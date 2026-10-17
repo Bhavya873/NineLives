@@ -202,5 +202,6 @@ fn gaussian(rng: &mut ChaCha8Rng) -> f32 {
     // 1 − u keeps the logarithm's argument in (0, 1].
     let u1: f32 = 1.0 - rng.random_range(0.0..1.0);
     let u2: f32 = rng.random_range(0.0..1.0);
-    (-2.0 * u1.ln()).sqrt() * (std::f32::consts::TAU * u2).cos()
+    // libm keeps the noise bit-identical on every platform (CLAUDE.md rule 2).
+    (-2.0 * libm::logf(u1)).sqrt() * libm::cosf(std::f32::consts::TAU * u2)
 }

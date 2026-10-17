@@ -16,16 +16,16 @@ Every training run or training chunk gets a row. Watch a replay before writing t
 | Controller | Mode | DR | Success | Save | Crash | Air per save (kg) | Touchdown spin median (rad/s) | Touchdown fall median (m/s) | Touchdown fall p95 (m/s) |
 |---|---|---|---|---|---|---|---|---|---|
 | off | realistic | no | 6.6% | 6.5% | 90.5% | – | 3.36 | 6.41 | 10.98 |
-| pd | realistic | no | 58.0% | 57.9% | 41.7% | 36.21 | 1.38 | 5.00 | 10.37 |
-| **ai** | realistic | no | **74.2%** | 74.1% | 25.7% | **30.72** | 1.22 | 5.60 | 8.82 |
+| pd | realistic | no | 58.0% | 57.9% | 41.7% | 36.21 | 1.37 | 5.01 | 10.49 |
+| **ai** | realistic | no | **74.2%** | 74.1% | 25.7% | **30.66** | 1.22 | 5.60 | 8.82 |
 | off | arcade | no | 6.6% | 6.5% | 90.5% | – | 3.36 | 6.41 | 10.98 |
-| pd | arcade | no | 60.6% | 60.5% | 39.1% | 42.17 | 1.31 | 4.86 | 10.47 |
+| pd | arcade | no | 60.6% | 60.5% | 39.1% | 42.17 | 1.30 | 4.86 | 10.47 |
 | **ai** | arcade | no | **84.5%** | 84.1% | 15.5% | 32.47 | 1.16 | 5.13 | 8.36 |
 | pd | realistic | yes | 57.2% | 57.1% | 42.5% | 40.55 | 1.39 | 5.09 | 10.45 |
 | ai | realistic | yes | 78.8% | 78.4% | 21.2% | 35.27 | 1.09 | 5.24 | 8.34 |
 
 Notes:
-- **AI beats PD on both save rate and air per save** (Realistic: 74.2% vs 58.0%, 30.7 vs 36.2 kg), meeting SPEC §10's "AI beats PD" target. The starting targets of ≥ 80% (Realistic) and ≥ 95% (Arcade) Stage A are **not met** (74.2%, 84.5%).
+- **AI beats PD on both save rate and air per save** (Realistic: 74.2% vs 58.0%, 30.7 vs 36.2 kg; numbers from the libm build, see DECISIONS), meeting SPEC §10's "AI beats PD" target. The starting targets of ≥ 80% (Realistic) and ≥ 95% (Arcade) Stage A are **not met** (74.2%, 84.5%).
 - The AI does better with randomization on (78.8%) than without: it trained only on randomized cars, and the randomized episodes average more thrust (scale 1.0–2.0) and are 40% unlimited air.
 - What limits success: about a quarter of Realistic starts tilt steeply with a corner near the ground; the hard impact comes within the first second, before any controller can right the car. Off and PD lose these too. Next levers (M7 or later): a longer run or a second seed (one seed per config so far, so run-to-run spread is unmeasured), and the touchdown fall speed (median 5.6 m/s): the reward pays for soft landings only through the save quality.
 - **Known limit, follow-up for M7:** at rest the policy still blows a throttle sum of 0.2–0.4. In Realistic that roughly matches the 5 kg/s ground refill, so the tank stops refilling after a save; with unlimited air it keeps a faint push going. The cause is the episode rule: success ends the episode 1 s after landing, so behaviour on the ground is barely trained. Training past success (a longer still hold, or not ending at success) is the deeper fix; it changes SPEC §9.5, so it waits for the M7 curriculum work.

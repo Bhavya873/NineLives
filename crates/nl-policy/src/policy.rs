@@ -141,7 +141,8 @@ impl Layer {
             for (weight, value) in weights.iter().zip(input) {
                 sum += weight * value;
             }
-            output.push(if self.tanh { sum.tanh() } else { sum });
+            // libm: the browser and native must compute the same actions (rule 2).
+            output.push(if self.tanh { libm::tanhf(sum) } else { sum });
         }
         output
     }
