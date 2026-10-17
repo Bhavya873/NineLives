@@ -46,7 +46,7 @@ impl Valves {
 
 /// Clamps a commanded throttle to 0..1. A NaN (for example from a broken policy)
 /// counts as 0, so it can never get stuck inside the valve state.
-fn safe_throttle(commanded: f32) -> f32 {
+pub(crate) fn safe_throttle(commanded: f32) -> f32 {
     if commanded.is_nan() {
         return 0.0;
     }
@@ -58,27 +58,31 @@ pub fn valve_step_fraction(dt_s: f32, time_constant_s: f32) -> f32 {
     1.0 - (-dt_s / time_constant_s).exp()
 }
 
-/// Adds every nozzle's push to the chassis for this step. Call after
-/// `reset_forces`, since Rapier keeps added forces until they are reset.
+/// Adds every nozzle's push to the chassis for this step and returns the total push,
+/// which the air tank pays for. Call after `reset_forces`, since Rapier keeps added
+/// forces until they are reset.
 ///
-/// `thrust_scale` multiplies every nozzle's maximum force (1.0 Realistic, 2.0 Arcade).
+/// `thrust_scale` multiplies every nozzle's maximum force (mode scale × tank gate).
 pub fn apply_nozzle_forces(
     body: &mut RigidBody,
     thrusters: &ThrusterConfig,
     effective_throttles: [f32; NOZZLE_COUNT],
     thrust_scale: f32,
-) {
+) -> f32 {
     let pose = *body.position();
+    let mut total_force_n = 0.0;
     for (nozzle, throttle) in thrusters.nozzles.iter().zip(effective_throttles) {
         if throttle <= 0.0 {
             continue;
         }
         let force_body_n = full_throttle_force_body_n(nozzle) * (throttle * thrust_scale);
+        total_force_n += force_body_n.length();
         // Rotate the push and its point from the body frame into the world frame.
         let force_world_n = pose.rotation * force_body_n;
         let point_world_m = pose * Vector::from_array(nozzle.position_m);
         body.add_force_at_point(force_world_n, point_world_m, true);
     }
+    total_force_n
 }
 
 /// The force and torque one nozzle puts on the car at full throttle in Realistic

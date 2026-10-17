@@ -16,9 +16,6 @@ use crate::thrusters::{Valves, apply_nozzle_forces};
 use crate::vehicle_config::{SteeringConfig, VehicleConfig};
 use crate::world::Pose;
 
-/// Thrust multiplier until modes arrive (M3 modes PR adds Realistic/Arcade).
-const REALISTIC_THRUST_SCALE: f32 = 1.0;
-
 /// Index of the front-left wheel. The front wheels (0 and 1) steer.
 const FRONT_LEFT_WHEEL: usize = 0;
 /// Index of the front-right wheel.
@@ -71,13 +68,16 @@ impl Car {
     /// Everything the car does before the physics step, in SPEC §7.1 order: read the
     /// driver's input, move the valves toward the commanded throttles, reset and add
     /// forces (drag, nozzles), then run the raycast wheels.
+    /// `thrust_multiplier` is the mode's thrust scale times the tank's thrust gate.
+    /// Returns the total thrust applied this step, for the air tank.
     /// Call exactly once per physics step, just before `PhysicsWorld::step`.
     pub fn prepare_physics_step(
         &mut self,
         physics: &mut PhysicsWorld,
         input: InputFrame,
         commanded_throttles: [f32; NOZZLE_COUNT],
-    ) {
+        thrust_multiplier: f32,
+    ) -> f32 {
         self.apply_driver_input(physics, input);
         let thrusters = &self.config.thrusters;
         self.valves.update(
@@ -86,13 +86,14 @@ impl Car {
             thrusters.valve_time_constant_s,
         );
         self.reset_forces_and_apply_air_drag(physics);
-        apply_nozzle_forces(
+        let thrust_n = apply_nozzle_forces(
             &mut physics.bodies[self.chassis],
             thrusters,
             self.valves.effective_throttles(),
-            REALISTIC_THRUST_SCALE,
+            thrust_multiplier,
         );
         self.update_wheels(physics);
+        thrust_n
     }
 
     /// Closes every valve and centres the steering, e.g. when the car is moved to
@@ -103,6 +104,11 @@ impl Car {
         for wheel in self.wheels.wheels_mut() {
             wheel.steering = 0.0;
         }
+    }
+
+    /// Exhaust speed of the cold gas, from the vehicle config.
+    pub fn exhaust_speed_m_s(&self) -> f32 {
+        self.config.thrusters.exhaust_speed_m_s
     }
 
     /// How open each thruster valve is now, 0..1, in nozzle order.

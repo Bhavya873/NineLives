@@ -1,0 +1,40 @@
+# FROZEN copy of configs/modes.toml used only by the golden trace.
+# Only edit it together with flat_drive.json.
+
+# Physics presets for the two game modes (SPEC §7.6). Every value is a starting value
+# to tune. Training samples these continuously (SPEC §9.8), so one policy serves both.
+
+[realistic]
+# Multiplies every nozzle's max force from vehicle.toml.
+thrust_scale = 1.0
+unlimited_air = false
+# The reported tank size; full lift (80 kg/s) empties it in about 3.25 s.
+tank_capacity_kg = 260.0
+# Refill while at least `refill_min_wheels` wheels touch. A gameplay concession;
+# the in-game help says so.
+refill_kg_s = 5.0
+refill_min_wheels = 3
+# Thrust fades to zero over this last fraction of the tank, so nothing pops.
+empty_fade_fraction = 0.02
+# Hop: this throttle on all four lift nozzles for `hop_s` seconds.
+hop_ff = 0.75
+hop_s = 0.40
+hop_cooldown_s = 1.5
+# A Hop needs at least this much air (ignored when air is unlimited).
+hop_min_air_kg = 30.0
+# Boost: this throttle on both boost nozzles while the button is held.
+boost_ff = 1.0
+
+[arcade]
+thrust_scale = 2.0
+unlimited_air = true
+# With unlimited air the tank never empties; "air used" is still counted for stats.
+tank_capacity_kg = 260.0
+refill_kg_s = 5.0
+refill_min_wheels = 3
+empty_fade_fraction = 0.02
+hop_ff = 0.75
+hop_s = 0.35
+hop_cooldown_s = 0.8
+hop_min_air_kg = 30.0
+boost_ff = 1.0

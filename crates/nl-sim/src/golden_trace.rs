@@ -11,7 +11,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP};
-use crate::input::InputFrame;
+use crate::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
+use crate::modes::{ModesConfig, ModesConfigError};
 use crate::vehicle_config::{VehicleConfig, VehicleConfigError};
 use crate::world::{DEFAULT_GROUND_FRICTION, SnapshotError, World};
 
@@ -21,6 +22,9 @@ pub const GOLDEN_TRACE_STEPS: u32 = 2000;
 /// The frozen car the golden hash was recorded with. Tuning `configs/vehicle.toml`
 /// must not change the golden hash, so the trace uses this copy instead.
 pub const GOLDEN_VEHICLE_TOML: &str = include_str!("../tests/golden/vehicle.toml");
+
+/// The frozen modes the golden hash was recorded with (the trace uses Realistic).
+pub const GOLDEN_MODES_TOML: &str = include_str!("../tests/golden/modes.toml");
 
 /// FNV-1a 64-bit starting value and multiplier (the standard constants).
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
@@ -39,33 +43,25 @@ pub struct GoldenTraceResult {
     pub final_position_m: [f32; 3],
 }
 
-/// The scripted driver input for `step`: wait, accelerate, turn left, turn right,
-/// brake, then reverse. It is a pure function of the step number.
+/// The scripted driver input for `step`: wait, accelerate, Hop, Boost, turn left,
+/// turn right, brake, then reverse. It is a pure function of the step number.
 pub fn scripted_input(step: u32) -> InputFrame {
     let second = step / PHYSICS_HZ;
-    let (throttle, steer) = match second {
-        0 => (0, 0),          // settle on the suspension
-        1..=4 => (127, 0),    // full throttle
-        5..=7 => (80, 100),   // throttle and turn left
-        8..=10 => (80, -100), // throttle and turn right
-        11..=12 => (-127, 0), // brake
-        _ => (-90, 30),       // reverse while turning
+    let (throttle, steer, buttons) = match second {
+        0 => (0, 0, 0),              // settle on the suspension
+        1..=2 => (127, 0, 0),        // full throttle
+        3 => (127, 0, BUTTON_HOP),   // Hop while driving (held: still only one Hop)
+        4 => (127, 0, BUTTON_BOOST), // Boost
+        5..=7 => (80, 100, 0),       // throttle and turn left
+        8..=10 => (80, -100, 0),     // throttle and turn right
+        11..=12 => (-127, 0, 0),     // brake
+        _ => (-90, 30, 0),           // reverse while turning
     };
     InputFrame {
         throttle,
         steer,
-        buttons: 0,
+        buttons,
     }
-}
-
-/// Why the golden trace could not run.
-#[derive(Debug, thiserror::Error)]
-pub enum GoldenTraceError {
-    #[error(transparent)]
-    Config(#[from] VehicleConfigError),
-
-    #[error(transparent)]
-    Snapshot(#[from] SnapshotError),
 }
 
 /// The scripted thruster throttles for `step`, so the trace also covers the nozzle
@@ -91,10 +87,24 @@ pub fn step_scripted(world: &mut World, step: u32) {
     world.step(scripted_input(step));
 }
 
+/// Why the golden trace could not run.
+#[derive(Debug, thiserror::Error)]
+pub enum GoldenTraceError {
+    #[error(transparent)]
+    Config(#[from] VehicleConfigError),
+
+    #[error(transparent)]
+    Modes(#[from] ModesConfigError),
+
+    #[error(transparent)]
+    Snapshot(#[from] SnapshotError),
+}
+
 /// Runs the golden trace with the frozen golden car.
 pub fn run_golden_trace() -> Result<GoldenTraceResult, GoldenTraceError> {
     let config = VehicleConfig::from_toml_str(GOLDEN_VEHICLE_TOML)?;
-    let mut world = World::new_on_flat_ground(&config, DEFAULT_GROUND_FRICTION);
+    let modes = ModesConfig::from_toml_str(GOLDEN_MODES_TOML)?;
+    let mut world = World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION);
 
     let mut hash = FNV_OFFSET_BASIS;
     for step in 0..GOLDEN_TRACE_STEPS {

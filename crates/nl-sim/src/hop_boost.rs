@@ -1,0 +1,214 @@
+//! Hop and Boost: the driver's two thruster buttons (SPEC §7.6–7.8).
+//!
+//! The game adds their throttles ("feed-forward") on top of the controller's:
+//! Hop puts `hop_ff` on the four lift nozzles for `hop_s`; Boost puts `boost_ff` on the
+//! two boost nozzles while held. `combine_throttles` then adds and clamps (SPEC §7.7).
+
+use serde::{Deserialize, Serialize};
+
+use crate::conventions::NOZZLE_COUNT;
+use crate::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
+use crate::modes::ModeParams;
+use crate::thrusters::safe_throttle;
+
+/// Indices of the four lift nozzles (L_FL, L_FR, L_RL, L_RR).
+const LIFT_NOZZLES: [usize; 4] = [0, 1, 2, 3];
+/// Indices of the two boost nozzles (B_L, B_R).
+const BOOST_NOZZLES: [usize; 2] = [8, 9];
+/// Wheels that must touch the ground to Hop (SPEC §7.8).
+const HOP_MIN_WHEELS: usize = 3;
+
+/// Why the driver cannot Hop right now. The HUD shows it (SPEC §7.8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HopBlockedReason {
+    /// Fewer than 3 wheels touch the ground.
+    NotOnGround,
+    /// The last Hop was too recent.
+    Cooldown,
+    /// Less air than `hop_min_air_kg` (Realistic only).
+    NoAir,
+}
+
+/// The state of the Hop and Boost buttons' effects.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HopBoost {
+    hop_time_left_s: f32,
+    hop_cooldown_left_s: f32,
+    hop_button_was_down: bool,
+    boost_active: bool,
+}
+
+impl HopBoost {
+    /// Advances the timers by `dt_s` and reacts to the buttons. A Hop starts when the
+    /// Hop button goes down (not while it is held) and nothing blocks it.
+    pub fn update(
+        &mut self,
+        input: InputFrame,
+        wheels_touching: usize,
+        air_kg: f32,
+        mode: &ModeParams,
+        dt_s: f32,
+    ) {
+        self.hop_time_left_s = (self.hop_time_left_s - dt_s).max(0.0);
+        self.hop_cooldown_left_s = (self.hop_cooldown_left_s - dt_s).max(0.0);
+
+        let hop_button_down = input.is_pressed(BUTTON_HOP);
+        let just_pressed = hop_button_down && !self.hop_button_was_down;
+        self.hop_button_was_down = hop_button_down;
+        let blocked = self.hop_blocked_reason(wheels_touching, air_kg, mode);
+        if just_pressed && blocked.is_none() {
+            self.hop_time_left_s = mode.hop_s;
+            self.hop_cooldown_left_s = mode.hop_cooldown_s;
+        }
+
+        self.boost_active = input.is_pressed(BUTTON_BOOST);
+    }
+
+    /// Why a Hop would be refused right now, or `None` if it is allowed (SPEC §7.8).
+    pub fn hop_blocked_reason(
+        &self,
+        wheels_touching: usize,
+        air_kg: f32,
+        mode: &ModeParams,
+    ) -> Option<HopBlockedReason> {
+        if wheels_touching < HOP_MIN_WHEELS {
+            return Some(HopBlockedReason::NotOnGround);
+        }
+        if self.hop_cooldown_left_s > 0.0 {
+            return Some(HopBlockedReason::Cooldown);
+        }
+        if !mode.unlimited_air && air_kg < mode.hop_min_air_kg {
+            return Some(HopBlockedReason::NoAir);
+        }
+        None
+    }
+
+    /// The throttles Hop and Boost add this step, in nozzle order.
+    pub fn feed_forward_throttles(&self, mode: &ModeParams) -> [f32; NOZZLE_COUNT] {
+        let mut throttles = [0.0; NOZZLE_COUNT];
+        if self.hop_active() {
+            for nozzle in LIFT_NOZZLES {
+                throttles[nozzle] = mode.hop_ff;
+            }
+        }
+        if self.boost_active {
+            for nozzle in BOOST_NOZZLES {
+                throttles[nozzle] = mode.boost_ff;
+            }
+        }
+        throttles
+    }
+
+    /// True while a Hop is pushing.
+    pub fn hop_active(&self) -> bool {
+        self.hop_time_left_s > 0.0
+    }
+
+    /// Seconds of push left in the current Hop.
+    pub fn hop_time_left_s(&self) -> f32 {
+        self.hop_time_left_s
+    }
+
+    /// Seconds until the next Hop is allowed.
+    pub fn hop_cooldown_left_s(&self) -> f32 {
+        self.hop_cooldown_left_s
+    }
+
+    /// True while the Boost button is held.
+    pub fn boost_active(&self) -> bool {
+        self.boost_active
+    }
+}
+
+/// SPEC §7.7: `u_cmd = clamp(u_ff + u_ctrl, 0, 1)`. During a Hop the controller can
+/// only add lift on top of `hop_ff`, never take it away.
+pub fn combine_throttles(
+    feed_forward: [f32; NOZZLE_COUNT],
+    controller: [f32; NOZZLE_COUNT],
+) -> [f32; NOZZLE_COUNT] {
+    let mut commanded = [0.0; NOZZLE_COUNT];
+    for index in 0..NOZZLE_COUNT {
+        // A NaN from the controller counts as 0, the same rule as the valves.
+        let controller_throttle = safe_throttle(controller[index]);
+        commanded[index] = (feed_forward[index] + controller_throttle).clamp(0.0, 1.0);
+    }
+    commanded
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modes::{DEFAULT_MODES_TOML, ModesConfig};
+
+    const DT_S: f32 = 1.0 / 120.0;
+
+    fn realistic() -> ModeParams {
+        ModesConfig::from_toml_str(DEFAULT_MODES_TOML)
+            .unwrap()
+            .realistic
+    }
+
+    fn hop_pressed() -> InputFrame {
+        InputFrame {
+            buttons: BUTTON_HOP,
+            ..InputFrame::default()
+        }
+    }
+
+    #[test]
+    fn a_hop_puts_hop_ff_on_the_lift_nozzles_only() {
+        let mode = realistic();
+        let mut hop_boost = HopBoost::default();
+
+        hop_boost.update(hop_pressed(), 4, 260.0, &mode, DT_S);
+
+        let throttles = hop_boost.feed_forward_throttles(&mode);
+        assert_eq!(&throttles[0..4], &[0.75; 4]);
+        assert_eq!(&throttles[4..10], &[0.0; 6]);
+    }
+
+    #[test]
+    fn holding_hop_does_not_start_a_second_hop_after_the_cooldown() {
+        let mode = realistic();
+        let mut hop_boost = HopBoost::default();
+
+        for _ in 0..(3.0 / DT_S) as usize {
+            hop_boost.update(hop_pressed(), 4, 260.0, &mode, DT_S);
+        }
+
+        assert!(!hop_boost.hop_active());
+    }
+
+    #[test]
+    fn hop_is_blocked_in_the_air_during_cooldown_and_without_air() {
+        let mode = realistic();
+        let mut hop_boost = HopBoost::default();
+
+        assert_eq!(
+            hop_boost.hop_blocked_reason(2, 260.0, &mode),
+            Some(HopBlockedReason::NotOnGround)
+        );
+        assert_eq!(
+            hop_boost.hop_blocked_reason(4, 10.0, &mode),
+            Some(HopBlockedReason::NoAir)
+        );
+        hop_boost.update(hop_pressed(), 4, 260.0, &mode, DT_S);
+        assert_eq!(
+            hop_boost.hop_blocked_reason(4, 260.0, &mode),
+            Some(HopBlockedReason::Cooldown)
+        );
+    }
+
+    #[test]
+    fn the_controller_cannot_take_lift_away_during_a_hop() {
+        let feed_forward = [0.75, 0.75, 0.75, 0.75, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0];
+        let controller = [0.5, 0.0, f32::NAN, 0.1, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+        let commanded = combine_throttles(feed_forward, controller);
+
+        assert_eq!(
+            commanded,
+            [1.0, 0.75, 0.75, 0.85, 0.3, 0.0, 0.0, 0.0, 1.0, 1.0]
+        );
+    }
+}
