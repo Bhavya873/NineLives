@@ -9,6 +9,7 @@ import { startGameLoop } from './game-loop';
 import { findHud, updateHud } from './hud/hud';
 import {
   BUTTON_BOOST,
+  BUTTON_CHAOS,
   BUTTON_HOP,
   onKeyPress,
   readInputFrame,
@@ -17,17 +18,33 @@ import {
 import { followCar, snapCamera } from './render/chase-camera';
 import { FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
 import { createGameScene, type PhysicsFrames, placeCar } from './render/scene';
-import initWasm, { Game, HudField, ModeCode } from './wasm/nl_wasm.js';
+import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
+
+/** How long the car stays wrecked before it respawns (SPEC §7.9 as amended). */
+const RESPAWN_DELAY_MS = 1500;
 
 async function start(): Promise<void> {
   await initWasm();
   if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
     throw new Error('The wasm build and the renderer disagree on the pose layout');
   }
-  if (Game.button_hop() !== BUTTON_HOP || Game.button_boost() !== BUTTON_BOOST) {
+  const buttonsMatch =
+    Game.button_hop() === BUTTON_HOP &&
+    Game.button_boost() === BUTTON_BOOST &&
+    Game.button_chaos() === BUTTON_CHAOS;
+  if (!buttonsMatch) {
     throw new Error('The wasm build and the keyboard disagree on the button bits');
   }
-  const game = new Game(vehicleToml, modesToml);
+  // A new random seed each visit; it only affects Chaos knocks.
+  const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
+  const game = new Game(vehicleToml, modesToml, seed);
+  let respawnTimer: number | undefined;
+  const respawnNow = () => {
+    window.clearTimeout(respawnTimer);
+    respawnTimer = undefined;
+    game.respawn();
+  };
+  onKeyPress('KeyR', respawnNow);
   onKeyPress('KeyM', () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
@@ -54,6 +71,10 @@ async function start(): Promise<void> {
       frames.previousChassis = frames.latestChassis;
       frames.previousWheels = frames.latestWheels;
       game.tick(readInputFrame());
+      if (crashedThisTick(game) && respawnTimer === undefined) {
+        // The explosion effect arrives in the next PR; for now, wait and respawn.
+        respawnTimer = window.setTimeout(respawnNow, RESPAWN_DELAY_MS);
+      }
       frames.latestChassis = game.chassis_pose();
       frames.latestWheels = game.wheel_poses();
     },
@@ -70,6 +91,7 @@ async function start(): Promise<void> {
         airFraction: hudValues[HudField.AirFraction] ?? 1,
         unlimitedAir: hudValues[HudField.UnlimitedAir] === 1,
         hopBlocked: hudValues[HudField.HopBlocked] ?? 0,
+        crashed: game.is_crashed(),
       });
       view.renderer.render(view.scene, view.camera);
       lastRenderMs = nowMs;
@@ -78,6 +100,17 @@ async function start(): Promise<void> {
 
   // A small read-only hook so automated tests can see where the car is.
   Object.assign(window, { ninelivesDebug: { chassisPose: () => Array.from(game.chassis_pose()) } });
+}
+
+/** Reads this tick's events and reports whether one of them is a crash. */
+function crashedThisTick(game: Game): boolean {
+  const events = game.drain_events();
+  for (let start = 0; start < events.length; start += Game.floats_per_event()) {
+    if (events[start] === EventKind.Crash) {
+      return true;
+    }
+  }
+  return false;
 }
 
 start().catch((error: unknown) => {

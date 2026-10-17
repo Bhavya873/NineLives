@@ -23,6 +23,8 @@ pub struct VehicleConfig {
     pub drive: DriveConfig,
     pub steering: SteeringConfig,
     pub thrusters: ThrusterConfig,
+    pub events: EventConfig,
+    pub chaos: ChaosConfig,
 }
 
 /// The car body. See `[chassis]` in `configs/vehicle.toml`.
@@ -116,6 +118,42 @@ pub struct ThrusterConfig {
     pub nozzles: [NozzleConfig; NOZZLE_COUNT],
 }
 
+/// When upsets, saves and crashes happen (SPEC §7.9). See `[events]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventConfig {
+    /// An upset starts after this long with no wheel on the ground.
+    pub upset_airborne_s: f32,
+    /// ...or when the car tilts past this.
+    pub upset_tilt_deg: f32,
+    /// A save needs the car within this tilt of level...
+    pub save_tilt_deg: f32,
+    /// ...turning slower than this...
+    pub save_max_spin_rad_s: f32,
+    /// ...for this long, on all 4 wheels.
+    pub save_hold_s: f32,
+    /// Crash if the body or roof hits something faster than this along the contact normal.
+    pub crash_impact_speed_m_s: f32,
+    /// Crash if the roof touches anything while tilted past this.
+    pub upside_down_tilt_deg: f32,
+    /// Crash if tilted past this...
+    pub stuck_tilt_deg: f32,
+    /// ...for longer than this.
+    pub stuck_s: f32,
+    /// Crash if the car falls below this height.
+    pub out_of_bounds_y_m: f32,
+}
+
+/// The size of a Chaos knock (SPEC §7.12). See `[chaos]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChaosConfig {
+    /// Largest random push.
+    pub max_linear_impulse_n_s: f32,
+    /// Largest random twist.
+    pub max_angular_impulse_n_m_s: f32,
+}
+
 /// One nozzle. See `[[thrusters.nozzles]]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -186,7 +224,9 @@ impl VehicleConfig {
         self.wheels.check()?;
         self.drive.check()?;
         self.steering.check()?;
-        self.thrusters.check()
+        self.thrusters.check()?;
+        self.events.check()?;
+        self.chaos.check()
     }
 }
 
@@ -264,6 +304,36 @@ impl SteeringConfig {
             return Err(VehicleConfigError::SteeringLimitsReversed { low, high });
         }
         Ok(())
+    }
+}
+
+impl EventConfig {
+    fn check(&self) -> CheckResult {
+        must_be_positive("events.upset_airborne_s", self.upset_airborne_s)?;
+        must_be_positive("events.upset_tilt_deg", self.upset_tilt_deg)?;
+        must_be_positive("events.save_tilt_deg", self.save_tilt_deg)?;
+        must_be_positive("events.save_max_spin_rad_s", self.save_max_spin_rad_s)?;
+        must_not_be_negative("events.save_hold_s", self.save_hold_s)?;
+        must_be_positive("events.crash_impact_speed_m_s", self.crash_impact_speed_m_s)?;
+        must_be_positive("events.upside_down_tilt_deg", self.upside_down_tilt_deg)?;
+        must_be_positive("events.stuck_tilt_deg", self.stuck_tilt_deg)?;
+        must_not_be_negative("events.stuck_s", self.stuck_s)?;
+        if !self.out_of_bounds_y_m.is_finite() {
+            let value = self.out_of_bounds_y_m;
+            return Err(VehicleConfigError::NotPositive {
+                field: "events.out_of_bounds_y_m (must be finite)",
+                value,
+            });
+        }
+        Ok(())
+    }
+}
+
+impl ChaosConfig {
+    fn check(&self) -> CheckResult {
+        must_not_be_negative("chaos.max_linear_impulse_n_s", self.max_linear_impulse_n_s)?;
+        let angular = self.max_angular_impulse_n_m_s;
+        must_not_be_negative("chaos.max_angular_impulse_n_m_s", angular)
     }
 }
 

@@ -24,7 +24,8 @@ pub fn arcade() -> ModeParams {
 /// A fresh flat-ground world with the repo's car in `mode`.
 pub fn new_world_in(mode: ModeParams) -> World {
     let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
-    World::new_on_flat_ground(&config, mode, DEFAULT_GROUND_FRICTION)
+    let seed = 0;
+    World::new_on_flat_ground(&config, mode, DEFAULT_GROUND_FRICTION, seed)
 }
 
 /// A fresh flat-ground world with the repo's car in Realistic mode.

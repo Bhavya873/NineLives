@@ -10,7 +10,7 @@ const WARM_UP_TICKS = 600;
 const MEASURED_TICKS = 6000;
 const TICK_BUDGET_MS = 1.5;
 
-const game = new Game(vehicleToml, modesToml);
+const game = new Game(vehicleToml, modesToml, 0n);
 const throttleAndTurn = new Uint8Array([100, 40, 0, 0]);
 
 for (let tick = 0; tick < WARM_UP_TICKS; tick += 1) {

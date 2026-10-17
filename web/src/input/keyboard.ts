@@ -11,6 +11,7 @@ const STEER_LEFT_KEYS = ['KeyA', 'ArrowLeft'];
 const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
+const CHAOS_KEYS = ['KeyC'];
 
 /**
  * Button bits, matching BUTTON_HOP and BUTTON_BOOST in crates/nl-sim/src/input.rs.
@@ -18,6 +19,7 @@ const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
  */
 export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
+export const BUTTON_CHAOS = 1 << 2;
 
 /** Every held key this module handles, so the page does not scroll on arrows or Space. */
 const HANDLED_KEYS = [
@@ -92,6 +94,9 @@ export function readInputFrame(): Uint8Array {
   hopPressedSinceLastFrame = false;
   if (isAnyHeld(BOOST_KEYS)) {
     buttons |= BUTTON_BOOST;
+  }
+  if (isAnyHeld(CHAOS_KEYS)) {
+    buttons |= BUTTON_CHAOS;
   }
   // Bytes 2 and 3 are the buttons, little-endian.
   frame[2] = buttons & 0xff;

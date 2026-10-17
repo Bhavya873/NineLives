@@ -32,6 +32,8 @@ export interface HudValues {
   unlimitedAir: boolean;
   /** A HopBlocked value: 0 means a Hop is allowed. */
   hopBlocked: number;
+  /** True from a crash until the respawn. */
+  crashed: boolean;
 }
 
 /** The HUD's elements, looked up once at start-up. */
@@ -53,5 +55,6 @@ export function updateHud(hud: Hud, values: HudValues): void {
   const air = values.unlimitedAir ? '∞' : `${Math.round(values.airFraction * 100)}%`;
   const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
   const mode = MODE_TEXT[values.mode] ?? '';
-  hud.status.textContent = [mode, `Air ${air}`, hop].filter(Boolean).join(' · ');
+  const crash = values.crashed ? 'CRASH — respawning' : '';
+  hud.status.textContent = [mode, `Air ${air}`, hop, crash].filter(Boolean).join(' · ');
 }
