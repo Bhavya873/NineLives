@@ -248,11 +248,9 @@ fn must_not_be_negative(field: &'static str, value: f32) -> CheckResult {
 mod tests {
     use super::*;
 
-    const REPO_VEHICLE_TOML: &str = DEFAULT_VEHICLE_TOML;
-
     #[test]
     fn the_repo_vehicle_config_loads() {
-        let config = VehicleConfig::from_toml_str(REPO_VEHICLE_TOML).unwrap();
+        let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
 
         assert_eq!(config.chassis.dry_mass_kg, 1800.0);
         assert_eq!(config.wheels.mount_points_m.len(), 4);
@@ -260,7 +258,7 @@ mod tests {
 
     #[test]
     fn front_left_wheel_is_in_front_and_on_the_left() {
-        let config = VehicleConfig::from_toml_str(REPO_VEHICLE_TOML).unwrap();
+        let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
         let front_left = config.wheels.mount_points_m[0];
 
         assert!(front_left[0] > 0.0, "front means +X");
@@ -269,7 +267,7 @@ mod tests {
 
     #[test]
     fn a_negative_mass_is_rejected_with_the_field_name() {
-        let broken = REPO_VEHICLE_TOML.replace("dry_mass_kg = 1800.0", "dry_mass_kg = -5.0");
+        let broken = DEFAULT_VEHICLE_TOML.replace("dry_mass_kg = 1800.0", "dry_mass_kg = -5.0");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
@@ -278,7 +276,7 @@ mod tests {
 
     #[test]
     fn an_infinite_speed_limit_is_rejected() {
-        let broken = REPO_VEHICLE_TOML.replace("max_speed_m_s = 45.0", "max_speed_m_s = inf");
+        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 45.0", "max_speed_m_s = inf");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
@@ -287,7 +285,7 @@ mod tests {
 
     #[test]
     fn an_unknown_field_is_rejected() {
-        let broken = REPO_VEHICLE_TOML.replace("[drive]", "[drive]\nturbo = true");
+        let broken = DEFAULT_VEHICLE_TOML.replace("[drive]", "[drive]\nturbo = true");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
@@ -296,7 +294,7 @@ mod tests {
 
     #[test]
     fn reversed_steering_limits_are_rejected() {
-        let broken = REPO_VEHICLE_TOML.replace(
+        let broken = DEFAULT_VEHICLE_TOML.replace(
             "max_angle_high_speed_rad = 0.15",
             "max_angle_high_speed_rad = 0.9",
         );

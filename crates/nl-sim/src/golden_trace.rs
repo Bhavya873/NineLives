@@ -8,27 +8,32 @@
 //! `tests/golden/vehicle.toml`. `cargo test` checks it natively; M2 adds the same
 //! check for the wasm build.
 
+use serde::{Deserialize, Serialize};
+
 use crate::conventions::PHYSICS_HZ;
 use crate::input::InputFrame;
 use crate::vehicle_config::{VehicleConfig, VehicleConfigError};
-use crate::world::{SnapshotError, World};
+use crate::world::{DEFAULT_GROUND_FRICTION, SnapshotError, World};
 
 /// Number of physics steps in the golden trace (SPEC §7.10).
 pub const GOLDEN_TRACE_STEPS: u32 = 2000;
 
-/// Ground friction used for the golden trace.
-const GOLDEN_TRACE_GROUND_FRICTION: f32 = 1.0;
+/// The frozen car the golden hash was recorded with. Tuning `configs/vehicle.toml`
+/// must not change the golden hash, so the trace uses this copy instead.
+pub const GOLDEN_VEHICLE_TOML: &str = include_str!("../tests/golden/vehicle.toml");
 
 /// FNV-1a 64-bit starting value and multiplier (the standard constants).
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
-/// The result of running the golden trace.
-#[derive(Debug, Clone, PartialEq)]
+/// The result of running the golden trace. It is stored as JSON in
+/// `tests/golden/flat_drive.json`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoldenTraceResult {
     /// Steps that were run.
     pub steps: u32,
-    /// Hash of every step's pose and velocities, as 16 hex digits.
+    /// Hash of every step's pose and velocities plus the final snapshot, as 16 hex digits.
+    #[serde(rename = "hash")]
     pub hash_hex: String,
     /// Where the car ended up, for a human-readable sanity check.
     pub final_position_m: [f32; 3],
@@ -63,10 +68,10 @@ pub enum GoldenTraceError {
     Snapshot(#[from] SnapshotError),
 }
 
-/// Runs the golden trace with the given vehicle config text.
-pub fn run_golden_trace(vehicle_toml: &str) -> Result<GoldenTraceResult, GoldenTraceError> {
-    let config = VehicleConfig::from_toml_str(vehicle_toml)?;
-    let mut world = World::new_on_flat_ground(&config, GOLDEN_TRACE_GROUND_FRICTION);
+/// Runs the golden trace with the frozen golden car.
+pub fn run_golden_trace() -> Result<GoldenTraceResult, GoldenTraceError> {
+    let config = VehicleConfig::from_toml_str(GOLDEN_VEHICLE_TOML)?;
+    let mut world = World::new_on_flat_ground(&config, DEFAULT_GROUND_FRICTION);
 
     let mut hash = FNV_OFFSET_BASIS;
     for step in 0..GOLDEN_TRACE_STEPS {

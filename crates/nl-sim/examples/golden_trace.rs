@@ -8,16 +8,8 @@ use std::error::Error;
 
 use nl_sim::golden_trace::run_golden_trace;
 
-/// The frozen car the golden hash was recorded with.
-const GOLDEN_VEHICLE_TOML: &str = include_str!("../tests/golden/vehicle.toml");
-
 fn main() -> Result<(), Box<dyn Error>> {
-    let result = run_golden_trace(GOLDEN_VEHICLE_TOML)?;
-    let json = serde_json::json!({
-        "steps": result.steps,
-        "hash": result.hash_hex,
-        "final_position_m": result.final_position_m,
-    });
-    println!("{}", serde_json::to_string_pretty(&json)?);
+    let result = run_golden_trace()?;
+    println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }

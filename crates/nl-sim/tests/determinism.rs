@@ -4,17 +4,15 @@
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
-use nl_sim::golden_trace::{GOLDEN_TRACE_STEPS, run_golden_trace, scripted_input};
-use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
+mod common;
+
+use common::new_world;
+use nl_sim::golden_trace::{
+    GOLDEN_TRACE_STEPS, GoldenTraceResult, run_golden_trace, scripted_input,
+};
 use nl_sim::world::{SNAPSHOT_FORMAT_VERSION, SnapshotError, World};
 
-const GOLDEN_VEHICLE_TOML: &str = include_str!("golden/vehicle.toml");
 const GOLDEN_FLAT_DRIVE_JSON: &str = include_str!("golden/flat_drive.json");
-
-fn new_world() -> World {
-    let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
-    World::new_on_flat_ground(&config, 1.0)
-}
 
 /// Steps `world` through the scripted inputs for steps `first..last`.
 fn run_script(world: &mut World, first: u32, last: u32) {
@@ -59,25 +57,16 @@ fn restoring_garbage_bytes_is_an_error_not_a_crash() {
 }
 
 #[test]
-fn the_golden_trace_matches_the_stored_hash() {
-    let expected: serde_json::Value = serde_json::from_str(GOLDEN_FLAT_DRIVE_JSON).unwrap();
+fn the_golden_trace_matches_the_stored_result() {
+    let expected: GoldenTraceResult = serde_json::from_str(GOLDEN_FLAT_DRIVE_JSON).unwrap();
 
-    let result = run_golden_trace(GOLDEN_VEHICLE_TOML).unwrap();
+    let result = run_golden_trace().unwrap();
 
-    assert_eq!(result.steps, expected["steps"].as_u64().unwrap() as u32);
     assert_eq!(
-        result.hash_hex,
-        expected["hash"].as_str().unwrap(),
+        result, expected,
         "physics output changed. If that was intended, regenerate the golden file \
          (see examples/golden_trace.rs) and explain why in the PR."
     );
-    let expected_position_m: Vec<f32> = expected["final_position_m"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|value| value.as_f64().unwrap() as f32)
-        .collect();
-    assert_eq!(result.final_position_m.to_vec(), expected_position_m);
 }
 
 #[test]

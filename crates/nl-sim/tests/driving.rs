@@ -4,17 +4,14 @@
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
+use common::new_world;
 use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::input::InputFrame;
-use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 use nl_sim::world::World;
 
 const STEPS_PER_SECOND: usize = PHYSICS_HZ as usize;
-
-fn new_world() -> World {
-    let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
-    World::new_on_flat_ground(&config, 1.0)
-}
 
 fn run(world: &mut World, input: InputFrame, seconds: f32) {
     let steps = (seconds * STEPS_PER_SECOND as f32).round() as usize;

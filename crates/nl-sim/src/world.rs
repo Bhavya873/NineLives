@@ -15,6 +15,10 @@ use crate::conventions::{PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
 use crate::input::InputFrame;
 use crate::vehicle_config::VehicleConfig;
 
+/// Ground friction for flat-ground worlds when nothing else is chosen (SPEC §7.2).
+/// It only matters when the car's body scrapes the ground.
+pub const DEFAULT_GROUND_FRICTION: f32 = 1.0;
+
 /// Half-size of the flat ground box, in metres. Big enough that M1 tests never
 /// drive off it. Course pieces replace this in M7.
 const FLAT_GROUND_HALF_EXTENTS_M: [f32; 3] = [2000.0, 0.5, 2000.0];
