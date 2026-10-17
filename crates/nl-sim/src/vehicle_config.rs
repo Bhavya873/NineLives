@@ -79,10 +79,10 @@ pub enum VehicleConfigError {
     #[error("vehicle.toml could not be read: {0}")]
     Parse(#[from] toml::de::Error),
 
-    #[error("vehicle.toml: `{field}` must be greater than zero, but it is {value}")]
+    #[error("vehicle.toml: `{field}` must be a finite number greater than zero, but it is {value}")]
     NotPositive { field: &'static str, value: f32 },
 
-    #[error("vehicle.toml: `{field}` must be zero or more, but it is {value}")]
+    #[error("vehicle.toml: `{field}` must be a finite number, zero or more, but it is {value}")]
     Negative { field: &'static str, value: f32 },
 
     #[error(
@@ -185,17 +185,17 @@ impl VehicleConfig {
     }
 }
 
-/// Fails if `value` is zero, negative or not a number.
+/// Fails if `value` is zero, negative, infinite or not a number.
 fn must_be_positive(field: &'static str, value: f32) -> Result<(), VehicleConfigError> {
-    if value.is_nan() || value <= 0.0 {
+    if !value.is_finite() || value <= 0.0 {
         return Err(VehicleConfigError::NotPositive { field, value });
     }
     Ok(())
 }
 
-/// Fails if `value` is negative or not a number.
+/// Fails if `value` is negative, infinite or not a number.
 fn must_not_be_negative(field: &'static str, value: f32) -> Result<(), VehicleConfigError> {
-    if value.is_nan() || value < 0.0 {
+    if !value.is_finite() || value < 0.0 {
         return Err(VehicleConfigError::Negative { field, value });
     }
     Ok(())
@@ -232,6 +232,15 @@ mod tests {
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
         assert!(error.to_string().contains("chassis.dry_mass_kg"));
+    }
+
+    #[test]
+    fn an_infinite_speed_limit_is_rejected() {
+        let broken = REPO_VEHICLE_TOML.replace("max_speed_m_s = 45.0", "max_speed_m_s = inf");
+
+        let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
+
+        assert!(error.to_string().contains("drive.max_speed_m_s"));
     }
 
     #[test]
