@@ -72,6 +72,21 @@ pub fn read_body_contacts(
     contacts
 }
 
+/// True if `collider` has any touching contact point with anything (SPEC §10's
+/// touchdown: the first moment the car meets the ground, wheels or not).
+pub fn is_touching(physics: &PhysicsWorld, collider: ColliderHandle) -> bool {
+    for pair in physics.narrow_phase.contact_pairs_with(collider) {
+        for manifold in pair.manifolds() {
+            for point in &manifold.points {
+                if point.dist <= TOUCH_DISTANCE_M {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// The fastest speed at which `our_collider` was moving into the other collider, over
 /// the pair's touching points; `None` if no point is touching.
 fn fastest_touching_approach_m_s(

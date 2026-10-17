@@ -11,6 +11,7 @@ use nl_sim::input::InputFrame;
 pub mod allocation;
 pub mod config;
 mod controller_kind;
+pub mod eval;
 mod manual;
 mod off;
 mod pd;

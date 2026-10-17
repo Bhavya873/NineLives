@@ -337,7 +337,7 @@ Until `ObsSpec` exists (M5) `act` takes only `ctx`: the driver's `InputFrame` an
    - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if height < 3 m and downward speed > 4 m/s, command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. Otherwise `F_y = 0` (saves air).
    - **Allocation:** solve `min ‖W(B·u − w)‖² + λ‖u‖²` subject to `0 ≤ u ≤ 1`, with `w = [0, F_y, 0, τx, τy, τz]` and `B` the 6×10 matrix scaled by max force. Use projected gradient descent (30 iterations, step `1/L`) or a small active-set NNLS. Torque weights are higher than force weights.
    - **On the ground and inverted:** use roll torque only, to flip back.
-   - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m` and not upright; when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
+   - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m`, not upright and nearly still, and there the roll torque is multiplied by `ground_roll_gain` (tipping the car over its side edge needs far more torque than turning it in the air); when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
 4. **Ai:** loads `models/policy.json`, normalizes the observation, runs the MLP forward pass, and maps the action from [−1, 1] to [0, 1]. The policy is deterministic (mean action).
 
 The PD controller is required before RL. It proves the problem is controllable and is the baseline the AI must be compared against.
@@ -399,14 +399,14 @@ The layout lives in Rust (`ObsSpec`). The schema hash covers names and order. Py
 There is no survival bonus *(req)*. Being alive must not pay, or the policy learns to hover (9.11).
 
 ### 9.5 Episode end
-- **Terminated:** crash; or success (Stage A/B: a save held for 1.0 s; Stage C: a save after the hop).
+- **Terminated:** crash; or success (Stage A/B: all four wheels down for 1.0 s unbroken — a clean landing counts even if no upset, and so no Save event, happened; Stage C: a save after the hop). Implemented once in `nl_sim::episode::Episode`.
 - **Truncated:** time limit (A/B 8 s, C 15 s, D/E 45 s).
 
 ### 9.6 Scenario stages
 | Stage | Spawn | Driver | Success |
 |---|---|---|---|
-| A — Drop | height U(1.5, 8) m; tilt U(0, θmax) about a random axis; ω magnitude U(0, ωmax) on a random axis; horizontal v U(0, 15); vertical v U(−5, 3) | none | save |
-| B — Side tip-over | resting on its side at low speed, roll U(60°, 110°) to either side, small pitch and yaw | none | back on 4 wheels, upright, without touching the roof |
+| A — Drop | height U(1.5, 8) m (raised if a tilted corner would be closer than `spawn_clearance_m` to the ground); tilt U(0, θmax) about a random horizontal axis; ω magnitude U(0, ωmax) on a random axis; horizontal v U(0, 15); vertical v U(−5, 3) | none | save |
+| B — Side tip-over | resting on its side at low speed (lowest corner `spawn_clearance_m` above the ground), roll U(60°, 110°) to either side, small pitch and yaw | none | back on 4 wheels, upright, without touching the roof |
 | C — Hop | driving straight at U(5, 25) m/s on flat ground; Hop at a random time; in 50% of episodes a car row of 1–3 cars (1.2–1.5 m tall) placed so the hop must clear it | bot | save after the hop, no obstacle hit |
 | D — Course | procedural course (7.11) | bot | reach the finish with no crash |
 | E — Chaos | any of A, C, D plus 1–3 Chaos impulses at random times | bot or none | as for the base stage |
@@ -473,9 +473,10 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 
 ## 10. Evaluation
 
+- The Rust runner (M4, no Python): `cargo run --release -p nl-control --example eval -- --controller {off,pd} --stage {A,B} --mode {realistic,arcade} --episodes 1000 --seed 0`. Both runners step `nl_sim::episode::Episode`, so success, crash and time limit mean the same thing.
 - `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`.
 - A fixed seed list makes runs reproducible. Domain randomization is off by default in eval (`--dr` turns it on).
-- **Outputs:** `results/<date>_<controller>_<stage>_<mode>.json` and `.csv`, with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down).
+- **Outputs:** `results/eval_<controller>_<stage>_<mode>.json` (no date: a rerun overwrites the file and git shows the change; the M5 Python eval adds a `.csv`), with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down).
 - **Metrics:** save rate, crash rate, air used per save (kg), touchdown spin and vertical speed (median and p95), and Gauntlet completion rate with the driver bot.
 - **Charts** (`python -m ninelives.charts`, SVG into `results/`): save rate by stage for Off/PD/AI; air per save, PD vs AI; touchdown spin distributions; the training curve.
 
@@ -610,8 +611,8 @@ class Game {
 
 **M4 — PD baseline and eval harness**
 - [x] `Pd` controller with allocation; a controller toggle in the web app.
-- [ ] Rust-side eval runner for Off/PD on Stages A and B (no Python needed), writing results JSON.
-- [ ] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
+- [x] Rust-side eval runner for Off/PD on Stages A and B (no Python needed), writing results JSON.
+- [x] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
 
 **M5 — Python env and first policy**
 - [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.

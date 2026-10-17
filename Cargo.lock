@@ -299,6 +299,7 @@ version = "0.1.0"
 dependencies = [
  "nl-sim",
  "serde",
+ "serde_json",
  "thiserror",
  "toml",
 ]

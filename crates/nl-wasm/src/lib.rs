@@ -425,13 +425,11 @@ impl Game {
 
     /// Looks up a mode by its name in the UI.
     fn mode_params(&self, mode: &str) -> Result<ModeParams, JsError> {
-        match mode {
-            "realistic" => Ok(self.modes.realistic),
-            "arcade" => Ok(self.modes.arcade),
-            other => Err(JsError::new(&format!(
-                "unknown mode \"{other}\"; use \"realistic\" or \"arcade\""
-            ))),
-        }
+        self.modes.by_name(mode).ok_or_else(|| {
+            JsError::new(&format!(
+                "unknown mode \"{mode}\"; use \"realistic\" or \"arcade\""
+            ))
+        })
     }
 }
 

@@ -49,7 +49,9 @@ impl Pd {
             && state.up_alignment() < self.config.upright_alignment
             && state.falling_speed_m_s().abs() < self.config.lying_max_fall_speed_m_s;
         if lying_on_ground {
-            // SPEC §8: roll torque only, to flip back onto the wheels.
+            // SPEC §8: roll torque only, to flip back onto the wheels. Lifting the car
+            // over its side edge takes far more torque than turning it in the air.
+            torque[0] *= self.config.ground_roll_gain;
             torque[1] = 0.0;
             torque[2] = 0.0;
         }

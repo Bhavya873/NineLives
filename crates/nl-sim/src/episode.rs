@@ -1,0 +1,202 @@
+//! One training or eval episode (SPEC §9.5): a fresh world started from a scenario, the
+//! rules for when it ends, and the per-episode numbers SPEC §10 reports. The Rust eval
+//! runner, the M5 Python binding and the browser replay all step episodes through this,
+//! so "success", "crash" and "time limit" mean the same thing everywhere.
+
+use serde::Serialize;
+
+use crate::car_state::CarState;
+use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
+use crate::events::{CrashCause, SimEvent};
+use crate::input::InputFrame;
+use crate::modes::ModeParams;
+use crate::scenarios::{EpisodeConfig, ScenariosConfig, Stage, start_episode};
+use crate::vehicle_config::VehicleConfig;
+use crate::world::{DEFAULT_GROUND_FRICTION, PlaceCarError, World};
+
+/// Where an episode stands after a step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EpisodeStatus {
+    /// Still going.
+    Running,
+    /// All four wheels down for `success_hold_s`, unbroken, with no crash (SPEC §9.5).
+    Succeeded,
+    /// The car crashed; this ends the episode.
+    Crashed(CrashCause),
+    /// The time limit ran out first.
+    TimedOut,
+}
+
+/// What happened in one episode (SPEC §10's per-episode row).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EpisodeResult {
+    /// The seed the episode was started from.
+    pub seed: u64,
+    /// All four wheels down for `success_hold_s`, unbroken, with no crash.
+    pub success: bool,
+    /// Save events seen (a recovery from an upset, SPEC §7.9).
+    pub saves: u32,
+    /// Why it crashed, if it did (a crash ends the episode, so there is at most one).
+    pub crash_cause: Option<CrashCause>,
+    /// Air the thrusters used over the whole episode, in kg.
+    pub air_used_kg: f32,
+    /// Air used during the upsets that ended in a save, in kg (from the Save events).
+    pub air_used_in_saves_kg: f32,
+    /// The largest tilt from upright, in degrees.
+    pub peak_tilt_deg: f32,
+    /// Spin size just before the car first touched the ground (wheels, body or roof),
+    /// in rad/s; None if it never did.
+    pub touchdown_spin_rad_s: Option<f32>,
+    /// Fall speed just before that first touch, in m/s.
+    pub touchdown_fall_m_s: Option<f32>,
+    /// How long the episode ran, in seconds.
+    pub duration_s: f32,
+}
+
+/// The numbers an episode gathers while it runs.
+#[derive(Default)]
+struct Tally {
+    saves: u32,
+    crash_cause: Option<CrashCause>,
+    air_used_in_saves_kg: f32,
+    peak_tilt_rad: f32,
+    /// Spin and fall speed just before the first touch.
+    touchdown: Option<(f32, f32)>,
+    /// When the current unbroken run of all four wheels down began.
+    wheels_down_since_s: Option<f32>,
+}
+
+/// A running episode: the world plus the numbers gathered so far.
+pub struct Episode {
+    world: World,
+    rules: EpisodeConfig,
+    seed: u64,
+    limit_steps: u64,
+    steps: u64,
+    /// The car on the latest step, so the next step knows what it was just before.
+    state: CarState,
+    tally: Tally,
+}
+
+impl Episode {
+    /// A fresh flat-ground world with the car placed for `stage` from `seed`.
+    pub fn start(
+        vehicle: &VehicleConfig,
+        mode: ModeParams,
+        scenarios: &ScenariosConfig,
+        stage: Stage,
+        seed: u64,
+    ) -> Result<Episode, PlaceCarError> {
+        let mut world = World::new_on_flat_ground(vehicle, mode, DEFAULT_GROUND_FRICTION, seed);
+        start_episode(&mut world, stage, scenarios, seed)?;
+        let rules = scenarios.episode;
+        Ok(Episode {
+            state: world.car_state(),
+            world,
+            rules,
+            seed,
+            limit_steps: (rules.time_limit_s * PHYSICS_HZ as f32).round() as u64,
+            steps: 0,
+            tally: Tally::default(),
+        })
+    }
+
+    /// The world, for controllers (`is_control_step`) and rendering.
+    pub fn world(&self) -> &World {
+        &self.world
+    }
+
+    /// The car on the latest step: what a controller sees.
+    pub fn car_state(&self) -> CarState {
+        self.state
+    }
+
+    /// One physics step with the controller's latest throttles (0..1, nozzle order).
+    /// Does nothing once the episode has ended.
+    pub fn step(&mut self, throttles: [f32; NOZZLE_COUNT]) -> EpisodeStatus {
+        if self.status() != EpisodeStatus::Running {
+            return self.status();
+        }
+        let before = self.state;
+        self.world.set_controller_throttles(throttles);
+        self.world.step(InputFrame::default());
+        self.steps += 1;
+        self.state = self.world.car_state();
+        self.tally.peak_tilt_rad = self.tally.peak_tilt_rad.max(self.world.tilt_rad());
+        self.track_touchdown(&before);
+        self.track_wheels_down();
+        for event in self.world.drain_events() {
+            self.record(event);
+        }
+        self.status()
+    }
+
+    /// SPEC §9.5: a crash ends the episode, and so does success.
+    pub fn status(&self) -> EpisodeStatus {
+        if let Some(cause) = self.tally.crash_cause {
+            return EpisodeStatus::Crashed(cause);
+        }
+        if self.held_on_wheels_long_enough() {
+            return EpisodeStatus::Succeeded;
+        }
+        if self.steps >= self.limit_steps {
+            return EpisodeStatus::TimedOut;
+        }
+        EpisodeStatus::Running
+    }
+
+    /// The per-episode row so far (final once `status` is not `Running`).
+    pub fn result(&self) -> EpisodeResult {
+        EpisodeResult {
+            seed: self.seed,
+            success: self.status() == EpisodeStatus::Succeeded,
+            saves: self.tally.saves,
+            crash_cause: self.tally.crash_cause,
+            air_used_kg: self.world.air_used_kg(),
+            air_used_in_saves_kg: self.tally.air_used_in_saves_kg,
+            peak_tilt_deg: self.tally.peak_tilt_rad.to_degrees(),
+            touchdown_spin_rad_s: self.tally.touchdown.map(|(spin, _)| spin),
+            touchdown_fall_m_s: self.tally.touchdown.map(|(_, fall)| fall),
+            duration_s: self.world.time_s() as f32,
+        }
+    }
+
+    /// The first time anything touches the ground, keeps the spin and fall speed from
+    /// `before` this step (after it, the ground has already stopped the car).
+    fn track_touchdown(&mut self, before: &CarState) {
+        let touching = self.state.wheels_down() > 0 || self.world.chassis_touching();
+        if touching && self.tally.touchdown.is_none() {
+            let [x, y, z] = before.angular_velocity_body_rad_s;
+            let spin_rad_s = (x * x + y * y + z * z).sqrt();
+            self.tally.touchdown = Some((spin_rad_s, before.falling_speed_m_s()));
+        }
+    }
+
+    /// Starts or breaks the run of all four wheels down that success needs.
+    fn track_wheels_down(&mut self) {
+        if self.state.wheels_down() < WHEEL_COUNT {
+            self.tally.wheels_down_since_s = None;
+        } else if self.tally.wheels_down_since_s.is_none() {
+            self.tally.wheels_down_since_s = Some(self.world.time_s() as f32);
+        }
+    }
+
+    /// Adds one event to the tally.
+    fn record(&mut self, event: SimEvent) {
+        match event {
+            SimEvent::Save { air_used_kg, .. } => {
+                self.tally.saves += 1;
+                self.tally.air_used_in_saves_kg += air_used_kg;
+            }
+            SimEvent::Crash { cause } => self.tally.crash_cause = Some(cause),
+            _ => {}
+        }
+    }
+
+    fn held_on_wheels_long_enough(&self) -> bool {
+        match self.tally.wheels_down_since_s {
+            Some(since_s) => self.world.time_s() as f32 - since_s >= self.rules.success_hold_s,
+            None => false,
+        }
+    }
+}
