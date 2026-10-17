@@ -20,7 +20,7 @@ pub enum CrashCause {
     UpsideDown,
     /// The car stayed tipped over for too long.
     Stuck,
-    /// The car fell out of the world.
+    /// The car fell out of the world or left the course's bounds box.
     OutOfBounds,
 }
 
@@ -72,6 +72,9 @@ pub struct EventInputs {
     pub impact_speed_m_s: f32,
     /// True if the roof touches anything.
     pub roof_touching: bool,
+    /// True if the centre of mass has left the course's bounds box (always false on
+    /// flat ground, which has no box).
+    pub outside_course: bool,
 }
 
 /// An upset in progress.
@@ -140,7 +143,7 @@ impl EventTracker {
         if inputs.roof_touching && inputs.tilt_rad > config.upside_down_tilt_deg.to_radians() {
             return Some(CrashCause::UpsideDown);
         }
-        if inputs.height_m < config.out_of_bounds_y_m {
+        if inputs.height_m < config.out_of_bounds_y_m || inputs.outside_course {
             return Some(CrashCause::OutOfBounds);
         }
         if self.stuck_s > config.stuck_s {
@@ -256,6 +259,7 @@ mod tests {
             height_m: 0.6,
             impact_speed_m_s: 0.0,
             roof_touching: false,
+            outside_course: false,
         }
     }
 

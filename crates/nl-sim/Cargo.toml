@@ -13,11 +13,11 @@ rand.workspace = true
 rand_chacha.workspace = true
 rapier3d.workspace = true
 serde.workspace = true
+# Course files are JSON (SPEC §7.11).
+serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 
 [lints]
 workspace = true
 
-[dev-dependencies]
-serde_json.workspace = true

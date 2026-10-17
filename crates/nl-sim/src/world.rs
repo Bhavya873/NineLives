@@ -1,8 +1,8 @@
 //! The simulated world: the ground, the car, and the fixed physics step.
 //!
-//! `World::step` advances exactly one physics step of `PHYSICS_DT_S` (1/120 s).
-//! M1 has only flat ground and driving; thrusters, the air tank and events join
-//! the step in M3, following the order in SPEC §7.1.
+//! `World::step` advances exactly one physics step of `PHYSICS_DT_S` (1/120 s),
+//! following the order in SPEC §7.1. The ground is either one big flat box or a course
+//! built from course JSON (SPEC §7.11).
 //!
 //! `snapshot` and `restore` save and load the whole world as bytes, for training
 //! checkpoints and the determinism tests. The game's respawn is lighter: it only puts
@@ -25,6 +25,8 @@ use crate::conventions::{
     NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
     gravity_vector,
 };
+use crate::course::{BoundsSpec, CourseSpec};
+use crate::course_build::{build_course_shapes, shape_collider};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
@@ -37,7 +39,7 @@ use crate::vehicle_config::VehicleConfig;
 pub const DEFAULT_GROUND_FRICTION: f32 = 1.0;
 
 /// Half-size of the flat ground box, in metres. Big enough that M1 tests never
-/// drive off it. Course pieces replace this in M7.
+/// drive off it. Courses build their own floor instead (`course_build`).
 const FLAT_GROUND_HALF_EXTENTS_M: [f32; 3] = [2000.0, 0.5, 2000.0];
 
 /// Where the car starts on flat ground: centre of mass a little above its resting
@@ -61,6 +63,13 @@ impl Pose {
             rotation_xyzw: [rotation.x, rotation.y, rotation.z, rotation.w],
         }
     }
+
+    /// The same pose as Rapier's type, with the rotation normalized.
+    pub fn to_rapier(&self) -> Pose3 {
+        let [x, y, z, w] = self.rotation_xyzw;
+        let rotation = Rotation::from_xyzw(x, y, z, w).normalize();
+        Pose3::from_parts(Vector::from_array(self.position_m), rotation)
+    }
 }
 
 /// Most events kept waiting for `drain_events`; older ones are dropped.
@@ -68,7 +77,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 7;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 8;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -93,7 +102,7 @@ pub enum PlaceCarError {
     ZeroRotation,
 }
 
-/// A world with flat ground and one car.
+/// A world with flat ground or a course, and one car.
 #[derive(Serialize, Deserialize)]
 pub struct World {
     physics: PhysicsWorld,
@@ -120,6 +129,8 @@ pub struct World {
     /// the world, not state, so it is not in snapshots and `restore` keeps it.
     #[serde(skip)]
     auto_respawn_after_steps: Option<u32>,
+    /// The course's bounds box; leaving it is an out-of-bounds crash. None on flat ground.
+    course_bounds: Option<BoundsSpec>,
     /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
@@ -139,13 +150,52 @@ impl World {
         ground_friction: f32,
         seed: u64,
     ) -> World {
-        let mut physics = PhysicsWorld::new();
-        physics.gravity = gravity_vector();
-        physics.integration_parameters.dt = PHYSICS_DT_S;
+        let mut physics = new_physics();
         physics.insert_collider(build_flat_ground(ground_friction), None);
-
         let start_m = Vector::new(0.0, FLAT_GROUND_START_HEIGHT_M, 0.0);
-        let car = Car::spawn(&mut physics, vehicle_config, start_m, 0.0);
+        World::with_car(physics, vehicle_config, mode, start_m, 0.0, None, seed)
+    }
+
+    /// Builds a checked course (SPEC §7.11) and puts the car at its start, with a full
+    /// tank for `mode`. Leaving the course's bounds box is an out-of-bounds crash.
+    /// `ground_friction` applies to every solid course shape, as on flat ground.
+    pub fn new_on_course(
+        vehicle_config: &VehicleConfig,
+        mode: ModeParams,
+        course: &CourseSpec,
+        ground_friction: f32,
+        seed: u64,
+    ) -> World {
+        let mut physics = new_physics();
+        for shape in build_course_shapes(course) {
+            if let Some(collider) = shape_collider(&shape, ground_friction) {
+                physics.insert_collider(collider, None);
+            }
+        }
+        let start_m = Vector::from_array(course.start.pos);
+        let yaw_rad = course.start.yaw.to_radians();
+        World::with_car(
+            physics,
+            vehicle_config,
+            mode,
+            start_m,
+            yaw_rad,
+            Some(course.bounds),
+            seed,
+        )
+    }
+
+    /// Adds the car to `physics` at `start_m`, facing `yaw_rad`, and wraps it all up.
+    fn with_car(
+        mut physics: PhysicsWorld,
+        vehicle_config: &VehicleConfig,
+        mode: ModeParams,
+        start_m: Vector,
+        yaw_rad: f32,
+        course_bounds: Option<BoundsSpec>,
+        seed: u64,
+    ) -> World {
+        let car = Car::spawn(&mut physics, vehicle_config, start_m, yaw_rad);
         // Fill the scene-query tree now; otherwise the wheel rays on the very first
         // step would find nothing, because Rapier only refreshes it inside a step.
         physics.detect_collisions(&(), &());
@@ -164,6 +214,7 @@ impl World {
             checkpoint,
             steps_since_crash: 0,
             auto_respawn_after_steps: None,
+            course_bounds,
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
@@ -289,6 +340,9 @@ impl World {
             height_m: body.translation().y,
             impact_speed_m_s: contacts.impact_speed_m_s,
             roof_touching: contacts.roof_touching,
+            outside_course: self
+                .course_bounds
+                .is_some_and(|bounds| !bounds.contains(body.center_of_mass().to_array())),
         };
         let config = &self.car.config().events;
         self.events
@@ -551,13 +605,8 @@ impl World {
         self.car.forget_wheel_rays();
         self.events.reset();
         self.steps_since_crash = 0;
-        let [x, y, z, w] = target.pose.rotation_xyzw;
-        let rotation = Rotation::from_xyzw(x, y, z, w).normalize();
         let body = &mut self.physics.bodies[self.car.chassis];
-        body.set_position(
-            Pose3::from_parts(Vector::from_array(target.pose.position_m), rotation),
-            true,
-        );
+        body.set_position(target.pose.to_rapier(), true);
         body.set_linvel(Vector::from_array(target.linear_velocity_m_s), true);
         body.set_angvel(Vector::from_array(target.angular_velocity_rad_s), true);
         // Refresh the scene-query tree so the wheel rays see the car's new place.
@@ -654,6 +703,14 @@ fn check_finite(what: &'static str, values: &[f32]) -> Result<(), PlaceCarError>
     } else {
         Err(PlaceCarError::NotFinite { what })
     }
+}
+
+/// An empty physics world with the sim's gravity and step (SPEC §4).
+fn new_physics() -> PhysicsWorld {
+    let mut physics = PhysicsWorld::new();
+    physics.gravity = gravity_vector();
+    physics.integration_parameters.dt = PHYSICS_DT_S;
+    physics
 }
 
 /// A large flat box whose top surface is at y = 0.

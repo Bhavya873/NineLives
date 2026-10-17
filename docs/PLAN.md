@@ -51,6 +51,19 @@ Each change gets a `SPEC.md` edit and a line in `docs/DECISIONS.md` in M0.
 - Air mass isn't added to the vehicle mass in v1.
 - Versions are pinned at scaffold time after checking the registries. The spec names rapier3d 0.36.1, pyo3 0.30.1 and SB3 2.9.0.
 
+### 3.3 Landing quality (M7, owner request 2026-10-17)
+A "save" today only means the car ends still, upright and on four wheels. For a driver that is not enough. One M7 PR, after the driver bot and Stages C/D/E but before the full training run, adds the following. Each item gets a sign test or rule test first, and an eval column so `results/` shows it:
+
+| Gap | What we add (all numbers start in `configs/reward.toml` or `scenarios.toml`) |
+|---|---|
+| Lands facing the wrong way | Heading error at touchdown: the angle between the nose (flattened to the ground) and the heading at take-off (Stage C) or the course direction (Stage D). The save quality `q` gets a `clamp01(1 − error / 45°)` factor. Stage C/D success needs an error < 30°. |
+| Loses speed and heading | Speed kept: forward speed 0.5 s after touchdown ÷ forward speed at take-off, as a `q` factor and an eval column. Only on driving stages (C/D/E); Stage A/B drops start at rest. |
+| Wheels slam down | New `HardLanding` event (not a crash) when any wheel's suspension bottoms out (compression ≥ 0.95) at touchdown. It costs a penalty and counts in eval. |
+| Bounces, slides, control returns late | Settle time: from first touchdown until four wheels are down with `|ω|` < 1.5 rad/s and sideways speed < 1 m/s, unbroken. It goes in eval, and a small per-step cost applies while unsettled after a touchdown. |
+| Tank empty for the next jump; thrust while parked | Success needs the throttle sum to stay < 0.05 for the last 0.5 s of the success window, so idle thrust can't count as a finished episode. The rule is gated on success, which needs four wheels down, so the M5 "keep one wheel up" loophole gives nothing. Air left at success adds a small bonus. |
+
+The events, rules and terms live only in `nl-sim` (golden rule 1). Python and the browser read them from there.
+
 ---
 
 ## 4. Milestones
