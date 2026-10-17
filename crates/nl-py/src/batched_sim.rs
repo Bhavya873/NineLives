@@ -5,6 +5,7 @@
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::reward::RewardTerms;
+use nl_sim::scenarios::ScenariosConfig;
 use nl_sim::training::FinishedEpisode;
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -29,6 +30,8 @@ type StepReturn<'py> = (
 #[pyclass(module = "ninelives_sim")]
 pub struct BatchedSim {
     slots: Vec<EnvSlot>,
+    /// The scenarios every slot was built with (for `level_count`).
+    scenarios: ScenariosConfig,
 }
 
 #[pymethods]
@@ -48,7 +51,10 @@ impl BatchedSim {
             let training = config.training.clone();
             slots.push(EnvSlot::new(training, config.stage, seed, index as u64));
         }
-        Ok(BatchedSim { slots })
+        Ok(BatchedSim {
+            slots,
+            scenarios: config.training.scenarios,
+        })
     }
 
     /// How many environments there are.
@@ -103,6 +109,12 @@ impl BatchedSim {
         for (index, slot) in self.slots.iter_mut().enumerate() {
             slot.reseed(seed, index as u64);
         }
+    }
+
+    /// How many curriculum levels `stage` ("A" or "B") has; the last is the full stage.
+    fn level_count(&self, stage: &str) -> PyResult<u32> {
+        let stage = parse_stage(stage).map_err(PyValueError::new_err)?;
+        Ok(self.scenarios.level_count(stage))
     }
 
     /// Sets the stage ("A" or "B") and curriculum level for every environment's next

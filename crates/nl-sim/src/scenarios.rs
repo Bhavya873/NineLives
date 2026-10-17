@@ -145,6 +145,14 @@ impl ScenariosConfig {
         Ok(config)
     }
 
+    /// How many curriculum levels `stage` has (1 for a stage without a curriculum).
+    pub fn level_count(&self, stage: Stage) -> u32 {
+        match stage {
+            Stage::A => self.curriculum_a.levels,
+            Stage::B => 1,
+        }
+    }
+
     /// These scenarios with `stage` at curriculum `level` (0 = easiest). Only Stage A
     /// has levels so far; any other stage gets the config unchanged.
     pub fn at_level(&self, stage: Stage, level: u32) -> ScenariosConfig {
