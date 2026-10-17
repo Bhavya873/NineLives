@@ -16,7 +16,7 @@ pub const BUTTON_CHAOS: u16 = 1 << 2;
 /// Button bit: reset to the last checkpoint.
 pub const BUTTON_RESET: u16 = 1 << 3;
 /// Bit of the first manual nozzle button. Nozzle `i` uses bit `FIRST_MANUAL_NOZZLE_BIT + i`.
-pub const FIRST_MANUAL_NOZZLE_BIT: u16 = 4;
+pub const FIRST_MANUAL_NOZZLE_BIT: u32 = 4;
 
 /// Number of bytes in a packed `InputFrame`.
 pub const INPUT_FRAME_BYTES: usize = 4;
@@ -54,7 +54,7 @@ impl InputFrame {
         if nozzle_index >= NOZZLE_COUNT {
             return false;
         }
-        self.is_pressed(1 << (FIRST_MANUAL_NOZZLE_BIT as usize + nozzle_index))
+        self.is_pressed(1 << (FIRST_MANUAL_NOZZLE_BIT + nozzle_index as u32))
     }
 
     /// Packs the frame into 4 bytes: throttle, steer, buttons (little-endian).

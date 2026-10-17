@@ -25,10 +25,7 @@ fn run(world: &mut World, input: InputFrame, seconds: f32) {
 }
 
 fn throttle(amount: i8) -> InputFrame {
-    InputFrame {
-        throttle: amount,
-        ..InputFrame::default()
-    }
+    throttle_and_steer(amount, 0)
 }
 
 fn throttle_and_steer(throttle: i8, steer: i8) -> InputFrame {

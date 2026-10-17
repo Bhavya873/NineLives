@@ -10,7 +10,7 @@ use rapier3d::prelude::*;
 
 use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
-use crate::vehicle_config::VehicleConfig;
+use crate::vehicle_config::{SteeringConfig, VehicleConfig};
 
 /// Index of the front-left wheel. The front wheels (0 and 1) steer.
 const FRONT_LEFT_WHEEL: usize = 0;
@@ -54,9 +54,17 @@ impl Car {
         }
     }
 
+    /// Everything the car does before the physics step, in SPEC §7.1 order: read the
+    /// driver's input, reset and add forces, then run the raycast wheels.
+    /// Call exactly once per physics step, just before `PhysicsWorld::step`.
+    pub fn prepare_physics_step(&mut self, physics: &mut PhysicsWorld, input: InputFrame) {
+        self.apply_driver_input(physics, input);
+        self.reset_forces_and_apply_air_drag(physics);
+        self.update_wheels(physics);
+    }
+
     /// Sets steering, engine force and brakes from the driver's input.
-    /// Call once per physics step, before `update_wheels`.
-    pub fn apply_driver_input(&mut self, physics: &PhysicsWorld, input: InputFrame) {
+    fn apply_driver_input(&mut self, physics: &PhysicsWorld, input: InputFrame) {
         let forward_speed_m_s = self.forward_speed_m_s(physics);
         self.update_steering(input.steer_fraction(), forward_speed_m_s);
 
@@ -71,7 +79,7 @@ impl Car {
     /// Clears last step's forces and torques, then adds air drag at the centre of mass
     /// (SPEC §7.2). Rapier keeps user forces between steps, so this must run once per
     /// physics step, before adding any other force.
-    pub fn reset_forces_and_apply_air_drag(&self, physics: &mut PhysicsWorld) {
+    fn reset_forces_and_apply_air_drag(&self, physics: &mut PhysicsWorld) {
         let drag = &self.config.air_drag;
         let body = &mut physics.bodies[self.chassis];
         let velocity_m_s = body.linvel();
@@ -90,8 +98,8 @@ impl Car {
     ///
     /// Skipped while the car is upside down: its "down" rays then point at the sky, and
     /// anything they hit (a ceiling, the underside of a ramp) must not push the car.
-    pub fn update_wheels(&mut self, physics: &mut PhysicsWorld) {
-        if self.up_alignment(physics) <= 0.0 {
+    fn update_wheels(&mut self, physics: &mut PhysicsWorld) {
+        if !self.is_upright(physics) {
             return;
         }
         // The rays start inside the car, so they must ignore the car's own colliders.
@@ -119,13 +127,20 @@ impl Car {
     /// (1/120 s). A wheel only counts when the car is the right way up, because on an
     /// upside-down car the "down" rays point at the sky (SPEC §7.3).
     pub fn wheels_touching(&self, physics: &PhysicsWorld) -> [bool; WHEEL_COUNT] {
-        let up_alignment = self.up_alignment(physics);
         let mut touching = [false; WHEEL_COUNT];
+        if !self.is_upright(physics) {
+            return touching;
+        }
         for (index, wheel) in self.wheels.wheels().iter().enumerate() {
-            touching[index] =
-                wheel_counts_as_touching(wheel.raycast_info().is_in_contact, up_alignment);
+            touching[index] = wheel.raycast_info().is_in_contact;
         }
         touching
+    }
+
+    /// True when the car's up axis points at least a little upwards. Below that, the
+    /// wheel rays point at the sky and must be ignored (SPEC §7.3).
+    fn is_upright(&self, physics: &PhysicsWorld) -> bool {
+        self.up_alignment(physics) > 0.0
     }
 
     /// How much the car's up axis points along world up: 1 upright, 0 on its side,
@@ -144,12 +159,7 @@ impl Car {
     /// the steering rate limit, and never past the speed-dependent angle limit.
     fn update_steering(&mut self, steer_fraction: f32, forward_speed_m_s: f32) {
         let steering = &self.config.steering;
-        let limit_rad = steering_limit_rad(
-            steering.max_angle_low_speed_rad,
-            steering.max_angle_high_speed_rad,
-            steering.high_speed_m_s,
-            forward_speed_m_s.abs(),
-        );
+        let limit_rad = steering_limit_rad(steering, forward_speed_m_s.abs());
         let target_rad = steer_fraction * limit_rad;
         let max_change_rad = steering.max_rate_rad_s * PHYSICS_DT_S;
         let change_rad =
@@ -189,17 +199,14 @@ impl Car {
     }
 }
 
-/// The largest steering angle allowed at `speed_m_s`: `low_rad` when stopped, sliding
-/// linearly down to `high_rad` at `high_speed_m_s` and above (SPEC §7.3).
-fn steering_limit_rad(low_rad: f32, high_rad: f32, high_speed_m_s: f32, speed_m_s: f32) -> f32 {
-    let progress = (speed_m_s / high_speed_m_s).clamp(0.0, 1.0);
+/// The largest steering angle allowed at `speed_m_s`: the low-speed limit when
+/// stopped, sliding linearly down to the high-speed limit at `high_speed_m_s` and
+/// above (SPEC §7.3).
+fn steering_limit_rad(steering: &SteeringConfig, speed_m_s: f32) -> f32 {
+    let low_rad = steering.max_angle_low_speed_rad;
+    let high_rad = steering.max_angle_high_speed_rad;
+    let progress = (speed_m_s / steering.high_speed_m_s).clamp(0.0, 1.0);
     low_rad + (high_rad - low_rad) * progress
-}
-
-/// A wheel touches the ground only if its ray hit something and the car is upright
-/// enough (SPEC §7.3). On an upside-down car the rays point up, so a hit means nothing.
-fn wheel_counts_as_touching(ray_hit: bool, up_alignment: f32) -> bool {
-    ray_hit && up_alignment > 0.0
 }
 
 /// The chassis rigid body: mass and inertia are set by hand (SPEC §7.3), so the
@@ -269,21 +276,23 @@ fn build_wheels(
 mod tests {
     use super::*;
 
+    fn steering_config() -> SteeringConfig {
+        SteeringConfig {
+            max_angle_low_speed_rad: 0.5,
+            max_angle_high_speed_rad: 0.15,
+            high_speed_m_s: 40.0,
+            max_rate_rad_s: 2.0,
+        }
+    }
+
     #[test]
     fn steering_limit_is_the_low_speed_value_when_stopped() {
-        assert_eq!(steering_limit_rad(0.5, 0.15, 40.0, 0.0), 0.5);
+        assert_eq!(steering_limit_rad(&steering_config(), 0.0), 0.5);
     }
 
     #[test]
     fn steering_limit_is_the_high_speed_value_at_and_above_high_speed() {
-        assert_eq!(steering_limit_rad(0.5, 0.15, 40.0, 40.0), 0.15);
-        assert_eq!(steering_limit_rad(0.5, 0.15, 40.0, 90.0), 0.15);
-    }
-
-    #[test]
-    fn a_ray_hit_does_not_count_when_the_car_is_upside_down() {
-        assert!(wheel_counts_as_touching(true, 1.0));
-        assert!(!wheel_counts_as_touching(true, -1.0));
-        assert!(!wheel_counts_as_touching(false, 1.0));
+        assert_eq!(steering_limit_rad(&steering_config(), 40.0), 0.15);
+        assert_eq!(steering_limit_rad(&steering_config(), 90.0), 0.15);
     }
 }

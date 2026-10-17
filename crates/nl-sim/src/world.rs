@@ -62,11 +62,7 @@ impl World {
 
     /// Advances the world by one physics step (1/120 s).
     pub fn step(&mut self, input: InputFrame) {
-        // SPEC §7.1 order, for the parts that exist so far:
-        // 1. read driver input, 7. forces, 8. vehicle controller, 9. physics step.
-        self.car.apply_driver_input(&self.physics, input);
-        self.car.reset_forces_and_apply_air_drag(&mut self.physics);
-        self.car.update_wheels(&mut self.physics);
+        self.car.prepare_physics_step(&mut self.physics, input);
         self.physics.step();
         self.step_count += 1;
     }
