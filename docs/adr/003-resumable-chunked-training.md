@@ -1,6 +1,6 @@
-# ADR-003: Resumable, chunked CPU training with checkpoints on `ckpt/` branches
+# ADR-003: Resumable, chunked CPU training (checkpoints now stay in `runs/`)
 
-**Status:** Accepted
+**Status:** Accepted; amended 2026-10-17 (training runs locally, checkpoints stay in `runs/`, see the amendment at the end)
 **Date:** 2026-10-17
 **Deciders:** Bhavya Modi (owner)
 
@@ -11,7 +11,7 @@ Training runs in a cloud container with 4 CPU cores and no GPU. A single backgro
 - Train with Stable-Baselines3 PPO on CPU.
 - Each training command runs for at most 60 minutes (`--max-minutes 60`), then saves a checkpoint and exits cleanly. `--resume` continues from the last checkpoint.
 - A checkpoint holds the PPO model, the `VecNormalize` statistics, the curriculum state (stage, level, success windows), the step count and the RNG seeds.
-- After each chunk, the latest and best checkpoints (well under 5 MB) are committed to an orphan branch `ckpt/<run-id>`. That branch never merges into `main`.
+- After each chunk, the latest and best checkpoints (well under 5 MB) are committed to an orphan branch `ckpt/<run-id>`. That branch never merges into `main`. *(Dropped by the 2026-10-17 amendment: checkpoints stay in `runs/`.)*
 - Every chunk is logged in `docs/EXPERIMENTS.md`.
 - The same commands work on the owner's machine as a fallback (`docs/TRAINING.md`).
 
@@ -43,5 +43,12 @@ Training runs in a cloud container with 4 CPU cores and no GPU. A single backgro
 ## Action items
 1. [ ] `--max-minutes`, `--resume` and a checkpoint format in `train.py` (M5).
 2. [ ] Resume test in `pytest`.
-3. [ ] `scripts/push_checkpoint.sh <run-id>` to commit to `ckpt/<run-id>`.
+3. [x] ~~`scripts/push_checkpoint.sh <run-id>` to commit to `ckpt/<run-id>`.~~ Dropped by the amendment.
 4. [ ] `docs/TRAINING.md` for running on the owner's machine.
+
+## Amendment (2026-10-17, start of M5)
+The owner moved training to their own machine (8-core Apple M1 Pro, 16 GB). Nothing on that machine is reclaimed, so the orphan `ckpt/<run-id>` branches are no longer needed:
+- Checkpoints (latest and best) stay in `runs/<run-id>/`, which is gitignored. No checkpoint is committed to any branch.
+- `--resume` and `--max-minutes` stay: a laptop sleeps, restarts and gets closed, and the resume test still guards the curriculum state.
+- The committed outputs are unchanged: `models/policy.json`, up to 8 viewer checkpoints under `web/public/checkpoints/<run-id>/` (SPEC §9.12) and the `docs/EXPERIMENTS.md` log.
+- Option B above ("one long run on the owner's machine") is now the main path, still in resumable chunks.
