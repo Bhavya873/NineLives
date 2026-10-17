@@ -8,9 +8,11 @@ tilt = 0.05
 # Spin: weight × −min(|ω|², spin_cap).
 spin = 0.002
 # Air with a limited tank: weight × −(air used this step / tank capacity).
-air_limited = 2.0
+# 4× SPEC §9.4's 2.0 (and unlimited 4× 0.002): with the start weights the policy kept
+# a nozzle open after landing (run stage-a-001, docs/EXPERIMENTS.md).
+air_limited = 8.0
 # Air when unlimited: weight × −(sum of the 10 throttles).
-air_unlimited = 0.002
+air_unlimited = 0.008
 # Airborne: weight × −1 per step while flying (no wheel, body or roof touching) longer
 # than airborne_grace_s.
 airborne = 0.02

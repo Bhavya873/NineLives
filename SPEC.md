@@ -392,8 +392,8 @@ Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range 
 |---|---|---|
 | Tilt | `(up·world_up − 1)` | 0.05 |
 | Spin | `−min(‖ω‖², 50)` | 0.002 |
-| Air (limited) | `−air_used_step / tank_capacity` | 2.0 |
-| Air (unlimited) | `−Σ u` | 0.002 |
+| Air (limited) | `−air_used_step / tank_capacity` | 8.0 (was 2.0; see DECISIONS) |
+| Air (unlimited) | `−Σ u` | 0.008 (was 0.002) |
 | Airborne time | `−1` per step while airborne for longer than 0.5 s | 0.02 |
 | Smoothness | `−‖u_t − u_{t−1}‖²` | 0.002 |
 | Save (event) | `2 + 3·q`, `q = clamp(1 − ‖ω‖/4) · clamp(1 − v_down/6)`, with ‖ω‖ and v_down taken just before the touchdown that led to the save | 1 |
@@ -620,10 +620,10 @@ class Game {
 - [x] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
 
 **M5 — Python env and first policy**
-- [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
-- [ ] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
-- [ ] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
-- [ ] Up to 8 evenly spaced checkpoints are exported as policy JSON for the training viewer (§9.12).
+- [x] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
+- [x] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
+- [x] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
+- [x] Up to 8 evenly spaced checkpoints are exported as policy JSON for the training viewer (§9.12).
 
 **M6 — AI in the browser**
 - [ ] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.

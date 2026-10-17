@@ -21,6 +21,7 @@ from ninelives.callbacks import CurriculumCallback, RunCheckpointCallback, TimeL
 from ninelives.curriculum import Curriculum
 from ninelives.env import NineLivesVecEnv
 from ninelives.run_files import RUNS_DIR, RunState, load_checkpoint, save_checkpoint
+from ninelives.sim_config import CONFIGS_DIR
 from ninelives.train_config import TrainConfig, load_train_config
 
 # Activation names a training YAML may use, and the torch layer each one means.
@@ -75,7 +76,14 @@ def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[P
         device="cpu",
     )
     curriculum = fresh_curriculum(config, env)
-    return model, RunState(steps=0, curriculum=curriculum, best_eval_success=-1.0, wall_seconds=0.0)
+    state = RunState(
+        steps=0,
+        total_steps=config.total_steps,
+        curriculum=curriculum,
+        best_eval_success=-1.0,
+        wall_seconds=0.0,
+    )
+    return model, state
 
 
 def resume_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[PPO, RunState]:
@@ -83,6 +91,12 @@ def resume_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tupl
     run does not replay the episodes it has already seen."""
     model, _, state = load_checkpoint(run_dir / "latest", env, fresh_curriculum(config, env))
     model.set_random_seed(config.seed + state.steps)
+    if state.total_steps and state.total_steps != config.total_steps:
+        print(
+            f"warning: this run was planned for {state.total_steps} steps, the config now says "
+            f"{config.total_steps}; the learning rate schedule will jump"
+        )
+    state.total_steps = config.total_steps
     return model, state
 
 
@@ -101,6 +115,8 @@ def train(argv: list[str] | None = None) -> RunState:
     else:
         run_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy(args.config, run_dir / "config.yaml")
+        # The TOML configs too: the reward and scenarios are part of what was trained.
+        shutil.copytree(CONFIGS_DIR, run_dir / "configs", ignore=shutil.ignore_patterns("train"))
         model, state = new_run(config, env, run_dir)
     # Before learn(): it resets every env, and those first episodes must already run
     # at the curriculum's level.

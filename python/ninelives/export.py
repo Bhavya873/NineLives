@@ -84,14 +84,22 @@ def rounded(values: list[float], digits: int | None) -> list[float]:
 
 
 def git_sha() -> str:
-    """The commit the export was made from, or "unknown" outside a git checkout."""
+    """The commit the export was made from, with "-dirty" if configs or code differ from
+    it (then the commit alone cannot reproduce the run); "unknown" outside a checkout."""
     try:
-        result = subprocess.run(
+        head = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True
+        )
+        changed = subprocess.run(
+            ["git", "status", "--porcelain", "--", "configs", "crates", "python"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
         )
     except OSError:
         return "unknown"
-    return result.stdout.strip() or "unknown"
+    sha = head.stdout.strip() or "unknown"
+    return f"{sha}-dirty" if changed.stdout.strip() else sha
 
 
 def evenly_spaced(items: list[Path], count: int) -> list[Path]:
@@ -102,16 +110,21 @@ def evenly_spaced(items: list[Path], count: int) -> list[Path]:
     return [items[index] for index in sorted(picks)]
 
 
-def export_viewer_checkpoints(run_dir: Path) -> list[Path]:
-    """SPEC §9.12: the training viewer's checkpoint files for this run."""
+def export_viewer_checkpoints(run_dir: Path, shipped: Path) -> list[Path]:
+    """SPEC §9.12: the training viewer's checkpoint files for this run. They run up to
+    the shipped policy (`shipped`, the folder exported to models/policy.json), which is
+    always the last one, so the viewer ends on the policy the game plays."""
+    shipped_steps = load_model_and_normalizer(shipped)[0].num_timesteps
     folders = [folder for folder in (run_dir / "checkpoints").iterdir() if folder.name.isdigit()]
-    numbered = sorted(folders, key=lambda folder: int(folder.name))
+    earlier = [folder for folder in folders if int(folder.name) < shipped_steps]
+    earlier.sort(key=lambda folder: int(folder.name))
+    numbered = [*evenly_spaced(earlier, VIEWER_MAX_CHECKPOINTS - 1), shipped]
     out_dir = VIEWER_DIR / run_dir.name
     out_dir.mkdir(parents=True, exist_ok=True)
     for old_file in out_dir.glob("*.json"):
         old_file.unlink()  # a re-export may write fewer files than the last one
     written = []
-    for number, folder in enumerate(evenly_spaced(numbered, VIEWER_MAX_CHECKPOINTS), start=1):
+    for number, folder in enumerate(numbered, start=1):
         model, normalizer = load_model_and_normalizer(folder)
         policy = export_policy(model, normalizer, run_dir.name, VIEWER_SIGNIFICANT_DIGITS)
         path = out_dir / f"{number}.json"
@@ -144,7 +157,7 @@ def main(argv: list[str] | None = None) -> None:
     args.out.write_text(json.dumps(export_policy(model, normalizer, args.run.name)))
     print(f"wrote {args.out} ({model.num_timesteps} steps)")
     if args.viewer:
-        for path in export_viewer_checkpoints(args.run):
+        for path in export_viewer_checkpoints(args.run, folder):
             print(f"wrote {path}")
 
 
