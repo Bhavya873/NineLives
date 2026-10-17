@@ -23,9 +23,11 @@ import {
   BUTTON_CHAOS,
   BUTTON_HOP,
   BUTTON_RESET,
+  FIRST_MANUAL_NOZZLE_BIT,
   onKeyPress,
   readInputFrame,
   startKeyboard,
+  tapButton,
 } from './input/keyboard.ts';
 import { followCar, snapCamera } from './render/chase-camera.ts';
 import {
@@ -46,7 +48,7 @@ import {
 } from './render/scene.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
-import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
+import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
 /** Reused each frame so the render loop allocates nothing for these. */
 const shake = new Vector3();
@@ -54,6 +56,7 @@ const crashPosition = new Vector3();
 const hudValues: HudValues = {
   speedMS: 0,
   mode: ModeCode.Realistic,
+  controller: ControllerCode.Off,
   airFraction: 1,
   unlimitedAir: false,
   hopBlocked: 0,
@@ -75,6 +78,18 @@ async function start(): Promise<void> {
   onKeyPress('KeyM', () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
+  });
+  // SPEC §11.3: T cycles the controller. Until PD and the AI exist (M4–M5) that is
+  // Off ↔ Manual; Manual is the debug controller for feeling each nozzle.
+  onKeyPress('KeyT', () => {
+    const isManual = game.hud()[HudField.Controller] === ControllerCode.Manual;
+    game.set_controller(isManual ? 'off' : 'manual');
+  });
+  const chaosButton = requireElement('chaos-button');
+  chaosButton.addEventListener('click', () => {
+    tapButton(BUTTON_CHAOS);
+    // Give the keyboard back, or Space (Hop) would "click" the focused button again.
+    chaosButton.blur();
   });
 
   const frames: PhysicsFrames = {
@@ -187,7 +202,8 @@ function checkWasmLayout(): void {
     Game.button_hop() === BUTTON_HOP &&
     Game.button_boost() === BUTTON_BOOST &&
     Game.button_chaos() === BUTTON_CHAOS &&
-    Game.button_reset() === BUTTON_RESET;
+    Game.button_reset() === BUTTON_RESET &&
+    Game.first_manual_nozzle_bit() === FIRST_MANUAL_NOZZLE_BIT;
   if (!buttonsMatch) {
     throw new Error('The wasm build and the keyboard disagree on the button bits');
   }
@@ -210,6 +226,7 @@ function snapViewToGame(
 function fillHudValues(values: Float32Array, out: HudValues): void {
   out.speedMS = values[HudField.SpeedMS] ?? 0;
   out.mode = values[HudField.Mode] ?? ModeCode.Custom;
+  out.controller = values[HudField.Controller] ?? ControllerCode.Off;
   out.airFraction = values[HudField.AirFraction] ?? 1;
   out.unlimitedAir = values[HudField.UnlimitedAir] === 1;
   out.hopBlocked = values[HudField.HopBlocked] ?? 0;

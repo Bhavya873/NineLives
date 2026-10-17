@@ -325,6 +325,7 @@ Course JSON, schema version 1:
 pub trait Controller {
     fn reset(&mut self, seed: u64);
     fn act(&mut self, obs: &Obs, ctx: &ControlCtx) -> [f32; 10]; // throttles in [0,1]
+    // Until ObsSpec exists (M4–M5) `act` takes only `ctx` (the driver's InputFrame).
 }
 ```
 
@@ -599,9 +600,9 @@ class Game {
 - [x] Chase camera, the fixed-step loop and interpolation work. Golden trace matches on wasm.
 
 **M3 — Thrusters, tank, modes, events**
-- [ ] 10 nozzles per 7.4 with valve lag; the tank per 7.5; modes per 7.6; Hop/Boost per 7.8; events per 7.9.
-- [ ] All sign, tank, hop and event tests from section 12 pass.
-- [ ] Web: flames, nozzle map, air gauge, toasts, Manual controller with keys 1–0, Chaos button.
+- [x] 10 nozzles per 7.4 with valve lag; the tank per 7.5; modes per 7.6; Hop/Boost per 7.8; events per 7.9.
+- [x] All sign, tank, hop and event tests from section 12 pass.
+- [x] Web: flames, nozzle map, air gauge, toasts, Manual controller with keys 1–0, Chaos button.
 
 **M4 — PD baseline and eval harness**
 - [ ] `Pd` controller with allocation; a controller toggle in the web app.

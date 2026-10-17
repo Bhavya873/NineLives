@@ -22,6 +22,21 @@ export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
 export const BUTTON_CHAOS = 1 << 2;
 export const BUTTON_RESET = 1 << 3;
+/** Bit of the first manual nozzle button; nozzle `i` uses this bit + `i` (SPEC §11.3). */
+export const FIRST_MANUAL_NOZZLE_BIT = 4;
+/** Keys 1, 2, … 9, 0 fire nozzles 0 to 9 when the controller is Manual. */
+const MANUAL_NOZZLE_KEYS = [
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
+  'Digit7',
+  'Digit8',
+  'Digit9',
+  'Digit0',
+];
 
 /** Each button bit and the keys that press it. */
 const BUTTON_KEYS: { bit: number; keys: string[] }[] = [
@@ -29,6 +44,10 @@ const BUTTON_KEYS: { bit: number; keys: string[] }[] = [
   { bit: BUTTON_BOOST, keys: BOOST_KEYS },
   { bit: BUTTON_CHAOS, keys: CHAOS_KEYS },
   { bit: BUTTON_RESET, keys: RESET_KEYS },
+  ...MANUAL_NOZZLE_KEYS.map((key, nozzle) => ({
+    bit: 1 << (FIRST_MANUAL_NOZZLE_BIT + nozzle),
+    keys: [key],
+  })),
 ];
 
 /** Every held key this module handles, so the page does not scroll on arrows or Space. */
@@ -54,6 +73,14 @@ let tappedButtons = 0;
 
 /** One-shot actions for single key presses (e.g. M toggles the mode), by key code. */
 const pressActions = new Map<string, () => void>();
+
+/**
+ * Presses a button for one frame, as if its key were tapped: the on-screen Chaos button
+ * uses this, so a click reaches the game exactly like the C key.
+ */
+export function tapButton(bit: number): void {
+  tappedButtons |= bit;
+}
 
 /** Runs `action` once each time `code` is pressed (holding the key does not repeat it). */
 export function onKeyPress(code: string, action: () => void): void {

@@ -8,7 +8,7 @@ import * as wasm from '../src/wasm/nl_wasm.js';
 wasm.initSync({ module: readFileSync(new URL('../src/wasm/nl_wasm_bg.wasm', import.meta.url)) });
 
 /** The wasm module's exports (Game, HudField, ...), ready to use. */
-export const { CrashCode, EventKind, Game, HopBlocked, HudField, ModeCode } = wasm;
+export const { ControllerCode, CrashCode, EventKind, Game, HopBlocked, HudField, ModeCode } = wasm;
 
 /** The text of the repo's configs/modes.toml. */
 export const modesToml = readFileSync(new URL('../../configs/modes.toml', import.meta.url), 'utf8');

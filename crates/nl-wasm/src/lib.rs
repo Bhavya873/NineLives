@@ -4,15 +4,17 @@
 //! JavaScript values (strings, byte arrays) into `nl-sim` calls and turn results
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
-//! So far: driving, thrusters, the air tank, modes, Hop and Boost, events and respawn.
-//! Controllers, the policy and courses are added in M3–M7, following SPEC §11.1.
+//! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
+//! the Off and Manual controllers. PD, the policy and courses follow in M4–M7 (SPEC §11.1).
 
-use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
+use nl_control::{ControlCtx, Controller, Manual, Off};
+use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_STEPS_PER_CONTROL_STEP};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
 use nl_sim::input::{
-    BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, INPUT_FRAME_BYTES, InputFrame,
+    BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, FIRST_MANUAL_NOZZLE_BIT,
+    INPUT_FRAME_BYTES, InputFrame,
 };
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::vehicle_config::VehicleConfig;
@@ -62,10 +64,45 @@ pub enum HudField {
     Crashed = 13,
     /// 1 while the tank is so low that thrust fades ("NO AIR"), else 0.
     OutOfAir = 14,
+    /// Which controller fires the thrusters: a `ControllerCode` value.
+    Controller = 15,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::OutOfAir as usize + 1;
+const HUD_LENGTH: usize = HudField::Controller as usize + 1;
+
+/// The values `HudField.Controller` can take (SPEC §8).
+#[wasm_bindgen]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ControllerCode {
+    /// No thrusters (Hop and Boost still work).
+    Off = 0,
+    /// Debug: keys 1–0 fire nozzles 0–9.
+    Manual = 1,
+}
+
+/// The controller in use. A plain enum rather than a trait object (CLAUDE.md: plain
+/// constructs); PD and the AI join it in M4–M5.
+enum ActiveController {
+    Off(Off),
+    Manual(Manual),
+}
+
+impl ActiveController {
+    fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
+        match self {
+            ActiveController::Off(controller) => controller.act(ctx),
+            ActiveController::Manual(controller) => controller.act(ctx),
+        }
+    }
+
+    fn code(&self) -> ControllerCode {
+        match self {
+            ActiveController::Off(_) => ControllerCode::Off,
+            ActiveController::Manual(_) => ControllerCode::Manual,
+        }
+    }
+}
 
 /// The values `HudField.Mode` can take.
 #[wasm_bindgen]
@@ -98,6 +135,8 @@ pub struct Game {
     modes: ModesConfig,
     /// Where each nozzle sits and which way its exhaust points (see `nozzle_layout`).
     nozzle_layout: Vec<f32>,
+    /// What fires the thrusters, asked at 60 Hz in `tick`.
+    controller: ActiveController,
     /// Saves and crashes since the game started, counted as events are drained.
     saves: u32,
     crashes: u32,
@@ -155,6 +194,7 @@ impl Game {
             world,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
+            controller: ActiveController::Off(Off),
             saves: 0,
             crashes: 0,
         })
@@ -163,6 +203,23 @@ impl Game {
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
     pub fn set_mode(&mut self, mode: &str) -> Result<(), JsError> {
         self.world.set_mode(self.mode_params(mode)?);
+        Ok(())
+    }
+
+    /// Chooses what fires the thrusters: "off" or "manual" ("pd" and "ai" arrive in
+    /// M4–M5). Throws on any other name. The new controller starts at the next step.
+    pub fn set_controller(&mut self, kind: &str) -> Result<(), JsError> {
+        self.controller = match kind {
+            "off" => ActiveController::Off(Off),
+            "manual" => ActiveController::Manual(Manual),
+            other => {
+                return Err(JsError::new(&format!(
+                    "unknown controller \"{other}\"; use \"off\" or \"manual\""
+                )));
+            }
+        };
+        // Close the valves the old controller left open.
+        self.world.set_controller_throttles([0.0; NOZZLE_COUNT]);
         Ok(())
     }
 
@@ -175,7 +232,13 @@ impl Game {
                 input.len()
             ))
         })?;
-        self.world.step(InputFrame::from_bytes(bytes));
+        let input = InputFrame::from_bytes(bytes);
+        // Controllers run at 60 Hz; the world holds their throttles in between (SPEC §7.1).
+        if self.world.step_count() % PHYSICS_STEPS_PER_CONTROL_STEP as u64 == 0 {
+            let throttles = self.controller.act(&ControlCtx { input });
+            self.world.set_controller_throttles(throttles);
+        }
+        self.world.step(input);
         Ok(())
     }
 
@@ -228,6 +291,7 @@ impl Game {
         values[HudField::Crashes as usize] = self.crashes as f32;
         values[HudField::Crashed as usize] = one_if(crashed);
         values[HudField::OutOfAir as usize] = one_if(self.world.is_out_of_air());
+        values[HudField::Controller as usize] = self.controller.code() as u8 as f32;
         values
     }
 
@@ -317,6 +381,11 @@ impl Game {
     /// Number of floats per event in `drain_events` (4).
     pub fn floats_per_event() -> usize {
         FLOATS_PER_EVENT
+    }
+
+    /// Bit of the first manual nozzle button; nozzle `i` uses this bit + `i`.
+    pub fn first_manual_nozzle_bit() -> u32 {
+        FIRST_MANUAL_NOZZLE_BIT
     }
 
     /// Number of floats per nozzle in `nozzle_layout` (6).
