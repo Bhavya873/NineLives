@@ -4,12 +4,13 @@
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
+use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::input::InputFrame;
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::World;
 
 const VEHICLE_TOML: &str = include_str!("../../../configs/vehicle.toml");
-const STEPS_PER_SECOND: usize = 120;
+const STEPS_PER_SECOND: usize = PHYSICS_HZ as usize;
 
 fn new_world() -> World {
     let config = VehicleConfig::from_toml_str(VEHICLE_TOML).unwrap();
@@ -130,6 +131,22 @@ fn braking_from_20_m_s_stops_the_car_in_a_plausible_distance() {
     assert!(
         stopping_distance_m > 15.0 && stopping_distance_m < 40.0,
         "stopped in {stopping_distance_m} m from {start_speed_m_s} m/s"
+    );
+}
+
+#[test]
+fn letting_go_of_the_throttle_coasts_to_a_slow_stop() {
+    let mut world = new_world();
+    run(&mut world, throttle(127), 2.0);
+
+    run(&mut world, InputFrame::default(), 3.0);
+
+    // Rolling resistance and drag slow the car gently: it neither stops dead nor
+    // keeps its speed.
+    let speed_m_s = world.forward_speed_m_s();
+    assert!(
+        speed_m_s > 15.0 && speed_m_s < 21.0,
+        "speed after coasting: {speed_m_s} m/s"
     );
 }
 

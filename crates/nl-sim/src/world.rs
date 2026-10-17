@@ -7,7 +7,7 @@
 use rapier3d::prelude::*;
 
 use crate::car::Car;
-use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT, gravity_vector};
+use crate::conventions::{PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
 use crate::input::InputFrame;
 use crate::vehicle_config::VehicleConfig;
 
@@ -36,8 +36,11 @@ pub struct World {
 }
 
 impl World {
-    /// Builds flat ground with the given friction and puts the car at the origin,
-    /// facing world +X.
+    /// Builds flat ground and puts the car at the origin, facing world +X.
+    ///
+    /// `ground_friction` applies when the car's body scrapes the ground. Tyre grip
+    /// comes from `wheels.friction_slip` in the vehicle config instead, because
+    /// Rapier's raycast wheels do not read collider friction.
     pub fn new_on_flat_ground(vehicle_config: &VehicleConfig, ground_friction: f32) -> World {
         let mut physics = PhysicsWorld::new();
         physics.gravity = gravity_vector();
@@ -46,6 +49,9 @@ impl World {
 
         let start_m = Vector::new(0.0, FLAT_GROUND_START_HEIGHT_M, 0.0);
         let car = Car::spawn(&mut physics, vehicle_config, start_m, 0.0);
+        // Fill the scene-query tree now; otherwise the wheel rays on the very first
+        // step would find nothing, because Rapier only refreshes it inside a step.
+        physics.detect_collisions(&(), &());
 
         World {
             physics,
@@ -72,7 +78,8 @@ impl World {
 
     /// Simulated time since the world was built.
     pub fn time_s(&self) -> f64 {
-        self.step_count as f64 * PHYSICS_DT_S as f64
+        // Divide by the exact rate; PHYSICS_DT_S is a rounded f32.
+        self.step_count as f64 / PHYSICS_HZ as f64
     }
 
     /// The car's current position and orientation.

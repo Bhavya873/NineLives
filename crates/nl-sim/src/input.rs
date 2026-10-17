@@ -44,9 +44,9 @@ impl InputFrame {
         to_fraction(self.steer)
     }
 
-    /// True if every bit in `button` is pressed.
+    /// True if every bit in `button` is pressed. An empty mask (0) is never pressed.
     pub fn is_pressed(&self, button: u16) -> bool {
-        self.buttons & button == button
+        button != 0 && self.buttons & button == button
     }
 
     /// True if the manual button for nozzle `nozzle_index` (0..10) is pressed.
@@ -130,5 +130,15 @@ mod tests {
         assert!(input.is_manual_nozzle_pressed(9));
         assert!(!input.is_manual_nozzle_pressed(0));
         assert!(!input.is_pressed(BUTTON_HOP));
+    }
+
+    #[test]
+    fn an_empty_button_mask_is_never_pressed() {
+        let input = InputFrame {
+            buttons: u16::MAX,
+            ..InputFrame::default()
+        };
+
+        assert!(!input.is_pressed(0));
     }
 }

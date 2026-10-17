@@ -7,7 +7,6 @@
 
 use rapier3d::control::{DynamicRayCastVehicleController, WheelTuning};
 use rapier3d::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
@@ -19,7 +18,6 @@ const FRONT_LEFT_WHEEL: usize = 0;
 const FRONT_RIGHT_WHEEL: usize = 1;
 
 /// The car's handles into the physics world, plus its driving state.
-#[derive(Clone, Serialize, Deserialize)]
 pub struct Car {
     /// The chassis rigid body.
     pub chassis: RigidBodyHandle,
@@ -70,8 +68,9 @@ impl Car {
         }
     }
 
-    /// Clears last step's forces and adds air drag at the centre of mass (SPEC §7.2).
-    /// Call once per physics step, before adding any other force.
+    /// Clears last step's forces and torques, then adds air drag at the centre of mass
+    /// (SPEC §7.2). Rapier keeps user forces between steps, so this must run once per
+    /// physics step, before adding any other force.
     pub fn reset_forces_and_apply_air_drag(&self, physics: &mut PhysicsWorld) {
         let drag = &self.config.air_drag;
         let body = &mut physics.bodies[self.chassis];
@@ -83,11 +82,18 @@ impl Car {
             * velocity_m_s.length()
             * velocity_m_s;
         body.reset_forces(false);
+        body.reset_torques(false);
         body.add_force(drag_force_n, false);
     }
 
     /// Casts the wheel rays and applies suspension, grip, engine and brake forces.
+    ///
+    /// Skipped while the car is upside down: its "down" rays then point at the sky, and
+    /// anything they hit (a ceiling, the underside of a ramp) must not push the car.
     pub fn update_wheels(&mut self, physics: &mut PhysicsWorld) {
+        if self.up_alignment(physics) <= 0.0 {
+            return;
+        }
         // The rays start inside the car, so they must ignore the car's own colliders.
         let filter = QueryFilter::default().exclude_rigid_body(self.chassis);
         let queries = physics.broad_phase.as_query_pipeline_mut(
@@ -108,7 +114,9 @@ impl Car {
 
     /// Which wheels touch the ground, in wheel order FL, FR, RL, RR.
     ///
-    /// A wheel only counts when the car is the right way up, because on an
+    /// These come from the rays cast in the last `update_wheels` call, which happens
+    /// just before the physics step, so they lag the chassis pose by one physics step
+    /// (1/120 s). A wheel only counts when the car is the right way up, because on an
     /// upside-down car the "down" rays point at the sky (SPEC §7.3).
     pub fn wheels_touching(&self, physics: &PhysicsWorld) -> [bool; WHEEL_COUNT] {
         let up_alignment = self.up_alignment(physics);
@@ -177,7 +185,7 @@ impl Car {
             return (throttle_fraction * full_engine_n, 0.0);
         }
 
-        (0.0, 0.0)
+        (0.0, drive.rolling_resistance_impulse_per_wheel_n_s)
     }
 }
 
