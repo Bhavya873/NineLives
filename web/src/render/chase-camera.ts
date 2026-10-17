@@ -4,7 +4,7 @@
 // and pulls back a little while the car is in the air.
 import { type PerspectiveCamera, Vector3 } from 'three';
 
-import type { BlendedPose } from './pose-blend';
+import type { BlendedPose } from './pose-blend.ts';
 
 const DISTANCE_BEHIND_M = 7.5;
 /** Extra distance while airborne, so jumps and flips fit in the frame. */

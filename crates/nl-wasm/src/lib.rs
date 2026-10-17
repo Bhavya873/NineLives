@@ -27,7 +27,7 @@ const FLOATS_PER_POSE: usize = 7;
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub enum HudField {
-    /// Forward speed in m/s (negative when reversing).
+    /// Forward speed in m/s (negative when reversing; 0 while the wreck is frozen).
     SpeedMS = 0,
     /// Simulated time since the game started, in seconds.
     TimeS = 1,
@@ -54,10 +54,14 @@ pub enum HudField {
     Saves = 11,
     /// Crashes since the game started, shown as "Lives used" (counted by `drain_events`).
     Crashes = 12,
+    /// 1 from a crash until the respawn (the wreck is frozen meanwhile), else 0.
+    Crashed = 13,
+    /// 1 while the tank is so low that thrust fades ("NO AIR"), else 0.
+    OutOfAir = 14,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::Crashes as usize + 1;
+const HUD_LENGTH: usize = HudField::OutOfAir as usize + 1;
 
 /// The values `HudField.Mode` can take.
 #[wasm_bindgen]
@@ -187,7 +191,14 @@ impl Game {
     /// Values for the on-screen display. Read them with the `HudField` indices.
     pub fn hud(&self) -> Vec<f32> {
         let mut values = vec![0.0; HUD_LENGTH];
-        values[HudField::SpeedMS as usize] = self.world.forward_speed_m_s();
+        let crashed = self.world.is_crashed();
+        // The frozen wreck keeps its last velocity; report it as stopped.
+        let speed_m_s = if crashed {
+            0.0
+        } else {
+            self.world.forward_speed_m_s()
+        };
+        values[HudField::SpeedMS as usize] = speed_m_s;
         values[HudField::TimeS as usize] = self.world.time_s() as f32;
         values[HudField::WheelsTouching as usize] = self.world.wheels_touching_count() as f32;
         values[HudField::AirFraction as usize] = self.world.air_fraction();
@@ -201,6 +212,8 @@ impl Game {
         values[HudField::Mode as usize] = self.mode_code() as u8 as f32;
         values[HudField::Saves as usize] = self.saves as f32;
         values[HudField::Crashes as usize] = self.crashes as f32;
+        values[HudField::Crashed as usize] = one_if(crashed);
+        values[HudField::OutOfAir as usize] = one_if(self.world.is_out_of_air());
         values
     }
 

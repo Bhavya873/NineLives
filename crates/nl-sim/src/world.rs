@@ -348,6 +348,12 @@ impl World {
         self.tank.air_kg()
     }
 
+    /// True once the tank is so low that thrust fades (below `empty_fade_fraction`,
+    /// SPEC §7.5); never with unlimited air. The HUD shows "NO AIR" then.
+    pub fn is_out_of_air(&self) -> bool {
+        self.tank.thrust_gate(&self.mode) < 1.0
+    }
+
     /// Air left as a fraction of capacity; 1 when air is unlimited.
     pub fn air_fraction(&self) -> f32 {
         self.tank.air_fraction(&self.mode)

@@ -18,8 +18,8 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { buildCarBody, buildWheel } from './car-mesh';
-import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend';
+import { buildCarBody, buildWheel } from './car-mesh.ts';
+import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
 const SKY_TOP = '#5b8fd9';
@@ -71,6 +71,14 @@ export function placeCar(
 
   view.sun.position.copy(carPose.position).add(SUN_OFFSET_M);
   view.sun.target.position.copy(carPose.position);
+}
+
+/** Shows or hides the car and its wheels, e.g. hidden while the wreck explodes. */
+export function setCarVisible(view: GameScene, visible: boolean): void {
+  view.carBody.visible = visible;
+  for (const wheel of view.wheels) {
+    wheel.visible = visible;
+  }
 }
 
 /** Builds the scene and attaches its canvas to `container`. */

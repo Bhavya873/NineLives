@@ -8,3 +8,8 @@ export function requireElement(id: string): HTMLElement {
   }
   return element;
 }
+
+/** True if the player asked the system for less motion (SPEC §11.4). */
+export function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}

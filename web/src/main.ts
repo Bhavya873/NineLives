@@ -4,9 +4,18 @@
 import modesToml from '../../configs/modes.toml?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
 
-import { requireElement } from './dom';
-import { startGameLoop } from './game-loop';
-import { findHud, updateHud } from './hud/hud';
+import { Vector3 } from 'three';
+
+import { prefersReducedMotion, requireElement } from './dom.ts';
+import { startGameLoop } from './game-loop.ts';
+import { findHud, type HudValues, updateHud } from './hud/hud.ts';
+import {
+  createToasts,
+  showNoAirIfNew,
+  showToast,
+  toastForEvents,
+  updateToasts,
+} from './hud/toasts.ts';
 import {
   BUTTON_BOOST,
   BUTTON_CHAOS,
@@ -15,31 +24,47 @@ import {
   onKeyPress,
   readInputFrame,
   startKeyboard,
-} from './input/keyboard';
-import { followCar, snapCamera } from './render/chase-camera';
-import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
-import { createGameScene, type GameScene, type PhysicsFrames, placeCar } from './render/scene';
+} from './input/keyboard.ts';
+import { followCar, snapCamera } from './render/chase-camera.ts';
+import {
+  cameraShake,
+  createExplosion,
+  startExplosion,
+  stopExplosion,
+  updateExplosion,
+} from './render/explosion.ts';
+import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend.ts';
+import {
+  createGameScene,
+  type GameScene,
+  type PhysicsFrames,
+  placeCar,
+  setCarVisible,
+} from './render/scene.ts';
+import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
-/** Numbers per event from `Game.drain_events`: the kind, then up to three values. */
-const FLOATS_PER_EVENT = 4;
+/** Reused each frame so the render loop allocates nothing for these. */
+const shake = new Vector3();
+const crashPosition = new Vector3();
+const hudValues: HudValues = {
+  speedMS: 0,
+  mode: ModeCode.Realistic,
+  airFraction: 1,
+  unlimitedAir: false,
+  hopBlocked: 0,
+  crashed: false,
+  saves: 0,
+  crashes: 0,
+  timeS: 0,
+  hopCooldownS: 0,
+  wheelsTouching: 4,
+  outOfAir: false,
+};
 
 async function start(): Promise<void> {
   await initWasm();
-  if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
-    throw new Error('The wasm build and the renderer disagree on the pose layout');
-  }
-  if (Game.floats_per_event() !== FLOATS_PER_EVENT) {
-    throw new Error('The wasm build and the game disagree on the event layout');
-  }
-  const buttonsMatch =
-    Game.button_hop() === BUTTON_HOP &&
-    Game.button_boost() === BUTTON_BOOST &&
-    Game.button_chaos() === BUTTON_CHAOS &&
-    Game.button_reset() === BUTTON_RESET;
-  if (!buttonsMatch) {
-    throw new Error('The wasm build and the keyboard disagree on the button bits');
-  }
+  checkWasmLayout();
   // A new random seed each visit; it only affects Chaos knocks.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
   const game = new Game(vehicleToml, modesToml, seed);
@@ -57,12 +82,33 @@ async function start(): Promise<void> {
   const wheelCount = frames.latestWheels.length / FLOATS_PER_POSE;
   const view = createGameScene(requireElement('game'), wheelCount);
   const hud = findHud();
+  const toasts = createToasts(requireElement('hud-toast'));
+  const explosion = createExplosion(view.scene, prefersReducedMotion());
   startKeyboard(window);
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
-
   let lastRenderMs = performance.now();
+
+  /**
+   * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
+   * frozen (SPEC §7.9), a respawn ends it and snaps the view to the checkpoint, and
+   * saves and crashes get a toast. The sim decides all of it; the view only follows.
+   */
+  const reactToEvents = (events: Float32Array, nowMs: number) => {
+    if (containsEvent(events, EventKind.Crash)) {
+      startExplosion(explosion, crashPosition);
+    }
+    if (containsEvent(events, EventKind.Respawn)) {
+      stopExplosion(explosion);
+      // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
+      snapViewToGame(game, frames, view, carPose);
+    }
+    const toast = toastForEvents(events);
+    if (toast) {
+      showToast(toasts, toast, nowMs);
+    }
+  };
 
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
@@ -71,30 +117,31 @@ async function start(): Promise<void> {
       game.tick(readInputFrame());
       frames.latestChassis = game.chassis_pose();
       frames.latestWheels = game.wheel_poses();
+      // Remember where the wreck froze, even if it respawns before the next frame.
+      if (game.is_crashed()) {
+        crashPosition.fromArray(frames.latestChassis);
+      }
     },
     render: (blend) => {
-      // Events queue up in the sim, so reading them once per frame is enough. The sim
-      // freezes the wreck and respawns it itself (SPEC §7.9); the view only follows.
-      if (containsEvent(game.drain_events(), EventKind.Respawn)) {
-        // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
-        snapViewToGame(game, frames, view, carPose);
-      }
       const nowMs = performance.now();
-      const hudValues = game.hud();
-      const airborne = hudValues[HudField.WheelsTouching] === 0;
+      const frameS = (nowMs - lastRenderMs) / 1000;
+      lastRenderMs = nowMs;
+      // Events queue up in the sim, so reading them once per frame is enough.
+      reactToEvents(game.drain_events(), nowMs);
+      fillHudValues(game.hud(), hudValues);
 
       placeCar(view, frames, blend, carPose);
-      followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000, airborne);
-      updateHud(hud, {
-        speedMS: hudValues[HudField.SpeedMS] ?? 0,
-        mode: hudValues[HudField.Mode] ?? ModeCode.Custom,
-        airFraction: hudValues[HudField.AirFraction] ?? 1,
-        unlimitedAir: hudValues[HudField.UnlimitedAir] === 1,
-        hopBlocked: hudValues[HudField.HopBlocked] ?? 0,
-        crashed: game.is_crashed(),
-      });
+      setCarVisible(view, !hudValues.crashed);
+      followCar(view.camera, carPose, frameS, hudValues.wheelsTouching === 0);
+      updateExplosion(explosion, frameS);
+      // Shake only this frame's picture, so the camera's smoothing never sees it.
+      view.camera.position.add(cameraShake(explosion, shake));
       view.renderer.render(view.scene, view.camera);
-      lastRenderMs = nowMs;
+      view.camera.position.sub(shake);
+
+      updateHud(hud, hudValues);
+      updateToasts(toasts, nowMs);
+      showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
     },
   });
 
@@ -106,6 +153,24 @@ async function start(): Promise<void> {
       simTimeS: () => game.hud()[HudField.TimeS] ?? 0,
     },
   });
+}
+
+/** Throws if this page and the wasm build disagree on a shared layout or bit. */
+function checkWasmLayout(): void {
+  if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
+    throw new Error('The wasm build and the renderer disagree on the pose layout');
+  }
+  if (Game.floats_per_event() !== FLOATS_PER_EVENT) {
+    throw new Error('The wasm build and the game disagree on the event layout');
+  }
+  const buttonsMatch =
+    Game.button_hop() === BUTTON_HOP &&
+    Game.button_boost() === BUTTON_BOOST &&
+    Game.button_chaos() === BUTTON_CHAOS &&
+    Game.button_reset() === BUTTON_RESET;
+  if (!buttonsMatch) {
+    throw new Error('The wasm build and the keyboard disagree on the button bits');
+  }
 }
 
 /** Shows the car exactly where the sim has it, with no blending or camera easing. */
@@ -121,14 +186,20 @@ function snapViewToGame(
   snapCamera(view.camera, carPose);
 }
 
-/** True if any of the events (from `Game.drain_events`) is of this kind. */
-function containsEvent(events: Float32Array, kind: EventKind): boolean {
-  for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
-    if (events[start] === kind) {
-      return true;
-    }
-  }
-  return false;
+/** Copies the values the HUD shows out of `Game.hud()`'s array into `out`. */
+function fillHudValues(values: Float32Array, out: HudValues): void {
+  out.speedMS = values[HudField.SpeedMS] ?? 0;
+  out.mode = values[HudField.Mode] ?? ModeCode.Custom;
+  out.airFraction = values[HudField.AirFraction] ?? 1;
+  out.unlimitedAir = values[HudField.UnlimitedAir] === 1;
+  out.hopBlocked = values[HudField.HopBlocked] ?? 0;
+  out.crashed = values[HudField.Crashed] === 1;
+  out.saves = values[HudField.Saves] ?? 0;
+  out.crashes = values[HudField.Crashes] ?? 0;
+  out.timeS = values[HudField.TimeS] ?? 0;
+  out.hopCooldownS = values[HudField.HopCooldownS] ?? 0;
+  out.wheelsTouching = values[HudField.WheelsTouching] ?? 0;
+  out.outOfAir = values[HudField.OutOfAir] === 1;
 }
 
 start().catch((error: unknown) => {
