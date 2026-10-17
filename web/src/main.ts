@@ -48,6 +48,7 @@ import {
   placeCar,
   setCarVisible,
 } from './render/scene.ts';
+import { loadPolicy } from './policy.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
 import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
@@ -81,8 +82,9 @@ async function start(): Promise<void> {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
-  // SPEC §11.3: T cycles the controller; the sim owns the order.
+  // SPEC §11.3: T cycles the controller; the sim owns the order (AI joins once loaded).
   onKeyPress('KeyT', () => game.cycle_controller());
+  void loadPolicy(game);
   bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
 
   const frames: PhysicsFrames = {
@@ -108,6 +110,13 @@ async function start(): Promise<void> {
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
+  // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
+  onKeyPress('KeyX', () => {
+    game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
+    // A drop during the respawn wait clears the crash without a Respawn event.
+    stopExplosion(explosion);
+    snapViewToGame(game, frames, view, carPose);
+  });
   let lastRenderMs = performance.now();
 
   /**
@@ -176,6 +185,7 @@ async function start(): Promise<void> {
     ninelivesDebug: {
       chassisPose: () => Array.from(game.chassis_pose()),
       simTimeS: () => game.hud()[HudField.TimeS] ?? 0,
+      controllerCode: () => game.hud()[HudField.Controller] ?? ControllerCode.Off,
     },
   });
 }

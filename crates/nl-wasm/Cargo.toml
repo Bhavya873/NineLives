@@ -13,6 +13,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 nl-sim.workspace = true
 nl-control.workspace = true
+nl-policy.workspace = true
+serde_json.workspace = true
 wasm-bindgen.workspace = true
 
 [lints]

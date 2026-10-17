@@ -7,8 +7,8 @@
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
 //! the Off, PD and Manual controllers. The policy and courses follow in M5–M7 (SPEC §11.1).
 
-use nl_control::config::ControllersConfig;
-use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off, Pd};
+use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off};
+use nl_policy::Policy;
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
@@ -18,9 +18,12 @@ use nl_sim::input::{
     INPUT_FRAME_BYTES, InputFrame,
 };
 use nl_sim::modes::{ModeParams, ModesConfig};
+use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
 use wasm_bindgen::prelude::*;
+
+mod eval;
 
 /// Number of floats in one pose: position x, y, z then quaternion x, y, z, w.
 const FLOATS_PER_POSE: usize = 7;
@@ -122,6 +125,9 @@ pub struct Game {
     /// What the named controllers are built from: PD for this car (from
     /// `configs/controllers.toml`) and, from M6, the loaded policy.
     choices: ControllerChoices,
+    /// Starts for the drop test: the repo's scenarios.toml, built in (the game passes no
+    /// scenarios of its own).
+    scenarios: ScenariosConfig,
     /// Buttons pressed on any tick since the last control step, so a quick tap of a
     /// nozzle key between two control steps still reaches the controller.
     buttons_since_control_step: u16,
@@ -183,17 +189,15 @@ impl Game {
         let mut world =
             World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
         world.enable_auto_respawn(config.events.respawn_delay_s);
-        let controllers = ControllersConfig::from_toml_str(controllers_toml)?;
-        let choices = ControllerChoices {
-            pd: Pd::for_vehicle(&config, modes.realistic, &controllers),
-            policy: None,
-        };
+        let choices =
+            ControllerChoices::from_configs(&config, modes.realistic, controllers_toml, None)?;
         Ok(Game {
             world,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
             controller: ControllerKind::Off(Off),
             choices,
+            scenarios: ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?,
             buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
@@ -207,10 +211,38 @@ impl Game {
     }
 
     /// Chooses what fires the thrusters by name: "off", "pd", "ai" or "manual". Throws
-    /// on any other name, or on "ai" before a policy is loaded (`load_policy`, M6). It
-    /// takes over at the next control step.
+    /// on any other name, or on "ai" before a policy is loaded (`load_policy`). It takes
+    /// over at the next control step.
     pub fn set_controller(&mut self, kind: &str) -> Result<(), JsError> {
         self.use_controller(ControllerKind::from_name(kind, &self.choices)?);
+        Ok(())
+    }
+
+    /// Loads the trained policy (the text of `models/policy.json`) for the "ai"
+    /// controller. Throws, naming the problem, if the file is not a policy or was
+    /// trained on another observation layout (its schema hash differs, SPEC §9.12). A
+    /// running AI switches to the new policy straight away.
+    pub fn load_policy(&mut self, json: &str) -> Result<(), JsError> {
+        self.choices.policy = Some(Policy::from_json(json)?);
+        if matches!(self.controller, ControllerKind::Ai(_)) {
+            self.use_controller(ControllerKind::from_name("ai", &self.choices)?);
+        }
+        Ok(())
+    }
+
+    /// True once a policy is loaded, so "ai" can be chosen.
+    pub fn has_policy(&self) -> bool {
+        self.choices.policy.is_some()
+    }
+
+    /// A drop test (SPEC §9.6 Stage A, full difficulty): puts the car in the air above
+    /// the arena centre in a random attitude, spin and speed drawn from `seed`, with a
+    /// full tank, exactly as a training episode starts. The respawn point is unchanged.
+    pub fn drop_test(&mut self, seed: u64) -> Result<(), JsError> {
+        start_episode(&mut self.world, Stage::A, &self.scenarios, seed)?;
+        self.controller.reset(seed);
+        // Taps from before the drop must not reach its first control step.
+        self.buttons_since_control_step = 0;
         Ok(())
     }
 

@@ -8,10 +8,10 @@
 
 use std::error::Error;
 
-use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
+use nl_control::ControllerKind;
+use nl_control::build_controller;
+use nl_control::config::DEFAULT_CONTROLLERS_TOML;
 use nl_control::eval::{run_episode, summarise};
-use nl_control::{ControllerChoices, ControllerKind, Pd};
-use nl_policy::Policy;
 use nl_sim::episode::EpisodeResult;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
 use nl_sim::randomization::EpisodeVariation;
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .by_name(&args.mode)
         .ok_or("--mode must be realistic or arcade")?;
 
-    let mut controller = build_controller(&args, &vehicle, mode)?;
+    let mut controller = build_named_controller(&args, &vehicle, mode)?;
     let randomization = args.randomize.then_some(&scenarios.randomization);
     let mut results: Vec<EpisodeResult> = Vec::new();
     for episode in 0..args.episodes {
@@ -82,23 +82,26 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
 
 /// The controller named by `--controller`: Off, PD built for this car, or the AI with
 /// the policy from `--policy` (read only when the AI is asked for).
-fn build_controller(
+fn build_named_controller(
     args: &Args,
     vehicle: &VehicleConfig,
     mode: ModeParams,
 ) -> Result<ControllerKind, Box<dyn Error>> {
-    let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML)?;
-    let mut policy = None;
+    let mut policy_json = None;
     if args.controller == "ai" {
         let text = std::fs::read_to_string(&args.policy)
             .map_err(|error| format!("--policy {}: {error}", args.policy))?;
-        policy = Some(Policy::from_json(&text)?);
+        policy_json = Some(text);
     }
-    let choices = ControllerChoices {
-        pd: Pd::for_vehicle(vehicle, mode, &config),
-        policy,
-    };
-    Ok(ControllerKind::from_name(&args.controller, &choices)?)
+    let controllers_toml = DEFAULT_CONTROLLERS_TOML;
+    let controller = build_controller(
+        &args.controller,
+        vehicle,
+        mode,
+        controllers_toml,
+        policy_json.as_deref(),
+    )?;
+    Ok(controller)
 }
 
 /// Reads `--name value` pairs; anything missing gets the default shown in the header.

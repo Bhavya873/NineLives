@@ -5,9 +5,9 @@
 //! Python's results match it exactly. `policy_actions` exposes the policy's forward pass
 //! for the export parity test.
 
-use nl_control::config::ControllersConfig;
+use nl_control::ControllerKind;
+use nl_control::build_controller;
 use nl_control::eval::{run_episode, summarise};
-use nl_control::{ControllerChoices, ControllerKind, Pd};
 use nl_policy::Policy;
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::episode::EpisodeResult;
@@ -36,7 +36,15 @@ pub fn run_eval(
     policy_json: Option<&str>,
 ) -> PyResult<String> {
     let config = parse_sim_config(config_json).map_err(PyValueError::new_err)?;
-    let prototype = build_controller(controller, &config, policy_json)?;
+    let training = &config.training;
+    let prototype = build_controller(
+        controller,
+        &training.vehicle,
+        training.mode,
+        &config.controllers_toml,
+        policy_json,
+    )
+    .map_err(|error| PyValueError::new_err(format!("run_eval: {error}")))?;
     // Like the Rust runner: refuse seeds that would run past u64::MAX.
     if episodes > 0 && first_seed.checked_add(episodes - 1).is_none() {
         let message = "run_eval: first_seed is too large for that many episodes";
@@ -45,7 +53,12 @@ pub fn run_eval(
     let results: Result<Vec<EpisodeResult>, String> = py.detach(|| {
         (0..episodes)
             .into_par_iter()
-            .map(|offset| eval_one(&config, &prototype, first_seed + offset))
+            // One controller per worker thread, reset by each episode: no copy of the
+            // policy's weights per episode.
+            .map_init(
+                || prototype.clone(),
+                |controller, offset| eval_one(&config, controller, first_seed + offset),
+            )
             .collect()
     });
     let results = results.map_err(PyValueError::new_err)?;
@@ -80,10 +93,10 @@ pub fn policy_actions<'py>(
     Ok(actions.into_pyarray(py))
 }
 
-/// One episode from `seed` with a fresh copy of `prototype`.
+/// One episode from `seed` with `controller` (reset at the episode's start).
 fn eval_one(
     config: &SimConfig,
-    prototype: &ControllerKind,
+    controller: &mut ControllerKind,
     seed: u64,
 ) -> Result<EpisodeResult, String> {
     let training = &config.training;
@@ -93,36 +106,12 @@ fn eval_one(
         .then_some(&training.scenarios.randomization);
     let variation =
         EpisodeVariation::for_seed(randomization, &training.vehicle, training.mode, seed);
-    let mut controller = prototype.clone();
     run_episode(
         &variation,
         &training.scenarios,
         config.stage,
-        &mut controller,
+        controller,
         seed,
     )
     .map_err(|error| format!("episode seed {seed}: {error}"))
-}
-
-/// The controller called `name` ("off", "pd" or "ai"), built for this config's car.
-fn build_controller(
-    name: &str,
-    config: &SimConfig,
-    policy_json: Option<&str>,
-) -> PyResult<ControllerKind> {
-    let as_py_error = |error: String| PyValueError::new_err(format!("run_eval: {error}"));
-    let controllers = ControllersConfig::from_toml_str(&config.controllers_toml)
-        .map_err(|error| as_py_error(error.to_string()))?;
-    let training = &config.training;
-    let policy = match policy_json {
-        Some(text) => {
-            Some(Policy::from_json(text).map_err(|error| as_py_error(error.to_string()))?)
-        }
-        None => None,
-    };
-    let choices = ControllerChoices {
-        pd: Pd::for_vehicle(&training.vehicle, training.mode, &controllers),
-        policy,
-    };
-    ControllerKind::from_name(name, &choices).map_err(|error| as_py_error(error.to_string()))
 }

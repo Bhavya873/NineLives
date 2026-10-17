@@ -392,7 +392,9 @@ name = "nl-wasm"
 version = "0.1.0"
 dependencies = [
  "nl-control",
+ "nl-policy",
  "nl-sim",
+ "serde_json",
  "wasm-bindgen",
 ]
 

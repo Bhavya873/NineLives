@@ -8,7 +8,16 @@ import * as wasm from '../src/wasm/nl_wasm.js';
 wasm.initSync({ module: readFileSync(new URL('../src/wasm/nl_wasm_bg.wasm', import.meta.url)) });
 
 /** The wasm module's exports (Game, HudField, ...), ready to use. */
-export const { ControllerCode, CrashCode, EventKind, Game, HopBlocked, HudField, ModeCode } = wasm;
+export const {
+  ControllerCode,
+  CrashCode,
+  EventKind,
+  Game,
+  HopBlocked,
+  HudField,
+  ModeCode,
+  eval_episodes: evalEpisodes,
+} = wasm;
 
 /** The text of the repo's configs/controllers.toml. */
 export const controllersToml = readFileSync(
@@ -24,6 +33,17 @@ export const vehicleToml = readFileSync(
   new URL('../../configs/vehicle.toml', import.meta.url),
   'utf8',
 );
+
+/** The text of the repo's trained policy, models/policy.json. */
+export const policyJson = readFileSync(
+  new URL('../../models/policy.json', import.meta.url),
+  'utf8',
+);
+
+/** A game with the repo's configs and the given seed. */
+export function newGame(seed = 0n) {
+  return new Game(vehicleToml, modesToml, controllersToml, seed);
+}
 
 /** Runs `count` ticks of the same packed input frame. */
 export function tickMany(game, input, count) {
