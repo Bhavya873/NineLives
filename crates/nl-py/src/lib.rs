@@ -1,10 +1,11 @@
-//! The `ninelives_sim` Python module (SPEC §9.1): `BatchedSim` for training, plus the
-//! observation layout and its schema hash, so Python never re-declares them
-//! (CLAUDE.md golden rules 1 and 4).
+//! The `ninelives_sim` Python module (SPEC §9.1): `BatchedSim` for training, `run_eval`
+//! and `policy_actions` for evaluation and export checks, plus the observation layout
+//! and its schema hash, so Python never re-declares them (CLAUDE.md golden rules 1, 4).
 
 mod batched_sim;
 mod config;
 mod env_slot;
+mod eval;
 
 use nl_sim::conventions;
 use nl_sim::obs::{OBS_SPEC, obs_schema_hash};
@@ -13,6 +14,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::batched_sim::BatchedSim;
+use crate::eval::{policy_actions, run_eval};
 
 /// The nozzle names in their fixed index order.
 #[pyfunction]
@@ -48,6 +50,12 @@ fn obs_schema_hash_py() -> String {
     obs_schema_hash()
 }
 
+/// The `format` and `version` an exported policy file must carry (SPEC §9.12).
+#[pyfunction]
+fn policy_format() -> (&'static str, u32) {
+    (nl_policy::POLICY_FORMAT, nl_policy::POLICY_FORMAT_VERSION)
+}
+
 /// The names of `info["reward_terms"]` columns, in order.
 #[pyfunction]
 fn reward_term_names() -> Vec<&'static str> {
@@ -58,6 +66,9 @@ fn reward_term_names() -> Vec<&'static str> {
 #[pymodule]
 fn ninelives_sim(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<BatchedSim>()?;
+    module.add_function(wrap_pyfunction!(run_eval, module)?)?;
+    module.add_function(wrap_pyfunction!(policy_actions, module)?)?;
+    module.add_function(wrap_pyfunction!(policy_format, module)?)?;
     module.add_function(wrap_pyfunction!(nozzle_names, module)?)?;
     module.add_function(wrap_pyfunction!(physics_dt_s, module)?)?;
     module.add_function(wrap_pyfunction!(obs_spec_py, module)?)?;

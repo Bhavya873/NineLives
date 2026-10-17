@@ -347,7 +347,9 @@ impl World {
 
     /// Angle between the car's up axis and world up: 0 level, π upside down.
     pub fn tilt_rad(&self) -> f32 {
-        self.car.up_alignment(&self.physics).clamp(-1.0, 1.0).acos()
+        // libm, not std: std's acos is the platform's and differs in the last bit between
+        // macOS, Linux and wasm, and the event rules compare this angle (rule 2).
+        libm::acosf(self.car.up_alignment(&self.physics).clamp(-1.0, 1.0))
     }
 
     /// Switches to another mode's physics, e.g. Realistic ↔ Arcade. The air left

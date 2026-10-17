@@ -50,10 +50,7 @@ pub fn run_episode(
     let mut throttles = [0.0; NOZZLE_COUNT];
     while episode.status() == EpisodeStatus::Running {
         if episode.world().is_control_step() {
-            let ctx = ControlCtx {
-                input: InputFrame::default(),
-                state: episode.car_state(),
-            };
+            let ctx = ControlCtx::for_world(episode.world(), InputFrame::default());
             throttles = controller.act(&ctx);
         }
         episode.step(throttles);

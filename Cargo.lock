@@ -337,6 +337,7 @@ dependencies = [
 name = "nl-control"
 version = "0.1.0"
 dependencies = [
+ "nl-policy",
  "nl-sim",
  "serde",
  "serde_json",
@@ -347,11 +348,20 @@ dependencies = [
 [[package]]
 name = "nl-policy"
 version = "0.1.0"
+dependencies = [
+ "libm",
+ "nl-sim",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "nl-py"
 version = "0.1.0"
 dependencies = [
+ "nl-control",
+ "nl-policy",
  "nl-sim",
  "numpy",
  "pyo3",
@@ -366,6 +376,7 @@ dependencies = [
 name = "nl-sim"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "postcard",
  "rand",
  "rand_chacha",

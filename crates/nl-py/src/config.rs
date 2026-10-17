@@ -21,6 +21,8 @@ struct SimConfigJson {
     mode: String,
     /// "A" or "B".
     stage: String,
+    /// configs/controllers.toml (PD's gains, for `run_eval`).
+    controllers_toml: String,
 }
 
 /// A parsed config: what to build each environment from, and which stage it starts in.
@@ -29,19 +31,21 @@ pub struct SimConfig {
     pub training: TrainingConfig,
     /// The stage every environment starts in.
     pub stage: Stage,
+    /// The text of controllers.toml (for PD in `run_eval`).
+    pub controllers_toml: String,
 }
 
 /// Parses the config JSON. The error says which part is wrong.
 pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
     let fields: SimConfigJson =
-        serde_json::from_str(json).map_err(|error| format!("BatchedSim config JSON: {error}"))?;
+        serde_json::from_str(json).map_err(|error| format!("sim config JSON: {error}"))?;
     let vehicle = VehicleConfig::from_toml_str(&fields.vehicle_toml).map_err(as_message)?;
     let modes = ModesConfig::from_toml_str(&fields.modes_toml).map_err(as_message)?;
     let scenarios = ScenariosConfig::from_toml_str(&fields.scenarios_toml).map_err(as_message)?;
     let reward = RewardConfig::from_toml_str(&fields.reward_toml).map_err(as_message)?;
     let mode = modes.by_name(&fields.mode).ok_or_else(|| {
         format!(
-            "BatchedSim config JSON: mode must be \"realistic\" or \"arcade\", not {:?}",
+            "sim config JSON: mode must be \"realistic\" or \"arcade\", not {:?}",
             fields.mode
         )
     })?;
@@ -54,6 +58,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
             reward,
         },
         stage,
+        controllers_toml: fields.controllers_toml,
     })
 }
 

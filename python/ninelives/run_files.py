@@ -20,9 +20,12 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 
 from ninelives.curriculum import Curriculum
+from ninelives.env import NineLivesVecEnv
 from ninelives.sim_config import REPO_ROOT
 
 RUNS_DIR = REPO_ROOT / "runs"
+# The exported policy the game and `eval --controller ai` load (SPEC §9.12).
+DEFAULT_POLICY_PATH = REPO_ROOT / "models" / "policy.json"
 MODEL_FILE = "model.zip"
 NORMALIZER_FILE = "vecnormalize.pkl"
 STATE_FILE = "state.json"
@@ -77,6 +80,17 @@ def load_checkpoint(
         wall_seconds=saved["wall_seconds"],
     )
     return model, normalizer, state
+
+
+def load_model_and_normalizer(folder: Path) -> tuple[PPO, VecNormalize]:
+    """The model and normalizer statistics saved in a checkpoint folder (for export).
+    SB3 needs an env to attach the statistics to; a one-env sim stands in."""
+    if not (folder / MODEL_FILE).is_file():
+        raise FileNotFoundError(f"no {MODEL_FILE} in {folder}")
+    model = PPO.load(folder / MODEL_FILE, device="cpu")
+    normalizer = VecNormalize.load(str(folder / NORMALIZER_FILE), NineLivesVecEnv(n_envs=1))
+    normalizer.training = False
+    return model, normalizer
 
 
 def state_to_dict(state: RunState) -> dict[str, Any]:

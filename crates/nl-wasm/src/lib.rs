@@ -8,7 +8,7 @@
 //! the Off, PD and Manual controllers. The policy and courses follow in M5–M7 (SPEC §11.1).
 
 use nl_control::config::ControllersConfig;
-use nl_control::{ControlCtx, ControllerKind, Off, Pd};
+use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off, Pd};
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
@@ -82,6 +82,8 @@ pub enum ControllerCode {
     Manual = 1,
     /// The PD baseline (SPEC §8).
     Pd = 2,
+    /// The trained policy (SPEC §8).
+    Ai = 3,
 }
 
 /// The values `HudField.Mode` can take.
@@ -117,8 +119,9 @@ pub struct Game {
     nozzle_layout: Vec<f32>,
     /// What fires the thrusters, asked at 60 Hz in `tick`.
     controller: ControllerKind,
-    /// PD built for this car with `configs/controllers.toml`; choosing PD copies it.
-    pd: Pd,
+    /// What the named controllers are built from: PD for this car (from
+    /// `configs/controllers.toml`) and, from M6, the loaded policy.
+    choices: ControllerChoices,
     /// Buttons pressed on any tick since the last control step, so a quick tap of a
     /// nozzle key between two control steps still reaches the controller.
     buttons_since_control_step: u16,
@@ -181,13 +184,16 @@ impl Game {
             World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
         world.enable_auto_respawn(config.events.respawn_delay_s);
         let controllers = ControllersConfig::from_toml_str(controllers_toml)?;
-        let pd = Pd::new(&world.car_model(), &controllers);
+        let choices = ControllerChoices {
+            pd: Pd::for_vehicle(&config, modes.realistic, &controllers),
+            policy: None,
+        };
         Ok(Game {
             world,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
             controller: ControllerKind::Off(Off),
-            pd,
+            choices,
             buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
@@ -200,16 +206,17 @@ impl Game {
         Ok(())
     }
 
-    /// Chooses what fires the thrusters by name: "off", "pd" or "manual" ("ai" arrives
-    /// in M5). Throws on any other name. It takes over at the next control step.
+    /// Chooses what fires the thrusters by name: "off", "pd", "ai" or "manual". Throws
+    /// on any other name, or on "ai" before a policy is loaded (`load_policy`, M6). It
+    /// takes over at the next control step.
     pub fn set_controller(&mut self, kind: &str) -> Result<(), JsError> {
-        self.use_controller(ControllerKind::from_name(kind, &self.pd)?);
+        self.use_controller(ControllerKind::from_name(kind, &self.choices)?);
         Ok(())
     }
 
     /// Switches to the next controller in the T-key cycle (SPEC §11.3).
     pub fn cycle_controller(&mut self) {
-        let next = self.controller.next(&self.pd);
+        let next = self.controller.next(&self.choices);
         self.use_controller(next);
     }
 
@@ -235,10 +242,8 @@ impl Game {
                 ..input
             };
             self.buttons_since_control_step = 0;
-            let throttles = self.controller.act(&ControlCtx {
-                input: controller_input,
-                state: self.world.car_state(),
-            });
+            let ctx = ControlCtx::for_world(&self.world, controller_input);
+            let throttles = self.controller.act(&ctx);
             self.world.set_controller_throttles(throttles);
         }
         self.world.step(input);
@@ -476,6 +481,7 @@ fn controller_code(controller: &ControllerKind) -> ControllerCode {
     match controller {
         ControllerKind::Off(_) => ControllerCode::Off,
         ControllerKind::Pd(_) => ControllerCode::Pd,
+        ControllerKind::Ai(_) => ControllerCode::Ai,
         ControllerKind::Manual(_) => ControllerCode::Manual,
     }
 }

@@ -1,0 +1,115 @@
+"""Export and eval tests (SPEC §9.12, §10, §12): the Rust forward pass matches SB3 on
+1000 observations (< 1e-4), the Python eval reproduces the Rust eval runner's rows, and
+an exported policy can be evaluated as the AI controller."""
+
+import json
+
+import numpy as np
+import torch
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import VecNormalize
+
+from ninelives.env import NineLivesVecEnv
+from ninelives.eval import RESULTS_DIR, evaluate, write_report
+from ninelives.export import evenly_spaced, export_policy
+from ninelives.export import main as export_main
+from ninelives.run_files import save_checkpoint
+from ninelives_sim import obs_schema_hash, policy_actions
+
+PARITY_TOLERANCE = 1e-4
+
+
+def random_policy() -> tuple[PPO, VecNormalize]:
+    """An untrained SB3 policy with large random weights and made-up normalizer stats,
+    so the parity check exercises every layer and the normalization."""
+    rng = np.random.default_rng(0)
+    torch.manual_seed(0)
+    normalizer = VecNormalize(NineLivesVecEnv(n_envs=2), clip_obs=10.0)
+    model = PPO(
+        "MlpPolicy",
+        normalizer,
+        n_steps=64,
+        policy_kwargs={
+            "net_arch": {"pi": [128, 128], "vf": [128, 128]},
+            "activation_fn": torch.nn.Tanh,
+        },
+        device="cpu",
+    )
+    with torch.no_grad():
+        for parameter in model.policy.parameters():
+            parameter.normal_(0.0, 0.3)
+    size = normalizer.observation_space.shape[0]
+    normalizer.obs_rms.mean = rng.normal(0.0, 2.0, size)
+    normalizer.obs_rms.var = rng.uniform(0.1, 5.0, size)
+    return model, normalizer
+
+
+def random_observations(count: int) -> np.ndarray:
+    rng = np.random.default_rng(1)
+    return rng.normal(0.0, 3.0, size=(count, 41)).astype(np.float32)
+
+
+def test_the_rust_forward_pass_matches_sb3_on_1000_observations():
+    model, normalizer = random_policy()
+    policy_json = json.dumps(export_policy(model, normalizer, "parity"))
+    observations = random_observations(1000)
+
+    rust_actions = policy_actions(policy_json, observations)
+    sb3_actions, _ = model.predict(normalizer.normalize_obs(observations), deterministic=True)
+
+    assert np.abs(rust_actions - sb3_actions).max() < PARITY_TOLERANCE
+    assert np.abs(sb3_actions).max() > 0.5, "the test policy should not be near zero"
+
+
+def test_the_export_carries_the_schema_hash_and_the_layer_shapes():
+    model, normalizer = random_policy()
+
+    policy = export_policy(model, normalizer, "shapes")
+
+    assert policy["obs_schema_hash"] == obs_schema_hash()
+    shapes = [(layer["in"], layer["out"], layer["act"]) for layer in policy["layers"]]
+    assert shapes == [(41, 128, "tanh"), (128, 128, "tanh"), (128, 10, "none")]
+
+
+def test_the_python_eval_reproduces_the_rust_eval_runners_rows():
+    committed = json.loads((RESULTS_DIR / "eval_pd_A_realistic.json").read_text())
+
+    report = evaluate("pd", "A", "realistic", episodes=20, first_seed=0)
+
+    assert report["episodes"] == committed["episodes"][:20]
+
+
+def test_an_exported_policy_runs_as_the_ai_controller(tmp_path):
+    model, normalizer = random_policy()
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(export_policy(model, normalizer, "ai")))
+
+    report = evaluate("ai", "A", "arcade", episodes=8, first_seed=0, policy=policy_path)
+    json_path = write_report(report, tmp_path)
+
+    assert report["summary"]["episodes"] == 8
+    assert json_path.with_suffix(".csv").read_text().count("\n") == 9
+
+
+def test_viewer_checkpoints_are_spread_evenly_and_keep_first_and_last():
+    folders = list(range(20))
+
+    picks = evenly_spaced(folders, 8)
+
+    assert len(picks) == 8
+    assert picks[0] == 0 and picks[-1] == 19
+    assert evenly_spaced(folders[:5], 8) == folders[:5]
+
+
+def test_the_export_command_writes_a_policy_rust_can_load(tmp_path):
+    model, normalizer = random_policy()
+    run_dir = tmp_path / "run"
+    save_checkpoint(run_dir / "latest", model, normalizer)
+    out = tmp_path / "policy.json"
+
+    export_main(["--run", str(run_dir), "--checkpoint", "latest", "--out", str(out)])
+
+    observations = random_observations(5)
+    rust_actions = policy_actions(out.read_text(), observations)
+    sb3_actions, _ = model.predict(normalizer.normalize_obs(observations), deterministic=True)
+    assert np.abs(rust_actions - sb3_actions).max() < PARITY_TOLERANCE
