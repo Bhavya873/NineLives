@@ -66,7 +66,9 @@ fn every_nozzle_torque_matches_the_spec_table() {
 fn firing_front_left_lift_raises_the_left_front_corner() {
     // In the air, so the wheels do not interfere: 10 m up, level, still.
     let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
-    world.place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3]);
+    world
+        .place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3])
+        .unwrap();
     let mut throttles = [0.0; NOZZLE_COUNT];
     throttles[0] = 1.0; // L_FL
 
@@ -85,7 +87,9 @@ fn firing_front_left_lift_raises_the_left_front_corner() {
 #[test]
 fn boost_nozzles_push_the_car_forward() {
     let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
-    world.place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3]);
+    world
+        .place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3])
+        .unwrap();
     let mut throttles = [0.0; NOZZLE_COUNT];
     throttles[8] = 1.0; // B_L
     throttles[9] = 1.0; // B_R
@@ -101,4 +105,29 @@ fn boost_nozzles_push_the_car_forward() {
         forward_speed_m_s > 3.5 && forward_speed_m_s < 4.6,
         "speed {forward_speed_m_s}"
     );
+}
+
+#[test]
+fn placing_the_car_closes_the_valves_from_the_last_run() {
+    let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
+    world.set_controller_throttles([1.0; NOZZLE_COUNT]);
+    for _ in 0..30 {
+        world.step(Default::default());
+    }
+
+    world
+        .place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3])
+        .unwrap();
+    world.step(Default::default());
+
+    assert_eq!(world.effective_throttles(), [0.0; NOZZLE_COUNT]);
+}
+
+#[test]
+fn a_zero_rotation_is_refused() {
+    let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
+
+    let result = world.place_car([0.0, 10.0, 0.0], [0.0; 4], [0.0; 3], [0.0; 3]);
+
+    assert!(result.is_err());
 }

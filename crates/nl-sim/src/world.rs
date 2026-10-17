@@ -63,6 +63,16 @@ pub enum SnapshotError {
     TrailingBytes { extra_bytes: usize },
 }
 
+/// Why the car could not be placed.
+#[derive(Debug, thiserror::Error)]
+pub enum PlaceCarError {
+    #[error("place_car: `{what}` contains a NaN or infinite number")]
+    NotFinite { what: &'static str },
+
+    #[error("place_car: the rotation quaternion has zero length; use [0, 0, 0, 1] for no rotation")]
+    ZeroRotation,
+}
+
 /// A world with flat ground and one car.
 #[derive(Serialize, Deserialize)]
 pub struct World {
@@ -123,24 +133,38 @@ impl World {
 
     /// Moves the car to a new position, orientation and velocity, for tests and for
     /// training scenarios (SPEC §9.6). Velocities are in world coordinates.
+    ///
+    /// It also closes every valve, clears the held controller throttles and centres
+    /// the steering, so nothing from the previous run carries over.
     pub fn place_car(
         &mut self,
         position_m: [f32; 3],
         rotation_xyzw: [f32; 4],
         linear_velocity_m_s: [f32; 3],
         angular_velocity_rad_s: [f32; 3],
-    ) {
+    ) -> Result<(), PlaceCarError> {
+        check_finite("position_m", &position_m)?;
+        check_finite("rotation_xyzw", &rotation_xyzw)?;
+        check_finite("linear_velocity_m_s", &linear_velocity_m_s)?;
+        check_finite("angular_velocity_rad_s", &angular_velocity_rad_s)?;
         let [x, y, z, w] = rotation_xyzw;
-        let rotation = Rotation::from_xyzw(x, y, z, w).normalize();
+        let rotation = Rotation::from_xyzw(x, y, z, w);
+        if rotation.length() < 1e-6 {
+            return Err(PlaceCarError::ZeroRotation);
+        }
+
+        self.controller_throttles = [0.0; NOZZLE_COUNT];
+        self.car.reset_actuators();
         let body = &mut self.physics.bodies[self.car.chassis];
         body.set_position(
-            Pose3::from_parts(Vector::from_array(position_m), rotation),
+            Pose3::from_parts(Vector::from_array(position_m), rotation.normalize()),
             true,
         );
         body.set_linvel(Vector::from_array(linear_velocity_m_s), true);
         body.set_angvel(Vector::from_array(angular_velocity_rad_s), true);
         // Refresh the scene-query tree so the wheel rays see the car's new place.
         self.physics.detect_collisions(&(), &());
+        Ok(())
     }
 
     /// Saves the complete state of the world as bytes: the format version, then the world.
@@ -223,6 +247,15 @@ impl World {
     /// Current front-wheel angle. Positive turns left.
     pub fn steering_angle_rad(&self) -> f32 {
         self.car.steering_angle_rad()
+    }
+}
+
+/// Fails if any value is NaN or infinite.
+fn check_finite(what: &'static str, values: &[f32]) -> Result<(), PlaceCarError> {
+    if values.iter().all(|value| value.is_finite()) {
+        Ok(())
+    } else {
+        Err(PlaceCarError::NotFinite { what })
     }
 }
 

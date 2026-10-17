@@ -95,6 +95,16 @@ impl Car {
         self.update_wheels(physics);
     }
 
+    /// Closes every valve and centres the steering, e.g. when the car is moved to
+    /// start a new run.
+    pub fn reset_actuators(&mut self) {
+        self.valves.close_all();
+        self.steering_angle_rad = 0.0;
+        for wheel in self.wheels.wheels_mut() {
+            wheel.steering = 0.0;
+        }
+    }
+
     /// How open each thruster valve is now, 0..1, in nozzle order.
     pub fn effective_throttles(&self) -> [f32; NOZZLE_COUNT] {
         self.valves.effective_throttles()

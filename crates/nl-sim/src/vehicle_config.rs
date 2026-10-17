@@ -159,6 +159,13 @@ pub enum VehicleConfigError {
         "vehicle.toml: nozzle \"{name}\" direction must have length 1, but it has length {length}"
     )]
     DirectionNotUnitLength { name: String, length: f32 },
+
+    #[error("vehicle.toml: nozzle \"{name}\": `{field}` is not valid ({reason})")]
+    BadNozzleValue {
+        name: String,
+        field: &'static str,
+        reason: &'static str,
+    },
 }
 
 /// Short alias so the check functions below fit on one line each.
@@ -292,7 +299,21 @@ impl NozzleConfig {
                 length,
             });
         }
-        must_be_positive("thrusters.nozzles.max_force_n", self.max_force_n)
+        if self.position_m.iter().any(|value| !value.is_finite()) {
+            return Err(self.bad_value("position_m", "every number must be finite"));
+        }
+        if !self.max_force_n.is_finite() || self.max_force_n <= 0.0 {
+            return Err(self.bad_value("max_force_n", "must be a finite number above zero"));
+        }
+        Ok(())
+    }
+
+    fn bad_value(&self, field: &'static str, reason: &'static str) -> VehicleConfigError {
+        VehicleConfigError::BadNozzleValue {
+            name: self.name.clone(),
+            field,
+            reason,
+        }
     }
 }
 
@@ -391,6 +412,15 @@ mod tests {
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
         assert!(error.to_string().contains("L_FL"));
+    }
+
+    #[test]
+    fn a_bad_nozzle_force_names_the_nozzle() {
+        let broken = DEFAULT_VEHICLE_TOML.replacen("max_force_n = 8000.0", "max_force_n = 0.0", 1);
+
+        let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
+
+        assert!(error.to_string().contains("B_L"), "{error}");
     }
 
     #[test]

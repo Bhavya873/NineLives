@@ -28,15 +28,29 @@ impl Valves {
     ) {
         let step_fraction = valve_step_fraction(dt_s, time_constant_s);
         for (effective, commanded) in self.effective_throttles.iter_mut().zip(commanded_throttles) {
-            let target = commanded.clamp(0.0, 1.0);
+            let target = safe_throttle(commanded);
             *effective += (target - *effective) * step_fraction;
         }
+    }
+
+    /// Closes every valve at once, e.g. when the car is moved to start a new run.
+    pub fn close_all(&mut self) {
+        self.effective_throttles = [0.0; NOZZLE_COUNT];
     }
 
     /// How open each valve is now, 0..1, in nozzle order.
     pub fn effective_throttles(&self) -> [f32; NOZZLE_COUNT] {
         self.effective_throttles
     }
+}
+
+/// Clamps a commanded throttle to 0..1. A NaN (for example from a broken policy)
+/// counts as 0, so it can never get stuck inside the valve state.
+fn safe_throttle(commanded: f32) -> f32 {
+    if commanded.is_nan() {
+        return 0.0;
+    }
+    commanded.clamp(0.0, 1.0)
 }
 
 /// The fraction of the remaining gap a valve closes in one step of `dt_s`.
@@ -105,6 +119,17 @@ mod tests {
 
         let error_fraction = (elapsed_s - time_constant_s).abs() / time_constant_s;
         assert!(error_fraction < 0.05, "reached 63% after {elapsed_s} s");
+    }
+
+    #[test]
+    fn a_nan_command_closes_the_valve_instead_of_breaking_it() {
+        let mut valves = Valves::default();
+        let mut commanded = [0.0; NOZZLE_COUNT];
+        commanded[2] = f32::NAN;
+
+        valves.update(commanded, PHYSICS_DT_S, 0.03);
+
+        assert_eq!(valves.effective_throttles()[2], 0.0);
     }
 
     #[test]
