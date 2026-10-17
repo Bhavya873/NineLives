@@ -12,7 +12,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
+use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
 use crate::input::InputFrame;
+use crate::modes::ModeParams;
+use crate::tank::AirTank;
 use crate::vehicle_config::VehicleConfig;
 
 /// Ground friction for flat-ground worlds when nothing else is chosen (SPEC §7.2).
@@ -48,7 +51,7 @@ impl Pose {
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 2;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 3;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -80,16 +83,25 @@ pub struct World {
     car: Car,
     /// The throttles the controller asked for last; held until it asks again (SPEC §7.1).
     controller_throttles: [f32; NOZZLE_COUNT],
+    /// The physics preset in use (Realistic, Arcade or anything in between).
+    mode: ModeParams,
+    tank: AirTank,
+    hop_boost: HopBoost,
     step_count: u64,
 }
 
 impl World {
-    /// Builds flat ground and puts the car at the origin, facing world +X.
+    /// Builds flat ground and puts the car at the origin, facing world +X, with a full
+    /// tank for `mode`.
     ///
     /// `ground_friction` applies when the car's body scrapes the ground. Tyre grip
     /// comes from `wheels.friction_slip` in the vehicle config instead, because
     /// Rapier's raycast wheels do not read collider friction.
-    pub fn new_on_flat_ground(vehicle_config: &VehicleConfig, ground_friction: f32) -> World {
+    pub fn new_on_flat_ground(
+        vehicle_config: &VehicleConfig,
+        mode: ModeParams,
+        ground_friction: f32,
+    ) -> World {
         let mut physics = PhysicsWorld::new();
         physics.gravity = gravity_vector();
         physics.integration_parameters.dt = PHYSICS_DT_S;
@@ -105,16 +117,94 @@ impl World {
             physics,
             car,
             controller_throttles: [0.0; NOZZLE_COUNT],
+            mode,
+            tank: AirTank::full(&mode),
+            hop_boost: HopBoost::default(),
             step_count: 0,
         }
     }
 
-    /// Advances the world by one physics step (1/120 s).
+    /// Advances the world by one physics step (1/120 s), in SPEC §7.1 order.
     pub fn step(&mut self, input: InputFrame) {
+        // 1–2. Driver input and the Hop/Boost feed-forward.
+        let wheels_down = self.wheels_touching_count();
+        let air_kg = self.tank.air_kg();
+        self.hop_boost
+            .update(input, wheels_down, air_kg, &self.mode, PHYSICS_DT_S);
+        // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
+        let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
+        let commanded = combine_throttles(feed_forward, self.controller_throttles);
+        // 5–8. Valve lag, tank gate, nozzle forces, wheels.
+        let thrust_multiplier = self.mode.thrust_scale * self.tank.thrust_gate(&self.mode);
         self.car
-            .prepare_physics_step(&mut self.physics, input, self.controller_throttles);
+            .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
+        // 9. The physics step.
         self.physics.step();
+        // 10. The tank: pay for this step's thrust, then refill if on the ground.
+        let thrust_n = self.car.total_thrust_n(thrust_multiplier);
+        let exhaust_m_s = self.car.exhaust_speed_m_s();
+        self.tank
+            .use_air(thrust_n, exhaust_m_s, PHYSICS_DT_S, &self.mode);
+        self.tank
+            .refill(self.wheels_touching_count(), PHYSICS_DT_S, &self.mode);
         self.step_count += 1;
+    }
+
+    /// Switches to another mode's physics, e.g. Realistic ↔ Arcade. The air left
+    /// carries over, limited to the new tank's capacity.
+    pub fn set_mode(&mut self, mode: ModeParams) {
+        let air_kg = self.tank.air_kg();
+        self.mode = mode;
+        self.tank.set_air_kg(air_kg, &mode);
+    }
+
+    /// The physics preset in use.
+    pub fn mode(&self) -> ModeParams {
+        self.mode
+    }
+
+    /// Fills the tank, e.g. when the car respawns.
+    pub fn refill_tank(&mut self) {
+        let capacity_kg = self.mode.tank_capacity_kg;
+        self.tank.set_air_kg(capacity_kg, &self.mode);
+    }
+
+    /// Sets the air left, e.g. for training scenarios. Clamped to 0..capacity.
+    pub fn set_air_kg(&mut self, air_kg: f32) {
+        self.tank.set_air_kg(air_kg, &self.mode);
+    }
+
+    /// Air left in the tank.
+    pub fn air_kg(&self) -> f32 {
+        self.tank.air_kg()
+    }
+
+    /// Air left as a fraction of capacity; 1 when air is unlimited.
+    pub fn air_fraction(&self) -> f32 {
+        self.tank.air_fraction(&self.mode)
+    }
+
+    /// All the air used since the world was built.
+    pub fn air_used_kg(&self) -> f32 {
+        self.tank.air_used_kg()
+    }
+
+    /// The Hop and Boost state: timers and whether each is active.
+    pub fn hop_boost(&self) -> &HopBoost {
+        &self.hop_boost
+    }
+
+    /// Why a Hop would be refused right now, or `None` if it is allowed.
+    pub fn hop_blocked_reason(&self) -> Option<HopBlockedReason> {
+        let wheels_down = self.wheels_touching_count();
+        self.hop_boost
+            .hop_blocked_reason(wheels_down, self.tank.air_kg(), &self.mode)
+    }
+
+    /// How many wheels touch the ground (0..4).
+    pub fn wheels_touching_count(&self) -> usize {
+        let touching = self.wheels_touching();
+        touching.iter().filter(|wheel_down| **wheel_down).count()
     }
 
     /// Sets the throttles (0..1 per nozzle, in nozzle order) that the controller wants.

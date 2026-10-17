@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Game, HudField, vehicleToml } from './load-wasm.mjs';
+import { Game, HopBlocked, HudField, modesToml, vehicleToml } from './load-wasm.mjs';
 
 const FULL_THROTTLE = new Uint8Array([127, 0, 0, 0]);
 
@@ -15,7 +15,7 @@ function tickMany(game, input, count) {
 }
 
 test('full throttle moves the car along +X', () => {
-  const game = new Game(vehicleToml);
+  const game = new Game(vehicleToml, modesToml);
 
   tickMany(game, FULL_THROTTLE, 240);
 
@@ -27,7 +27,7 @@ test('full throttle moves the car along +X', () => {
 });
 
 test('restoring a snapshot puts the car and the clock back exactly', () => {
-  const game = new Game(vehicleToml);
+  const game = new Game(vehicleToml, modesToml);
   tickMany(game, FULL_THROTTLE, 60);
   const saved = game.snapshot();
   const savedPose = Array.from(game.chassis_pose());
@@ -45,11 +45,32 @@ test('restoring a snapshot puts the car and the clock back exactly', () => {
 test('a bad config is rejected with the field name', () => {
   const broken = vehicleToml.replace('dry_mass_kg = 1800.0', 'dry_mass_kg = -1.0');
 
-  assert.throws(() => new Game(broken), /chassis\.dry_mass_kg/);
+  assert.throws(() => new Game(broken, modesToml), /chassis\.dry_mass_kg/);
 });
 
 test('tick needs exactly 4 input bytes', () => {
-  const game = new Game(vehicleToml);
+  const game = new Game(vehicleToml, modesToml);
 
   assert.throws(() => game.tick(new Uint8Array([1, 2])), /4 input bytes/);
+});
+
+test('switching to arcade gives unlimited air; unknown modes are refused', () => {
+  const game = new Game(vehicleToml, modesToml);
+
+  game.set_mode('arcade');
+
+  assert.equal(game.unlimited_air(), true);
+  assert.equal(game.hud()[HudField.AirFraction], 1);
+  assert.throws(() => game.set_mode('turbo'), /unknown mode/);
+});
+
+test('space-bar hop lifts the car once it has settled', () => {
+  const game = new Game(vehicleToml, modesToml);
+  tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
+  assert.equal(game.hud()[HudField.HopBlocked], HopBlocked.No);
+
+  game.tick(new Uint8Array([0, 0, 1, 0]));
+  tickMany(game, new Uint8Array([0, 0, 0, 0]), 60);
+
+  assert.ok(game.chassis_pose()[1] > 1.2, `height ${game.chassis_pose()[1]}`);
 });

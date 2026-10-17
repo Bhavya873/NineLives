@@ -39,12 +39,21 @@
         top: 16px;
         font-size: 14px;
       }
+      #hud-status {
+        left: 16px;
+        bottom: 64px;
+        font-size: 16px;
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
     <div id="hud-speed" class="hud">0 km/h</div>
-    <div id="hud-help" class="hud">W/S or ↑/↓ drive · A/D or ←/→ steer</div>
+    <div id="hud-status" class="hud">Realistic · Air 100%</div>
+    <div id="hud-help" class="hud">
+      W/S or ↑/↓ drive · A/D or ←/→ steer · Space hop · Shift boost · M mode<br />
+      The tank slowly refills while the car is on its wheels (a game rule, not real physics).
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

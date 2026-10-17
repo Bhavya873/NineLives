@@ -9,12 +9,33 @@ const THROTTLE_KEYS = ['KeyW', 'ArrowUp'];
 const BRAKE_KEYS = ['KeyS', 'ArrowDown'];
 const STEER_LEFT_KEYS = ['KeyA', 'ArrowLeft'];
 const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
+const HOP_KEYS = ['Space'];
+const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
 
-/** Every key this module handles, so the page does not scroll on arrow keys. */
-const HANDLED_KEYS = [...THROTTLE_KEYS, ...BRAKE_KEYS, ...STEER_LEFT_KEYS, ...STEER_RIGHT_KEYS];
+/** Button bits, matching BUTTON_HOP and BUTTON_BOOST in crates/nl-sim/src/input.rs. */
+const BUTTON_HOP = 1 << 0;
+const BUTTON_BOOST = 1 << 1;
+
+/** Every held key this module handles, so the page does not scroll on arrows or Space. */
+const HANDLED_KEYS = [
+  ...THROTTLE_KEYS,
+  ...BRAKE_KEYS,
+  ...STEER_LEFT_KEYS,
+  ...STEER_RIGHT_KEYS,
+  ...HOP_KEYS,
+  ...BOOST_KEYS,
+];
 
 /** Keys that are currently held down, by `KeyboardEvent.code`. */
 const heldKeys = new Set<string>();
+
+/** One-shot actions for single key presses (e.g. M toggles the mode), by key code. */
+const pressActions = new Map<string, () => void>();
+
+/** Runs `action` once each time `code` is pressed (holding the key does not repeat it). */
+export function onKeyPress(code: string, action: () => void): void {
+  pressActions.set(code, action);
+}
 
 /** Starts listening to the keyboard. Call once at start-up. */
 export function startKeyboard(target: Window): void {
@@ -29,6 +50,9 @@ export function startKeyboard(target: Window): void {
       event.preventDefault();
     }
     heldKeys.add(event.code);
+    if (!event.repeat) {
+      pressActions.get(event.code)?.();
+    }
   });
   target.addEventListener('keyup', (event) => {
     heldKeys.delete(event.code);
@@ -49,16 +73,29 @@ export function readInputFrame(): Uint8Array {
   frameSigned[0] = axis(THROTTLE_KEYS, BRAKE_KEYS);
   // Positive steer is left, matching the sim's yaw sign (SPEC §4).
   frameSigned[1] = axis(STEER_LEFT_KEYS, STEER_RIGHT_KEYS);
-  // Bytes 2 and 3 are the buttons (Hop, Boost, ...), added in M3.
+  let buttons = 0;
+  if (isAnyHeld(HOP_KEYS)) {
+    buttons |= BUTTON_HOP;
+  }
+  if (isAnyHeld(BOOST_KEYS)) {
+    buttons |= BUTTON_BOOST;
+  }
+  // Bytes 2 and 3 are the buttons, little-endian.
+  frame[2] = buttons & 0xff;
+  frame[3] = buttons >> 8;
   return frame;
 }
 
 /** +127 if a "positive" key is held, -127 if a "negative" one is, 0 for both or neither. */
 function axis(positiveKeys: string[], negativeKeys: string[]): number {
-  const positive = positiveKeys.some((key) => heldKeys.has(key));
-  const negative = negativeKeys.some((key) => heldKeys.has(key));
+  const positive = isAnyHeld(positiveKeys);
+  const negative = isAnyHeld(negativeKeys);
   if (positive === negative) {
     return 0;
   }
   return positive ? FULL_SCALE : -FULL_SCALE;
+}
+
+function isAnyHeld(keys: string[]): boolean {
+  return keys.some((key) => heldKeys.has(key));
 }

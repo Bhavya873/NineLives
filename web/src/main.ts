@@ -1,12 +1,13 @@
 // Entry point for the web game. It wires the pieces together:
 // keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
 // Each piece lives in its own folder: input/, render/, hud/; the loop is in game-loop.ts.
+import modesToml from '../../configs/modes.toml?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
 
 import { requireElement } from './dom';
 import { startGameLoop } from './game-loop';
 import { findHud, updateHud } from './hud/hud';
-import { readInputFrame, startKeyboard } from './input/keyboard';
+import { onKeyPress, readInputFrame, startKeyboard } from './input/keyboard';
 import { followCar, snapCamera } from './render/chase-camera';
 import { FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
 import { createGameScene, type PhysicsFrames, placeCar } from './render/scene';
@@ -17,7 +18,12 @@ async function start(): Promise<void> {
   if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
     throw new Error('The wasm build and the renderer disagree on the pose layout');
   }
-  const game = new Game(vehicleToml);
+  const game = new Game(vehicleToml, modesToml);
+  let modeName = 'Realistic';
+  onKeyPress('KeyM', () => {
+    modeName = modeName === 'Realistic' ? 'Arcade' : 'Realistic';
+    game.set_mode(modeName.toLowerCase());
+  });
 
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),
@@ -50,7 +56,13 @@ async function start(): Promise<void> {
 
       placeCar(view, frames, blend, carPose);
       followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000, airborne);
-      updateHud(hud, hudValues[HudField.SpeedMS] ?? 0);
+      updateHud(hud, {
+        speedMS: hudValues[HudField.SpeedMS] ?? 0,
+        modeName,
+        airFraction: hudValues[HudField.AirFraction] ?? 1,
+        unlimitedAir: game.unlimited_air(),
+        hopBlocked: hudValues[HudField.HopBlocked] ?? 0,
+      });
       view.renderer.render(view.scene, view.camera);
       lastRenderMs = nowMs;
     },
