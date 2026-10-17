@@ -10,15 +10,16 @@ import {
   HopBlocked,
   HudField,
   ModeCode,
+  controllersToml,
   modesToml,
-  vehicleToml,
   tickMany,
+  vehicleToml,
 } from './load-wasm.mjs';
 
 const FULL_THROTTLE = new Uint8Array([127, 0, 0, 0]);
 
 test('full throttle moves the car along +X', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
   tickMany(game, FULL_THROTTLE, 240);
 
@@ -30,7 +31,7 @@ test('full throttle moves the car along +X', () => {
 });
 
 test('the mode comes back with a restored snapshot', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   game.set_mode('arcade');
   const saved = game.snapshot();
 
@@ -41,7 +42,7 @@ test('the mode comes back with a restored snapshot', () => {
 });
 
 test('restoring a snapshot puts the car and the clock back exactly', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   tickMany(game, FULL_THROTTLE, 60);
   const saved = game.snapshot();
   const savedPose = Array.from(game.chassis_pose());
@@ -59,17 +60,17 @@ test('restoring a snapshot puts the car and the clock back exactly', () => {
 test('a bad config is rejected with the field name', () => {
   const broken = vehicleToml.replace('dry_mass_kg = 1800.0', 'dry_mass_kg = -1.0');
 
-  assert.throws(() => new Game(broken, modesToml, 0n), /chassis\.dry_mass_kg/);
+  assert.throws(() => new Game(broken, modesToml, controllersToml, 0n), /chassis\.dry_mass_kg/);
 });
 
 test('tick needs exactly 4 input bytes', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
   assert.throws(() => game.tick(new Uint8Array([1, 2])), /4 input bytes/);
 });
 
 test('switching to arcade gives unlimited air; unknown modes are refused', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
   game.set_mode('arcade');
 
@@ -80,7 +81,7 @@ test('switching to arcade gives unlimited air; unknown modes are refused', () =>
 });
 
 test('space-bar hop lifts the car once it has settled', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
   assert.equal(game.hud()[HudField.HopBlocked], HopBlocked.No);
 
@@ -100,7 +101,7 @@ function eventGroups(values) {
 }
 
 test('a hop reports airborne, upset and save events', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
   game.drain_events();
 
@@ -118,7 +119,7 @@ test('a hop reports airborne, upset and save events', () => {
 });
 
 test('the Reset button respawns at the start with a full tank and keeps the mode', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   game.set_mode('arcade');
   tickMany(game, new Uint8Array([127, 0, 2, 0]), 240);
   game.set_mode('realistic');
@@ -137,7 +138,7 @@ test('the Reset button respawns at the start with a full tank and keeps the mode
 });
 
 test('the HUD reports not crashed and not out of air at the start', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   tickMany(game, new Uint8Array([127, 0, 0, 0]), 120);
 
   const hud = game.hud();
@@ -148,7 +149,7 @@ test('the HUD reports not crashed and not out of air at the start', () => {
 });
 
 test('holding Boost in tight circles runs the Realistic tank out of air', () => {
-  const game = new Game(vehicleToml, modesToml, 0n);
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   const boostAndTurn = new Uint8Array([0, 127, Game.button_boost(), 0]);
   let ticks = 0;
   while (game.hud()[HudField.OutOfAir] === 0 && ticks < 120 * 600) {

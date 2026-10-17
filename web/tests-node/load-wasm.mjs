@@ -10,6 +10,12 @@ wasm.initSync({ module: readFileSync(new URL('../src/wasm/nl_wasm_bg.wasm', impo
 /** The wasm module's exports (Game, HudField, ...), ready to use. */
 export const { ControllerCode, CrashCode, EventKind, Game, HopBlocked, HudField, ModeCode } = wasm;
 
+/** The text of the repo's configs/controllers.toml. */
+export const controllersToml = readFileSync(
+  new URL('../../configs/controllers.toml', import.meta.url),
+  'utf8',
+);
+
 /** The text of the repo's configs/modes.toml. */
 export const modesToml = readFileSync(new URL('../../configs/modes.toml', import.meta.url), 'utf8');
 

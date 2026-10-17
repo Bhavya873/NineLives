@@ -32,12 +32,12 @@ pub struct UnknownController {
 }
 
 impl ControllerKind {
-    /// The controller called `name` ("off", "pd" or "manual"). "pd" gives a fresh copy
-    /// of `pd`, which the caller builds once for its car (`Pd::new`).
+    /// The controller called `name` ("off", "pd" or "manual"). "pd" gives a copy of
+    /// `pd`, which the caller builds once for its car (`Pd::new`) and never runs.
     pub fn from_name(name: &str, pd: &Pd) -> Result<ControllerKind, UnknownController> {
         match name {
             "off" => Ok(ControllerKind::Off(Off)),
-            "pd" => Ok(fresh_pd(pd)),
+            "pd" => Ok(ControllerKind::Pd(Box::new(pd.clone()))),
             "manual" => Ok(ControllerKind::Manual(Manual)),
             other => Err(UnknownController {
                 name: other.to_string(),
@@ -49,9 +49,18 @@ impl ControllerKind {
     /// Manual), wrapping round. `pd` is as in `from_name`.
     pub fn next(&self, pd: &Pd) -> ControllerKind {
         match self {
-            ControllerKind::Off(_) => fresh_pd(pd),
+            ControllerKind::Off(_) => ControllerKind::Pd(Box::new(pd.clone())),
             ControllerKind::Pd(_) => ControllerKind::Manual(Manual),
             ControllerKind::Manual(_) => ControllerKind::Off(Off),
+        }
+    }
+
+    /// Its name in `CONTROLLER_NAMES`.
+    pub fn name(&self) -> &'static str {
+        match self {
+            ControllerKind::Off(_) => "off",
+            ControllerKind::Pd(_) => "pd",
+            ControllerKind::Manual(_) => "manual",
         }
     }
 
@@ -74,40 +83,31 @@ impl ControllerKind {
     }
 }
 
-/// A copy of `pd` with its state cleared.
-fn fresh_pd(pd: &Pd) -> ControllerKind {
-    let mut copy = Box::new(pd.clone());
-    copy.reset(0);
-    ControllerKind::Pd(copy)
-}
-
 #[cfg(test)]
 mod tests {
-    use nl_sim::car_state::CarModel;
+    use nl_sim::modes::{DEFAULT_MODES_TOML, ModesConfig};
+    use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
+    use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
     use super::*;
     use crate::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
 
-    /// A PD for a made-up car with one lift nozzle per axis; the tests only check names.
+    /// PD for the repo's car.
     fn pd() -> Pd {
-        let mut nozzle_wrenches = [[0.0; 6]; NOZZLE_COUNT];
-        for (index, wrench) in nozzle_wrenches.iter_mut().enumerate() {
-            wrench[index % 6] = 1000.0;
-        }
-        let model = CarModel {
-            mass_kg: 1800.0,
-            principal_inertia_kg_m2: [600.0, 3000.0, 2700.0],
-            nozzle_wrenches,
-        };
+        let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
+        let mode = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)
+            .unwrap()
+            .realistic;
+        let world = World::new_on_flat_ground(&vehicle, mode, DEFAULT_GROUND_FRICTION, 0);
         let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
-        Pd::new(&model, &config)
+        Pd::new(&world.car_model(), &config)
     }
 
     #[test]
-    fn every_listed_name_is_accepted() {
+    fn every_listed_name_is_accepted_and_named_back() {
         let pd = pd();
         for name in CONTROLLER_NAMES {
-            assert!(ControllerKind::from_name(name, &pd).is_ok(), "{name}");
+            assert_eq!(ControllerKind::from_name(name, &pd).unwrap().name(), name);
         }
     }
 
@@ -122,15 +122,14 @@ mod tests {
     }
 
     #[test]
-    fn the_cycle_goes_off_pd_manual_and_comes_back() {
+    fn the_cycle_follows_the_name_list_and_comes_back() {
         let pd = pd();
-        let start = ControllerKind::Off(Off);
+        let mut controller = ControllerKind::Off(Off);
 
-        let second = start.next(&pd);
-        let third = second.next(&pd);
-
-        assert_eq!(second, ControllerKind::Pd(Box::new(pd.clone())));
-        assert_eq!(third, ControllerKind::Manual(Manual));
-        assert_eq!(third.next(&pd), start);
+        for step in 1..=CONTROLLER_NAMES.len() {
+            controller = controller.next(&pd);
+            let expected = CONTROLLER_NAMES[step % CONTROLLER_NAMES.len()];
+            assert_eq!(controller.name(), expected);
+        }
     }
 }

@@ -4,13 +4,13 @@
 // Run it on a release build; debug builds are many times slower.
 import { performance } from 'node:perf_hooks';
 
-import { Game, modesToml, vehicleToml } from '../tests-node/load-wasm.mjs';
+import { Game, controllersToml, modesToml, vehicleToml } from '../tests-node/load-wasm.mjs';
 
 const WARM_UP_TICKS = 600;
 const MEASURED_TICKS = 6000;
 const TICK_BUDGET_MS = 1.5;
 
-const game = new Game(vehicleToml, modesToml, 0n);
+const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 const throttleAndTurn = new Uint8Array([100, 40, 0, 0]);
 
 for (let tick = 0; tick < WARM_UP_TICKS; tick += 1) {

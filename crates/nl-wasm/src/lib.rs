@@ -7,7 +7,7 @@
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
 //! the Off, PD and Manual controllers. The policy and courses follow in M5–M7 (SPEC §11.1).
 
-use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
+use nl_control::config::ControllersConfig;
 use nl_control::{ControlCtx, ControllerKind, Off, Pd};
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
@@ -164,18 +164,23 @@ pub enum CrashCode {
 
 #[wasm_bindgen]
 impl Game {
-    /// Builds a game on flat ground from the text of `configs/vehicle.toml` and
-    /// `configs/modes.toml`, starting in Realistic mode. `seed` drives the random
+    /// Builds a game on flat ground from the text of `configs/vehicle.toml`,
+    /// `configs/modes.toml` and `configs/controllers.toml`, starting in Realistic mode. `seed` drives the random
     /// Chaos knocks. A crash respawns by itself after `[events] respawn_delay_s`.
     /// Throws if a config is invalid; the message names the bad field.
     #[wasm_bindgen(constructor)]
-    pub fn new(vehicle_toml: &str, modes_toml: &str, seed: u64) -> Result<Game, JsError> {
+    pub fn new(
+        vehicle_toml: &str,
+        modes_toml: &str,
+        controllers_toml: &str,
+        seed: u64,
+    ) -> Result<Game, JsError> {
         let config = VehicleConfig::from_toml_str(vehicle_toml)?;
         let modes = ModesConfig::from_toml_str(modes_toml)?;
         let mut world =
             World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
         world.enable_auto_respawn(config.events.respawn_delay_s);
-        let controllers = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML)?;
+        let controllers = ControllersConfig::from_toml_str(controllers_toml)?;
         let pd = Pd::new(&world.car_model(), &controllers);
         Ok(Game {
             world,
@@ -220,7 +225,11 @@ impl Game {
         let input = InputFrame::from_bytes(bytes);
         // Controllers run at 60 Hz; the world holds their throttles in between (SPEC §7.1).
         self.buttons_since_control_step |= input.buttons;
-        if self.world.is_control_step() {
+        if self.world.is_crashed() {
+            // The wreck is frozen until it respawns: nothing to control, and the
+            // controller should start fresh on the respawned car.
+            self.controller.reset(0);
+        } else if self.world.is_control_step() {
             let controller_input = InputFrame {
                 buttons: self.buttons_since_control_step,
                 ..input

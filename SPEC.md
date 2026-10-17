@@ -491,7 +491,7 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 ### 11.1 Wasm API (`nl-wasm`)
 ```ts
 class Game {
-  constructor(vehicleToml: string, modesToml: string, seed: bigint);  // courseJson joins in M6
+  constructor(vehicleToml: string, modesToml: string, controllersToml: string, seed: bigint);  // courseJson joins in M6
   set_mode(mode: "realistic" | "arcade"): void;
   set_controller(kind: "off" | "pd" | "ai" | "manual"): void;
   load_policy(json: string): void;          // throws if obs_schema_hash mismatches

@@ -9,10 +9,10 @@ import { airGaugeText, createAirGauge, updateAirGauge } from '../src/hud/air-gau
 import { mapPercent } from '../src/hud/nozzle-map.ts';
 import { readNozzleLayout } from '../src/nozzle-layout.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
-import { Game, modesToml, vehicleToml } from './load-wasm.mjs';
+import { Game, controllersToml, modesToml, vehicleToml } from './load-wasm.mjs';
 
 function nozzleLayout() {
-  return new Game(vehicleToml, modesToml, 0n).nozzle_layout();
+  return new Game(vehicleToml, modesToml, controllersToml, 0n).nozzle_layout();
 }
 
 test('the nozzle layout has 10 nozzles and lift exhaust points down', () => {
