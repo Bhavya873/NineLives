@@ -14,6 +14,7 @@ pub struct ModeParams {
     pub thrust_scale: f32,
     /// When true the tank never runs out; air used is still counted.
     pub unlimited_air: bool,
+    /// How much air a full tank holds.
     pub tank_capacity_kg: f32,
     /// Refill rate while enough wheels touch the ground.
     pub refill_kg_s: f32,
@@ -37,7 +38,9 @@ pub struct ModeParams {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModesConfig {
+    /// The `[realistic]` section.
     pub realistic: ModeParams,
+    /// The `[arcade]` section.
     pub arcade: ModeParams,
 }
 
@@ -87,6 +90,10 @@ impl ModeParams {
         )?;
         check(mode, "refill_kg_s", self.refill_kg_s, not_negative, |v| {
             v >= 0.0
+        })?;
+        let wheels = self.refill_min_wheels as f32;
+        check(mode, "refill_min_wheels", wheels, "must be 1 to 4", |v| {
+            (1.0..=4.0).contains(&v)
         })?;
         let fade = self.empty_fade_fraction;
         check(

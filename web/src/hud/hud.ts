@@ -12,6 +12,7 @@ const HOP_BLOCKED_TEXT = ['', 'Hop: wheels off the ground', 'Hop: cooldown', 'Ho
 /** The numbers the HUD shows, already read from the game. */
 export interface HudValues {
   speedMS: number;
+  /** "realistic", "arcade" or "custom". */
   modeName: string;
   /** Air left, 0..1. Arcade has unlimited air. */
   airFraction: number;
@@ -38,5 +39,6 @@ export function updateHud(hud: Hud, values: HudValues): void {
 
   const air = values.unlimitedAir ? '∞' : `${Math.round(values.airFraction * 100)}%`;
   const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
-  hud.status.textContent = [values.modeName, `Air ${air}`, hop].filter(Boolean).join(' · ');
+  const mode = values.modeName.charAt(0).toUpperCase() + values.modeName.slice(1);
+  hud.status.textContent = [mode, `Air ${air}`, hop].filter(Boolean).join(' · ');
 }

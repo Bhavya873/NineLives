@@ -42,10 +42,12 @@ pub enum HudField {
     HopBlocked = 7,
     /// 1 while Boost is held, else 0.
     BoostActive = 8,
+    /// 1 when the current mode has unlimited air (the HUD shows ∞), else 0.
+    UnlimitedAir = 9,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::BoostActive as usize + 1;
+const HUD_LENGTH: usize = HudField::UnlimitedAir as usize + 1;
 
 /// The values `HudField.HopBlocked` can take (SPEC §7.8).
 #[wasm_bindgen]
@@ -81,9 +83,18 @@ impl Game {
         Ok(Game { world, modes })
     }
 
-    /// True when the current mode has unlimited air (the HUD shows ∞).
-    pub fn unlimited_air(&self) -> bool {
-        self.world.mode().unlimited_air
+    /// The current mode's name: "realistic", "arcade", or "custom" for anything else
+    /// (e.g. a mode sampled in between). Read from the world, so it is still right
+    /// after `restore`.
+    pub fn mode_name(&self) -> String {
+        let mode = self.world.mode();
+        if mode == self.modes.realistic {
+            "realistic".to_string()
+        } else if mode == self.modes.arcade {
+            "arcade".to_string()
+        } else {
+            "custom".to_string()
+        }
     }
 
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
@@ -134,6 +145,7 @@ impl Game {
         values[HudField::HopCooldownS as usize] = hop_boost.hop_cooldown_left_s();
         values[HudField::BoostActive as usize] = one_if(hop_boost.boost_active());
         values[HudField::HopBlocked as usize] = hop_blocked_code(self.world.hop_blocked_reason());
+        values[HudField::UnlimitedAir as usize] = one_if(self.world.mode().unlimited_air);
         values
     }
 

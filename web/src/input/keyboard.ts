@@ -29,6 +29,12 @@ const HANDLED_KEYS = [
 /** Keys that are currently held down, by `KeyboardEvent.code`. */
 const heldKeys = new Set<string>();
 
+/**
+ * Hop key presses not yet sent to the game. A quick tap can go down and up between two
+ * ticks on a slow frame; remembering the press makes sure the game still sees it.
+ */
+let hopPressedSinceLastFrame = false;
+
 /** One-shot actions for single key presses (e.g. M toggles the mode), by key code. */
 const pressActions = new Map<string, () => void>();
 
@@ -50,6 +56,9 @@ export function startKeyboard(target: Window): void {
       event.preventDefault();
     }
     heldKeys.add(event.code);
+    if (HOP_KEYS.includes(event.code)) {
+      hopPressedSinceLastFrame = true;
+    }
     if (!event.repeat) {
       pressActions.get(event.code)?.();
     }
@@ -74,9 +83,10 @@ export function readInputFrame(): Uint8Array {
   // Positive steer is left, matching the sim's yaw sign (SPEC §4).
   frameSigned[1] = axis(STEER_LEFT_KEYS, STEER_RIGHT_KEYS);
   let buttons = 0;
-  if (isAnyHeld(HOP_KEYS)) {
+  if (isAnyHeld(HOP_KEYS) || hopPressedSinceLastFrame) {
     buttons |= BUTTON_HOP;
   }
+  hopPressedSinceLastFrame = false;
   if (isAnyHeld(BOOST_KEYS)) {
     buttons |= BUTTON_BOOST;
   }

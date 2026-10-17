@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::conventions::NOZZLE_COUNT;
 use crate::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
 use crate::modes::ModeParams;
+use crate::thrusters::safe_throttle;
 
 /// Indices of the four lift nozzles (L_FL, L_FR, L_RL, L_RR).
 const LIFT_NOZZLES: [usize; 4] = [0, 1, 2, 3];
@@ -127,12 +128,8 @@ pub fn combine_throttles(
 ) -> [f32; NOZZLE_COUNT] {
     let mut commanded = [0.0; NOZZLE_COUNT];
     for index in 0..NOZZLE_COUNT {
-        // A NaN from the controller counts as 0 (see thrusters::Valves).
-        let controller_throttle = if controller[index].is_nan() {
-            0.0
-        } else {
-            controller[index]
-        };
+        // A NaN from the controller counts as 0, the same rule as the valves.
+        let controller_throttle = safe_throttle(controller[index]);
         commanded[index] = (feed_forward[index] + controller_throttle).clamp(0.0, 1.0);
     }
     commanded

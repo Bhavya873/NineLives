@@ -169,3 +169,16 @@ fn boost_adds_about_0_9_g_in_realistic_and_twice_that_in_arcade() {
         );
     }
 }
+
+#[test]
+fn placing_the_car_ends_a_hop_in_progress() {
+    let mut world = new_world();
+    settle(&mut world);
+    world.step(buttons(BUTTON_HOP));
+    assert!(world.hop_boost().hop_active());
+
+    lift_into_the_air(&mut world, 50.0);
+
+    assert!(!world.hop_boost().hop_active());
+    assert_eq!(world.hop_boost().hop_cooldown_left_s(), 0.0);
+}

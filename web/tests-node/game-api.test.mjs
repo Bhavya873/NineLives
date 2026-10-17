@@ -26,6 +26,17 @@ test('full throttle moves the car along +X', () => {
   assert.deepEqual(Array.from(game.nozzle_throttles()), new Array(Game.nozzle_count()).fill(0));
 });
 
+test('the mode comes back with a restored snapshot', () => {
+  const game = new Game(vehicleToml, modesToml);
+  game.set_mode('arcade');
+  const saved = game.snapshot();
+
+  game.set_mode('realistic');
+  game.restore(saved);
+
+  assert.equal(game.mode_name(), 'arcade');
+});
+
 test('restoring a snapshot puts the car and the clock back exactly', () => {
   const game = new Game(vehicleToml, modesToml);
   tickMany(game, FULL_THROTTLE, 60);
@@ -59,7 +70,8 @@ test('switching to arcade gives unlimited air; unknown modes are refused', () =>
 
   game.set_mode('arcade');
 
-  assert.equal(game.unlimited_air(), true);
+  assert.equal(game.mode_name(), 'arcade');
+  assert.equal(game.hud()[HudField.UnlimitedAir], 1);
   assert.equal(game.hud()[HudField.AirFraction], 1);
   assert.throws(() => game.set_mode('turbo'), /unknown mode/);
 });

@@ -19,10 +19,8 @@ async function start(): Promise<void> {
     throw new Error('The wasm build and the renderer disagree on the pose layout');
   }
   const game = new Game(vehicleToml, modesToml);
-  let modeName = 'Realistic';
   onKeyPress('KeyM', () => {
-    modeName = modeName === 'Realistic' ? 'Arcade' : 'Realistic';
-    game.set_mode(modeName.toLowerCase());
+    game.set_mode(game.mode_name() === 'arcade' ? 'realistic' : 'arcade');
   });
 
   const frames: PhysicsFrames = {
@@ -58,9 +56,9 @@ async function start(): Promise<void> {
       followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000, airborne);
       updateHud(hud, {
         speedMS: hudValues[HudField.SpeedMS] ?? 0,
-        modeName,
+        modeName: game.mode_name(),
         airFraction: hudValues[HudField.AirFraction] ?? 1,
-        unlimitedAir: game.unlimited_air(),
+        unlimitedAir: hudValues[HudField.UnlimitedAir] === 1,
         hopBlocked: hudValues[HudField.HopBlocked] ?? 0,
       });
       view.renderer.render(view.scene, view.camera);

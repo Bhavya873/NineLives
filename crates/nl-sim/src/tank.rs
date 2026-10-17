@@ -61,11 +61,13 @@ impl AirTank {
         dt_s: f32,
         mode: &ModeParams,
     ) {
-        let used_kg = total_force_n / exhaust_speed_m_s * dt_s;
-        self.air_used_kg += used_kg;
+        let mut used_kg = total_force_n / exhaust_speed_m_s * dt_s;
         if !mode.unlimited_air {
-            self.air_kg = (self.air_kg - used_kg).max(0.0);
+            // Never count more air than was actually in the tank.
+            used_kg = used_kg.min(self.air_kg);
+            self.air_kg -= used_kg;
         }
+        self.air_used_kg += used_kg;
     }
 
     /// Refills at `refill_kg_s` while enough wheels touch the ground (SPEC §7.5).
@@ -141,6 +143,18 @@ mod tests {
 
         assert_eq!(after_two_wheels, 100.0);
         assert_eq!(after_three_wheels, 105.0);
+    }
+
+    #[test]
+    fn air_used_never_exceeds_what_was_in_the_tank() {
+        let mode = realistic();
+        let mut tank = AirTank::full(&mode);
+        tank.set_air_kg(1.0, &mode);
+
+        tank.use_air(48_000.0, 600.0, 1.0, &mode);
+
+        assert_eq!(tank.air_kg(), 0.0);
+        assert_eq!(tank.air_used_kg(), 1.0);
     }
 
     #[test]

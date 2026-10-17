@@ -136,12 +136,12 @@ impl World {
         let commanded = combine_throttles(feed_forward, self.controller_throttles);
         // 5–8. Valve lag, tank gate, nozzle forces, wheels.
         let thrust_multiplier = self.mode.thrust_scale * self.tank.thrust_gate(&self.mode);
-        self.car
-            .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
+        let thrust_n =
+            self.car
+                .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
         // 9. The physics step.
         self.physics.step();
         // 10. The tank: pay for this step's thrust, then refill if on the ground.
-        let thrust_n = self.car.total_thrust_n(thrust_multiplier);
         let exhaust_m_s = self.car.exhaust_speed_m_s();
         self.tank
             .use_air(thrust_n, exhaust_m_s, PHYSICS_DT_S, &self.mode);
@@ -223,8 +223,9 @@ impl World {
     /// Moves the car to a new position, orientation and velocity, for tests and for
     /// training scenarios (SPEC §9.6). Velocities are in world coordinates.
     ///
-    /// It also closes every valve, clears the held controller throttles and centres
-    /// the steering, so nothing from the previous run carries over.
+    /// It also closes every valve, clears the held controller throttles, ends any Hop
+    /// or Boost and its cooldown, and centres the steering, so nothing from the
+    /// previous run carries over. The tank is left as it is (see `refill_tank`).
     pub fn place_car(
         &mut self,
         position_m: [f32; 3],
@@ -243,6 +244,7 @@ impl World {
         }
 
         self.controller_throttles = [0.0; NOZZLE_COUNT];
+        self.hop_boost = HopBoost::default();
         self.car.reset_actuators();
         let body = &mut self.physics.bodies[self.car.chassis];
         body.set_position(
