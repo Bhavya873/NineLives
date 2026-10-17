@@ -14,7 +14,10 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
-use crate::car_state::{CarModel, CarState, height_above_ground_m, read_car_model};
+use crate::car_state::{
+    CarModel, CarState, TERRAIN_PROBE_COUNT, height_above_ground_m, read_car_model,
+    terrain_probe_heights_m,
+};
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
 use crate::contacts::{MotionBeforeStep, is_touching, read_body_contacts};
@@ -432,6 +435,28 @@ impl World {
         (body.rotation().inverse() * world_vector).to_array()
     }
 
+    /// How far each wheel's spring is pushed in, 0..1, in wheel order (SPEC §9.2).
+    pub fn suspension_compressions(&self) -> [f32; WHEEL_COUNT] {
+        self.car.suspension_compressions(&self.physics)
+    }
+
+    /// Ground height relative to the centre of mass at each probe distance ahead along
+    /// the car's horizontal heading, capped (SPEC §9.2 terrain probe; see `car_state`).
+    pub fn terrain_probe_heights_m(&self) -> [f32; TERRAIN_PROBE_COUNT] {
+        terrain_probe_heights_m(&self.physics, &self.car)
+    }
+
+    /// The driver's input on the latest step.
+    pub fn last_input(&self) -> InputFrame {
+        self.previous_input
+    }
+
+    /// The throttles the controller asked for last (0..1, nozzle order), held until
+    /// it asks again.
+    pub fn controller_throttles(&self) -> [f32; NOZZLE_COUNT] {
+        self.controller_throttles
+    }
+
     /// The car's mass, inertia and what each nozzle can push (for PD's allocation).
     pub fn car_model(&self) -> CarModel {
         read_car_model(&self.physics, &self.car)
@@ -510,11 +535,14 @@ impl World {
     }
 
     /// Moves the car and resets the held controller throttles, valves, Hop/Boost,
-    /// steering and event rules (including a crash), so nothing carries over. The tank
+    /// steering, wheel rays and event rules (including a crash), so nothing carries over. The tank
     /// is left as it is. Shared by `place_car` and `respawn`; the values must be finite
     /// with a non-zero rotation.
     fn move_car_to(&mut self, target: Checkpoint) {
         self.reset_controls();
+        // The wheel rays were cast at the old pose; forget them so contact and
+        // suspension read "not touching" until the next step casts them again.
+        self.car.forget_wheel_rays();
         self.events.reset();
         self.steps_since_crash = 0;
         let [x, y, z, w] = target.pose.rotation_xyzw;
