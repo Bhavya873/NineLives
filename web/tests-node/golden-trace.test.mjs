@@ -5,12 +5,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { loadWasm } from './load-wasm.mjs';
+import { Game } from './load-wasm.mjs';
 
 const goldenFile = new URL('../../crates/nl-sim/tests/golden/flat_drive.json', import.meta.url);
 
 test('wasm golden trace matches the native golden hash', () => {
-  const { Game } = loadWasm();
   const expected = JSON.parse(readFileSync(goldenFile, 'utf8'));
 
   assert.equal(Game.golden_trace_hash(), expected.hash);

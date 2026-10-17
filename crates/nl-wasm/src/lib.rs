@@ -30,8 +30,8 @@ pub enum HudField {
     WheelsTouching = 2,
 }
 
-/// Number of values in the HUD array. Keep it one more than the last `HudField`.
-const HUD_LENGTH: usize = 3;
+/// Number of values in the HUD array: one more than the last `HudField`.
+const HUD_LENGTH: usize = HudField::WheelsTouching as usize + 1;
 
 /// One running game: a world and the car in it.
 #[wasm_bindgen]
@@ -111,8 +111,7 @@ impl Game {
     /// Runs the 2000-step golden trace and returns its hash, so a test can check
     /// that wasm gives bit-identical physics to native (SPEC §7.10).
     pub fn golden_trace_hash() -> Result<String, JsError> {
-        let result = run_golden_trace().map_err(|error| JsError::new(&error.to_string()))?;
-        Ok(result.hash_hex)
+        Ok(run_golden_trace()?.hash_hex)
     }
 
     /// The fixed physics step length in seconds (1/120).

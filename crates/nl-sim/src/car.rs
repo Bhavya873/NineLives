@@ -167,11 +167,10 @@ impl Car {
     /// forward spins a wheel about -Z, so the roll angle is negated.
     pub fn wheel_poses(&self, physics: &PhysicsWorld) -> [Pose; WHEEL_COUNT] {
         let chassis_pose = physics.bodies[self.chassis].position();
-        let is_upright = self.is_upright(physics);
+        let touching = self.wheels_touching(physics);
         let mut poses = [Pose::new(Vector::ZERO, Rotation::IDENTITY); WHEEL_COUNT];
         for (index, wheel) in self.wheels.wheels().iter().enumerate() {
-            let ray_measured_length = is_upright && wheel.raycast_info().is_in_contact;
-            let suspension_length_m = if ray_measured_length {
+            let suspension_length_m = if touching[index] {
                 wheel.raycast_info().suspension_length
             } else {
                 wheel.suspension_rest_length

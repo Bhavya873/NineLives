@@ -2,12 +2,10 @@
 // It loads the wasm build from web/src/wasm, so run `npm run wasm` first.
 // Run with `npm run test:wasm` (CI runs it in the web job).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { loadWasm } from './load-wasm.mjs';
+import { Game, HudField, vehicleToml } from './load-wasm.mjs';
 
-const vehicleToml = readFileSync(new URL('../../configs/vehicle.toml', import.meta.url), 'utf8');
 const FULL_THROTTLE = new Uint8Array([127, 0, 0, 0]);
 
 function tickMany(game, input, count) {
@@ -17,7 +15,6 @@ function tickMany(game, input, count) {
 }
 
 test('full throttle moves the car along +X', () => {
-  const { Game } = loadWasm();
   const game = new Game(vehicleToml);
 
   tickMany(game, FULL_THROTTLE, 240);
@@ -29,7 +26,6 @@ test('full throttle moves the car along +X', () => {
 });
 
 test('restoring a snapshot puts the car and the clock back exactly', () => {
-  const { Game, HudField } = loadWasm();
   const game = new Game(vehicleToml);
   tickMany(game, FULL_THROTTLE, 60);
   const saved = game.snapshot();
@@ -46,14 +42,12 @@ test('restoring a snapshot puts the car and the clock back exactly', () => {
 });
 
 test('a bad config is rejected with the field name', () => {
-  const { Game } = loadWasm();
   const broken = vehicleToml.replace('dry_mass_kg = 1800.0', 'dry_mass_kg = -1.0');
 
   assert.throws(() => new Game(broken), /chassis\.dry_mass_kg/);
 });
 
 test('tick needs exactly 4 input bytes', () => {
-  const { Game } = loadWasm();
   const game = new Game(vehicleToml);
 
   assert.throws(() => game.tick(new Uint8Array([1, 2])), /4 input bytes/);

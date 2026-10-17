@@ -2,17 +2,14 @@
 //
 // Usage: npm run wasm:release && node scripts/measure-tick.mjs
 // Run it on a release build; debug builds are many times slower.
-import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 
-import { loadWasm } from '../tests-node/load-wasm.mjs';
+import { Game, vehicleToml } from '../tests-node/load-wasm.mjs';
 
 const WARM_UP_TICKS = 600;
 const MEASURED_TICKS = 6000;
 const TICK_BUDGET_MS = 1.5;
 
-const { Game } = loadWasm();
-const vehicleToml = readFileSync(new URL('../../configs/vehicle.toml', import.meta.url), 'utf8');
 const game = new Game(vehicleToml);
 const throttleAndTurn = new Uint8Array([100, 40, 0, 0]);
 
