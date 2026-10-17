@@ -75,8 +75,8 @@ fn limited_air_costs_its_share_of_the_tank() {
 
     let terms = reward_terms(&step, &config());
 
-    // 26 kg of 260 kg is 10% of the tank: −2.0 × 0.1.
-    assert!((terms.air + 0.2).abs() < 1e-6);
+    // 26 kg of 260 kg is 10% of the tank: −8.0 × 0.1.
+    assert!((terms.air + 0.8).abs() < 1e-6);
 }
 
 #[test]
@@ -91,8 +91,8 @@ fn unlimited_air_costs_by_throttle_instead() {
 
     let terms = reward_terms(&step, &config());
 
-    // Throttles sum to 5: −0.002 × 5. The kilograms do not count.
-    assert!((terms.air + 0.01).abs() < 1e-6);
+    // Throttles sum to 5: −0.008 × 5. The kilograms do not count.
+    assert!((terms.air + 0.04).abs() < 1e-6);
 }
 
 #[test]

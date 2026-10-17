@@ -4,6 +4,7 @@
       latest/            model.zip, vecnormalize.pkl, state.json (resume from here)
       best/              the same, for the best eval success so far
       checkpoints/<n>/   model.zip, vecnormalize.pkl every `every_steps` steps
+      configs/           the configs/*.toml the run started with
       tb/                TensorBoard logs
 
 `runs/` is gitignored and stays on the training machine (ADR-003). state.json holds
@@ -37,6 +38,8 @@ class RunState:
     own count so state.json can be read without loading the model."""
 
     steps: int
+    # The run's planned length; the learning rate decays over it.
+    total_steps: int
     curriculum: Curriculum
     best_eval_success: float
     wall_seconds: float
@@ -75,6 +78,7 @@ def load_checkpoint(
     curriculum.restore(saved["curriculum"])
     state = RunState(
         steps=saved["steps"],
+        total_steps=saved.get("total_steps", 0),
         curriculum=curriculum,
         best_eval_success=saved["best_eval_success"],
         wall_seconds=saved["wall_seconds"],
@@ -97,6 +101,7 @@ def state_to_dict(state: RunState) -> dict[str, Any]:
     """state.json's contents."""
     return {
         "steps": state.steps,
+        "total_steps": state.total_steps,
         "curriculum": state.curriculum.progress(),
         "best_eval_success": state.best_eval_success,
         "wall_seconds": state.wall_seconds,

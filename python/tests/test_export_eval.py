@@ -121,3 +121,21 @@ def test_eval_with_domain_randomization_changes_the_episodes_and_the_file_name(t
 
     assert plain["episodes"] != randomized["episodes"]
     assert write_report(randomized, tmp_path).name == "eval_pd_A_realistic_dr.json"
+
+
+def test_viewer_checkpoints_end_on_the_shipped_policy(tmp_path, monkeypatch):
+    import ninelives.export as export
+
+    model, normalizer = random_policy()
+    run_dir = tmp_path / "run"
+    for steps in (100, 200, 300):
+        model.num_timesteps = steps
+        save_checkpoint(run_dir / "checkpoints" / str(steps), model, normalizer)
+    model.num_timesteps = 200
+    save_checkpoint(run_dir / "best", model, normalizer)
+    monkeypatch.setattr(export, "VIEWER_DIR", tmp_path / "viewer")
+
+    written = export.export_viewer_checkpoints(run_dir, run_dir / "best")
+
+    steps = [json.loads(path.read_text())["trained"]["steps"] for path in written]
+    assert steps == [100, 200]

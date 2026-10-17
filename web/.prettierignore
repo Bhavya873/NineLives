@@ -3,3 +3,5 @@ src/wasm/
 test-results/
 playwright-report/
 package-lock.json
+# Generated policy checkpoints for the training viewer (ninelives.export), not source.
+public/checkpoints/
