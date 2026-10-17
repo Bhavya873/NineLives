@@ -206,3 +206,19 @@ fn out_of_air_starts_where_thrust_starts_to_fade_and_never_in_arcade() {
     arcade_world.set_air_kg(0.0);
     assert!(!arcade_world.is_out_of_air());
 }
+
+#[test]
+fn an_empty_tank_shows_no_flames_even_with_the_valves_open() {
+    let mut world = new_world();
+    world.set_controller_throttles([1.0; NOZZLE_COUNT]);
+    run(&mut world, InputFrame::default(), 0.3);
+    assert!(world.flame_fractions()[0] > 0.5);
+
+    world.set_air_kg(0.0);
+
+    assert!(
+        world.effective_throttles()[0] > 0.5,
+        "the valves are still open"
+    );
+    assert_eq!(world.flame_fractions(), [0.0; NOZZLE_COUNT]);
+}

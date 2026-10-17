@@ -368,6 +368,12 @@ impl ThrusterConfig {
 }
 
 impl NozzleConfig {
+    /// The way the gas leaves the nozzle: opposite to the push (SPEC §7.4).
+    pub fn exhaust_direction(&self) -> [f32; 3] {
+        let [x, y, z] = self.direction;
+        [-x, -y, -z]
+    }
+
     fn check(&self, index: usize) -> CheckResult {
         let expected = NOZZLE_NAMES[index];
         if self.name != expected {
@@ -502,6 +508,15 @@ mod tests {
             error,
             VehicleConfigError::WrongNozzleOrder { index: 0, .. }
         ));
+    }
+
+    #[test]
+    fn a_lift_nozzle_pushes_up_so_its_exhaust_points_down() {
+        let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
+
+        let exhaust = config.thrusters.nozzles[0].exhaust_direction();
+
+        assert_eq!(exhaust, [-0.0, -1.0, -0.0]);
     }
 
     #[test]

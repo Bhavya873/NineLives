@@ -22,6 +22,10 @@ use wasm_bindgen::prelude::*;
 /// Number of floats in one pose: position x, y, z then quaternion x, y, z, w.
 const FLOATS_PER_POSE: usize = 7;
 
+/// Number of floats per nozzle in `Game::nozzle_layout`: position x, y, z, then the
+/// exhaust direction x, y, z.
+const FLOATS_PER_NOZZLE: usize = 6;
+
 /// Where each value sits in the array returned by `Game::hud`. JavaScript sees this
 /// as an object, so it can write `hud[HudField.SpeedMS]` instead of a bare number.
 #[wasm_bindgen]
@@ -92,6 +96,8 @@ pub enum HopBlocked {
 pub struct Game {
     world: World,
     modes: ModesConfig,
+    /// Where each nozzle sits and which way its exhaust points (see `nozzle_layout`).
+    nozzle_layout: Vec<f32>,
     /// Saves and crashes since the game started, counted as events are drained.
     saves: u32,
     crashes: u32,
@@ -148,6 +154,7 @@ impl Game {
         Ok(Game {
             world,
             modes,
+            nozzle_layout: flatten_nozzle_layout(&config),
             saves: 0,
             crashes: 0,
         })
@@ -182,10 +189,17 @@ impl Game {
         flatten_poses(&self.world.wheel_poses())
     }
 
-    /// How open each of the 10 thruster valves is now (0..1), in nozzle order.
-    /// The renderer sizes each flame from these.
+    /// How much gas each of the 10 nozzles is blowing now (0..1), in nozzle order:
+    /// valve opening times the tank gate. The renderer sizes each flame from these.
     pub fn nozzle_throttles(&self) -> Vec<f32> {
-        self.world.effective_throttles().to_vec()
+        self.world.flame_fractions().to_vec()
+    }
+
+    /// Where the renderer draws each nozzle and its flame, in nozzle order, 6 floats
+    /// each in the car's body frame (+X forward, +Y up, +Z right): position in metres,
+    /// then the unit exhaust direction (opposite to the push, SPEC §7.4).
+    pub fn nozzle_layout(&self) -> Vec<f32> {
+        self.nozzle_layout.clone()
     }
 
     /// Values for the on-screen display. Read them with the `HudField` indices.
@@ -305,6 +319,11 @@ impl Game {
         FLOATS_PER_EVENT
     }
 
+    /// Number of floats per nozzle in `nozzle_layout` (6).
+    pub fn floats_per_nozzle() -> usize {
+        FLOATS_PER_NOZZLE
+    }
+
     /// Number of thruster nozzles (10).
     pub fn nozzle_count() -> usize {
         NOZZLE_COUNT
@@ -387,6 +406,16 @@ fn hop_blocked_code(reason: Option<HopBlockedReason>) -> f32 {
         Some(HopBlockedReason::NoAir) => HopBlocked::NoAir,
     };
     code as u8 as f32
+}
+
+/// Each nozzle's position then exhaust direction, one after another.
+fn flatten_nozzle_layout(config: &VehicleConfig) -> Vec<f32> {
+    let mut values = Vec::with_capacity(NOZZLE_COUNT * FLOATS_PER_NOZZLE);
+    for nozzle in &config.thrusters.nozzles {
+        values.extend_from_slice(&nozzle.position_m);
+        values.extend_from_slice(&nozzle.exhaust_direction());
+    }
+    values
 }
 
 /// Writes poses one after another as [x, y, z, qx, qy, qz, qw, x, y, z, ...].
