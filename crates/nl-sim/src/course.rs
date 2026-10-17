@@ -11,6 +11,9 @@ use serde_json::Value;
 
 /// The demo course (SPEC §7.11), built into the binary so the game and tests share it.
 pub const GAUNTLET_JSON: &str = include_str!("../../../courses/gauntlet.json");
+/// The training viewer's obstacle arena (SPEC §11.6): ramps and blocks around an open
+/// drop zone at the origin, where Stage A drops start.
+pub const ARENA_JSON: &str = include_str!("../../../courses/arena.json");
 
 /// The only course schema version this build reads.
 pub const COURSE_SCHEMA_VERSION: u32 = 1;
