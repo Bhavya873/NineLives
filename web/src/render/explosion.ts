@@ -1,7 +1,8 @@
 // The crash explosion (SPEC §7.9, §11.4): a flash, a shockwave ring and about 20 low-poly
 // debris pieces thrown from where the car crashed, plus a short camera shake.
 // Purely visual: the sim has already frozen the wreck; this only draws over it until the
-// respawn. Debris directions use Math.random because they never affect the physics.
+// respawn, when `stopExplosion` ends it. Debris directions use Math.random because they
+// never affect the physics.
 import {
   DoubleSide,
   Group,
@@ -16,8 +17,6 @@ import {
   Vector3,
 } from 'three';
 
-/** How long the effect plays, in seconds (about the sim's respawn delay). */
-const DURATION_S = 1.5;
 const DEBRIS_COUNT = 20;
 /** Fewer pieces when the player asks for reduced motion (SPEC §11.4). */
 const DEBRIS_COUNT_REDUCED_MOTION = 8;
@@ -44,7 +43,7 @@ interface Debris {
 
 /** The explosion's three.js objects and how far through the effect it is. */
 export interface Explosion {
-  /** The ring and debris; hidden while the effect is not playing. */
+  /** The ring and debris; visible exactly while the effect plays. */
   group: Group;
   /**
    * Kept in the scene at all times (dark when idle): adding or hiding a light changes
@@ -53,7 +52,7 @@ export interface Explosion {
   flash: PointLight;
   ring: Mesh<RingGeometry, MeshBasicMaterial>;
   debris: Debris[];
-  /** Seconds since `startExplosion`; the effect is over at `DURATION_S`. */
+  /** Seconds since `startExplosion`. */
   ageS: number;
   reducedMotion: boolean;
 }
@@ -71,7 +70,7 @@ export function createExplosion(scene: Scene, reducedMotion: boolean): Explosion
   const debris = buildDebris(reducedMotion ? DEBRIS_COUNT_REDUCED_MOTION : DEBRIS_COUNT);
   group.add(ring, ...debris.map((piece) => piece.mesh));
   scene.add(group, flash);
-  return { group, flash, ring, debris, ageS: DURATION_S, reducedMotion };
+  return { group, flash, ring, debris, ageS: 0, reducedMotion };
 }
 
 /** Starts the effect at `position` (where the car crashed). */
@@ -94,16 +93,23 @@ export function startExplosion(explosion: Explosion, position: Vector3): void {
   }
 }
 
-/** True while the effect is playing. */
-export function isExplosionPlaying(explosion: Explosion): boolean {
-  return explosion.ageS < DURATION_S;
+/** Ends the effect at once, e.g. when the car respawns: hides it and stops the shake. */
+export function stopExplosion(explosion: Explosion): void {
+  explosion.group.visible = false;
+  explosion.flash.intensity = 0;
 }
 
-/** Advances the effect by `frameS` seconds; hides it once it is over. */
+/** True from `startExplosion` until `stopExplosion`. */
+export function isExplosionPlaying(explosion: Explosion): boolean {
+  return explosion.group.visible;
+}
+
+/**
+ * Advances the effect by `frameS` seconds. The flash, ring and shake fade within a
+ * second; the debris keeps falling (the ground hides it) until `stopExplosion`.
+ */
 export function updateExplosion(explosion: Explosion, frameS: number): void {
   if (!isExplosionPlaying(explosion)) {
-    explosion.group.visible = false;
-    explosion.flash.intensity = 0;
     return;
   }
   explosion.ageS += frameS;
@@ -123,7 +129,8 @@ export function updateExplosion(explosion: Explosion, frameS: number): void {
  */
 export function cameraShake(explosion: Explosion, out: Vector3): Vector3 {
   out.set(0, 0, 0);
-  if (explosion.reducedMotion || explosion.ageS >= SHAKE_S) {
+  const shaking = isExplosionPlaying(explosion) && explosion.ageS < SHAKE_S;
+  if (explosion.reducedMotion || !shaking) {
     return out;
   }
   const strength = SHAKE_AMPLITUDE_M * (1 - explosion.ageS / SHAKE_S);

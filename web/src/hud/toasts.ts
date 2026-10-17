@@ -1,7 +1,6 @@
 // Centre-screen toasts (SPEC §11.5): "SAVE" with the air used, "CRASH" with the cause,
 // and "NO AIR". It turns drained sim events into short messages (main.ts shows "NO AIR"
 // when the sim's out-of-air flag turns on); it never touches physics.
-// The .ts extension lets the Node unit tests load this file without a bundler.
 import { FLOATS_PER_EVENT } from '../sim-events.ts';
 import { CrashCode, EventKind } from '../wasm/nl_wasm.js';
 
@@ -18,14 +17,21 @@ const CRASH_CAUSE_TEXT: Record<number, string> = {
 
 /** The toast element and when it should disappear. */
 export interface Toasts {
+  /** The centre element the text goes in. */
   element: HTMLElement;
+  /** When to hide it, in `performance.now()` milliseconds. */
   hideAtMs: number;
+  /**
+   * Whether "NO AIR" may show again. It re-arms only once the tank is full, so air
+   * hovering around the empty mark does not flash the toast over and over.
+   */
+  noAirArmed: boolean;
 }
 
 /** Starts with nothing showing. */
 export function createToasts(element: HTMLElement): Toasts {
   element.hidden = true;
-  return { element, hideAtMs: 0 };
+  return { element, hideAtMs: 0, noAirArmed: true };
 }
 
 /**
@@ -52,6 +58,25 @@ export function showToast(toasts: Toasts, text: string, nowMs: number): void {
   toasts.element.textContent = text;
   toasts.element.hidden = false;
   toasts.hideAtMs = nowMs + TOAST_SHOW_MS;
+}
+
+/**
+ * Shows "NO AIR" when the sim says the tank has run out, unless another toast is
+ * showing (a SAVE or CRASH is bigger news). `airFraction` re-arms it once the tank is full.
+ */
+export function showNoAirIfNew(
+  toasts: Toasts,
+  outOfAir: boolean,
+  airFraction: number,
+  nowMs: number,
+): void {
+  if (airFraction >= 1) {
+    toasts.noAirArmed = true;
+  }
+  if (outOfAir && toasts.noAirArmed && toasts.element.hidden) {
+    showToast(toasts, 'NO AIR', nowMs);
+    toasts.noAirArmed = false;
+  }
 }
 
 /** Hides the toast once its time is up. */

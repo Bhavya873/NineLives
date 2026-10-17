@@ -18,8 +18,8 @@ import {
   WebGLRenderer,
 } from 'three';
 
-import { buildCarBody, buildWheel } from './car-mesh';
-import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend';
+import { buildCarBody, buildWheel } from './car-mesh.ts';
+import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
 const SKY_TOP = '#5b8fd9';

@@ -6,10 +6,16 @@ import vehicleToml from '../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { prefersReducedMotion, requireElement } from './dom';
-import { startGameLoop } from './game-loop';
-import { findHud, type HudValues, updateHud } from './hud/hud';
-import { createToasts, showToast, toastForEvents, updateToasts } from './hud/toasts';
+import { prefersReducedMotion, requireElement } from './dom.ts';
+import { startGameLoop } from './game-loop.ts';
+import { findHud, type HudValues, updateHud } from './hud/hud.ts';
+import {
+  createToasts,
+  showNoAirIfNew,
+  showToast,
+  toastForEvents,
+  updateToasts,
+} from './hud/toasts.ts';
 import {
   BUTTON_BOOST,
   BUTTON_CHAOS,
@@ -18,17 +24,23 @@ import {
   onKeyPress,
   readInputFrame,
   startKeyboard,
-} from './input/keyboard';
-import { followCar, snapCamera } from './render/chase-camera';
-import { cameraShake, createExplosion, startExplosion, updateExplosion } from './render/explosion';
-import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
+} from './input/keyboard.ts';
+import { followCar, snapCamera } from './render/chase-camera.ts';
+import {
+  cameraShake,
+  createExplosion,
+  startExplosion,
+  stopExplosion,
+  updateExplosion,
+} from './render/explosion.ts';
+import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend.ts';
 import {
   createGameScene,
   type GameScene,
   type PhysicsFrames,
   placeCar,
   setCarVisible,
-} from './render/scene';
+} from './render/scene.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
@@ -46,6 +58,8 @@ const hudValues: HudValues = {
   crashes: 0,
   timeS: 0,
   hopCooldownS: 0,
+  wheelsTouching: 4,
+  outOfAir: false,
 };
 
 async function start(): Promise<void> {
@@ -74,20 +88,19 @@ async function start(): Promise<void> {
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
-  let wasOutOfAir = false;
   let lastRenderMs = performance.now();
 
   /**
    * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
-   * frozen (SPEC §7.9), a respawn snaps the view to the checkpoint, and saves and
-   * crashes get a toast. The sim decides all of it; the view only follows.
+   * frozen (SPEC §7.9), a respawn ends it and snaps the view to the checkpoint, and
+   * saves and crashes get a toast. The sim decides all of it; the view only follows.
    */
   const reactToEvents = (events: Float32Array, nowMs: number) => {
     if (containsEvent(events, EventKind.Crash)) {
-      crashPosition.fromArray(frames.latestChassis);
       startExplosion(explosion, crashPosition);
     }
     if (containsEvent(events, EventKind.Respawn)) {
+      stopExplosion(explosion);
       // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
       snapViewToGame(game, frames, view, carPose);
     }
@@ -104,6 +117,10 @@ async function start(): Promise<void> {
       game.tick(readInputFrame());
       frames.latestChassis = game.chassis_pose();
       frames.latestWheels = game.wheel_poses();
+      // Remember where the wreck froze, even if it respawns before the next frame.
+      if (game.is_crashed()) {
+        crashPosition.fromArray(frames.latestChassis);
+      }
     },
     render: (blend) => {
       const nowMs = performance.now();
@@ -111,12 +128,11 @@ async function start(): Promise<void> {
       lastRenderMs = nowMs;
       // Events queue up in the sim, so reading them once per frame is enough.
       reactToEvents(game.drain_events(), nowMs);
-      const hudArray = game.hud();
-      fillHudValues(hudArray, hudValues);
+      fillHudValues(game.hud(), hudValues);
 
       placeCar(view, frames, blend, carPose);
       setCarVisible(view, !hudValues.crashed);
-      followCar(view.camera, carPose, frameS, hudArray[HudField.WheelsTouching] === 0);
+      followCar(view.camera, carPose, frameS, hudValues.wheelsTouching === 0);
       updateExplosion(explosion, frameS);
       // Shake only this frame's picture, so the camera's smoothing never sees it.
       view.camera.position.add(cameraShake(explosion, shake));
@@ -124,12 +140,8 @@ async function start(): Promise<void> {
       view.camera.position.sub(shake);
 
       updateHud(hud, hudValues);
-      const outOfAir = hudArray[HudField.OutOfAir] === 1;
-      if (outOfAir && !wasOutOfAir) {
-        showToast(toasts, 'NO AIR', nowMs);
-      }
-      wasOutOfAir = outOfAir;
       updateToasts(toasts, nowMs);
+      showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
     },
   });
 
@@ -186,6 +198,8 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.crashes = values[HudField.Crashes] ?? 0;
   out.timeS = values[HudField.TimeS] ?? 0;
   out.hopCooldownS = values[HudField.HopCooldownS] ?? 0;
+  out.wheelsTouching = values[HudField.WheelsTouching] ?? 0;
+  out.outOfAir = values[HudField.OutOfAir] === 1;
 }
 
 start().catch((error: unknown) => {

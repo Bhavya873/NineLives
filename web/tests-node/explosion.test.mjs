@@ -10,6 +10,7 @@ import {
   createExplosion,
   isExplosionPlaying,
   startExplosion,
+  stopExplosion,
   updateExplosion,
 } from '../src/render/explosion.ts';
 
@@ -20,17 +21,18 @@ function play(explosion, seconds) {
   }
 }
 
-test('the explosion plays for about 1.5 s and then hides', () => {
+test('the explosion plays until it is stopped (the respawn), then hides', () => {
   const explosion = createExplosion(new Scene(), false);
 
   startExplosion(explosion, new Vector3(5, 1, 2));
-  play(explosion, 1.0);
+  play(explosion, 3.0);
   assert.equal(isExplosionPlaying(explosion), true);
-  assert.equal(explosion.group.visible, true);
-  play(explosion, 0.6);
+  stopExplosion(explosion);
 
   assert.equal(isExplosionPlaying(explosion), false);
   assert.equal(explosion.group.visible, false);
+  assert.equal(explosion.flash.intensity, 0);
+  assert.equal(cameraShake(explosion, new Vector3()).length(), 0);
 });
 
 test('about 20 debris pieces fly up and out, then fall', () => {
@@ -50,14 +52,14 @@ test('about 20 debris pieces fly up and out, then fall', () => {
   });
 });
 
-test('the flash light stays in the scene and goes dark after the effect', () => {
+test('the flash light stays in the scene and goes dark within a second', () => {
   const scene = new Scene();
   const explosion = createExplosion(scene, false);
   startExplosion(explosion, new Vector3());
 
   play(explosion, 0.05);
   assert.ok(explosion.flash.intensity > 0);
-  play(explosion, 2);
+  play(explosion, 1);
 
   assert.equal(explosion.flash.intensity, 0);
   assert.equal(explosion.flash.parent, scene);

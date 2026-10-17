@@ -140,3 +140,26 @@ test('the Reset button respawns at the start with a full tank and keeps the mode
   assert.equal(game.hud()[HudField.Mode], ModeCode.Realistic);
   assert.equal(game.hud()[HudField.Crashes], 0);
 });
+
+test('the HUD reports not crashed and not out of air at the start', () => {
+  const game = new Game(vehicleToml, modesToml, 0n);
+  tickMany(game, new Uint8Array([127, 0, 0, 0]), 120);
+
+  const hud = game.hud();
+
+  assert.equal(hud[HudField.Crashed], 0);
+  assert.equal(hud[HudField.OutOfAir], 0);
+  assert.ok(hud[HudField.SpeedMS] > 1, `speed ${hud[HudField.SpeedMS]}`);
+});
+
+test('holding Boost in tight circles runs the Realistic tank out of air', () => {
+  const game = new Game(vehicleToml, modesToml, 0n);
+  const boostAndTurn = new Uint8Array([0, 127, Game.button_boost(), 0]);
+  let ticks = 0;
+  while (game.hud()[HudField.OutOfAir] === 0 && ticks < 120 * 600) {
+    game.tick(boostAndTurn);
+    ticks += 1;
+  }
+
+  assert.equal(game.hud()[HudField.OutOfAir], 1, `air ${game.hud()[HudField.AirFraction]}`);
+});

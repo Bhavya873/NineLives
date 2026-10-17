@@ -3,7 +3,7 @@
 // toasts.ts; the nozzle map and air gauge come in a later M3 PR.
 // It reads plain numbers and writes text; it never touches physics.
 
-import { requireElement } from '../dom';
+import { requireElement } from '../dom.ts';
 import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
@@ -35,6 +35,7 @@ export interface HudValues {
   hopBlocked: number;
   /** True from a crash until the respawn. */
   crashed: boolean;
+  /** Saves so far. */
   saves: number;
   /** Crashes so far, shown as "Lives used". */
   crashes: number;
@@ -42,6 +43,10 @@ export interface HudValues {
   timeS: number;
   /** Seconds until the next Hop is allowed. */
   hopCooldownS: number;
+  /** How many wheels touch the ground (0 to 4); the camera pulls back at 0. */
+  wheelsTouching: number;
+  /** True while the tank is so low that thrust fades (the sim decides). */
+  outOfAir: boolean;
 }
 
 /** The HUD's elements, looked up once at start-up. */
