@@ -453,7 +453,7 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 3. Report both in the README with the explanation: pay for landing, charge for airtime, never pay for merely surviving.
 
 ### 9.12 Export (`models/policy.json`) *(req)*
-For the training viewer (§11.6), training also exports up to 8 evenly spaced checkpoints of the run behind `models/policy.json` in this format to `web/public/checkpoints/<run-id>/<n>.json` (weights rounded to 4 significant digits, under 3 MB in total). Those few are committed, like `models/policy.json`; every other checkpoint stays in `runs/` (gitignored) or on the `ckpt/<run-id>` branch (ADR-003).
+For the training viewer (§11.6), training also exports up to 8 evenly spaced checkpoints of the run behind `models/policy.json` in this format to `web/public/checkpoints/<run-id>/<n>.json` (weights rounded to 4 significant digits, under 3 MB in total). Those few are committed, like `models/policy.json`; every other checkpoint stays in `runs/` (gitignored, ADR-003).
 ```json
 {
   "format": "ninelives-policy", "version": 1,
@@ -645,7 +645,7 @@ class Game {
 ## 14. Risks and mitigations
 | Risk | Mitigation |
 |---|---|
-| Training stops when the cloud container is reclaimed | Resumable 60-minute training chunks; checkpoints pushed to `ckpt/<run-id>` branches (ADR-003) |
+| Training stops (laptop sleeps, restarts or is closed) | Resumable training chunks (`--resume`, `--max-minutes`); checkpoints kept in `runs/` on the training machine (ADR-003) |
 | Native and wasm physics differ | `enhanced-determinism`, the golden-trace test on both targets |
 | RL does not converge | PD baseline first; curriculum; reward weights; larger network; try SAC; log every run |
 | Hover or other reward hacking | No survival bonus, an airborne cost, watch clips not only scores (9.11) |
