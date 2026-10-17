@@ -21,7 +21,7 @@ pub fn apply_chaos_knock(body: &mut RigidBody, config: &ChaosConfig, rng: &mut C
 
 /// A random unit vector, evenly spread over all directions.
 /// Picks points in a cube and keeps the first one inside the unit ball.
-fn random_direction(rng: &mut ChaCha8Rng) -> Vector {
+pub(crate) fn random_direction(rng: &mut ChaCha8Rng) -> Vector {
     loop {
         let candidate = Vector::new(
             rng.random_range(-1.0..=1.0),

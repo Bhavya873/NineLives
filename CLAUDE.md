@@ -48,6 +48,7 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo run -p nl-sim --example drive
+cargo run --release -p nl-control --example eval -- --controller pd --stage A --mode realistic --episodes 200 --seed 0
 
 # Python (venv with Python 3.11 or 3.12)
 pip install -e python[dev]

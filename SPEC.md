@@ -610,8 +610,8 @@ class Game {
 
 **M4 — PD baseline and eval harness**
 - [ ] `Pd` controller with allocation; a controller toggle in the web app.
-- [ ] Rust-side eval runner for Off/PD on Stages A and B (no Python needed), writing results JSON.
-- [ ] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
+- [x] Rust-side eval runner for Off/PD on Stages A and B (no Python needed), writing results JSON.
+- [x] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
 
 **M5 — Python env and first policy**
 - [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.

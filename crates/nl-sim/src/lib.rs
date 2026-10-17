@@ -15,6 +15,7 @@ pub mod golden_trace;
 pub mod hop_boost;
 pub mod input;
 pub mod modes;
+pub mod scenarios;
 pub mod tank;
 pub mod thrusters;
 pub mod vehicle_config;
