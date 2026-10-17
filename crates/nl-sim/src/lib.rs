@@ -6,6 +6,7 @@
 
 pub mod car;
 pub mod chaos;
+pub mod checkpoint;
 pub mod contacts;
 pub mod conventions;
 pub mod events;

@@ -49,6 +49,12 @@ impl InputFrame {
         button != 0 && self.buttons & button == button
     }
 
+    /// The buttons that are down now but were up in `previous`. One-shot actions
+    /// (Hop, Chaos, Reset) start on these, so holding a button does not repeat them.
+    pub fn newly_pressed_buttons(&self, previous: InputFrame) -> u16 {
+        self.buttons & !previous.buttons
+    }
+
     /// True if the manual button for nozzle `nozzle_index` (0..10) is pressed.
     pub fn is_manual_nozzle_pressed(&self, nozzle_index: usize) -> bool {
         if nozzle_index >= NOZZLE_COUNT {
@@ -118,6 +124,20 @@ mod tests {
         let round_trip = InputFrame::from_bytes(input.to_bytes());
 
         assert_eq!(round_trip, input);
+    }
+
+    #[test]
+    fn only_buttons_that_just_went_down_count_as_newly_pressed() {
+        let previous = InputFrame {
+            buttons: BUTTON_HOP,
+            ..InputFrame::default()
+        };
+        let now = InputFrame {
+            buttons: BUTTON_HOP | BUTTON_RESET,
+            ..InputFrame::default()
+        };
+
+        assert_eq!(now.newly_pressed_buttons(previous), BUTTON_RESET);
     }
 
     #[test]

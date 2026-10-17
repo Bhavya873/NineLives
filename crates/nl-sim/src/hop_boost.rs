@@ -7,7 +7,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::conventions::NOZZLE_COUNT;
-use crate::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
 use crate::modes::ModeParams;
 use crate::thrusters::safe_throttle;
 
@@ -34,16 +33,17 @@ pub enum HopBlockedReason {
 pub struct HopBoost {
     hop_time_left_s: f32,
     hop_cooldown_left_s: f32,
-    hop_button_was_down: bool,
     boost_active: bool,
 }
 
 impl HopBoost {
-    /// Advances the timers by `dt_s` and reacts to the buttons. A Hop starts when the
-    /// Hop button goes down (not while it is held) and nothing blocks it.
+    /// Advances the timers by `dt_s` and reacts to the buttons. A Hop starts when
+    /// `hop_just_pressed` (the Hop button went down this step) and nothing blocks it;
+    /// Boost runs while `boost_held`.
     pub fn update(
         &mut self,
-        input: InputFrame,
+        hop_just_pressed: bool,
+        boost_held: bool,
         wheels_touching: usize,
         air_kg: f32,
         mode: &ModeParams,
@@ -52,16 +52,13 @@ impl HopBoost {
         self.hop_time_left_s = (self.hop_time_left_s - dt_s).max(0.0);
         self.hop_cooldown_left_s = (self.hop_cooldown_left_s - dt_s).max(0.0);
 
-        let hop_button_down = input.is_pressed(BUTTON_HOP);
-        let just_pressed = hop_button_down && !self.hop_button_was_down;
-        self.hop_button_was_down = hop_button_down;
         let blocked = self.hop_blocked_reason(wheels_touching, air_kg, mode);
-        if just_pressed && blocked.is_none() {
+        if hop_just_pressed && blocked.is_none() {
             self.hop_time_left_s = mode.hop_s;
             self.hop_cooldown_left_s = mode.hop_cooldown_s;
         }
 
-        self.boost_active = input.is_pressed(BUTTON_BOOST);
+        self.boost_active = boost_held;
     }
 
     /// Why a Hop would be refused right now, or `None` if it is allowed (SPEC §7.8).
@@ -148,19 +145,12 @@ mod tests {
             .realistic
     }
 
-    fn hop_pressed() -> InputFrame {
-        InputFrame {
-            buttons: BUTTON_HOP,
-            ..InputFrame::default()
-        }
-    }
-
     #[test]
     fn a_hop_puts_hop_ff_on_the_lift_nozzles_only() {
         let mode = realistic();
         let mut hop_boost = HopBoost::default();
 
-        hop_boost.update(hop_pressed(), 4, 260.0, &mode, DT_S);
+        hop_boost.update(true, false, 4, 260.0, &mode, DT_S);
 
         let throttles = hop_boost.feed_forward_throttles(&mode);
         assert_eq!(&throttles[0..4], &[0.75; 4]);
@@ -168,13 +158,11 @@ mod tests {
     }
 
     #[test]
-    fn holding_hop_does_not_start_a_second_hop_after_the_cooldown() {
+    fn no_hop_starts_without_a_press() {
         let mode = realistic();
         let mut hop_boost = HopBoost::default();
 
-        for _ in 0..(3.0 / DT_S) as usize {
-            hop_boost.update(hop_pressed(), 4, 260.0, &mode, DT_S);
-        }
+        hop_boost.update(false, false, 4, 260.0, &mode, DT_S);
 
         assert!(!hop_boost.hop_active());
     }
@@ -192,7 +180,7 @@ mod tests {
             hop_boost.hop_blocked_reason(4, 10.0, &mode),
             Some(HopBlockedReason::NoAir)
         );
-        hop_boost.update(hop_pressed(), 4, 260.0, &mode, DT_S);
+        hop_boost.update(true, false, 4, 260.0, &mode, DT_S);
         assert_eq!(
             hop_boost.hop_blocked_reason(4, 260.0, &mode),
             Some(HopBlockedReason::Cooldown)

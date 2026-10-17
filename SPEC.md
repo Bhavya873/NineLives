@@ -277,7 +277,7 @@ During a Hop the controller cannot reduce lift below `hop_ff`, but it can add up
 - **Upset start:** airborne for > 0.3 s, or tilt > 60°.
 - **Save:** during an upset, 4 wheels touching, tilt < 15°, |ω| < 1.5 rad/s, held for 0.5 s. Emits `Save { duration, air_used, peak_tilt }`.
 - **Crash:** any chassis or roof collider contact with relative normal speed > 6 m/s (`HardImpact`); **or** any roof contact while tilt > 120°, at any speed (`UpsideDown`); **or** stuck (tilt > 100° for > 2 s) (`Stuck`); **or** out of bounds (y < −20 or outside the course box) (`OutOfBounds`). Emits `Crash { cause }`.
-- **Explosion and respawn (game only):** on `Crash` the game freezes the chassis and plays an explosion (flash, shockwave ring, about 20 low-poly debris pieces, camera shake unless reduced motion is on). After 1.5 s the car respawns at the last checkpoint snapshot (`restore`) with a full tank, and the HUD's "Lives used" counter goes up by one. In training a crash simply ends the episode (9.5).
+- **Explosion and respawn (game only):** on `Crash` the sim freezes the wreck (no physics steps) and the game plays an explosion (flash, shockwave ring, about 20 low-poly debris pieces, camera shake unless reduced motion is on). After `respawn_delay_s` (1.5 s) of sim time (auto-respawn, which only the game turns on) the sim puts the car back at its last checkpoint (pose and velocities, not a `restore`) with a full tank and emits `Respawn`; mode, clock and random generator carry on. The HUD's "Lives used" counter is the crash count, which the game keeps as it drains events. The Reset button (R) respawns at once. In training a crash simply ends the episode (9.5).
 - Events are drained by the caller (`world.drain_events()`) and counted in stats.
 
 ### 7.10 Determinism *(req)*
@@ -498,7 +498,7 @@ class Game {
   hud(): Float32Array;                      // fixed layout: speed, air_frac, tilt, |ω|, saves, crashes, time, hop_cd, …
   drain_events(): Float32Array;             // 4 per event: EventKind, then up to 3 values (Save stats, CrashCode)
   is_crashed(): boolean;
-  set_checkpoint(): void; respawn(): void;  // respawn: checkpoint pose, full tank, fresh events
+  set_checkpoint(): void;                   // the car's pose and motion now become the respawn point
   snapshot(): Uint8Array; restore(s: Uint8Array): void;
   build_hash(): string;
 }
@@ -517,7 +517,7 @@ class Game {
 | A D / ← → | steer |
 | Space | Hop |
 | Shift | Boost |
-| R | reset to the last checkpoint (`restore` snapshot) |
+| R | reset to the last checkpoint (the `reset` bit in the InputFrame) |
 | C | Chaos (random knock) |
 | M | toggle Realistic / Arcade |
 | T | cycle controller Off → PD → AI |
@@ -559,7 +559,7 @@ class Game {
 - **Tank:** 1 s of full lift in Realistic consumes 80 kg ± 1%; the empty tank fades thrust smoothly; refill only with ≥ 3 wheels down.
 - **Valve lag:** step response reaches 63% at τ ± 5%.
 - **Hop:** Realistic, flat ground, controller Off, centre-of-mass offset 0 → apex 1.7 m ± 20%; Arcade apex 7.5 m ± 20%.
-- **Events:** an upright 2 m drop gives a landing with no crash; an upside-down 0.5 m drop gives an `UpsideDown` crash; a hard side impact at 8 m/s gives a `HardImpact` crash; 3 s at tilt > 100° without roof contact gives a `Stuck` crash; respawn restores the checkpoint snapshot exactly.
+- **Events:** an upright 2 m drop gives a landing with no crash; an upside-down 0.5 m drop gives an `UpsideDown` crash; a hard side impact at 8 m/s gives a `HardImpact` crash; 3 s at tilt > 100° without roof contact gives a `Stuck` crash; with auto-respawn on, a crashed car stays frozen for `respawn_delay_s` and then is back at its checkpoint pose with a full tank and a `Respawn` event; the Reset bit respawns at once, only once while held; without auto-respawn (training) a crash stays until reset.
 - **Determinism:** two runs with the same seed and inputs are bit-identical for 2000 steps; the golden trace matches.
 - **Observations:** length 41; names unique; hash stable; values inside the spec bounds on random states.
 - **Policy:** the JSON loader rejects a wrong hash or shape; the forward pass matches fixtures.

@@ -122,17 +122,21 @@ test('a hop reports airborne, upset and save events', () => {
   assert.equal(game.is_crashed(), false);
 });
 
-test('respawn returns to the start with a full tank and keeps the mode', () => {
+test('the Reset button respawns at the start with a full tank and keeps the mode', () => {
   const game = new Game(vehicleToml, modesToml, 0n);
   game.set_mode('arcade');
   tickMany(game, new Uint8Array([127, 0, 2, 0]), 240);
   game.set_mode('realistic');
   tickMany(game, new Uint8Array([127, 0, 2, 0]), 60);
+  game.drain_events();
 
-  game.respawn();
+  game.tick(new Uint8Array([0, 0, Game.button_reset(), 0]));
 
+  // The start pose is a little above resting height, so an AirborneStart may follow.
+  const kinds = eventGroups(game.drain_events()).map((group) => group[0]);
+  assert.equal(kinds[0], EventKind.Respawn);
   assert.ok(Math.abs(game.chassis_pose()[0]) < 0.5, `x ${game.chassis_pose()[0]}`);
   assert.equal(game.hud()[HudField.AirFraction], 1);
   assert.equal(game.hud()[HudField.Mode], ModeCode.Realistic);
-  assert.equal(game.is_crashed(), false);
+  assert.equal(game.hud()[HudField.Crashes], 0);
 });

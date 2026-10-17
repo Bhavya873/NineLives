@@ -11,6 +11,7 @@ import {
   BUTTON_BOOST,
   BUTTON_CHAOS,
   BUTTON_HOP,
+  BUTTON_RESET,
   onKeyPress,
   readInputFrame,
   startKeyboard,
@@ -20,8 +21,6 @@ import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose
 import { createGameScene, type GameScene, type PhysicsFrames, placeCar } from './render/scene';
 import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
-/** How long the car stays wrecked before it respawns (SPEC §7.9 as amended). */
-const RESPAWN_DELAY_MS = 1500;
 /** Numbers per event from `Game.drain_events`: the kind, then up to three values. */
 const FLOATS_PER_EVENT = 4;
 
@@ -36,7 +35,8 @@ async function start(): Promise<void> {
   const buttonsMatch =
     Game.button_hop() === BUTTON_HOP &&
     Game.button_boost() === BUTTON_BOOST &&
-    Game.button_chaos() === BUTTON_CHAOS;
+    Game.button_chaos() === BUTTON_CHAOS &&
+    Game.button_reset() === BUTTON_RESET;
   if (!buttonsMatch) {
     throw new Error('The wasm build and the keyboard disagree on the button bits');
   }
@@ -62,15 +62,6 @@ async function start(): Promise<void> {
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
 
-  let respawnTimer: number | undefined;
-  const respawnNow = () => {
-    window.clearTimeout(respawnTimer);
-    respawnTimer = undefined;
-    game.respawn();
-    // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
-    snapViewToGame(game, frames, view, carPose);
-  };
-  onKeyPress('KeyR', respawnNow);
   let lastRenderMs = performance.now();
 
   startGameLoop(Game.physics_dt_s(), {
@@ -82,10 +73,11 @@ async function start(): Promise<void> {
       frames.latestWheels = game.wheel_poses();
     },
     render: (blend) => {
-      // Events queue up in the sim, so reading them once per frame is enough.
-      if (containsCrash(game.drain_events()) && respawnTimer === undefined) {
-        // The explosion effect arrives in the next PR; for now, wait and respawn.
-        respawnTimer = window.setTimeout(respawnNow, RESPAWN_DELAY_MS);
+      // Events queue up in the sim, so reading them once per frame is enough. The sim
+      // freezes the wreck and respawns it itself (SPEC §7.9); the view only follows.
+      if (containsEvent(game.drain_events(), EventKind.Respawn)) {
+        // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
+        snapViewToGame(game, frames, view, carPose);
       }
       const nowMs = performance.now();
       const hudValues = game.hud();
@@ -129,10 +121,10 @@ function snapViewToGame(
   snapCamera(view.camera, carPose);
 }
 
-/** True if any of the events (from `Game.drain_events`) is a crash. */
-function containsCrash(events: Float32Array): boolean {
+/** True if any of the events (from `Game.drain_events`) is of this kind. */
+function containsEvent(events: Float32Array, kind: EventKind): boolean {
   for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
-    if (events[start] === EventKind.Crash) {
+    if (events[start] === kind) {
       return true;
     }
   }

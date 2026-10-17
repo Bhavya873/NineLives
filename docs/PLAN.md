@@ -38,10 +38,10 @@ Each change gets a `SPEC.md` edit and a line in `docs/DECISIONS.md` in M0.
 - **Upside down:** **any** roof contact while tilt > 120° → crash, at any speed. *(was: also speed > 3 m/s)*
 - **Stuck:** tilt > 100° for > 2 s → crash. *(was 5 s; nothing can recover from there anyway)*
 - **Out of bounds:** unchanged.
-- **In the game:** on `Crash`, freeze the car's physics body, then play the **explosion**: a flash, a shockwave ring, about 20 low-poly debris pieces, and a camera shake (none with reduced motion). After **1.5 s**, **respawn** at the last checkpoint snapshot (`restore`) with a full tank, and add 1 to the crash counter. The HUD shows "Lives used: 3", which ties into the Nine Lives name.
+- **In the game:** on `Crash`, freeze the car's physics body, then play the **explosion**: a flash, a shockwave ring, about 20 low-poly debris pieces, and a camera shake (none with reduced motion). After **1.5 s**, **respawn** at the last checkpoint (pose and velocities; see DECISIONS 2026-10-17, no `restore`) with a full tank, and add 1 to the crash counter. The HUD shows "Lives used: 3", which ties into the Nine Lives name.
 - **In training:** a crash is still terminal with −10 reward. Respawn happens only in the game.
 - **Stage B** becomes "tipped onto its side at low speed" (roll 60–110°, recover without touching the roof).
-- Tests: an upside-down 0.5 m drop crashes; an upright 2 m drop doesn't; respawn restores the checkpoint state exactly (snapshot equality).
+- Tests: an upside-down 0.5 m drop crashes; an upright 2 m drop doesn't; respawn puts the car at the checkpoint pose with a full tank (see `tests/respawn.rs`).
 
 ### 3.2 Smaller defaults (unless the owner objects)
 - `car_row` boxes are 4.5 × h × 1.9 m with 0.6 m gaps. Stage C uses rows of 1–3 cars, because in Realistic a plain Hop clears about 13 m and 5 cars need about 25 m. The Gauntlet's 5-car row gets a run-up ramp.

@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{arcade, new_world, new_world_in, realistic};
+use common::{LEVEL, arcade, buttons, new_world, new_world_in, realistic};
 use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT, PHYSICS_HZ};
 use nl_sim::hop_boost::HopBlockedReason;
 use nl_sim::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
@@ -20,22 +20,10 @@ fn run(world: &mut World, input: InputFrame, seconds: f32) {
     }
 }
 
-fn buttons(buttons: u16) -> InputFrame {
-    InputFrame {
-        buttons,
-        ..InputFrame::default()
-    }
-}
-
 /// Puts the car high in the air, level and still.
 fn lift_into_the_air(world: &mut World, height_m: f32) {
     world
-        .place_car(
-            [0.0, height_m, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
-            [0.0; 3],
-            [0.0; 3],
-        )
+        .place_car([0.0, height_m, 0.0], LEVEL, [0.0; 3], [0.0; 3])
         .unwrap();
 }
 
@@ -181,4 +169,24 @@ fn placing_the_car_ends_a_hop_in_progress() {
 
     assert!(!world.hop_boost().hop_active());
     assert_eq!(world.hop_boost().hop_cooldown_left_s(), 0.0);
+}
+
+#[test]
+fn holding_hop_starts_only_one_hop_even_after_the_cooldown() {
+    let mut world = new_world();
+    settle(&mut world);
+
+    // Hold Hop well past the cooldown and count how many Hops begin.
+    let mut hops_started = 0;
+    let mut was_active = false;
+    for _ in 0..4 * STEPS_PER_SECOND {
+        world.step(buttons(BUTTON_HOP));
+        let active = world.hop_boost().hop_active();
+        if active && !was_active {
+            hops_started += 1;
+        }
+        was_active = active;
+    }
+
+    assert_eq!(hops_started, 1);
 }

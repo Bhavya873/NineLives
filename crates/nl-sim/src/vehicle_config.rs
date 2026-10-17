@@ -142,6 +142,8 @@ pub struct EventConfig {
     pub stuck_s: f32,
     /// Crash if the car falls below this height.
     pub out_of_bounds_y_m: f32,
+    /// After a crash the wreck stays frozen this long, then the car respawns.
+    pub respawn_delay_s: f32,
 }
 
 /// The size of a Chaos knock (SPEC §7.12). See `[chaos]`.
@@ -331,6 +333,7 @@ impl EventConfig {
         must_be_tilt_deg("events.stuck_tilt_deg", self.stuck_tilt_deg)?;
         must_not_be_negative("events.stuck_s", self.stuck_s)?;
         must_be_finite("events.out_of_bounds_y_m", self.out_of_bounds_y_m)?;
+        must_not_be_negative("events.respawn_delay_s", self.respawn_delay_s)?;
         if self.save_tilt_deg >= self.upset_tilt_deg {
             let save = self.save_tilt_deg;
             let upset = self.upset_tilt_deg;

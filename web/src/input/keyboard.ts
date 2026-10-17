@@ -12,6 +12,7 @@ const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
 const CHAOS_KEYS = ['KeyC'];
+const RESET_KEYS = ['KeyR'];
 
 /**
  * Button bits, matching the BUTTON_* constants in crates/nl-sim/src/input.rs.
@@ -20,6 +21,15 @@ const CHAOS_KEYS = ['KeyC'];
 export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
 export const BUTTON_CHAOS = 1 << 2;
+export const BUTTON_RESET = 1 << 3;
+
+/** Each button bit and the keys that press it. */
+const BUTTON_KEYS: { bit: number; keys: string[] }[] = [
+  { bit: BUTTON_HOP, keys: HOP_KEYS },
+  { bit: BUTTON_BOOST, keys: BOOST_KEYS },
+  { bit: BUTTON_CHAOS, keys: CHAOS_KEYS },
+  { bit: BUTTON_RESET, keys: RESET_KEYS },
+];
 
 /** Every held key this module handles, so the page does not scroll on arrows or Space. */
 const HANDLED_KEYS = [
@@ -30,15 +40,15 @@ const HANDLED_KEYS = [
   ...HOP_KEYS,
   ...BOOST_KEYS,
   ...CHAOS_KEYS,
+  ...RESET_KEYS,
 ];
 
 /** Keys that are currently held down, by `KeyboardEvent.code`. */
 const heldKeys = new Set<string>();
 
 /**
- * Bits of the press-to-trigger buttons (Hop, Chaos) pressed since the last frame. A quick
- * tap can go down and up between two ticks on a slow frame; remembering the press makes
- * sure the game still sees it.
+ * Button bits pressed since the last frame. A quick tap can go down and up between two
+ * ticks on a slow frame; remembering the press makes sure the game still sees it.
  */
 let tappedButtons = 0;
 
@@ -63,11 +73,10 @@ export function startKeyboard(target: Window): void {
       event.preventDefault();
     }
     heldKeys.add(event.code);
-    if (HOP_KEYS.includes(event.code)) {
-      tappedButtons |= BUTTON_HOP;
-    }
-    if (CHAOS_KEYS.includes(event.code)) {
-      tappedButtons |= BUTTON_CHAOS;
+    for (const button of BUTTON_KEYS) {
+      if (button.keys.includes(event.code)) {
+        tappedButtons |= button.bit;
+      }
     }
     if (!event.repeat) {
       pressActions.get(event.code)?.();
@@ -94,14 +103,10 @@ export function readInputFrame(): Uint8Array {
   frameSigned[1] = axis(STEER_LEFT_KEYS, STEER_RIGHT_KEYS);
   let buttons = tappedButtons;
   tappedButtons = 0;
-  if (isAnyHeld(HOP_KEYS)) {
-    buttons |= BUTTON_HOP;
-  }
-  if (isAnyHeld(BOOST_KEYS)) {
-    buttons |= BUTTON_BOOST;
-  }
-  if (isAnyHeld(CHAOS_KEYS)) {
-    buttons |= BUTTON_CHAOS;
+  for (const button of BUTTON_KEYS) {
+    if (isAnyHeld(button.keys)) {
+      buttons |= button.bit;
+    }
   }
   // Bytes 2 and 3 are the buttons, little-endian.
   frame[2] = buttons & 0xff;
