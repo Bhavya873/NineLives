@@ -33,14 +33,18 @@ const CHECKER_SIZE_M = 2;
 const CHECKER_LIGHT = '#3b5470';
 const CHECKER_DARK = '#22344a';
 
-/** Everything the renderer draws, kept together so the game can move it each frame. */
-export interface GameScene {
+/** The arena every view draws into (see `createArena`). */
+export interface Arena {
   renderer: WebGLRenderer;
   scene: Scene;
   camera: PerspectiveCamera;
   sun: DirectionalLight;
-  /** The sky dome; it moves with the car. */
+  /** The sky dome; the game moves it with the car. */
   backdrop: Mesh;
+}
+
+/** The game's view: the arena plus the one car. */
+export interface GameScene extends Arena {
   carBody: Group;
   wheels: Group[];
 }
@@ -94,6 +98,17 @@ export function setCarVisible(view: GameScene, visible: boolean): void {
 
 /** Builds the scene and attaches its canvas to `container`. */
 export function createGameScene(container: HTMLElement, wheelCount: number): GameScene {
+  const arena = createArena(container);
+  const carBody = buildCarBody();
+  const wheels = Array.from({ length: wheelCount }, () => buildWheel());
+  arena.scene.add(carBody, ...wheels);
+  return { ...arena, carBody, wheels };
+}
+
+/** The lab arena without any car (SPEC §11.4): renderer, checkered floor fading into the
+ * sky dome, light with soft shadows, and a camera kept matched to the window. The game
+ * and the training viewer both build on it. */
+export function createArena(container: HTMLElement): Arena {
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -114,18 +129,14 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
   scene.add(sun, sun.target);
   scene.add(buildGround());
 
-  const carBody = buildCarBody();
-  const wheels = Array.from({ length: wheelCount }, () => buildWheel());
-  scene.add(carBody, ...wheels);
-
-  const gameScene = { renderer, scene, camera, sun, backdrop, carBody, wheels };
-  resizeToWindow(gameScene);
-  window.addEventListener('resize', () => resizeToWindow(gameScene));
-  return gameScene;
+  const arena = { renderer, scene, camera, sun, backdrop };
+  resizeToWindow(arena);
+  window.addEventListener('resize', () => resizeToWindow(arena));
+  return arena;
 }
 
 /** Keeps the canvas and camera matched to the window size. */
-function resizeToWindow({ renderer, camera }: GameScene): void {
+function resizeToWindow({ renderer, camera }: Arena): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();

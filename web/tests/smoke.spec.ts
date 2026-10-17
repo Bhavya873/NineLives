@@ -6,6 +6,8 @@
 // frame (SPEC §11.2), so 3 real seconds can be much less than 3 simulated seconds.
 import { expect, test, type Page } from '@playwright/test';
 
+import { collectConsoleErrors } from './console-errors.ts';
+
 /** Seconds of simulated full throttle; about 20 m of driving at the car's acceleration. */
 const THROTTLE_SIM_S = 2;
 /** Generous limit for slow CI machines. */
@@ -38,17 +40,6 @@ async function readDebug(page: Page, what: 'x' | 'time'): Promise<number> {
     }
     return key === 'x' ? (hook.chassisPose()[0] ?? 0) : hook.simTimeS();
   }, what);
-}
-
-/** Collects the text of every console error the page logs from now on. */
-function collectConsoleErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      errors.push(message.text());
-    }
-  });
-  return errors;
 }
 
 test('holding W drives the car forward without console errors', async ({ page }) => {

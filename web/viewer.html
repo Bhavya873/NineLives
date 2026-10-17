@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nine Lives — Training viewer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #121a24;
+        font-family: system-ui, sans-serif;
+      }
+      #viewer {
+        position: fixed;
+        inset: 0;
+      }
+      .panel {
+        position: fixed;
+        left: 16px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: rgba(12, 18, 26, 0.75);
+        color: #e8eef5;
+        font-size: 14px;
+      }
+      #viewer-status {
+        top: 16px;
+      }
+      #viewer-help {
+        bottom: 16px;
+        color: #a9b6c4;
+      }
+      a {
+        color: #9fd1ff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="viewer"></div>
+    <div id="viewer-status" class="panel">Loading checkpoints…</div>
+    <div id="viewer-help" class="panel">
+      64 cars, the same 64 drops, one checkpoint at a time · → / N next · ← / P previous · faded
+      cars crashed · <a href="./">back to the game</a>
+    </div>
+    <script type="module" src="/src/viewer/main.ts"></script>
+  </body>
+</html>

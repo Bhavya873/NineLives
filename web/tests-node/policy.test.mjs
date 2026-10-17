@@ -5,7 +5,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { ControllerCode, HudField, evalEpisodes, newGame, policyJson } from './load-wasm.mjs';
+import {
+  ControllerCode,
+  HudField,
+  asFloat32,
+  evalEpisodes,
+  newGame,
+  policyJson,
+} from './load-wasm.mjs';
 
 test('the AI cannot be chosen until a policy is loaded, then it can', () => {
   const game = newGame();
@@ -54,17 +61,6 @@ test('a drop test throws the car into the air', () => {
   const heightM = game.chassis_pose()[1];
   assert.ok(heightM > 1.0, `car centre at ${heightM} m`);
 });
-
-/** An episode row with every number rounded to float32, the precision the sim works in
- * (the results files were written by Python, which prints each float32 as a longer
- * double, so the text differs while the value is the same). */
-function asFloat32(row) {
-  const rounded = {};
-  for (const [key, value] of Object.entries(row)) {
-    rounded[key] = typeof value === 'number' ? Math.fround(value) : value;
-  }
-  return rounded;
-}
 
 test('wasm runs the same AI episodes as the native eval, bit for bit', () => {
   const committed = JSON.parse(

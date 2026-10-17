@@ -48,14 +48,23 @@ pub fn run_episode(
     let mut episode = Episode::start(variation, scenarios, stage, seed)?;
     controller.reset(seed);
     let mut throttles = [0.0; NOZZLE_COUNT];
-    while episode.status() == EpisodeStatus::Running {
-        if episode.world().is_control_step() {
-            let ctx = ControlCtx::for_episode(&mut episode, InputFrame::default());
-            throttles = controller.act(&ctx);
-        }
-        episode.step(throttles);
-    }
+    while step_episode(&mut episode, controller, &mut throttles) == EpisodeStatus::Running {}
     Ok(episode.result())
+}
+
+/// One physics step of `episode`, with `controller` acting at 60 Hz (SPEC §7.1) on what
+/// `ControlCtx::for_episode` shows it; `throttles` holds its latest throttles between
+/// control steps. Eval and the browser's training viewer both step episodes this way.
+pub fn step_episode(
+    episode: &mut Episode,
+    controller: &mut dyn Controller,
+    throttles: &mut [f32; NOZZLE_COUNT],
+) -> EpisodeStatus {
+    if episode.status() == EpisodeStatus::Running && episode.world().is_control_step() {
+        let ctx = ControlCtx::for_episode(episode, InputFrame::default());
+        *throttles = controller.act(&ctx);
+    }
+    episode.step(*throttles)
 }
 
 /// Summarises many episodes.

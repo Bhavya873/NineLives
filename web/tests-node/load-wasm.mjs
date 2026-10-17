@@ -17,6 +17,8 @@ export const {
   HudField,
   ModeCode,
   eval_episodes: evalEpisodes,
+  Crowd,
+  CrowdOutcome,
 } = wasm;
 
 /** The text of the repo's configs/controllers.toml. */
@@ -50,4 +52,15 @@ export function tickMany(game, input, count) {
   for (let tick = 0; tick < count; tick += 1) {
     game.tick(input);
   }
+}
+
+/** An episode row with every number rounded to float32, the precision the sim works in
+ * (the results files were written by Python, which prints each float32 as a longer
+ * double, so the text differs while the value is the same). */
+export function asFloat32(row) {
+  const rounded = {};
+  for (const [key, value] of Object.entries(row)) {
+    rounded[key] = typeof value === 'number' ? Math.fround(value) : value;
+  }
+  return rounded;
 }
