@@ -1,0 +1,43 @@
+# Nine Lives Cargo workspace. All physics lives in nl-sim (see CLAUDE.md, golden rule 1).
+[workspace]
+resolver = "3"
+members = [
+    "crates/nl-sim",
+    "crates/nl-control",
+    "crates/nl-policy",
+    "crates/nl-py",
+    "crates/nl-wasm",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+nl-sim = { path = "crates/nl-sim" }
+rapier3d = { version = "0.36.1", features = ["enhanced-determinism", "serde-serialize"] }
+pyo3 = { version = "0.30.1", features = ["extension-module"] }
+# Exact pin: the wasm-bindgen CLI must match this version (CI reads it from Cargo.lock).
+wasm-bindgen = "=0.2.129"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# Library code returns Result instead of panicking (CLAUDE.md § Style).
+# Tests may still unwrap; see clippy.toml.
+unwrap_used = "deny"
+expect_used = "deny"
+
+# Native release builds (training) favour speed.
+[profile.release]
+lto = "thin"
+
+# Browser builds favour a small download (SPEC §11.7).
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1

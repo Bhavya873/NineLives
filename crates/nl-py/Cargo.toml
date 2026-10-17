@@ -1,0 +1,19 @@
+[package]
+name = "nl-py"
+description = "Python module `ninelives_sim`: the Nine Lives sim for training."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "ninelives_sim"
+crate-type = ["cdylib"]
+
+[dependencies]
+nl-sim.workspace = true
+pyo3.workspace = true
+
+[lints]
+workspace = true

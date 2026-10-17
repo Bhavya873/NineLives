@@ -1,0 +1,11 @@
+# Build settings for the Rust extension module `ninelives_sim` (built with maturin).
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "ninelives-sim"
+requires-python = ">=3.11,<3.13"
+dynamic = ["version"]  # taken from the Cargo workspace
+description = "Rust simulation core for Nine Lives, exposed to Python."
+license = "MIT"
