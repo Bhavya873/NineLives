@@ -13,7 +13,7 @@ import {
   Vector3,
 } from 'three';
 
-import { FLOATS_PER_NOZZLE } from '../sim-layout.ts';
+import type { NozzlePlace } from '../nozzle-layout.ts';
 
 /** Flame length at full throttle. */
 const FLAME_MAX_LENGTH_M = 1.4;
@@ -24,57 +24,53 @@ const FLAME_MAX_OPACITY = 0.85;
 const FLAME_COLOUR = 0xd6ecff;
 const NOZZLE_COLOUR = 0x30343b;
 
-/** The flame meshes, one per nozzle in nozzle order. */
-export interface Flames {
-  flames: Mesh<ConeGeometry, MeshBasicMaterial>[];
-}
+/** One nozzle's flame. */
+export type Flame = Mesh<ConeGeometry, MeshBasicMaterial>;
 
 /** The way three.js cones point before they are turned toward the exhaust. */
 const CONE_AXIS = new Vector3(0, 1, 0);
 
 /**
- * Adds a nozzle and a (hidden) flame to `carBody` for each nozzle in `layout`
- * (from `Game.nozzle_layout`, in the car's body frame).
+ * Adds a nozzle with a (hidden) flame to `carBody` for each place in `nozzles`, and
+ * returns the flames in nozzle order.
  */
-export function createFlames(carBody: Group, layout: Float32Array): Flames {
+export function createFlames(carBody: Group, nozzles: NozzlePlace[]): Flame[] {
   const nozzleGeometry = new CylinderGeometry(0.05, 0.09, 0.12, 8);
   const nozzleMaterial = new MeshStandardMaterial({ color: NOZZLE_COLOUR, flatShading: true });
-  // A unit-length cone whose wide base sits at the nozzle and whose tip points along
-  // +Y, so scaling Y by the flame length stretches it away from the car.
+  // A unit-length cone with its wide base at the nozzle and its tip along +Y, so
+  // scaling Y by the flame length stretches it away from the car.
   const flameGeometry = new ConeGeometry(FLAME_RADIUS_M, 1, 12, 1, true).translate(0, 0.5, 0);
 
-  const flames: Mesh<ConeGeometry, MeshBasicMaterial>[] = [];
-  const position = new Vector3();
+  const flames: Flame[] = [];
   const exhaust = new Vector3();
-  for (let start = 0; start + FLOATS_PER_NOZZLE <= layout.length; start += FLOATS_PER_NOZZLE) {
-    position.fromArray(layout, start);
-    exhaust.fromArray(layout, start + 3);
-
+  for (const place of nozzles) {
+    // The nozzle cone points along the exhaust; its flame, a child, inherits that.
     const nozzle = new Mesh(nozzleGeometry, nozzleMaterial);
-    nozzle.position.copy(position);
-    nozzle.quaternion.setFromUnitVectors(CONE_AXIS, exhaust);
-
+    nozzle.position.fromArray(place.positionM);
+    nozzle.quaternion.setFromUnitVectors(CONE_AXIS, exhaust.fromArray(place.exhaust));
     const flame = new Mesh(flameGeometry, buildFlameMaterial());
-    flame.position.copy(position);
-    flame.quaternion.setFromUnitVectors(CONE_AXIS, exhaust);
     flame.visible = false;
-
-    carBody.add(nozzle, flame);
+    nozzle.add(flame);
+    carBody.add(nozzle);
     flames.push(flame);
   }
-  return { flames };
+  return flames;
 }
 
 /** Sizes each flame from its effective throttle (0..1, from `Game.nozzle_throttles`). */
-export function updateFlames(flames: Flames, throttles: Float32Array): void {
-  flames.flames.forEach((flame, index) => {
+export function updateFlames(flames: Flame[], throttles: Float32Array): void {
+  for (let index = 0; index < flames.length; index += 1) {
+    const flame = flames[index];
     const throttle = throttles[index] ?? 0;
+    if (!flame) {
+      continue;
+    }
     flame.visible = throttle >= FLAME_MIN_THROTTLE;
     if (flame.visible) {
       flame.scale.set(1, throttle * FLAME_MAX_LENGTH_M, 1);
       flame.material.opacity = throttle * FLAME_MAX_OPACITY;
     }
-  });
+  }
 }
 
 /** Additive and see-through, so overlapping flames glow brighter like gas jets. */

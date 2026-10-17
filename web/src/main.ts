@@ -45,7 +45,7 @@ import {
   setCarVisible,
 } from './render/scene.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
-import { FLOATS_PER_NOZZLE } from './sim-layout.ts';
+import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
 import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
 /** Reused each frame so the render loop allocates nothing for these. */
@@ -88,9 +88,9 @@ async function start(): Promise<void> {
   const hud = findHud();
   const toasts = createToasts(requireElement('hud-toast'));
   const explosion = createExplosion(view.scene, prefersReducedMotion());
-  const nozzleLayout = game.nozzle_layout();
-  const flames = createFlames(view.carBody, nozzleLayout);
-  const nozzleMap = createNozzleMap(requireElement('hud-nozzles'), nozzleLayout);
+  const nozzles = readNozzleLayout(game.nozzle_layout());
+  const flames = createFlames(view.carBody, nozzles);
+  const nozzleDots = createNozzleMap(requireElement('hud-nozzles'), nozzles);
   const airGauge = createAirGauge(
     requireElement('hud-air'),
     requireElement('hud-air-fill'),
@@ -156,7 +156,7 @@ async function start(): Promise<void> {
 
       updateHud(hud, hudValues);
       updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
-      updateNozzleMap(nozzleMap, throttles);
+      updateNozzleMap(nozzleDots, throttles);
       updateToasts(toasts, nowMs);
       showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
     },

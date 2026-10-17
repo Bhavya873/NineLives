@@ -13,3 +13,10 @@ export function requireElement(id: string): HTMLElement {
 export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+/** Writes `text` only when it changed, so an unchanged HUD costs the page no layout work. */
+export function setText(element: HTMLElement, text: string): void {
+  if (element.textContent !== text) {
+    element.textContent = text;
+  }
+}

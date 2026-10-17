@@ -413,10 +413,7 @@ fn flatten_nozzle_layout(config: &VehicleConfig) -> Vec<f32> {
     let mut values = Vec::with_capacity(NOZZLE_COUNT * FLOATS_PER_NOZZLE);
     for nozzle in &config.thrusters.nozzles {
         values.extend_from_slice(&nozzle.position_m);
-        // The config gives the push direction; the exhaust leaves the other way.
-        for push in nozzle.direction {
-            values.push(-push);
-        }
+        values.extend_from_slice(&nozzle.exhaust_direction());
     }
     values
 }

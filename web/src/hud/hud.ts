@@ -3,7 +3,7 @@
 // map and toasts each have their own file in this folder.
 // It reads plain numbers and writes text; it never touches physics.
 
-import { requireElement } from '../dom.ts';
+import { requireElement, setText } from '../dom.ts';
 import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
@@ -75,13 +75,6 @@ export function updateHud(hud: Hud, values: HudValues): void {
   const crash = values.crashed ? 'Respawning…' : '';
   setText(hud.status, [mode, hop, crash].filter(Boolean).join(' · '));
   setText(hud.stats, statsText(values));
-}
-
-/** Writes `text` only when it changed, so an unchanged HUD costs the page no layout work. */
-function setText(element: HTMLElement, text: string): void {
-  if (element.textContent !== text) {
-    element.textContent = text;
-  }
 }
 
 /** The top-right lines: saves, lives used, time, and the Hop cooldown while it runs. */

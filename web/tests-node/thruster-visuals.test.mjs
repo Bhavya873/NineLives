@@ -7,6 +7,7 @@ import { Group } from 'three';
 
 import { airGaugeText } from '../src/hud/air-gauge.ts';
 import { mapPercent } from '../src/hud/nozzle-map.ts';
+import { readNozzleLayout } from '../src/nozzle-layout.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
 import { Game, modesToml, vehicleToml } from './load-wasm.mjs';
 
@@ -16,29 +17,32 @@ function nozzleLayout() {
 
 test('the nozzle layout has 10 nozzles and lift exhaust points down', () => {
   const layout = nozzleLayout();
+  const nozzles = readNozzleLayout(layout);
 
   assert.equal(layout.length, Game.nozzle_count() * Game.floats_per_nozzle());
+  assert.equal(nozzles.length, 10);
   // L_FL: front-left, below the centre of mass; it pushes up, so its gas goes down.
-  assert.ok(layout[0] > 0, 'L_FL is at the front');
-  assert.ok(layout[2] < 0, 'L_FL is on the left');
-  assert.deepEqual(Array.from(layout.slice(3, 6)), [-0, -1, -0]);
+  assert.ok(nozzles[0].positionM[0] > 0, 'L_FL is at the front');
+  assert.ok(nozzles[0].positionM[2] < 0, 'L_FL is on the left');
+  assert.deepEqual(nozzles[0].exhaust, [-0, -1, -0]);
 });
 
 test('a flame shows only when its nozzle fires, and grows with the throttle', () => {
   const carBody = new Group();
-  const flames = createFlames(carBody, nozzleLayout());
+  const flames = createFlames(carBody, readNozzleLayout(nozzleLayout()));
   const throttles = new Float32Array(10);
   throttles[0] = 0.5;
   throttles[9] = 1;
 
   updateFlames(flames, throttles);
 
-  assert.equal(flames.flames.length, 10);
-  assert.equal(flames.flames[0].visible, true);
-  assert.equal(flames.flames[1].visible, false);
-  assert.ok(flames.flames[9].scale.y > flames.flames[0].scale.y);
-  // Each nozzle adds a nozzle cone and a flame to the car body.
-  assert.equal(carBody.children.length, 20);
+  assert.equal(flames.length, 10);
+  assert.equal(flames[0].visible, true);
+  assert.equal(flames[1].visible, false);
+  assert.ok(flames[9].scale.y > flames[0].scale.y);
+  // Each nozzle is a cone on the car body with its flame as a child.
+  assert.equal(carBody.children.length, 10);
+  assert.equal(flames[0].parent?.parent, carBody);
 });
 
 test('the nozzle map spans the car from edge to edge', () => {
