@@ -73,6 +73,14 @@ export function placeCar(
   view.sun.target.position.copy(carPose.position);
 }
 
+/** Shows or hides the car and its wheels, e.g. hidden while the wreck explodes. */
+export function setCarVisible(view: GameScene, visible: boolean): void {
+  view.carBody.visible = visible;
+  for (const wheel of view.wheels) {
+    wheel.visible = visible;
+  }
+}
+
 /** Builds the scene and attaches its canvas to `container`. */
 export function createGameScene(container: HTMLElement, wheelCount: number): GameScene {
   const renderer = new WebGLRenderer({ antialias: true });

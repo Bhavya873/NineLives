@@ -44,12 +44,30 @@
         bottom: 64px;
         font-size: 16px;
       }
+      #hud-stats {
+        right: 16px;
+        top: 16px;
+        font-size: 16px;
+        text-align: right;
+        white-space: pre-line;
+      }
+      #hud-toast {
+        left: 50%;
+        top: 35%;
+        transform: translateX(-50%);
+        padding: 10px 22px;
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
     <div id="hud-speed" class="hud">0 km/h</div>
     <div id="hud-status" class="hud">Realistic · Air 100%</div>
+    <div id="hud-stats" class="hud"></div>
+    <div id="hud-toast" class="hud" hidden></div>
     <div id="hud-help" class="hud">
       W/S or ↑/↓ drive · A/D or ←/→ steer · Space hop · Shift boost · M mode · C chaos · R
       respawn<br />

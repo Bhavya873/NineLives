@@ -1,5 +1,6 @@
-// The on-screen display (SPEC §11.5). So far: speed, mode, air and why Hop is
-// unavailable. Later M3 PRs add saves, crashes, toasts and the nozzle map.
+// The on-screen display (SPEC §11.5). So far: speed, mode, air, why Hop is unavailable,
+// and the top-right stats (saves, lives used, time, Hop cooldown). Toasts live in
+// toasts.ts; the nozzle map and air gauge come in a later M3 PR.
 // It reads plain numbers and writes text; it never touches physics.
 
 import { requireElement } from '../dom';
@@ -34,27 +35,63 @@ export interface HudValues {
   hopBlocked: number;
   /** True from a crash until the respawn. */
   crashed: boolean;
+  saves: number;
+  /** Crashes so far, shown as "Lives used". */
+  crashes: number;
+  /** Simulated time since the game started. */
+  timeS: number;
+  /** Seconds until the next Hop is allowed. */
+  hopCooldownS: number;
 }
 
 /** The HUD's elements, looked up once at start-up. */
 export interface Hud {
   speed: HTMLElement;
   status: HTMLElement;
+  stats: HTMLElement;
 }
 
 /** Finds the HUD elements in the page. Throws if the page is missing one. */
 export function findHud(): Hud {
-  return { speed: requireElement('hud-speed'), status: requireElement('hud-status') };
+  return {
+    speed: requireElement('hud-speed'),
+    status: requireElement('hud-status'),
+    stats: requireElement('hud-stats'),
+  };
 }
 
 /** Updates the HUD from the game's latest values. */
 export function updateHud(hud: Hud, values: HudValues): void {
-  const speedKmH = Math.abs(values.speedMS) * KM_PER_H_PER_M_PER_S;
+  // The frozen wreck keeps its last velocity, so show it as stopped.
+  const speedMS = values.crashed ? 0 : values.speedMS;
+  const speedKmH = Math.abs(speedMS) * KM_PER_H_PER_M_PER_S;
   hud.speed.textContent = `${speedKmH.toFixed(0)} km/h`;
 
   const air = values.unlimitedAir ? '∞' : `${Math.round(values.airFraction * 100)}%`;
   const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
   const mode = MODE_TEXT[values.mode] ?? '';
-  const crash = values.crashed ? 'CRASH — respawning' : '';
+  const crash = values.crashed ? 'Respawning…' : '';
   hud.status.textContent = [mode, `Air ${air}`, hop, crash].filter(Boolean).join(' · ');
+
+  hud.stats.textContent = statsText(values);
+}
+
+/** The top-right lines: saves, lives used, time, and the Hop cooldown while it runs. */
+export function statsText(values: HudValues): string {
+  const lines = [
+    `Saves ${values.saves}`,
+    `Lives used ${values.crashes}`,
+    `Time ${formatTime(values.timeS)}`,
+  ];
+  if (values.hopCooldownS > 0) {
+    lines.push(`Hop in ${values.hopCooldownS.toFixed(1)} s`);
+  }
+  return lines.join('\n');
+}
+
+/** Minutes and seconds with tenths, e.g. 1:05.3. */
+function formatTime(timeS: number): string {
+  const minutes = Math.floor(timeS / 60);
+  const seconds = (timeS - minutes * 60).toFixed(1).padStart(4, '0');
+  return `${minutes}:${seconds}`;
 }
