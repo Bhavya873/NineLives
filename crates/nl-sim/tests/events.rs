@@ -6,15 +6,12 @@
 
 mod common;
 
-use common::new_world;
-use nl_sim::conventions::PHYSICS_HZ;
+use common::{LEVEL, new_world, run_and_collect};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::input::{BUTTON_CHAOS, InputFrame};
-use nl_sim::world::World;
 use rapier3d::prelude::Vector;
 
 /// Rotation quaternions (x, y, z, w).
-const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 const UPSIDE_DOWN: [f32; 4] = [1.0, 0.0, 0.0, 0.0];
 /// Rolled 90° about the forward axis: lying on its side.
 const ON_ITS_SIDE: [f32; 4] = [
@@ -23,16 +20,6 @@ const ON_ITS_SIDE: [f32; 4] = [
     0.0,
     std::f32::consts::FRAC_1_SQRT_2,
 ];
-
-/// Runs for `seconds` with no input and returns every event.
-fn run_and_collect(world: &mut World, seconds: f32) -> Vec<SimEvent> {
-    let mut events = Vec::new();
-    for _ in 0..(seconds * PHYSICS_HZ as f32) as usize {
-        world.step(InputFrame::default());
-        events.extend(world.drain_events());
-    }
-    events
-}
 
 fn crash_causes(events: &[SimEvent]) -> Vec<CrashCause> {
     let mut causes = Vec::new();
@@ -71,8 +58,7 @@ fn landing_upside_down_from_half_a_metre_is_a_crash() {
         .place_car([0.0, 1.05, 0.0], UPSIDE_DOWN, [0.0; 3], [0.0; 3])
         .unwrap();
 
-    // Long enough to fall the 0.5 m, short of the 1.5 s respawn delay.
-    let events = run_and_collect(&mut world, 1.0);
+    let events = run_and_collect(&mut world, 2.0);
 
     assert_eq!(crash_causes(&events), vec![CrashCause::UpsideDown]);
     assert!(world.is_crashed());

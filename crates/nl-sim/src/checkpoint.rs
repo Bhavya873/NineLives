@@ -6,13 +6,13 @@
 use rapier3d::prelude::RigidBody;
 use serde::{Deserialize, Serialize};
 
+use crate::world::Pose;
+
 /// The car's pose and motion at the last checkpoint, in world coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Checkpoint {
-    /// Centre of mass position.
-    pub position_m: [f32; 3],
-    /// Orientation as a quaternion (x, y, z, w).
-    pub rotation_xyzw: [f32; 4],
+    /// Where the centre of mass is and which way the car faces.
+    pub pose: Pose,
     /// Velocity, so a checkpoint before a jump still has the speed to clear it.
     pub linear_velocity_m_s: [f32; 3],
     /// Angular velocity.
@@ -22,10 +22,8 @@ pub struct Checkpoint {
 impl Checkpoint {
     /// Records where `chassis` is and how it moves right now.
     pub fn of_chassis(chassis: &RigidBody) -> Checkpoint {
-        let rotation = chassis.rotation();
         Checkpoint {
-            position_m: chassis.translation().to_array(),
-            rotation_xyzw: [rotation.x, rotation.y, rotation.z, rotation.w],
+            pose: Pose::new(chassis.translation(), *chassis.rotation()),
             linear_velocity_m_s: chassis.linvel().to_array(),
             angular_velocity_rad_s: chassis.angvel().to_array(),
         }

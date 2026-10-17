@@ -7,7 +7,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::conventions::NOZZLE_COUNT;
-use crate::input::{BUTTON_BOOST, InputFrame};
 use crate::modes::ModeParams;
 use crate::thrusters::safe_throttle;
 
@@ -39,11 +38,12 @@ pub struct HopBoost {
 
 impl HopBoost {
     /// Advances the timers by `dt_s` and reacts to the buttons. A Hop starts when
-    /// `hop_just_pressed` (the Hop button went down this step) and nothing blocks it.
+    /// `hop_just_pressed` (the Hop button went down this step) and nothing blocks it;
+    /// Boost runs while `boost_held`.
     pub fn update(
         &mut self,
-        input: InputFrame,
         hop_just_pressed: bool,
+        boost_held: bool,
         wheels_touching: usize,
         air_kg: f32,
         mode: &ModeParams,
@@ -58,7 +58,7 @@ impl HopBoost {
             self.hop_cooldown_left_s = mode.hop_cooldown_s;
         }
 
-        self.boost_active = input.is_pressed(BUTTON_BOOST);
+        self.boost_active = boost_held;
     }
 
     /// Why a Hop would be refused right now, or `None` if it is allowed (SPEC §7.8).
@@ -135,7 +135,6 @@ pub fn combine_throttles(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::BUTTON_HOP;
     use crate::modes::{DEFAULT_MODES_TOML, ModesConfig};
 
     const DT_S: f32 = 1.0 / 120.0;
@@ -146,19 +145,12 @@ mod tests {
             .realistic
     }
 
-    fn hop_pressed() -> InputFrame {
-        InputFrame {
-            buttons: BUTTON_HOP,
-            ..InputFrame::default()
-        }
-    }
-
     #[test]
     fn a_hop_puts_hop_ff_on_the_lift_nozzles_only() {
         let mode = realistic();
         let mut hop_boost = HopBoost::default();
 
-        hop_boost.update(hop_pressed(), true, 4, 260.0, &mode, DT_S);
+        hop_boost.update(true, false, 4, 260.0, &mode, DT_S);
 
         let throttles = hop_boost.feed_forward_throttles(&mode);
         assert_eq!(&throttles[0..4], &[0.75; 4]);
@@ -166,11 +158,11 @@ mod tests {
     }
 
     #[test]
-    fn a_hop_starts_only_on_the_press_not_while_the_button_is_held() {
+    fn no_hop_starts_without_a_press() {
         let mode = realistic();
         let mut hop_boost = HopBoost::default();
 
-        hop_boost.update(hop_pressed(), false, 4, 260.0, &mode, DT_S);
+        hop_boost.update(false, false, 4, 260.0, &mode, DT_S);
 
         assert!(!hop_boost.hop_active());
     }
@@ -188,7 +180,7 @@ mod tests {
             hop_boost.hop_blocked_reason(4, 10.0, &mode),
             Some(HopBlockedReason::NoAir)
         );
-        hop_boost.update(hop_pressed(), true, 4, 260.0, &mode, DT_S);
+        hop_boost.update(true, false, 4, 260.0, &mode, DT_S);
         assert_eq!(
             hop_boost.hop_blocked_reason(4, 260.0, &mode),
             Some(HopBlockedReason::Cooldown)

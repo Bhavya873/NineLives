@@ -1,32 +1,28 @@
 //! Respawn tests (SPEC §7.9, with the explode-and-respawn rule from docs/DECISIONS.md):
-//! a crashed car stays frozen for the respawn delay, then comes back at the last
-//! checkpoint with a full tank; the Reset button does the same at once.
+//! a crashed car stays frozen; with auto-respawn on it comes back at the last checkpoint
+//! with a full tank after the delay, and the Reset button does the same at once.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
 mod common;
 
-use common::new_world;
+use common::{LEVEL, buttons, new_world, run_and_collect};
 use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::events::SimEvent;
-use nl_sim::input::{BUTTON_RESET, InputFrame};
+use nl_sim::input::BUTTON_RESET;
 use nl_sim::world::World;
 
-const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 /// Below the out-of-bounds height, so the first step is a crash.
 const OUT_OF_BOUNDS_M: [f32; 3] = [0.0, -25.0, 0.0];
-/// From configs/vehicle.toml `[events] respawn_delay_s`.
+/// The auto-respawn delay these tests turn on.
 const RESPAWN_DELAY_S: f32 = 1.5;
 
-/// Steps `seconds` with no input and returns every event.
-fn run_and_collect(world: &mut World, seconds: f32) -> Vec<SimEvent> {
-    let mut events = Vec::new();
-    for _ in 0..(seconds * PHYSICS_HZ as f32).round() as usize {
-        world.step(InputFrame::default());
-        events.extend(world.drain_events());
-    }
-    events
+/// A fresh world whose crashed car respawns by itself after `RESPAWN_DELAY_S`.
+fn new_game_world() -> World {
+    let mut world = new_world();
+    world.enable_auto_respawn(RESPAWN_DELAY_S);
+    world
 }
 
 /// Crashes the car by dropping it out of the world, then forgets those events.
@@ -35,9 +31,8 @@ fn crash(world: &mut World) {
         .place_car(OUT_OF_BOUNDS_M, LEVEL, [0.0; 3], [0.0; 3])
         .unwrap();
     world.set_air_kg(10.0);
-    world.step(InputFrame::default());
+    run_and_collect(world, 1.0 / PHYSICS_HZ as f32);
     assert!(world.is_crashed());
-    world.drain_events();
 }
 
 fn count_respawns(events: &[SimEvent]) -> usize {
@@ -52,7 +47,7 @@ fn count_respawns(events: &[SimEvent]) -> usize {
 
 #[test]
 fn a_crashed_car_stays_frozen_until_the_respawn_delay_has_passed() {
-    let mut world = new_world();
+    let mut world = new_game_world();
     crash(&mut world);
     let wreck = world.chassis_pose();
 
@@ -65,7 +60,7 @@ fn a_crashed_car_stays_frozen_until_the_respawn_delay_has_passed() {
 
 #[test]
 fn after_the_delay_the_car_is_back_at_the_start_with_a_full_tank() {
-    let mut world = new_world();
+    let mut world = new_game_world();
     let start = world.chassis_pose();
     crash(&mut world);
 
@@ -75,7 +70,17 @@ fn after_the_delay_the_car_is_back_at_the_start_with_a_full_tank() {
     assert!(!world.is_crashed());
     assert_eq!(world.air_fraction(), 1.0);
     assert_eq!(world.chassis_pose().position_m, start.position_m);
-    assert_eq!(world.crashes(), 1);
+}
+
+#[test]
+fn without_auto_respawn_a_crash_stays_until_reset() {
+    let mut world = new_world();
+    crash(&mut world);
+
+    let events = run_and_collect(&mut world, 3.0 * RESPAWN_DELAY_S);
+
+    assert!(world.is_crashed());
+    assert_eq!(count_respawns(&events), 0);
 }
 
 #[test]
@@ -86,32 +91,23 @@ fn pressing_reset_respawns_at_once_even_without_a_crash() {
     world
         .place_car([30.0, 5.0, 0.0], LEVEL, [0.0; 3], [0.0; 3])
         .unwrap();
-    let reset = InputFrame {
-        buttons: BUTTON_RESET,
-        ..InputFrame::default()
-    };
 
-    world.step(reset);
+    world.step(buttons(BUTTON_RESET));
 
     assert_eq!(count_respawns(&world.drain_events()), 1);
     let position_m = world.chassis_pose().position_m;
     // One physics step has run since the respawn, so allow a tiny settle.
     assert!((position_m[0] - checkpoint.position_m[0]).abs() < 0.01);
     assert!((position_m[1] - checkpoint.position_m[1]).abs() < 0.01);
-    assert_eq!(world.crashes(), 0);
 }
 
 #[test]
 fn holding_reset_respawns_only_once() {
     let mut world = new_world();
-    let reset = InputFrame {
-        buttons: BUTTON_RESET,
-        ..InputFrame::default()
-    };
 
     let mut events = Vec::new();
     for _ in 0..PHYSICS_HZ {
-        world.step(reset);
+        world.step(buttons(BUTTON_RESET));
         events.extend(world.drain_events());
     }
 
@@ -120,7 +116,7 @@ fn holding_reset_respawns_only_once() {
 
 #[test]
 fn the_clock_keeps_running_through_a_respawn() {
-    let mut world = new_world();
+    let mut world = new_game_world();
     crash(&mut world);
     let steps_before = world.step_count();
 

@@ -20,7 +20,7 @@ use crate::contacts::{MotionBeforeStep, read_body_contacts};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
-use crate::input::{BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
+use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
 use crate::vehicle_config::VehicleConfig;
@@ -38,7 +38,7 @@ const FLAT_GROUND_HALF_EXTENTS_M: [f32; 3] = [2000.0, 0.5, 2000.0];
 const FLAT_GROUND_START_HEIGHT_M: f32 = 0.7;
 
 /// Where something is and which way it faces, in world coordinates.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Pose {
     /// Centre position.
     pub position_m: [f32; 3],
@@ -106,11 +106,11 @@ pub struct World {
     previous_input: InputFrame,
     /// Where the car respawns after a crash or a reset.
     checkpoint: Checkpoint,
-    /// Physics steps since the crash, while the wreck waits to respawn.
+    /// Physics steps since the crash, while the wreck waits.
     steps_since_crash: u32,
-    /// Saves and crashes since the world was built (the HUD's "Lives used" is crashes).
-    saves: u32,
-    crashes: u32,
+    /// If set, a crashed car respawns by itself after this many steps (the game turns
+    /// it on; training ends the episode at the crash instead).
+    auto_respawn_after_steps: Option<u32>,
     /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
@@ -154,15 +154,16 @@ impl World {
             previous_input: InputFrame::default(),
             checkpoint,
             steps_since_crash: 0,
-            saves: 0,
-            crashes: 0,
+            auto_respawn_after_steps: None,
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
     }
 
     /// Advances the world by one physics step (1/120 s). After a crash the wreck stays
-    /// frozen until it respawns (SPEC §7.9); the Reset button respawns at once.
+    /// frozen until it respawns (SPEC §7.9): by itself if `enable_auto_respawn` was
+    /// called, or when the Reset button is pressed, `respawn` is called or the car is
+    /// placed again.
     pub fn step(&mut self, input: InputFrame) {
         let presses = input.newly_pressed_buttons(self.previous_input);
         self.previous_input = input;
@@ -184,9 +185,10 @@ impl World {
         let wheels_down = self.wheels_touching_count();
         let air_kg = self.tank.air_kg();
         let hop_just_pressed = presses & BUTTON_HOP != 0;
+        let boost_held = input.is_pressed(BUTTON_BOOST);
         self.hop_boost.update(
-            input,
             hop_just_pressed,
+            boost_held,
             wheels_down,
             air_kg,
             &self.mode,
@@ -223,19 +225,25 @@ impl World {
         apply_chaos_knock(body, &self.car.config().chaos, &mut self.rng);
     }
 
-    /// Counts the frozen wreck's time and respawns once the delay has passed.
+    /// Counts the frozen wreck's time and respawns once the auto-respawn delay is up.
     fn wait_to_respawn(&mut self) {
         self.steps_since_crash += 1;
-        // Compare in f64 steps, so 1.5 s is exactly 180 steps (PHYSICS_DT_S is rounded).
-        let waited_s = self.steps_since_crash as f64 / PHYSICS_HZ as f64;
-        if waited_s >= self.car.config().events.respawn_delay_s as f64 {
+        if let Some(delay_steps) = self.auto_respawn_after_steps
+            && self.steps_since_crash >= delay_steps
+        {
             self.respawn();
         }
     }
 
+    /// Makes a crashed car respawn by itself after `delay_s` of sim time (the game's
+    /// explode-and-respawn rule, SPEC §7.9). Off by default.
+    pub fn enable_auto_respawn(&mut self, delay_s: f32) {
+        let delay_steps = (delay_s * PHYSICS_HZ as f32).round() as u32;
+        self.auto_respawn_after_steps = Some(delay_steps);
+    }
+
     /// Puts the car back at the last checkpoint with a full tank, clears any crash and
-    /// reports `SimEvent::Respawn` (SPEC §7.9). Mode, clock, random generator and the
-    /// save and crash counts carry on.
+    /// reports `SimEvent::Respawn` (SPEC §7.9). Mode, clock and random generator carry on.
     pub fn respawn(&mut self) {
         self.move_car_to(self.checkpoint);
         self.refill_tank();
@@ -245,16 +253,6 @@ impl World {
     /// Makes the car's current pose and motion the place it respawns.
     pub fn set_checkpoint(&mut self) {
         self.checkpoint = Checkpoint::of_chassis(&self.physics.bodies[self.car.chassis]);
-    }
-
-    /// Saves since the world was built.
-    pub fn saves(&self) -> u32 {
-        self.saves
-    }
-
-    /// Crashes since the world was built; the game shows it as "Lives used".
-    pub fn crashes(&self) -> u32 {
-        self.crashes
     }
 
     /// Feeds this step's state to the event rules and keeps any new events.
@@ -276,22 +274,9 @@ impl World {
             roof_touching: contacts.roof_touching,
         };
         let config = &self.car.config().events;
-        let first_new = self.pending_events.len();
         self.events
             .update(&inputs, config, PHYSICS_DT_S, &mut self.pending_events);
-        self.count_saves_and_crashes(first_new);
         self.drop_events_over_the_cap();
-    }
-
-    /// Adds the events from index `first_new` on to the save and crash counts.
-    fn count_saves_and_crashes(&mut self, first_new: usize) {
-        for event in &self.pending_events[first_new..] {
-            match event {
-                SimEvent::Save { .. } => self.saves += 1,
-                SimEvent::Crash { .. } => self.crashes += 1,
-                _ => {}
-            }
-        }
     }
 
     /// Queues one event for `drain_events`.
@@ -314,7 +299,7 @@ impl World {
         std::mem::take(&mut self.pending_events)
     }
 
-    /// True once the car has crashed. Placing the car again clears it.
+    /// True from a crash until the car respawns or is placed again.
     pub fn is_crashed(&self) -> bool {
         self.events.crashed()
     }
@@ -397,9 +382,9 @@ impl World {
     /// Moves the car to a new position, orientation and velocity, for tests and for
     /// training scenarios (SPEC §9.6). Velocities are in world coordinates.
     ///
-    /// It also closes every valve, clears the held controller throttles, ends any Hop
-    /// or Boost and its cooldown, and centres the steering, so nothing from the
-    /// previous run carries over. The tank is left as it is (see `refill_tank`).
+    /// Fails on NaN or infinite values or a zero rotation. Otherwise it forgets any
+    /// undrained events and resets the car as `move_car_to` describes; the tank is
+    /// left as it is (see `refill_tank`).
     pub fn place_car(
         &mut self,
         position_m: [f32; 3],
@@ -418,28 +403,31 @@ impl World {
 
         self.pending_events.clear();
         self.move_car_to(Checkpoint {
-            position_m,
-            rotation_xyzw,
+            pose: Pose {
+                position_m,
+                rotation_xyzw,
+            },
             linear_velocity_m_s,
             angular_velocity_rad_s,
         });
         Ok(())
     }
 
-    /// Moves the car and resets its valves, Hop/Boost, steering and event rules, so
-    /// nothing carries over (the tank is left as it is). Shared by `place_car` and
-    /// `respawn`; the values must be finite with a non-zero rotation.
+    /// Moves the car and resets the held controller throttles, valves, Hop/Boost,
+    /// steering and event rules (including a crash), so nothing carries over. The tank
+    /// is left as it is. Shared by `place_car` and `respawn`; the values must be finite
+    /// with a non-zero rotation.
     fn move_car_to(&mut self, target: Checkpoint) {
         self.controller_throttles = [0.0; NOZZLE_COUNT];
         self.hop_boost = HopBoost::default();
         self.events.reset();
         self.steps_since_crash = 0;
         self.car.reset_actuators();
-        let [x, y, z, w] = target.rotation_xyzw;
+        let [x, y, z, w] = target.pose.rotation_xyzw;
         let rotation = Rotation::from_xyzw(x, y, z, w).normalize();
         let body = &mut self.physics.bodies[self.car.chassis];
         body.set_position(
-            Pose3::from_parts(Vector::from_array(target.position_m), rotation),
+            Pose3::from_parts(Vector::from_array(target.pose.position_m), rotation),
             true,
         );
         body.set_linvel(Vector::from_array(target.linear_velocity_m_s), true);

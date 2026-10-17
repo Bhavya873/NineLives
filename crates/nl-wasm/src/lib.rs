@@ -50,9 +50,9 @@ pub enum HudField {
     /// The current mode: a `ModeCode` value. Read from the world, so it is still
     /// right after `restore`.
     Mode = 10,
-    /// Saves since the game started.
+    /// Saves since the game started (counted by `drain_events`).
     Saves = 11,
-    /// Crashes since the game started (shown as "Lives used").
+    /// Crashes since the game started, shown as "Lives used" (counted by `drain_events`).
     Crashes = 12,
 }
 
@@ -88,6 +88,9 @@ pub enum HopBlocked {
 pub struct Game {
     world: World,
     modes: ModesConfig,
+    /// Saves and crashes since the game started, counted as events are drained.
+    saves: u32,
+    crashes: u32,
 }
 
 /// Number of floats per event in `Game::drain_events`.
@@ -129,14 +132,21 @@ pub enum CrashCode {
 impl Game {
     /// Builds a game on flat ground from the text of `configs/vehicle.toml` and
     /// `configs/modes.toml`, starting in Realistic mode. `seed` drives the random
-    /// Chaos knocks. Throws if a config is invalid; the message names the bad field.
+    /// Chaos knocks. A crash respawns by itself after `[events] respawn_delay_s`.
+    /// Throws if a config is invalid; the message names the bad field.
     #[wasm_bindgen(constructor)]
     pub fn new(vehicle_toml: &str, modes_toml: &str, seed: u64) -> Result<Game, JsError> {
         let config = VehicleConfig::from_toml_str(vehicle_toml)?;
         let modes = ModesConfig::from_toml_str(modes_toml)?;
-        let world =
+        let mut world =
             World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
-        Ok(Game { world, modes })
+        world.enable_auto_respawn(config.events.respawn_delay_s);
+        Ok(Game {
+            world,
+            modes,
+            saves: 0,
+            crashes: 0,
+        })
     }
 
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
@@ -189,8 +199,8 @@ impl Game {
         values[HudField::HopBlocked as usize] = hop_blocked_code(self.world.hop_blocked_reason());
         values[HudField::UnlimitedAir as usize] = one_if(self.world.mode().unlimited_air);
         values[HudField::Mode as usize] = self.mode_code() as u8 as f32;
-        values[HudField::Saves as usize] = self.world.saves() as f32;
-        values[HudField::Crashes as usize] = self.world.crashes() as f32;
+        values[HudField::Saves as usize] = self.saves as f32;
+        values[HudField::Crashes as usize] = self.crashes as f32;
         values
     }
 
@@ -217,10 +227,15 @@ impl Game {
     }
 
     /// Events since the last call, 4 floats each: an `EventKind` then up to three
-    /// values (see `EventKind`), unused ones 0.
+    /// values (see `EventKind`), unused ones 0. Also counts saves and crashes for `hud`.
     pub fn drain_events(&mut self) -> Vec<f32> {
         let mut values = Vec::new();
         for event in self.world.drain_events() {
+            match event {
+                SimEvent::Save { .. } => self.saves += 1,
+                SimEvent::Crash { .. } => self.crashes += 1,
+                _ => {}
+            }
             values.extend_from_slice(&event_floats(event));
         }
         values
