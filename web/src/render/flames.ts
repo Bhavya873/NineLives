@@ -22,7 +22,8 @@ const FLAME_RADIUS_M = 0.12;
 const FLAME_MIN_THROTTLE = 0.02;
 const FLAME_MAX_OPACITY = 0.85;
 const FLAME_COLOUR = 0xd6ecff;
-const NOZZLE_COLOUR = 0x30343b;
+/** Light metal, so the nozzles show against the dark arena floor. */
+const NOZZLE_COLOUR = 0xa9b1ba;
 /**
  * Nozzle cones are drawn this far out along the exhaust from the physics position, so the
  * lift nozzles (just inside the body box) show below the car.

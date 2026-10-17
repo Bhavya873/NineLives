@@ -20,19 +20,18 @@ import {
   WebGLRenderer,
 } from 'three';
 
+import { BACKDROP_HORIZON, BACKDROP_RADIUS_M, buildBackdropDome } from './backdrop.ts';
 import { buildCarBody, buildWheel } from './car-mesh.ts';
 import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
-/** Beyond this the floor is pure fog colour, so the camera draws nothing further. */
+/** The floor starts fading into the backdrop here and is pure backdrop colour by the end. */
+const FOG_START_M = 120;
 const FOG_END_M = 700;
 /** Side of one floor square; big enough to read speed from at a glance. */
 const CHECKER_SIZE_M = 2;
 const CHECKER_LIGHT = '#3b5470';
 const CHECKER_DARK = '#22344a';
-const BACKDROP_TOP = '#5a7ea3';
-/** Also the page background in index.html (shown before the canvas draws); keep them equal. */
-const BACKDROP_HORIZON = '#121a24';
 
 /** Everything the renderer draws, kept together so the game can move it each frame. */
 export interface GameScene {
@@ -40,6 +39,8 @@ export interface GameScene {
   scene: Scene;
   camera: PerspectiveCamera;
   sun: DirectionalLight;
+  /** The sky dome; it moves with the car. */
+  backdrop: Mesh;
   carBody: Group;
   wheels: Group[];
 }
@@ -80,6 +81,7 @@ export function placeCar(
 
   view.sun.position.copy(carPose.position).add(SUN_OFFSET_M);
   view.sun.target.position.copy(carPose.position);
+  view.backdrop.position.copy(carPose.position);
 }
 
 /** Shows or hides the car and its wheels, e.g. hidden while the wreck explodes. */
@@ -99,12 +101,15 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
   container.appendChild(renderer.domElement);
 
   const scene = new Scene();
-  scene.background = buildBackdropGradient();
-  // The floor fades into the dark horizon, so the arena has no visible edge.
-  scene.fog = new Fog(new Color(BACKDROP_HORIZON), 120, FOG_END_M);
+  scene.background = new Color(BACKDROP_HORIZON);
+  // The floor fades into the dome's horizon colour, so the arena has no visible edge.
+  scene.fog = new Fog(new Color(BACKDROP_HORIZON), FOG_START_M, FOG_END_M);
+  const backdrop = buildBackdropDome();
+  scene.add(backdrop);
 
-  const camera = new PerspectiveCamera(60, 1, 0.1, FOG_END_M + 50);
-  scene.add(new HemisphereLight(0xffffff, 0x2a3440, 1.3));
+  const camera = new PerspectiveCamera(60, 1, 0.1, BACKDROP_RADIUS_M + 100);
+  // Soft fill light, kept low so the sun's shadow still reads on the dark floor.
+  scene.add(new HemisphereLight(0xffffff, 0x2a3440, 0.7));
   const sun = buildSun();
   scene.add(sun, sun.target);
   scene.add(buildGround());
@@ -113,7 +118,7 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
   const wheels = Array.from({ length: wheelCount }, () => buildWheel());
   scene.add(carBody, ...wheels);
 
-  const gameScene = { renderer, scene, camera, sun, carBody, wheels };
+  const gameScene = { renderer, scene, camera, sun, backdrop, carBody, wheels };
   resizeToWindow(gameScene);
   window.addEventListener('resize', () => resizeToWindow(gameScene));
   return gameScene;
@@ -124,17 +129,6 @@ function resizeToWindow({ renderer, camera }: GameScene): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-}
-
-/** A vertical backdrop gradient (BACKDROP_TOP to BACKDROP_HORIZON) in a tiny canvas. */
-function buildBackdropGradient(): CanvasTexture {
-  return buildCanvasTexture(1, 256, (context) => {
-    const gradient = context.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0, BACKDROP_TOP);
-    gradient.addColorStop(1, BACKDROP_HORIZON);
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, 1, 256);
-  });
 }
 
 /** A texture drawn once by `draw` into a small canvas of `width` × `height` pixels. */
@@ -157,7 +151,7 @@ function buildCanvasTexture(
 
 /** One directional light that casts soft shadows near the car. */
 function buildSun(): DirectionalLight {
-  const sun = new DirectionalLight(0xffffff, 2.2);
+  const sun = new DirectionalLight(0xffffff, 2.8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   const reach = 30;

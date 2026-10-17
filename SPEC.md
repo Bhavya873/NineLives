@@ -452,7 +452,6 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 3. Report both in the README with the explanation: pay for landing, charge for airtime, never pay for merely surviving.
 
 ### 9.12 Export (`models/policy.json`) *(req)*
-Training also exports each saved checkpoint in this format to `results/checkpoints/<run-id>/<n>.json`, for the training viewer (§11.6).
 ```json
 {
   "format": "ninelives-policy", "version": 1,
@@ -530,7 +529,7 @@ class Game {
 | Esc | pause / menu |
 
 ### 11.4 Visuals
-- Low-poly generic sports car (no brand shapes) in a **lab arena**: a blue-grey checkered floor, a dark gradient backdrop the floor fades into, neutral light, soft shadows from one directional light, and plain-coloured, flat-shaded course pieces (ramps, blocks), like a physics simulator's test arena.
+- Low-poly generic sports car (no brand shapes) in a **lab arena**: a blue-grey checkered floor that fades into a dark sky dome (its horizon is the fog colour, so there is no edge), neutral light, soft shadows from one directional light, and plain-coloured, flat-shaded course pieces (ramps, blocks), like a physics simulator's test arena.
 - **Nozzles:** small cones on the body at the 7.4 positions. Each flame is an additive-blended cone mesh whose length and opacity follow its effective throttle, plus a light puff of particles. Colour is a cold blue-white (cold gas), never fire.
 - **Camera:** smoothed chase camera that stays world-up when the car flips, so the player sees the flip. A slight pull-back while airborne.
 - Respect `prefers-reduced-motion`: no camera shake, fewer particles.
@@ -547,7 +546,6 @@ class Game {
 - **Results screen** at the finish: time, saves, crashes, air used, and the delta vs the ghost.
 - **Ghost:** record `InputFrame`s per tick plus seed, course, mode, controller, policy hash and `build_hash`. Replay in a second `Game` instance and render it translucent. Store the best run in `localStorage` (wrap every read and write in try/catch; discard on build-hash mismatch).
 - **Results tab:** shows the committed SVG charts from `results/`.
-- **Training viewer:** pick a run and watch a crowd of cars (about 64, each its own wasm `Game`, translucent) drive the obstacle arena with checkpoint 1, 2, 3… of the policy, auto-advancing, with each checkpoint's saves, crashes and distance. Training exports a `policy.json` per checkpoint for it (§9).
 
 ### 11.7 Performance and deploy
 - Target 60 fps on a mid-range laptop. Budget: sim tick ≤ 1.5 ms; render ≤ 8 ms. Measure and show an optional FPS / ms overlay (F3).
@@ -616,17 +614,14 @@ class Game {
 - [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
 - [ ] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
 - [ ] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
-- [ ] Each saved checkpoint is also exported as policy JSON for the training viewer (§9.12).
 
 **M6 — AI in the browser**
 - [ ] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.
-- [ ] The training viewer (§11.6) replays checkpoint 1, 2, 3… with a crowd of cars; on Stage A drop scenarios in the flat arena until M7 adds the obstacle arena.
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [ ] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
 - [ ] Stages B–E trained; the policy is re-exported; eval on all stages and both modes.
 - [ ] The Gauntlet is playable start to finish with checkpoints and the results screen.
-- [ ] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
 - [ ] Ghost, title screen, results tab, reduced motion, the performance overlay, static deploy.
