@@ -6,12 +6,45 @@
     <title>Nine Lives</title>
     <!-- Empty icon so the browser does not request a missing /favicon.ico. -->
     <link rel="icon" href="data:," />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #cfe3f5;
+        font-family: system-ui, sans-serif;
+      }
+      #game {
+        position: fixed;
+        inset: 0;
+      }
+      .hud {
+        position: fixed;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgb(0 0 0 / 45%);
+        color: #fff;
+        font-variant-numeric: tabular-nums;
+        pointer-events: none;
+      }
+      #hud-speed {
+        left: 16px;
+        bottom: 16px;
+        font-size: 28px;
+        font-weight: 600;
+      }
+      #hud-help {
+        left: 16px;
+        top: 16px;
+        font-size: 14px;
+      }
+    </style>
   </head>
   <body>
-    <main>
-      <h1>Nine Lives</h1>
-      <p id="build-info">Loading the simulation…</p>
-    </main>
+    <div id="game"></div>
+    <div id="hud-speed" class="hud">0 km/h</div>
+    <div id="hud-help" class="hud">W/S or ↑/↓ drive · A/D or ←/→ steer</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
