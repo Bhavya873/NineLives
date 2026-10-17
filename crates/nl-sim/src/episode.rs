@@ -1,18 +1,23 @@
 //! One training or eval episode (SPEC §9.5): a fresh world started from a scenario, the
 //! rules for when it ends, and the per-episode numbers SPEC §10 reports. The Rust eval
 //! runner, the M5 Python binding and the browser replay all step episodes through this,
-//! so "success", "crash" and "time limit" mean the same thing everywhere.
+//! so "success", "crash" and "time limit" mean the same thing everywhere. It also applies
+//! the episode's domain randomization (SPEC §9.8): the varied car and world, actuation
+//! latency and observation noise, so training and eval randomize the same way.
 
+use std::collections::VecDeque;
+
+use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 
 use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
 use crate::events::{CrashCause, SimEvent};
 use crate::input::InputFrame;
-use crate::modes::ModeParams;
+use crate::obs::{Observation, PREV_ACTION_INDEX, observe};
+use crate::randomization::{EpisodeVariation, ObsNoise, add_state_noise, noise_rng};
 use crate::scenarios::{EpisodeConfig, ScenariosConfig, Stage, start_episode};
-use crate::vehicle_config::VehicleConfig;
-use crate::world::{DEFAULT_GROUND_FRICTION, PlaceCarError, World};
+use crate::world::{PlaceCarError, World};
 
 /// Where an episode stands after a step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,20 +85,37 @@ pub struct Episode {
     /// Anything (wheels, body or roof) touched the ground on the latest step.
     touching: bool,
     tally: Tally,
+    /// Throttles on their way to the valves, one per control step of latency.
+    delayed_throttles: VecDeque<[f32; NOZZLE_COUNT]>,
+    /// What the controller asked for on the latest control step (the observation's
+    /// `prev_action`, SPEC §9.2).
+    commanded_throttles: [f32; NOZZLE_COUNT],
+    /// What the valves are being told now (the commanded throttles, `latency` control
+    /// steps late).
+    applied_throttles: [f32; NOZZLE_COUNT],
+    /// Sensor noise on what controllers see (all zero: none), and its generator.
+    obs_noise: ObsNoise,
+    noise_rng: ChaCha8Rng,
 }
 
 impl Episode {
-    /// A fresh flat-ground world with the car placed for `stage` from `seed`.
+    /// A fresh flat-ground world for `variation` (use `EpisodeVariation::none` for no
+    /// randomization) with the car placed for `stage` from `seed`.
     pub fn start(
-        vehicle: &VehicleConfig,
-        mode: ModeParams,
+        variation: &EpisodeVariation,
         scenarios: &ScenariosConfig,
         stage: Stage,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
-        let mut world = World::new_on_flat_ground(vehicle, mode, DEFAULT_GROUND_FRICTION, seed);
+        let mut world = World::new_on_flat_ground(
+            &variation.vehicle,
+            variation.mode,
+            variation.ground_friction,
+            seed,
+        );
         start_episode(&mut world, stage, scenarios, seed)?;
         let rules = scenarios.episode;
+        let delayed_throttles = vec![[0.0; NOZZLE_COUNT]; variation.latency_control_steps];
         Ok(Episode {
             state: world.car_state(),
             touching: false,
@@ -103,7 +125,29 @@ impl Episode {
             limit_steps: (rules.time_limit_s * PHYSICS_HZ as f32).round() as u64,
             steps: 0,
             tally: Tally::default(),
+            delayed_throttles: VecDeque::from(delayed_throttles),
+            commanded_throttles: [0.0; NOZZLE_COUNT],
+            applied_throttles: [0.0; NOZZLE_COUNT],
+            obs_noise: variation.obs_noise,
+            noise_rng: noise_rng(seed),
         })
+    }
+
+    /// What a controller sees now: the car's state with this episode's sensor noise
+    /// (SPEC §9.8), and the observation built from that same state (SPEC §9.2), whose
+    /// `prev_action` is what the controller last commanded.
+    pub fn controller_view(&mut self) -> (CarState, Observation) {
+        let mut state = self.state;
+        add_state_noise(&mut state, &self.obs_noise, &mut self.noise_rng);
+        let mut observation = observe(&self.world, &state);
+        let prev_action = PREV_ACTION_INDEX..PREV_ACTION_INDEX + NOZZLE_COUNT;
+        observation[prev_action].copy_from_slice(&self.commanded_throttles);
+        (state, observation)
+    }
+
+    /// The observation a controller sees now (see `controller_view`).
+    pub fn observe(&mut self) -> Observation {
+        self.controller_view().1
     }
 
     /// The world, for controllers (`is_control_step`) and rendering.
@@ -134,13 +178,21 @@ impl Episode {
     }
 
     /// One physics step with the controller's latest throttles (0..1, nozzle order).
-    /// Does nothing once the episode has ended.
+    /// On a control step they join the latency queue (SPEC §9.8), and the valves get the
+    /// ones from `latency` control steps ago. Does nothing once the episode has ended.
     pub fn step(&mut self, throttles: [f32; NOZZLE_COUNT]) -> EpisodeStatus {
         if self.status() != EpisodeStatus::Running {
             return self.status();
         }
+        if self.world.is_control_step() {
+            self.commanded_throttles = throttles;
+            self.delayed_throttles.push_back(throttles);
+            if let Some(oldest) = self.delayed_throttles.pop_front() {
+                self.applied_throttles = oldest;
+            }
+        }
         let before = self.state;
-        self.world.set_controller_throttles(throttles);
+        self.world.set_controller_throttles(self.applied_throttles);
         self.world.step(InputFrame::default());
         self.steps += 1;
         self.state = self.world.car_state();

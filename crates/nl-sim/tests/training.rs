@@ -9,6 +9,7 @@ mod common;
 
 use common::{realistic, reward, scenarios, vehicle};
 use nl_sim::episode::{Episode, EpisodeStatus};
+use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::training::{StepOutcome, TrainingConfig, TrainingEnv, throttles_from_action};
 
@@ -21,6 +22,7 @@ fn config() -> TrainingConfig {
         mode: realistic(),
         scenarios: scenarios(),
         reward: reward(),
+        randomize: false,
     }
 }
 
@@ -88,14 +90,8 @@ fn shut_valves_give_the_same_episode_row_as_stepping_episode_directly() {
     let mut env = TrainingEnv::new(config(), Stage::A);
     env.reset(seed).unwrap();
     let level_zero_scenarios = scenarios().at_level(Stage::A, 0);
-    let mut episode = Episode::start(
-        &vehicle(),
-        realistic(),
-        &level_zero_scenarios,
-        Stage::A,
-        seed,
-    )
-    .unwrap();
+    let plain = EpisodeVariation::none(&vehicle(), realistic());
+    let mut episode = Episode::start(&plain, &level_zero_scenarios, Stage::A, seed).unwrap();
 
     let outcomes = run_to_end(&mut env, VALVES_SHUT);
     while episode.status() == EpisodeStatus::Running {

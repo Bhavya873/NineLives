@@ -328,7 +328,7 @@ pub trait Controller {
 }
 ```
 
-Until `ObsSpec` exists (M5) `act` takes only `ctx`: the driver's `InputFrame` and the car's `CarState` (the physical quantities the observation packs). M5 adds `obs` for the AI. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
+`act` takes only `ctx`: the driver's `InputFrame`, the car's `CarState` (the physical quantities the observation packs) and, from M5, the `observation` built from them (§9.2), which the AI reads. Every runner builds it with `ControlCtx::for_world`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
 2. **Manual** (debug only): keys map to individual nozzles at throttle 1.
@@ -354,6 +354,7 @@ The PD controller is required before RL. It proves the problem is controllable a
 - **Auto-reset:** an env that ends returns its terminal observation in `info["terminal_obs"]` (N × OBS_DIM, masked) and its reset observation in `obs`.
 - `info` arrays: `saves`, `crashes`, `crash_cause`, `air_used_kg`, `stage`, `success`, `episode_len`.
 - Envs are stepped in parallel with `rayon`; each env owns its own world and RNG.
+- Implementation notes (`crates/nl-py`): `config_json` holds the text of `vehicle.toml`, `modes.toml`, `scenarios.toml`, `reward.toml` and `controllers.toml` plus `mode` and `stage` (built by `ninelives.sim_config.load_sim_config`; the Rust module reads no files). Env `i` draws its episode seeds from ChaCha8 stream `i` of `seed`; `reset(seeds)` overrides them once. `info` holds `done` (rows whose episode ended), `terminal_obs`, `episode` (per row: the finished episode as a JSON object string with the eval `EpisodeResult` fields, so `success`, `saves`, `crash_cause`, `air_used_kg` and the touchdown numbers, plus `stage`, `level` and `control_steps`; None elsewhere) and `reward_terms` (N × 7, columns from `reward_term_names()`). The episode row replaces separate `saves`/`crashes`/… arrays so its field names match the results files. `set_stage_and_level(stage, level)` applies from each env's next episode.
 
 `ninelives.env`:
 - `NineLivesVecEnv(sb3.common.vec_env.VecEnv)` adapts `BatchedSim` to SB3. It sets `infos[i]["terminal_observation"]` and `infos[i]["TimeLimit.truncated"]`.
@@ -391,8 +392,8 @@ Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range 
 |---|---|---|
 | Tilt | `(up·world_up − 1)` | 0.05 |
 | Spin | `−min(‖ω‖², 50)` | 0.002 |
-| Air (limited) | `−air_used_step / tank_capacity` | 2.0 |
-| Air (unlimited) | `−Σ u` | 0.002 |
+| Air (limited) | `−air_used_step / tank_capacity` | 8.0 (was 2.0; see DECISIONS) |
+| Air (unlimited) | `−Σ u` | 0.008 (was 0.002) |
 | Airborne time | `−1` per step while airborne for longer than 0.5 s | 0.02 |
 | Smoothness | `−‖u_t − u_{t−1}‖²` | 0.002 |
 | Save (event) | `2 + 3·q`, `q = clamp(1 − ‖ω‖/4) · clamp(1 − v_down/6)`, with ‖ω‖ and v_down taken just before the touchdown that led to the save | 1 |
@@ -435,6 +436,8 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 | Thrust scale | U(1.0, 2.0) |
 | Unlimited air | probability 0.4; otherwise tank U(150, 350) kg |
 
+Implementation notes (`nl-sim/src/randomization.rs`): the ranges live in `[randomization]` of `configs/scenarios.toml`; each episode draws them from its own seed on ChaCha8 stream 2 (noise during the episode uses stream 3), so a seed always gives the same car. The inertia factor is one draw for all three axes; the force factor is one draw per nozzle. The centre-of-mass offset (`chassis.center_of_mass_offset_m`) and wind (`air_drag.wind_m_s`) are vehicle.toml fields that default to 0. `Episode` applies a variation (`EpisodeVariation`, or `EpisodeVariation::none`): the varied car, mode and ground at the start, then latency (the valves get the throttles of `latency` control steps ago) and observation noise (`Episode::observe`). The observation's `prev_action` shows what the controller commanded, the same signal the smoothness cost uses. Training turns randomization on (`randomize: true` in the training YAML); eval leaves it off unless `--dr` is given (results get a `_dr` suffix); the game leaves it off.
+
 ### 9.9 Curriculum callback
 - Track the success rate over the last 500 episodes per stage. When it exceeds 85%, advance that stage's level or unlock the next stage.
 - Once unlocked, sample stages with weights A 0.25, B 0.15, C 0.2, D 0.3, E 0.1, so earlier skills are not forgotten.
@@ -476,7 +479,7 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 ## 10. Evaluation
 
 - The Rust runner (M4, no Python): `cargo run --release -p nl-control --example eval -- --controller {off,pd} --stage {A,B} --mode {realistic,arcade} --episodes 1000 --seed 0`. Both runners step `nl_sim::episode::Episode`, so success, crash and time limit mean the same thing.
-- `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`.
+- `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`. It runs the episodes in Rust (`ninelives_sim.run_eval`, the same `run_episode` and summary as the Rust runner), so the two runners give identical rows; the Rust runner also takes `--controller ai --policy <file>`.
 - A fixed seed list makes runs reproducible. Domain randomization is off by default in eval (`--dr` turns it on).
 - **Outputs:** `results/eval_<controller>_<stage>_<mode>.json` (no date: a rerun overwrites the file and git shows the change; the M5 Python eval adds a `.csv`), with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down).
 - **Metrics:** save rate, crash rate, air used per save (kg), touchdown spin and vertical speed (median and p95), and Gauntlet completion rate with the driver bot.
@@ -617,10 +620,10 @@ class Game {
 - [x] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
 
 **M5 — Python env and first policy**
-- [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
-- [ ] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
-- [ ] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
-- [ ] Up to 8 evenly spaced checkpoints are exported as policy JSON for the training viewer (§9.12).
+- [x] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
+- [x] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
+- [x] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
+- [x] Up to 8 evenly spaced checkpoints are exported as policy JSON for the training viewer (§9.12).
 
 **M6 — AI in the browser**
 - [ ] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.

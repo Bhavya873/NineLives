@@ -147,7 +147,8 @@ impl Car {
     fn reset_forces_and_apply_air_drag(&self, physics: &mut PhysicsWorld) {
         let drag = &self.config.air_drag;
         let body = &mut physics.bodies[self.chassis];
-        let velocity_m_s = body.linvel();
+        // Drag acts on the speed through the air, not over the ground.
+        let velocity_m_s = body.linvel() - Vector::from_array(drag.wind_m_s);
         // SPEC §7.2: F = -0.5 · ρ · CdA · |v| · v
         let drag_force_n = -0.5
             * drag.air_density_kg_m3
@@ -321,8 +322,8 @@ fn steering_limit_rad(steering: &SteeringConfig, speed_m_s: f32) -> f32 {
     low_rad + (high_rad - low_rad) * progress
 }
 
-/// The chassis rigid body: mass and inertia are set by hand (SPEC §7.3), so the
-/// colliders below have zero density and add no mass.
+/// The chassis rigid body: mass, inertia and centre of mass are set by hand (SPEC §7.3),
+/// so the colliders below have zero density and add no mass.
 fn build_chassis_body(
     config: &VehicleConfig,
     position_m: Vector,
@@ -330,7 +331,8 @@ fn build_chassis_body(
 ) -> RigidBodyBuilder {
     let chassis = &config.chassis;
     let inertia = Vector::from_array(chassis.inertia_kg_m2);
-    let mass_properties = MassProperties::new(Vector::ZERO, chassis.dry_mass_kg, inertia);
+    let centre_of_mass_m = Vector::from_array(chassis.center_of_mass_offset_m);
+    let mass_properties = MassProperties::new(centre_of_mass_m, chassis.dry_mass_kg, inertia);
     RigidBodyBuilder::dynamic()
         .translation(position_m)
         .rotation(Vector::new(0.0, yaw_rad, 0.0))

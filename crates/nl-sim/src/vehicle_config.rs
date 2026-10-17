@@ -39,6 +39,10 @@ pub struct ChassisConfig {
     pub roof_half_extents_m: [f32; 3],
     /// Moments of inertia about the body axes: roll (x), yaw (y), pitch (z).
     pub inertia_kg_m2: [f32; 3],
+    /// Where the centre of mass sits relative to the body frame's origin, in m. 0 in
+    /// vehicle.toml; domain randomization (SPEC §9.8) moves it up to ±0.1 m per axis.
+    #[serde(default)]
+    pub center_of_mass_offset_m: [f32; 3],
 }
 
 /// Air resistance on the body. See `[air_drag]`.
@@ -48,6 +52,10 @@ pub struct AirDragConfig {
     pub air_density_kg_m3: f32,
     /// Drag coefficient times frontal area (CdA).
     pub drag_area_m2: f32,
+    /// Wind velocity in world coordinates, in m/s; drag acts on the car's speed
+    /// relative to it (SPEC §7.2). 0 in vehicle.toml; randomized in training (§9.8).
+    #[serde(default)]
+    pub wind_m_s: [f32; 3],
 }
 
 /// The four raycast wheels and their suspension. See `[wheels]`.
@@ -249,14 +257,19 @@ impl ChassisConfig {
         must_be_positive("chassis.dry_mass_kg", self.dry_mass_kg)?;
         all_must_be_positive("chassis.half_extents_m", self.half_extents_m)?;
         all_must_be_positive("chassis.roof_half_extents_m", self.roof_half_extents_m)?;
-        all_must_be_positive("chassis.inertia_kg_m2", self.inertia_kg_m2)
+        all_must_be_positive("chassis.inertia_kg_m2", self.inertia_kg_m2)?;
+        all_must_be_finite(
+            "chassis.center_of_mass_offset_m",
+            self.center_of_mass_offset_m,
+        )
     }
 }
 
 impl AirDragConfig {
     fn check(&self) -> CheckResult {
         must_not_be_negative("air_drag.air_density_kg_m3", self.air_density_kg_m3)?;
-        must_not_be_negative("air_drag.drag_area_m2", self.drag_area_m2)
+        must_not_be_negative("air_drag.drag_area_m2", self.drag_area_m2)?;
+        all_must_be_finite("air_drag.wind_m_s", self.wind_m_s)
     }
 }
 
@@ -434,6 +447,14 @@ fn must_not_be_negative(field: &'static str, value: f32) -> CheckResult {
 }
 
 /// Fails if `value` is infinite or not a number.
+/// Every value finite.
+fn all_must_be_finite(field: &'static str, values: [f32; 3]) -> CheckResult {
+    for value in values {
+        must_be_finite(field, value)?;
+    }
+    Ok(())
+}
+
 fn must_be_finite(field: &'static str, value: f32) -> CheckResult {
     if !value.is_finite() {
         return Err(VehicleConfigError::NotFinite { field, value });

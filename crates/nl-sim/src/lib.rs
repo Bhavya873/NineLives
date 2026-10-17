@@ -18,6 +18,7 @@ pub mod hop_boost;
 pub mod input;
 pub mod modes;
 pub mod obs;
+pub mod randomization;
 pub mod reward;
 pub mod scenarios;
 pub mod tank;

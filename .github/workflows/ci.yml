@@ -41,7 +41,8 @@ jobs:
           .venv/bin/pip install -r python/requirements-dev.lock
           .venv/bin/pip install -e python
       - name: Build the Rust module
-        run: VIRTUAL_ENV=.venv .venv/bin/maturin develop -m crates/nl-py/Cargo.toml
+        # Release: the env tests run hundreds of physics steps, far too slow unoptimised.
+        run: VIRTUAL_ENV=.venv .venv/bin/maturin develop --release -m crates/nl-py/Cargo.toml
       - name: Ruff
         run: |
           .venv/bin/ruff check python

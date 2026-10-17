@@ -9,6 +9,7 @@ mod common;
 use common::{realistic, vehicle};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::episode::{Episode, EpisodeStatus};
+use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 
 const NO_THRUST: [f32; NOZZLE_COUNT] = [0.0; NOZZLE_COUNT];
@@ -25,7 +26,13 @@ fn run_to_end(episode: &mut Episode) -> EpisodeStatus {
 fn the_time_limit_ends_an_episode_that_neither_crashes_nor_saves() {
     let mut scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML).unwrap();
     scenarios.episode.time_limit_s = 0.1;
-    let mut episode = Episode::start(&vehicle(), realistic(), &scenarios, Stage::B, 0).unwrap();
+    let mut episode = Episode::start(
+        &EpisodeVariation::none(&vehicle(), realistic()),
+        &scenarios,
+        Stage::B,
+        0,
+    )
+    .unwrap();
 
     let status = run_to_end(&mut episode);
 
@@ -37,7 +44,13 @@ fn the_time_limit_ends_an_episode_that_neither_crashes_nor_saves() {
 #[test]
 fn an_ended_episode_ignores_further_steps() {
     let scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML).unwrap();
-    let mut episode = Episode::start(&vehicle(), realistic(), &scenarios, Stage::A, 3).unwrap();
+    let mut episode = Episode::start(
+        &EpisodeVariation::none(&vehicle(), realistic()),
+        &scenarios,
+        Stage::A,
+        3,
+    )
+    .unwrap();
     let status = run_to_end(&mut episode);
     let finished = episode.result();
 
@@ -56,7 +69,13 @@ fn a_car_resting_on_its_wheels_succeeds_after_the_hold_without_any_save() {
     scenarios.stage_a.max_spin_rad_s = 0.0;
     scenarios.stage_a.horizontal_speed_m_s = [0.0, 0.0];
     scenarios.stage_a.vertical_speed_m_s = [0.0, 0.0];
-    let mut episode = Episode::start(&vehicle(), realistic(), &scenarios, Stage::A, 0).unwrap();
+    let mut episode = Episode::start(
+        &EpisodeVariation::none(&vehicle(), realistic()),
+        &scenarios,
+        Stage::A,
+        0,
+    )
+    .unwrap();
 
     let status = run_to_end(&mut episode);
 

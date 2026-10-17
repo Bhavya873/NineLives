@@ -55,10 +55,16 @@ test('switching back to Off closes the valves Manual left open', () => {
 test('an unknown controller name is refused with a helpful message', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
-  assert.throws(() => game.set_controller('autopilot'), /use one of: off, pd, manual/);
+  assert.throws(() => game.set_controller('autopilot'), /use one of: off, pd, ai, manual/);
 });
 
-test('cycling the controller goes Off, PD, Manual and back to Off', () => {
+test('choosing the AI before a policy is loaded is refused with a helpful message', () => {
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+
+  assert.throws(() => game.set_controller('ai'), /needs a policy/);
+});
+
+test('without a policy, cycling the controller goes Off, PD, Manual and back to Off', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
   game.cycle_controller();

@@ -12,8 +12,16 @@ name = "ninelives_sim"
 crate-type = ["cdylib"]
 
 [dependencies]
+nl-control.workspace = true
+nl-policy.workspace = true
 nl-sim.workspace = true
+numpy.workspace = true
 pyo3.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

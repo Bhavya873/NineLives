@@ -1,0 +1,33 @@
+# PPO training run settings (SPEC §9.9, §9.10). Every number is a starting value to
+# tune; log each run in docs/EXPERIMENTS.md. Paths are relative to the repo root.
+
+seed: 0
+mode: realistic        # base preset; with randomize, only its Hop/Boost settings stay (§9.8)
+stage: A               # SPEC §9.6; M5 trains Stage A only
+randomize: true        # SPEC §9.8 domain randomization (mode, car, latency, noise)
+total_steps: 50_000_000
+
+ppo:
+  n_envs: 64
+  n_steps: 512         # 64 × 512 = 32,768 samples per update
+  batch_size: 4096
+  n_epochs: 10
+  learning_rate: 3.0e-4   # decays linearly to 0 over total_steps
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  net_arch: [128, 128]    # the same for the policy and the value network
+  activation: tanh
+
+normalize:
+  clip_obs: 10.0       # VecNormalize(norm_obs=True, norm_reward=True)
+
+curriculum:
+  window: 500          # success rate over the last this many episodes at the level
+  advance_at: 0.85     # move up a level when the success rate passes this
+
+checkpoint:
+  every_steps: 1_000_000
+  eval_episodes: 200   # fixed-seed episodes at the hardest level, to keep the best
+  eval_seed: 1_000_000 # first eval seed, far from training seeds

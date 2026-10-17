@@ -11,6 +11,8 @@ use serde::Deserialize;
 
 use crate::chaos::random_direction;
 use crate::checkpoint::Checkpoint;
+use crate::obs::MAX_THRUST_SCALE;
+use crate::randomization::RandomizationConfig;
 use crate::world::{PlaceCarError, Pose, World};
 
 /// The ChaCha8 stream scenario draws use (Chaos uses the default stream 0).
@@ -19,8 +21,9 @@ const SCENARIO_RNG_STREAM: u64 = 1;
 /// The repo's `configs/scenarios.toml`, built in so tests and the eval runner share it.
 pub const DEFAULT_SCENARIOS_TOML: &str = include_str!("../../../configs/scenarios.toml");
 
-/// Which kind of start (SPEC §9.6). Stages C–E arrive with courses in M7.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which kind of start (SPEC §9.6). Stages C–E arrive with courses in M7. Results and
+/// training info spell it "A" or "B".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Stage {
     /// Drop from the air in a random attitude and spin.
     A,
@@ -104,6 +107,8 @@ pub struct ScenariosConfig {
     pub stage_b: TipOverConfig,
     /// The `[curriculum_a]` section.
     pub curriculum_a: CurriculumAConfig,
+    /// The `[randomization]` section (SPEC §9.8).
+    pub randomization: RandomizationConfig,
 }
 
 /// Why scenarios.toml could not be used.
@@ -132,6 +137,12 @@ pub enum ScenariosConfigError {
         rule: &'static str,
         value: f32,
     },
+
+    #[error("scenarios.toml: `randomization.{field}` must be {rule}")]
+    BadRandomization {
+        field: &'static str,
+        rule: &'static str,
+    },
 }
 
 impl ScenariosConfig {
@@ -141,7 +152,16 @@ impl ScenariosConfig {
         config.check_ranges()?;
         config.check_numbers()?;
         config.check_curriculum()?;
+        config.check_randomization()?;
         Ok(config)
+    }
+
+    /// How many curriculum levels `stage` has (1 for a stage without a curriculum).
+    pub fn level_count(&self, stage: Stage) -> u32 {
+        match stage {
+            Stage::A => self.curriculum_a.levels,
+            Stage::B => 1,
+        }
     }
 
     /// These scenarios with `stage` at curriculum `level` (0 = easiest). Only Stage A
@@ -177,6 +197,45 @@ impl ScenariosConfig {
             ),
             ..full
         }
+    }
+
+    /// Randomization factors and sizes must be above zero (a zero mass or tank breaks
+    /// the physics); the latency range must be in order; the probability in 0..1. The
+    /// friction, wind, offset and noise are checked with the other ranges and numbers.
+    fn check_randomization(&self) -> Result<(), ScenariosConfigError> {
+        let ranges = &self.randomization;
+        let positive_ranges = [
+            ("mass_factor", ranges.mass_factor),
+            ("inertia_factor", ranges.inertia_factor),
+            ("max_force_factor", ranges.max_force_factor),
+            ("valve_time_constant_s", ranges.valve_time_constant_s),
+            ("thrust_scale", ranges.thrust_scale),
+            ("tank_capacity_kg", ranges.tank_capacity_kg),
+        ];
+        for (field, [low, high]) in positive_ranges {
+            if !(low.is_finite() && high.is_finite() && 0.0 < low && low <= high) {
+                return Err(bad_randomization(field, "[low, high] with 0 < low ≤ high"));
+            }
+        }
+        if ranges.thrust_scale[1] > MAX_THRUST_SCALE {
+            return Err(bad_randomization(
+                "thrust_scale",
+                "no higher than the observation's 3.0",
+            ));
+        }
+        if ranges.latency_control_steps[0] > ranges.latency_control_steps[1] {
+            return Err(bad_randomization(
+                "latency_control_steps",
+                "[low, high] with low ≤ high",
+            ));
+        }
+        if !(0.0..=1.0).contains(&ranges.unlimited_air_probability) {
+            return Err(bad_randomization(
+                "unlimited_air_probability",
+                "between 0 and 1",
+            ));
+        }
+        Ok(())
     }
 
     /// The curriculum must have a level and start no harder than it ends.
@@ -223,6 +282,11 @@ impl ScenariosConfig {
             ),
             ("stage_a.vertical_speed_m_s", a.vertical_speed_m_s, true),
             ("stage_b.roll_deg", self.stage_b.roll_deg, false),
+            (
+                "randomization.ground_friction",
+                self.randomization.ground_friction,
+                false,
+            ),
         ];
         for (field, range, may_be_negative) in ranges {
             let [low, high] = range;
@@ -244,6 +308,27 @@ impl ScenariosConfig {
             ("stage_a.max_spin_rad_s", self.stage_a.max_spin_rad_s),
             ("stage_b.max_pitch_yaw_deg", self.stage_b.max_pitch_yaw_deg),
             ("stage_b.max_speed_m_s", self.stage_b.max_speed_m_s),
+            (
+                "randomization.center_of_mass_offset_m",
+                self.randomization.center_of_mass_offset_m,
+            ),
+            ("randomization.wind_m_s", self.randomization.wind_m_s),
+            (
+                "randomization.noise.gravity_dir",
+                self.randomization.noise.gravity_dir,
+            ),
+            (
+                "randomization.noise.spin_rad_s",
+                self.randomization.noise.spin_rad_s,
+            ),
+            (
+                "randomization.noise.speed_m_s",
+                self.randomization.noise.speed_m_s,
+            ),
+            (
+                "randomization.noise.height_m",
+                self.randomization.noise.height_m,
+            ),
         ];
         for (field, value) in numbers {
             if !value.is_finite() || value < 0.0 {
@@ -305,16 +390,16 @@ fn sample_drop(config: &DropConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
     let height_m = draw(rng, config.height_m);
     let heading = Rotation::from_rotation_y(rng.random_range(0.0..std::f32::consts::TAU));
     let tilt_axis_rad = rng.random_range(0.0..std::f32::consts::TAU);
-    let tilt_axis = Vector::new(tilt_axis_rad.cos(), 0.0, tilt_axis_rad.sin());
+    let tilt_axis = Vector::new(libm::cosf(tilt_axis_rad), 0.0, libm::sinf(tilt_axis_rad));
     let tilt_rad = rng.random_range(0.0..=config.max_tilt_deg.to_radians());
     let rotation = Rotation::from_axis_angle(tilt_axis, tilt_rad) * heading;
     let spin = random_direction(rng) * rng.random_range(0.0..=config.max_spin_rad_s);
     let direction_rad = rng.random_range(0.0..std::f32::consts::TAU);
     let horizontal_m_s = draw(rng, config.horizontal_speed_m_s);
     let velocity = Vector::new(
-        horizontal_m_s * direction_rad.cos(),
+        horizontal_m_s * libm::cosf(direction_rad),
         draw(rng, config.vertical_speed_m_s),
-        horizontal_m_s * direction_rad.sin(),
+        horizontal_m_s * libm::sinf(direction_rad),
     );
     checkpoint(Vector::new(0.0, height_m, 0.0), rotation, velocity, spin)
 }
@@ -337,11 +422,15 @@ fn sample_tip_over(config: &TipOverConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
     let direction_rad = rng.random_range(0.0..std::f32::consts::TAU);
     let speed_m_s = rng.random_range(0.0..=config.max_speed_m_s);
     let velocity = Vector::new(
-        speed_m_s * direction_rad.cos(),
+        speed_m_s * libm::cosf(direction_rad),
         0.0,
-        speed_m_s * direction_rad.sin(),
+        speed_m_s * libm::sinf(direction_rad),
     );
     checkpoint(Vector::ZERO, rotation, velocity, Vector::ZERO)
+}
+
+fn bad_randomization(field: &'static str, rule: &'static str) -> ScenariosConfigError {
+    ScenariosConfigError::BadRandomization { field, rule }
 }
 
 /// The value `progress` (0..1) of the way from `first` to `last`.
@@ -349,8 +438,8 @@ fn lerp(first: f32, last: f32, progress: f32) -> f32 {
     first + (last - first) * progress
 }
 
-/// An even draw from `[low, high]`.
-fn draw(rng: &mut ChaCha8Rng, range: [f32; 2]) -> f32 {
+/// An even draw from `[low, high]` (also used by domain randomization).
+pub(crate) fn draw(rng: &mut ChaCha8Rng, range: [f32; 2]) -> f32 {
     let [low, high] = range;
     rng.random_range(low..=high)
 }

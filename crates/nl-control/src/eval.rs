@@ -5,9 +5,8 @@
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::episode::{Episode, EpisodeResult, EpisodeStatus};
 use nl_sim::input::InputFrame;
-use nl_sim::modes::ModeParams;
+use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{ScenariosConfig, Stage};
-use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::PlaceCarError;
 use serde::Serialize;
 
@@ -37,23 +36,21 @@ pub struct EvalSummary {
 }
 
 /// Runs one episode of `stage` from `seed` with `controller`, which acts at 60 Hz.
+/// `variation` is the episode's car and world: `EpisodeVariation::none` for plain eval,
+/// or a `randomization::sample_variation` for eval with domain randomization.
 pub fn run_episode(
-    vehicle: &VehicleConfig,
-    mode: ModeParams,
+    variation: &EpisodeVariation,
     scenarios: &ScenariosConfig,
     stage: Stage,
     controller: &mut dyn Controller,
     seed: u64,
 ) -> Result<EpisodeResult, PlaceCarError> {
-    let mut episode = Episode::start(vehicle, mode, scenarios, stage, seed)?;
+    let mut episode = Episode::start(variation, scenarios, stage, seed)?;
     controller.reset(seed);
     let mut throttles = [0.0; NOZZLE_COUNT];
     while episode.status() == EpisodeStatus::Running {
         if episode.world().is_control_step() {
-            let ctx = ControlCtx {
-                input: InputFrame::default(),
-                state: episode.car_state(),
-            };
+            let ctx = ControlCtx::for_episode(&mut episode, InputFrame::default());
             throttles = controller.act(&ctx);
         }
         episode.step(throttles);

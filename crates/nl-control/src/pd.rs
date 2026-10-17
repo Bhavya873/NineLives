@@ -4,6 +4,9 @@
 
 use nl_sim::car_state::{CarModel, CarState, WRENCH_SIZE, Wrench};
 use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT};
+use nl_sim::modes::ModeParams;
+use nl_sim::vehicle_config::VehicleConfig;
+use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
 use crate::allocation::Allocator;
 use crate::config::{ControllersConfig, PdConfig};
@@ -34,6 +37,17 @@ impl Pd {
             allocator: Allocator::new(&model.nozzle_wrenches, &config.allocation),
             throttles: [0.0; NOZZLE_COUNT],
         }
+    }
+
+    /// A PD controller for the car `vehicle` describes, in `mode` (reads its mass,
+    /// inertia and nozzle pushes from a throwaway world).
+    pub fn for_vehicle(
+        vehicle: &VehicleConfig,
+        mode: ModeParams,
+        config: &ControllersConfig,
+    ) -> Pd {
+        let world = World::new_on_flat_ground(vehicle, mode, DEFAULT_GROUND_FRICTION, 0);
+        Pd::new(&world.car_model(), config)
     }
 
     /// The force and torque PD wants now, in the body frame:
