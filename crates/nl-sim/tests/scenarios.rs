@@ -1,5 +1,5 @@
 //! Scenario tests (SPEC §9.6): starts repeat for the same seed, stay inside their
-//! ranges, and the config refuses a backwards range.
+//! ranges, and the config refuses a backwards range or a negative maximum.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
@@ -73,6 +73,18 @@ fn a_backwards_range_is_refused_with_its_field_name() {
     let error = ScenariosConfig::from_toml_str(&broken).unwrap_err();
 
     assert!(error.to_string().contains("stage_a.height_m"), "{error}");
+}
+
+#[test]
+fn a_negative_maximum_is_refused_with_its_field_name() {
+    let broken = DEFAULT_SCENARIOS_TOML.replace("max_spin_rad_s = 6.0", "max_spin_rad_s = -1.0");
+
+    let error = ScenariosConfig::from_toml_str(&broken).unwrap_err();
+
+    assert!(
+        error.to_string().contains("stage_a.max_spin_rad_s"),
+        "{error}"
+    );
 }
 
 #[test]

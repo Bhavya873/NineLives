@@ -13,6 +13,9 @@ use crate::chaos::random_direction;
 use crate::checkpoint::Checkpoint;
 use crate::world::{PlaceCarError, Pose, World};
 
+/// The ChaCha8 stream scenario draws use (Chaos uses the default stream 0).
+const SCENARIO_RNG_STREAM: u64 = 1;
+
 /// The repo's `configs/scenarios.toml`, built in so tests and the eval runner share it.
 pub const DEFAULT_SCENARIOS_TOML: &str = include_str!("../../../configs/scenarios.toml");
 
@@ -50,11 +53,15 @@ pub struct EpisodeConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DropConfig {
+    /// Height of the centre of mass above the ground, in m.
     pub height_m: [f32; 2],
+    /// Largest tilt from upright, about a random axis, in degrees.
     pub max_tilt_deg: f32,
+    /// Largest spin size, about another random axis, in rad/s.
     pub max_spin_rad_s: f32,
+    /// Horizontal speed, in a random direction, in m/s.
     pub horizontal_speed_m_s: [f32; 2],
-    /// Positive is up.
+    /// Vertical speed in m/s; positive is up.
     pub vertical_speed_m_s: [f32; 2],
 }
 
@@ -62,9 +69,13 @@ pub struct DropConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TipOverConfig {
+    /// Roll onto either side, in degrees.
     pub roll_deg: [f32; 2],
+    /// Largest extra pitch and yaw, each way, in degrees.
     pub max_pitch_yaw_deg: f32,
+    /// Height of the centre of mass above the ground, in m.
     pub height_m: f32,
+    /// Largest horizontal sliding speed, in m/s.
     pub max_speed_m_s: f32,
 }
 
@@ -72,8 +83,11 @@ pub struct TipOverConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScenariosConfig {
+    /// The `[episode]` section.
     pub episode: EpisodeConfig,
+    /// The `[stage_a]` section.
     pub stage_a: DropConfig,
+    /// The `[stage_b]` section.
     pub stage_b: TipOverConfig,
 }
 
@@ -88,23 +102,36 @@ pub enum ScenariosConfigError {
         field: &'static str,
         range: [f32; 2],
     },
+
+    #[error("scenarios.toml: `{field}` must be a finite number, zero or more, but it is {value}")]
+    Negative { field: &'static str, value: f32 },
+
+    #[error("scenarios.toml: `episode.time_limit_s` must be above zero, but it is {0}")]
+    NoTimeLimit(f32),
 }
 
 impl ScenariosConfig {
     /// Parses and checks the text of a scenarios.toml.
     pub fn from_toml_str(text: &str) -> Result<ScenariosConfig, ScenariosConfigError> {
         let config: ScenariosConfig = toml::from_str(text)?;
+        config.check_ranges()?;
+        config.check_numbers()?;
+        Ok(config)
+    }
+
+    /// Every [low, high] pair must be finite and in order.
+    fn check_ranges(&self) -> Result<(), ScenariosConfigError> {
         let ranges = [
-            ("stage_a.height_m", config.stage_a.height_m),
+            ("stage_a.height_m", self.stage_a.height_m),
             (
                 "stage_a.horizontal_speed_m_s",
-                config.stage_a.horizontal_speed_m_s,
+                self.stage_a.horizontal_speed_m_s,
             ),
             (
                 "stage_a.vertical_speed_m_s",
-                config.stage_a.vertical_speed_m_s,
+                self.stage_a.vertical_speed_m_s,
             ),
-            ("stage_b.roll_deg", config.stage_b.roll_deg),
+            ("stage_b.roll_deg", self.stage_b.roll_deg),
         ];
         for (field, range) in ranges {
             let [low, high] = range;
@@ -112,7 +139,30 @@ impl ScenariosConfig {
                 return Err(ScenariosConfigError::BadRange { field, range });
             }
         }
-        Ok(config)
+        Ok(())
+    }
+
+    /// Single numbers: none may be negative (a negative maximum would make an empty
+    /// draw range), and the time limit must be above zero.
+    fn check_numbers(&self) -> Result<(), ScenariosConfigError> {
+        let numbers = [
+            ("episode.success_hold_s", self.episode.success_hold_s),
+            ("stage_a.max_tilt_deg", self.stage_a.max_tilt_deg),
+            ("stage_a.max_spin_rad_s", self.stage_a.max_spin_rad_s),
+            ("stage_b.max_pitch_yaw_deg", self.stage_b.max_pitch_yaw_deg),
+            ("stage_b.height_m", self.stage_b.height_m),
+            ("stage_b.max_speed_m_s", self.stage_b.max_speed_m_s),
+        ];
+        for (field, value) in numbers {
+            if !value.is_finite() || value < 0.0 {
+                return Err(ScenariosConfigError::Negative { field, value });
+            }
+        }
+        let limit_s = self.episode.time_limit_s;
+        if !limit_s.is_finite() || limit_s <= 0.0 {
+            return Err(ScenariosConfigError::NoTimeLimit(limit_s));
+        }
+        Ok(())
     }
 }
 
@@ -124,6 +174,9 @@ pub fn start_episode(
     seed: u64,
 ) -> Result<(), PlaceCarError> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    // The world seeds Chaos from the same seed; a stream of its own keeps the start's
+    // draws from repeating Chaos's knocks.
+    rng.set_stream(SCENARIO_RNG_STREAM);
     let start = match stage {
         Stage::A => sample_drop(&config.stage_a, &mut rng),
         Stage::B => sample_tip_over(&config.stage_b, &mut rng),
@@ -188,6 +241,7 @@ fn draw(rng: &mut ChaCha8Rng, range: [f32; 2]) -> f32 {
     rng.random_range(low..=high)
 }
 
+/// A start with this pose and these velocities.
 fn checkpoint(position: Vector, rotation: Rotation, velocity: Vector, spin: Vector) -> Checkpoint {
     Checkpoint {
         pose: Pose::new(position, rotation),

@@ -5,8 +5,10 @@
 #![allow(clippy::unwrap_used)]
 
 use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
-use nl_control::eval::{EpisodeResult, run_episode, summarise};
+use nl_control::eval::{run_episode, summarise};
 use nl_control::{Controller, Off, Pd};
+use nl_sim::episode::EpisodeResult;
+use nl_sim::events::CrashCause;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
@@ -86,8 +88,7 @@ fn the_summary_counts_rates_and_air_per_save() {
         seed: 0,
         success,
         saves,
-        crashes: u32::from(!success),
-        crash_cause: None,
+        crash_cause: (!success).then_some(CrashCause::HardImpact),
         air_used_kg,
         peak_tilt_deg: 0.0,
         touchdown_spin_rad_s: Some(1.0),
@@ -98,7 +99,15 @@ fn the_summary_counts_rates_and_air_per_save() {
     let summary = summarise(&[episode(true, 1, 30.0), episode(false, 0, 10.0)]);
 
     assert_eq!(summary.success_rate, 0.5);
+    assert_eq!(summary.save_rate, 0.5);
     assert_eq!(summary.crash_rate, 0.5);
     assert_eq!(summary.air_per_save_kg, Some(40.0));
     assert_eq!(summary.touchdown_fall_median_m_s, Some(2.0));
+}
+
+#[test]
+fn crash_causes_are_written_in_snake_case() {
+    let json = serde_json::to_string(&CrashCause::HardImpact).unwrap();
+
+    assert_eq!(json, "\"hard_impact\"");
 }

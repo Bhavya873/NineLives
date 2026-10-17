@@ -337,7 +337,7 @@ Until `ObsSpec` exists (M5) `act` takes only `ctx`: the driver's `InputFrame` an
    - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if height < 3 m and downward speed > 4 m/s, command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. Otherwise `F_y = 0` (saves air).
    - **Allocation:** solve `min ‖W(B·u − w)‖² + λ‖u‖²` subject to `0 ≤ u ≤ 1`, with `w = [0, F_y, 0, τx, τy, τz]` and `B` the 6×10 matrix scaled by max force. Use projected gradient descent (30 iterations, step `1/L`) or a small active-set NNLS. Torque weights are higher than force weights.
    - **On the ground and inverted:** use roll torque only, to flip back.
-   - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m` and not upright; when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
+   - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m`, not upright and nearly still, and there the roll torque is multiplied by `ground_roll_gain` (tipping the car over its side edge needs far more torque than turning it in the air); when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
 4. **Ai:** loads `models/policy.json`, normalizes the observation, runs the MLP forward pass, and maps the action from [−1, 1] to [0, 1]. The policy is deterministic (mean action).
 
 The PD controller is required before RL. It proves the problem is controllable and is the baseline the AI must be compared against.
@@ -473,9 +473,10 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 
 ## 10. Evaluation
 
+- The Rust runner (M4, no Python): `cargo run --release -p nl-control --example eval -- --controller {off,pd} --stage {A,B} --mode {realistic,arcade} --episodes 1000 --seed 0`. Both runners step `nl_sim::episode::Episode`, so success, crash and time limit mean the same thing.
 - `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`.
 - A fixed seed list makes runs reproducible. Domain randomization is off by default in eval (`--dr` turns it on).
-- **Outputs:** `results/<date>_<controller>_<stage>_<mode>.json` and `.csv`, with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down).
+- **Outputs:** `results/eval_<controller>_<stage>_<mode>.json` (no date: a rerun overwrites the file and git shows the change; the M5 Python eval adds a `.csv`), with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down).
 - **Metrics:** save rate, crash rate, air used per save (kg), touchdown spin and vertical speed (median and p95), and Gauntlet completion rate with the driver bot.
 - **Charts** (`python -m ninelives.charts`, SVG into `results/`): save rate by stage for Off/PD/AI; air per save, PD vs AI; touchdown spin distributions; the training curve.
 

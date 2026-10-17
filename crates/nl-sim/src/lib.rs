@@ -10,6 +10,7 @@ pub mod chaos;
 pub mod checkpoint;
 pub mod contacts;
 pub mod conventions;
+pub mod episode;
 pub mod events;
 pub mod golden_trace;
 pub mod hop_boost;

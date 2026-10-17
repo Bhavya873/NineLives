@@ -72,6 +72,16 @@ impl ModesConfig {
         config.arcade.check("arcade")?;
         Ok(config)
     }
+
+    /// The mode called `name` ("realistic" or "arcade"), as the UI and the eval runner
+    /// spell it; None for any other name.
+    pub fn by_name(&self, name: &str) -> Option<ModeParams> {
+        match name {
+            "realistic" => Some(self.realistic),
+            "arcade" => Some(self.arcade),
+            _ => None,
+        }
+    }
 }
 
 impl ModeParams {
