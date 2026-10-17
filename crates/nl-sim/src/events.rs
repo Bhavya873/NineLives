@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::car_state::Touchdown;
 use crate::conventions::WHEEL_COUNT;
 use crate::vehicle_config::EventConfig;
 
@@ -40,6 +41,10 @@ pub enum SimEvent {
         air_used_kg: f32,
         /// The largest tilt during the upset.
         peak_tilt_rad: f32,
+        /// How the car was moving just before the touchdown that led to the save: the
+        /// first wheel touchdown after no wheel touched, or, if the wheels never left the
+        /// ground, the moment all four were down again (SPEC §9.4 save quality).
+        landing: Touchdown,
     },
     /// The car crashed. In the game it explodes and respawns; in training the episode ends.
     Crash { cause: CrashCause },
@@ -56,6 +61,9 @@ pub struct EventInputs {
     pub tilt_rad: f32,
     /// Size of the angular velocity.
     pub spin_rad_s: f32,
+    /// The motion from just before this step: spin size and fall speed (positive
+    /// downward). A touchdown is judged on these, since the step itself stops the car.
+    pub motion_before_step: Touchdown,
     /// All the air used so far.
     pub air_used_kg: f32,
     /// Height of the centre of mass.
@@ -74,6 +82,8 @@ struct Upset {
     peak_tilt_rad: f32,
     /// How long the save conditions have held so far.
     save_held_s: f32,
+    /// The touchdown the save will be judged on, once there is one.
+    landing: Option<Touchdown>,
 }
 
 /// Remembers what is needed between steps to apply the SPEC §7.9 rules.
@@ -84,6 +94,8 @@ pub struct EventTracker {
     upset: Option<Upset>,
     stuck_s: f32,
     crashed: bool,
+    /// Wheels down on the step before, to spot a touchdown.
+    previous_wheels_down: usize,
 }
 
 impl EventTracker {
@@ -117,6 +129,7 @@ impl EventTracker {
         }
         self.update_airborne(inputs, dt_s, events);
         self.update_upset_and_save(inputs, config, dt_s, events);
+        self.previous_wheels_down = inputs.wheels_down;
     }
 
     /// The first crash rule that applies this step, if any (SPEC §7.9).
@@ -183,8 +196,10 @@ impl EventTracker {
                 air_used_at_start_kg: inputs.air_used_kg,
                 peak_tilt_rad: inputs.tilt_rad,
                 save_held_s: 0.0,
+                landing: None,
             });
         }
+        let touched_down = self.previous_wheels_down == 0 && inputs.wheels_down > 0;
         let Some(upset) = self.upset.as_mut() else {
             return;
         };
@@ -194,6 +209,10 @@ impl EventTracker {
         let back_on_wheels = inputs.wheels_down == WHEEL_COUNT
             && inputs.tilt_rad < config.save_tilt_deg.to_radians()
             && inputs.spin_rad_s < config.save_max_spin_rad_s;
+        let all_wheels_back = inputs.wheels_down == WHEEL_COUNT;
+        if upset.landing.is_none() && (touched_down || all_wheels_back) {
+            upset.landing = Some(inputs.motion_before_step);
+        }
         upset.save_held_s = if back_on_wheels {
             upset.save_held_s + dt_s
         } else {
@@ -204,6 +223,7 @@ impl EventTracker {
                 duration_s: upset.elapsed_s,
                 air_used_kg: inputs.air_used_kg - upset.air_used_at_start_kg,
                 peak_tilt_rad: upset.peak_tilt_rad,
+                landing: upset.landing.unwrap_or(inputs.motion_before_step),
             });
             self.upset = None;
         }
@@ -228,6 +248,10 @@ mod tests {
             wheels_down: 4,
             tilt_rad: 0.0,
             spin_rad_s: 0.0,
+            motion_before_step: Touchdown {
+                spin_rad_s: 0.0,
+                fall_m_s: 0.0,
+            },
             air_used_kg: 0.0,
             height_m: 0.6,
             impact_speed_m_s: 0.0,
@@ -242,6 +266,43 @@ mod tests {
             tracker.update(&inputs, &config(), DT_S, &mut events);
         }
         events
+    }
+
+    /// The motion just before a step: `spin_rad_s` and `fall_m_s`.
+    fn moving(spin_rad_s: f32, fall_m_s: f32) -> Touchdown {
+        Touchdown {
+            spin_rad_s,
+            fall_m_s,
+        }
+    }
+
+    #[test]
+    fn a_save_is_judged_on_the_first_touchdown_not_a_gentle_bounce_after_it() {
+        let mut tracker = EventTracker::default();
+        let in_the_air = EventInputs {
+            wheels_down: 0,
+            ..upright_on_wheels()
+        };
+        let hard_touch = EventInputs {
+            wheels_down: 2,
+            motion_before_step: moving(4.0, 6.0),
+            ..upright_on_wheels()
+        };
+        let gentle_touch = EventInputs {
+            motion_before_step: moving(0.2, 0.5),
+            ..upright_on_wheels()
+        };
+
+        let mut events = feed(&mut tracker, in_the_air, 0.5);
+        events.extend(feed(&mut tracker, hard_touch, DT_S));
+        events.extend(feed(&mut tracker, in_the_air, 0.2));
+        events.extend(feed(&mut tracker, gentle_touch, 1.0));
+
+        let landing = events.iter().find_map(|event| match event {
+            SimEvent::Save { landing, .. } => Some(*landing),
+            _ => None,
+        });
+        assert_eq!(landing, Some(moving(4.0, 6.0)));
     }
 
     #[test]

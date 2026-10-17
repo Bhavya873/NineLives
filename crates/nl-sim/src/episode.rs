@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 
-use crate::car_state::CarState;
+use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
 use crate::events::{CrashCause, SimEvent};
 use crate::input::InputFrame;
@@ -60,10 +60,12 @@ struct Tally {
     crash_cause: Option<CrashCause>,
     air_used_in_saves_kg: f32,
     peak_tilt_rad: f32,
-    /// Spin and fall speed just before the first touch.
-    touchdown: Option<(f32, f32)>,
+    /// The motion just before the first touch.
+    touchdown: Option<Touchdown>,
     /// When the current unbroken run of all four wheels down began.
     wheels_down_since_s: Option<f32>,
+    /// The landing of the latest save (what the reward's save quality judges).
+    last_save_landing: Option<Touchdown>,
 }
 
 /// A running episode: the world plus the numbers gathered so far.
@@ -75,6 +77,8 @@ pub struct Episode {
     steps: u64,
     /// The car on the latest step, so the next step knows what it was just before.
     state: CarState,
+    /// Anything (wheels, body or roof) touched the ground on the latest step.
+    touching: bool,
     tally: Tally,
 }
 
@@ -92,6 +96,7 @@ impl Episode {
         let rules = scenarios.episode;
         Ok(Episode {
             state: world.car_state(),
+            touching: false,
             world,
             rules,
             seed,
@@ -109,6 +114,23 @@ impl Episode {
     /// The car on the latest step: what a controller sees.
     pub fn car_state(&self) -> CarState {
         self.state
+    }
+
+    /// Save events so far.
+    pub fn saves(&self) -> u32 {
+        self.tally.saves
+    }
+
+    /// How the car was moving just before the touchdown that led to the latest save;
+    /// None before the first save.
+    pub fn last_save_landing(&self) -> Option<Touchdown> {
+        self.tally.last_save_landing
+    }
+
+    /// True if anything (a wheel, the body or the roof) touched the ground on the
+    /// latest step; false while the car flies.
+    pub fn anything_touching(&self) -> bool {
+        self.touching
     }
 
     /// One physics step with the controller's latest throttles (0..1, nozzle order).
@@ -155,8 +177,8 @@ impl Episode {
             air_used_kg: self.world.air_used_kg(),
             air_used_in_saves_kg: self.tally.air_used_in_saves_kg,
             peak_tilt_deg: self.tally.peak_tilt_rad.to_degrees(),
-            touchdown_spin_rad_s: self.tally.touchdown.map(|(spin, _)| spin),
-            touchdown_fall_m_s: self.tally.touchdown.map(|(_, fall)| fall),
+            touchdown_spin_rad_s: self.tally.touchdown.map(|touchdown| touchdown.spin_rad_s),
+            touchdown_fall_m_s: self.tally.touchdown.map(|touchdown| touchdown.fall_m_s),
             duration_s: self.world.time_s() as f32,
         }
     }
@@ -164,11 +186,9 @@ impl Episode {
     /// The first time anything touches the ground, keeps the spin and fall speed from
     /// `before` this step (after it, the ground has already stopped the car).
     fn track_touchdown(&mut self, before: &CarState) {
-        let touching = self.state.wheels_down() > 0 || self.world.chassis_touching();
-        if touching && self.tally.touchdown.is_none() {
-            let [x, y, z] = before.angular_velocity_body_rad_s;
-            let spin_rad_s = (x * x + y * y + z * z).sqrt();
-            self.tally.touchdown = Some((spin_rad_s, before.falling_speed_m_s()));
+        self.touching = self.state.wheels_down() > 0 || self.world.chassis_touching();
+        if self.touching && self.tally.touchdown.is_none() {
+            self.tally.touchdown = Some(Touchdown::of(before));
         }
     }
 
@@ -184,9 +204,14 @@ impl Episode {
     /// Adds one event to the tally.
     fn record(&mut self, event: SimEvent) {
         match event {
-            SimEvent::Save { air_used_kg, .. } => {
+            SimEvent::Save {
+                air_used_kg,
+                landing,
+                ..
+            } => {
                 self.tally.saves += 1;
                 self.tally.air_used_in_saves_kg += air_used_kg;
+                self.tally.last_save_landing = Some(landing);
             }
             SimEvent::Crash { cause } => self.tally.crash_cause = Some(cause),
             _ => {}

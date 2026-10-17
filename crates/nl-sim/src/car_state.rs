@@ -64,11 +64,36 @@ impl CarState {
         -self.gravity_dir_body[1]
     }
 
+    /// Size of the angular velocity, in rad/s.
+    pub fn spin_rad_s(&self) -> f32 {
+        let [x, y, z] = self.angular_velocity_body_rad_s;
+        (x * x + y * y + z * z).sqrt()
+    }
+
     /// How fast the car falls (positive downward), in m/s.
     pub fn falling_speed_m_s(&self) -> f32 {
         let [gx, gy, gz] = self.gravity_dir_body;
         let [vx, vy, vz] = self.linear_velocity_body_m_s;
         gx * vx + gy * vy + gz * vz
+    }
+}
+
+/// How the car was moving just before it touched down.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Touchdown {
+    /// Spin size, in rad/s.
+    pub spin_rad_s: f32,
+    /// Fall speed (positive downward), in m/s.
+    pub fall_m_s: f32,
+}
+
+impl Touchdown {
+    /// The motion of `state` (the car on the step before it touched).
+    pub fn of(state: &CarState) -> Touchdown {
+        Touchdown {
+            spin_rad_s: state.spin_rad_s(),
+            fall_m_s: state.falling_speed_m_s(),
+        }
     }
 }
 

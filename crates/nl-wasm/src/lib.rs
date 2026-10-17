@@ -443,6 +443,7 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
             duration_s,
             air_used_kg,
             peak_tilt_rad,
+            ..
         } => [
             kind_code(EventKind::Save),
             duration_s,
