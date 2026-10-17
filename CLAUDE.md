@@ -20,7 +20,7 @@ A browser driving game where an AI fires a car's 10 cold-gas thrusters automatic
 5. **Sign tests first.** When adding or changing a force, torque or frame transform, write the unit test that pins its sign before the code.
 6. **Configs, not constants.** Tunable numbers go in `configs/*.toml` (vehicle, modes, reward, scenarios). Code holds no magic numbers that the spec marks *(start)*.
 7. **No branding.** Never use Tesla or SpaceX names, logos or car shapes in code, assets or UI. Use "inspired by" wording in docs only.
-8. **Never commit** training checkpoints (`runs/`), large binaries or secrets to `main` or a feature branch. `models/policy.json` and `results/*.json|csv|svg` are committed. The only exception: small (< 5 MB) latest/best checkpoints go to orphan `ckpt/<run-id>` branches that never merge (ADR-003).
+8. **Never commit** training checkpoints (`runs/`), large binaries or secrets to `main` or a feature branch. `models/policy.json` and `results/*.json|csv|svg` are committed. Training runs locally, so checkpoints stay in `runs/` on the training machine (ADR-003); the only committed checkpoints are the ≤ 8 viewer exports under `web/public/checkpoints/` (SPEC §9.12).
 
 ## Layout
 - `crates/nl-sim` holds the world, vehicle, thrusters, tank, modes, courses, events, obs, reward, scenarios and driver bot.

@@ -13,7 +13,7 @@ This plan turns the spec into an ordered build. It doesn't restate the spec. Sec
 | **What ships** | A static browser game (Rust → wasm + three.js) where a learned policy fires 10 cold-gas thrusters so the car lands on its wheels. A hard or upside-down landing makes the car explode and respawn. It also ships a reproducible Off / PD / AI evaluation with charts and a written-up reward-hacking experiment (the hover hack). |
 | **Core rule** | All physics lives in one Rust crate (`nl-sim`). Python training and the browser call into it, and a golden trace checks determinism on native and wasm. |
 | **Build order** | M0 → M8 in order (§13), with full spec scope and no external deadline. M9 is optional. |
-| **Training** | PPO on CPU (no GPU needed), run as resumable 1-hour chunks in this cloud environment, with your machine as a fallback (§5). |
+| **Training** | PPO on CPU (no GPU needed), run locally on the owner's machine (8-core Apple M1 Pro) as resumable chunks; checkpoints stay in `runs/` (§5). |
 | **Biggest risks** | PPO not converging on the later stages, CPU training time, and native-vs-wasm determinism. |
 
 ---
@@ -88,23 +88,25 @@ The milestone contents follow SPEC §13. Tests per milestone follow SPEC §12, p
 | Item | Estimate | How we check it |
 |---|---|---|
 | Sim cost | ~50–100 µs per env per control step (2 physics steps + raycasts) | measured in M2 (wasm) and M5 (native) |
-| End-to-end throughput on this 4-core box | **3k–10k env-steps/s** (rollout + PPO update) | first lines of the first M5 run |
+| End-to-end throughput on the 8-core training machine | **5k–20k env-steps/s** (rollout + PPO update) | first lines of the first M5 run |
 | Stage A to ≥ 95% (Arcade) | ~10–30 M steps → **0.5–3 h** | curriculum log |
 | Full curriculum A→E | ~100–200 M steps → **5–20 h** | curriculum log |
 | Hover-hack experiment (2 runs, Arcade, Stage A only) | ~10 M steps each → **1–2 h total** | |
 
 If the measured throughput comes in below 3k steps/s, I'll profile `BatchedSim` first (the usual culprits are Python↔Rust copies, raycasts and collider count) before changing anything else.
 
-### 5.3 Where it runs: resumable chunks
-This cloud environment is a good place to train **if** training survives the container being reclaimed. Background commands are capped at about 2 hours, and the container disappears when idle. So training is built to stop and resume at any time:
+### 5.3 Where it runs: locally, in resumable chunks
+*(Changed 2026-10-17, at the start of M5: training moved from the cloud container to the owner's machine. See DECISIONS and ADR-003.)*
+
+Training runs on the owner's machine (8-core Apple M1 Pro, 16 GB). Checkpoints stay on that disk in `runs/<run-id>/`, which is gitignored, so no checkpoint is ever committed to any branch. A laptop still sleeps, restarts and gets closed, so training can still stop and resume at any time:
 
 1. **`python -m ninelives.train --config … --run-id … --resume`** continues from the last checkpoint. That checkpoint includes the PPO model, the `VecNormalize` statistics, the curriculum state (stage, level, success windows) and the RNG seeds.
-2. **Chunks:** each training command runs for at most **60 minutes** (`--max-minutes 60`), writes a checkpoint, and exits cleanly. I run chunks in the background, check the logs between them, and start the next one.
-3. **Saving checkpoints outside the container:** the checkpoint files are small. A 128×128 policy plus the normalization stats is well under 1 MB. After each chunk I push the **latest and best** checkpoints to a separate orphan branch, `ckpt/<run-id>`. That branch never merges into `main`, so `main` stays clean and the CLAUDE.md rule "never commit `runs/`" still holds for `main`. A new container restores from that branch and resumes. *(This is a small exception to the rule, and it gets a DECISIONS entry.)*
+2. **Chunks:** `--max-minutes N` makes a command write a checkpoint and exit cleanly after N minutes; a checkpoint is also written every 1M steps (SPEC §9.10). I run chunks in the background, check the logs between them, and start the next one.
+3. **Checkpoints stay in `runs/`:** the latest and the best (by eval success) are kept in `runs/<run-id>/`. Losing that folder costs the run, not the project: the committed `models/policy.json`, the viewer checkpoints and `docs/EXPERIMENTS.md` hold everything the repo needs.
 4. **Every chunk is logged** in `docs/EXPERIMENTS.md`: date, config, seed, steps so far, wall time, success per stage and notes. That follows CLAUDE.md.
 5. **After each stage unlocks:** export `models/policy.json`, run the fixed-seed eval, watch a replay for odd behaviour, and commit the policy and results on the feature branch for your PR review.
 
-**Fallback: your machine.** The same commands work locally (`docs/TRAINING.md` will list them step by step for macOS, Linux and Windows). A machine with 8+ cores trains about 2× faster than this one. You'd push the `ckpt/<run-id>` branch, or send me the final checkpoint folder, and I'll take over export and eval.
+`docs/TRAINING.md` lists the commands step by step, so the owner can also start or resume a run without me.
 
 ### 5.4 Keeping training honest
 - **Reward hacking:** for every run, I watch a replay in the browser (M6+) or a headless trajectory plot, not just the score. The hover hack (SPEC §9.11) is run on purpose in M8 to show what that failure looks like.
@@ -166,7 +168,7 @@ This goes into `CLAUDE.md` § Style. Readable beats clever, everywhere.
 
 ## 9. Owner answers (2026-10-17)
 
-1. **Branches:** yes. One `claude/<feature>` branch per PR, plus `ckpt/<run-id>` checkpoint branches.
-2. **Training location:** train here in resumable 1-hour chunks, with the owner's machine as the fallback.
+1. **Branches:** yes. One `claude/<feature>` branch per PR. *(The `ckpt/<run-id>` checkpoint branches were dropped on 2026-10-17; see answer 2.)*
+2. **Training location:** ~~train here in resumable 1-hour chunks, with the owner's machine as the fallback~~. Updated 2026-10-17 at the start of M5: train locally on the owner's machine; checkpoints stay in `runs/` (gitignored).
 3. **Review speed:** the owner reviews PRs within about a day.
 4. **Deploy:** the game is hosted on **Railway** as a static site. The repo goes public once there's a working deliverable.
