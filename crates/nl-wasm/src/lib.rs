@@ -8,6 +8,8 @@
 //! the Off, PD and Manual controllers. The policy and courses follow in M5–M7 (SPEC §11.1).
 
 use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off};
+use std::sync::Arc;
+
 use nl_policy::Policy;
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
@@ -23,10 +25,11 @@ use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
 use wasm_bindgen::prelude::*;
 
+mod crowd;
 mod eval;
 
 /// Number of floats in one pose: position x, y, z then quaternion x, y, z, w.
-const FLOATS_PER_POSE: usize = 7;
+pub(crate) const FLOATS_PER_POSE: usize = 7;
 
 /// Number of floats per nozzle in `Game::nozzle_layout`: position x, y, z, then the
 /// exhaust direction x, y, z.
@@ -223,7 +226,7 @@ impl Game {
     /// trained on another observation layout (its schema hash differs, SPEC §9.12). A
     /// running AI switches to the new policy straight away.
     pub fn load_policy(&mut self, json: &str) -> Result<(), JsError> {
-        self.choices.policy = Some(Policy::from_json(json)?);
+        self.choices.policy = Some(Arc::new(Policy::from_json(json)?));
         if matches!(self.controller, ControllerKind::Ai(_)) {
             self.use_controller(ControllerKind::from_name("ai", &self.choices)?);
         }
@@ -545,7 +548,7 @@ fn flatten_nozzle_layout(config: &VehicleConfig) -> Vec<f32> {
 }
 
 /// Writes poses one after another as [x, y, z, qx, qy, qz, qw, x, y, z, ...].
-fn flatten_poses(poses: &[Pose]) -> Vec<f32> {
+pub(crate) fn flatten_poses(poses: &[Pose]) -> Vec<f32> {
     let mut values = Vec::with_capacity(poses.len() * FLOATS_PER_POSE);
     for pose in poses {
         values.extend_from_slice(&pose.position_m);

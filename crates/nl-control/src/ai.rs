@@ -1,6 +1,9 @@
 //! The AI controller (SPEC §8): the trained policy (`nl_policy::Policy`) run on the
 //! observation, its actions mapped to throttles the same way training maps them
-//! (`(a + 1) / 2`, SPEC §9.3). It keeps no state between control steps.
+//! (`(a + 1) / 2`, SPEC §9.3). It keeps no state between control steps, and it shares its
+//! policy (`Arc`), so many cars or eval threads can fly one loaded network.
+
+use std::sync::Arc;
 
 use nl_policy::Policy;
 use nl_sim::conventions::NOZZLE_COUNT;
@@ -11,12 +14,12 @@ use crate::{ControlCtx, Controller};
 /// Fires the nozzles the way the trained policy says (deterministic, mean action).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ai {
-    policy: Policy,
+    policy: Arc<Policy>,
 }
 
 impl Ai {
-    /// The controller for a loaded policy.
-    pub fn new(policy: Policy) -> Ai {
+    /// The controller for a loaded policy (shared, not copied).
+    pub fn new(policy: Arc<Policy>) -> Ai {
         Ai { policy }
     }
 }

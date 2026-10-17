@@ -119,21 +119,47 @@ def export_viewer_checkpoints(run_dir: Path, shipped: Path) -> list[Path]:
     earlier = [folder for folder in folders if int(folder.name) < shipped_steps]
     earlier.sort(key=lambda folder: int(folder.name))
     numbered = [*evenly_spaced(earlier, VIEWER_MAX_CHECKPOINTS - 1), shipped]
+    policies = []
+    for folder in numbered:
+        model, normalizer = load_model_and_normalizer(folder)
+        policy = export_policy(model, normalizer, run_dir.name, VIEWER_SIGNIFICANT_DIGITS)
+        policies.append(json.dumps(policy, separators=(",", ":")))
+    # Check the size before touching any file, so a failed export changes nothing.
+    total_bytes = sum(len(text.encode()) for text in policies)
+    if total_bytes > VIEWER_MAX_BYTES:
+        raise ValueError(
+            f"viewer checkpoints would be {total_bytes} bytes, over {VIEWER_MAX_BYTES}"
+        )
     out_dir = VIEWER_DIR / run_dir.name
     out_dir.mkdir(parents=True, exist_ok=True)
     for old_file in out_dir.glob("*.json"):
         old_file.unlink()  # a re-export may write fewer files than the last one
     written = []
-    for number, folder in enumerate(numbered, start=1):
-        model, normalizer = load_model_and_normalizer(folder)
-        policy = export_policy(model, normalizer, run_dir.name, VIEWER_SIGNIFICANT_DIGITS)
+    for number, text in enumerate(policies, start=1):
         path = out_dir / f"{number}.json"
-        path.write_text(json.dumps(policy, separators=(",", ":")))
+        path.write_text(text)
         written.append(path)
-    total_bytes = sum(path.stat().st_size for path in written)
-    if total_bytes > VIEWER_MAX_BYTES:
-        raise ValueError(f"viewer checkpoints are {total_bytes} bytes, over {VIEWER_MAX_BYTES}")
+    write_viewer_index(out_dir.parent)
     return written
+
+
+def write_viewer_index(viewer_dir: Path = VIEWER_DIR) -> Path:
+    """Writes `index.json` listing every exported run (sorted by run id, so the last one
+    is the newest when ids are numbered like stage-a-004) and its checkpoint files in
+    training order, with each one's step count, for the training viewer (SPEC §11.6)."""
+    runs = []
+    run_dirs = sorted(folder for folder in viewer_dir.iterdir() if folder.is_dir())
+    for run_dir in run_dirs:
+        numbered = [path for path in run_dir.glob("*.json") if path.stem.isdigit()]
+        files = sorted(numbered, key=lambda path: int(path.stem))
+        checkpoints = []
+        for path in files:
+            steps = json.loads(path.read_text())["trained"]["steps"]
+            checkpoints.append({"file": path.name, "steps": steps})
+        runs.append({"run_id": run_dir.name, "checkpoints": checkpoints})
+    index = viewer_dir / "index.json"
+    index.write_text(json.dumps({"runs": runs}, indent=2) + "\n")
+    return index
 
 
 def main(argv: list[str] | None = None) -> None:

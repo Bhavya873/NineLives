@@ -139,3 +139,6 @@ def test_viewer_checkpoints_end_on_the_shipped_policy(tmp_path, monkeypatch):
 
     steps = [json.loads(path.read_text())["trained"]["steps"] for path in written]
     assert steps == [100, 200]
+    index = json.loads((tmp_path / "viewer" / "index.json").read_text())
+    assert index["runs"][0]["run_id"] == "run"
+    assert [entry["steps"] for entry in index["runs"][0]["checkpoints"]] == [100, 200]

@@ -2,6 +2,8 @@
 //! wasm `set_controller` and both eval runners go through this one list, so the names
 //! and the cycle order live in one place.
 
+use std::sync::Arc;
+
 use nl_policy::{Policy, PolicyError};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::modes::ModeParams;
@@ -35,8 +37,9 @@ pub const CONTROLLER_NAMES: [&str; 4] = ["off", "pd", "ai", "manual"];
 pub struct ControllerChoices {
     /// PD built for the car (`Pd::for_vehicle`).
     pub pd: Pd,
-    /// The AI's policy; "ai" cannot be chosen without one.
-    pub policy: Option<Policy>,
+    /// The AI's policy, shared by every AI built from these choices; "ai" cannot be
+    /// chosen without one.
+    pub policy: Option<Arc<Policy>>,
 }
 
 impl ControllerChoices {
@@ -51,7 +54,7 @@ impl ControllerChoices {
     ) -> Result<ControllerChoices, BuildControllerError> {
         let controllers = ControllersConfig::from_toml_str(controllers_toml)?;
         let policy = match policy_json {
-            Some(text) => Some(Policy::from_json(text)?),
+            Some(text) => Some(Arc::new(Policy::from_json(text)?)),
             None => None,
         };
         Ok(ControllerChoices {
@@ -112,7 +115,7 @@ impl ControllerKind {
             "off" => Ok(ControllerKind::Off(Off)),
             "pd" => Ok(ControllerKind::Pd(Box::new(choices.pd.clone()))),
             "ai" => match &choices.policy {
-                Some(policy) => Ok(ControllerKind::Ai(Box::new(Ai::new(policy.clone())))),
+                Some(policy) => Ok(ControllerKind::Ai(Box::new(Ai::new(Arc::clone(policy))))),
                 None => Err(ControllerChoiceError::NoPolicy),
             },
             "manual" => Ok(ControllerKind::Manual(Manual)),

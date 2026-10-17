@@ -37,6 +37,13 @@ export function blendPose(
   out.rotation.slerpQuaternions(fromRotation, toRotation, blend);
 }
 
+/** Writes pose number `index` of a packed array into `out`, unblended. */
+export function readPose(poses: Float32Array, index: number, out: BlendedPose): void {
+  const start = index * FLOATS_PER_POSE;
+  out.position.set(poses[start] ?? 0, poses[start + 1] ?? 0, poses[start + 2] ?? 0);
+  readQuaternion(poses, start + 3, out.rotation);
+}
+
 /** Makes an empty pose to blend into. */
 export function newBlendedPose(): BlendedPose {
   return { position: new Vector3(), rotation: new Quaternion() };

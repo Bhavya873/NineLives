@@ -50,11 +50,17 @@ const glass = new MeshStandardMaterial({ color: 0x8fb0c8, flatShading: true, rou
 const tyre = new MeshStandardMaterial({ color: 0x1b1b1b, flatShading: true, roughness: 0.9 });
 const hub = new MeshStandardMaterial({ color: 0xc8c8c8, flatShading: true, metalness: 0.6 });
 
+// One geometry of each part, shared by every car built (the training viewer draws 64).
+const bodyGeometry = extrudeProfile(BODY_PROFILE_M, BODY_WIDTH_M);
+const cabinGeometry = extrudeProfile(CABIN_PROFILE_M, CABIN_WIDTH_M);
+const tyreGeometry = new CylinderGeometry(WHEEL_RADIUS_M, WHEEL_RADIUS_M, WHEEL_WIDTH_M, 14);
+const hubGeometry = new BoxGeometry(WHEEL_RADIUS_M * 1.4, 0.08, WHEEL_WIDTH_M + 0.02);
+
 /** The car body: a painted lower body with a dark glass cabin on top. */
 export function buildCarBody(): Group {
   const body = new Group();
-  body.add(new Mesh(extrudeProfile(BODY_PROFILE_M, BODY_WIDTH_M), paint));
-  body.add(new Mesh(extrudeProfile(CABIN_PROFILE_M, CABIN_WIDTH_M), glass));
+  body.add(new Mesh(bodyGeometry, paint));
+  body.add(new Mesh(cabinGeometry, glass));
   castShadows(body);
   return body;
 }
@@ -63,15 +69,12 @@ export function buildCarBody(): Group {
 export function buildWheel(): Group {
   const wheel = new Group();
 
-  const tyreMesh = new Mesh(
-    new CylinderGeometry(WHEEL_RADIUS_M, WHEEL_RADIUS_M, WHEEL_WIDTH_M, 14),
-    tyre,
-  );
+  const tyreMesh = new Mesh(tyreGeometry, tyre);
   // Cylinders stand along Y in three.js; lay this one along Z, the sim's axle axis.
   tyreMesh.rotation.x = Math.PI / 2;
   wheel.add(tyreMesh);
 
-  const hubBar = new Mesh(new BoxGeometry(WHEEL_RADIUS_M * 1.4, 0.08, WHEEL_WIDTH_M + 0.02), hub);
+  const hubBar = new Mesh(hubGeometry, hub);
   wheel.add(hubBar);
 
   castShadows(wheel);

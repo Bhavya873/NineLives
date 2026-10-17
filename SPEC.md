@@ -555,7 +555,7 @@ class Game {
 - **Results screen** at the finish: time, saves, crashes, air used, and the delta vs the ghost.
 - **Ghost:** record `InputFrame`s per tick plus seed, course, mode, controller, policy hash and `build_hash`. Replay in a second `Game` instance and render it translucent. Store the best run in `localStorage` (wrap every read and write in try/catch; discard on build-hash mismatch).
 - **Results tab:** shows the committed SVG charts from `results/`.
-- **Training viewer:** pick a run and watch a crowd of cars (about 64, each its own wasm `Game`, translucent) drive with checkpoint 1, 2, 3… of the policy, auto-advancing, with each checkpoint's saves, crashes and distance. Stage A drops in the flat arena first (M6), then the obstacle arena (M7).
+- **Training viewer** (`viewer.html`): watch a crowd of 64 translucent cars fly the same 64 Stage A drops (eval seeds 0–63) with checkpoint 1, 2, 3… of the newest exported run, auto-advancing (← / → to step), with each checkpoint's landed, crashed and still-flying counts. One wasm `Crowd` flies every car as a full `Episode` with one shared policy; `ninelives.export --viewer` writes the checkpoint files plus `checkpoints/index.json`. Stage A drops in the flat arena first (M6), then the obstacle arena (M7), where distance along the course joins the counts and a run picker can follow.
 
 ### 11.7 Performance and deploy
 - Target 60 fps on a mid-range laptop. Budget: sim tick ≤ 1.5 ms; render ≤ 8 ms. Measure and show an optional FPS / ms overlay (F3).
@@ -628,7 +628,7 @@ class Game {
 
 **M6 — AI in the browser**
 - [x] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.
-- [ ] The training viewer (§11.6) replays the exported checkpoints with a crowd of cars on Stage A drops.
+- [x] The training viewer (§11.6) replays the exported checkpoints with a crowd of cars on Stage A drops.
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [ ] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
