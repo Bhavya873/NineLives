@@ -5,9 +5,10 @@
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
-//! the Off and Manual controllers. PD, the policy and courses follow in M4–M7 (SPEC §11.1).
+//! the Off, PD and Manual controllers. The policy and courses follow in M5–M7 (SPEC §11.1).
 
-use nl_control::{ControlCtx, ControllerKind, Off};
+use nl_control::config::ControllersConfig;
+use nl_control::{ControlCtx, ControllerKind, Off, Pd};
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
@@ -79,6 +80,8 @@ pub enum ControllerCode {
     Off = 0,
     /// Debug: keys 1–0 fire nozzles 0–9.
     Manual = 1,
+    /// The PD baseline (SPEC §8).
+    Pd = 2,
 }
 
 /// The values `HudField.Mode` can take.
@@ -114,6 +117,8 @@ pub struct Game {
     nozzle_layout: Vec<f32>,
     /// What fires the thrusters, asked at 60 Hz in `tick`.
     controller: ControllerKind,
+    /// PD built for this car with `configs/controllers.toml`; choosing PD copies it.
+    pd: Pd,
     /// Buttons pressed on any tick since the last control step, so a quick tap of a
     /// nozzle key between two control steps still reaches the controller.
     buttons_since_control_step: u16,
@@ -159,22 +164,30 @@ pub enum CrashCode {
 
 #[wasm_bindgen]
 impl Game {
-    /// Builds a game on flat ground from the text of `configs/vehicle.toml` and
-    /// `configs/modes.toml`, starting in Realistic mode. `seed` drives the random
+    /// Builds a game on flat ground from the text of `configs/vehicle.toml`,
+    /// `configs/modes.toml` and `configs/controllers.toml`, starting in Realistic mode. `seed` drives the random
     /// Chaos knocks. A crash respawns by itself after `[events] respawn_delay_s`.
     /// Throws if a config is invalid; the message names the bad field.
     #[wasm_bindgen(constructor)]
-    pub fn new(vehicle_toml: &str, modes_toml: &str, seed: u64) -> Result<Game, JsError> {
+    pub fn new(
+        vehicle_toml: &str,
+        modes_toml: &str,
+        controllers_toml: &str,
+        seed: u64,
+    ) -> Result<Game, JsError> {
         let config = VehicleConfig::from_toml_str(vehicle_toml)?;
         let modes = ModesConfig::from_toml_str(modes_toml)?;
         let mut world =
             World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
         world.enable_auto_respawn(config.events.respawn_delay_s);
+        let controllers = ControllersConfig::from_toml_str(controllers_toml)?;
+        let pd = Pd::new(&world.car_model(), &controllers);
         Ok(Game {
             world,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
             controller: ControllerKind::Off(Off),
+            pd,
             buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
@@ -187,16 +200,16 @@ impl Game {
         Ok(())
     }
 
-    /// Chooses what fires the thrusters by name: "off" or "manual" ("pd" and "ai" arrive
-    /// in M4–M5). Throws on any other name. It takes over at the next control step.
+    /// Chooses what fires the thrusters by name: "off", "pd" or "manual" ("ai" arrives
+    /// in M5). Throws on any other name. It takes over at the next control step.
     pub fn set_controller(&mut self, kind: &str) -> Result<(), JsError> {
-        self.use_controller(ControllerKind::from_name(kind)?);
+        self.use_controller(ControllerKind::from_name(kind, &self.pd)?);
         Ok(())
     }
 
     /// Switches to the next controller in the T-key cycle (SPEC §11.3).
     pub fn cycle_controller(&mut self) {
-        let next = self.controller.next();
+        let next = self.controller.next(&self.pd);
         self.use_controller(next);
     }
 
@@ -212,7 +225,11 @@ impl Game {
         let input = InputFrame::from_bytes(bytes);
         // Controllers run at 60 Hz; the world holds their throttles in between (SPEC §7.1).
         self.buttons_since_control_step |= input.buttons;
-        if self.world.is_control_step() {
+        if self.world.is_crashed() {
+            // The wreck is frozen until it respawns: nothing to control, and the
+            // controller should start fresh on the respawned car.
+            self.controller.reset(0);
+        } else if self.world.is_control_step() {
             let controller_input = InputFrame {
                 buttons: self.buttons_since_control_step,
                 ..input
@@ -457,6 +474,7 @@ fn crash_code(cause: CrashCause) -> f32 {
 fn controller_code(controller: &ControllerKind) -> ControllerCode {
     match controller {
         ControllerKind::Off(_) => ControllerCode::Off,
+        ControllerKind::Pd(_) => ControllerCode::Pd,
         ControllerKind::Manual(_) => ControllerCode::Manual,
     }
 }

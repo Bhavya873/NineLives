@@ -1,6 +1,7 @@
 // Entry point for the web game. It wires the pieces together:
 // keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
 // Each piece lives in its own folder: input/, render/, hud/; the loop is in game-loop.ts.
+import controllersToml from '../../configs/controllers.toml?raw';
 import modesToml from '../../configs/modes.toml?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
 
@@ -75,7 +76,7 @@ async function start(): Promise<void> {
   checkWasmLayout();
   // A new random seed each visit; it only affects Chaos knocks.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
-  const game = new Game(vehicleToml, modesToml, seed);
+  const game = new Game(vehicleToml, modesToml, controllersToml, seed);
   onKeyPress('KeyM', () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');

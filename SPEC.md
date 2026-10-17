@@ -492,7 +492,7 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 ### 11.1 Wasm API (`nl-wasm`)
 ```ts
 class Game {
-  constructor(vehicleToml: string, modesToml: string, seed: bigint);  // courseJson joins in M6
+  constructor(vehicleToml: string, modesToml: string, controllersToml: string, seed: bigint);  // courseJson joins in M6
   set_mode(mode: "realistic" | "arcade"): void;
   set_controller(kind: "off" | "pd" | "ai" | "manual"): void;
   load_policy(json: string): void;          // throws if obs_schema_hash mismatches
@@ -526,7 +526,7 @@ class Game {
 | R | reset to the last checkpoint (the `reset` bit in the InputFrame) |
 | C | Chaos (random knock) |
 | M | toggle Realistic / Arcade |
-| T | cycle controller: Off → Manual in M3; Off → PD → AI → Manual from M5 (Manual stays reachable for debugging) |
+| T | cycle controller: Off → Manual in M3; Off → PD → Manual in M4; Off → PD → AI → Manual from M5 (Manual stays reachable for debugging) |
 | G | toggle ghost |
 | 1–0 | fire nozzles 0–9 (only when the controller is Manual) |
 | Esc | pause / menu |
@@ -610,7 +610,7 @@ class Game {
 - [x] Web: flames, nozzle map, air gauge, toasts, Manual controller with keys 1–0, Chaos button.
 
 **M4 — PD baseline and eval harness**
-- [ ] `Pd` controller with allocation; a controller toggle in the web app.
+- [x] `Pd` controller with allocation; a controller toggle in the web app.
 - [x] Rust-side eval runner for Off/PD on Stages A and B (no Python needed), writing results JSON.
 - [x] PD saves visibly more than Off on Stage A (numbers recorded in `docs/EXPERIMENTS.md`).
 
