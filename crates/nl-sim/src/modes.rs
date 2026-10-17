@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::conventions::WHEEL_COUNT;
+
 /// The physics settings one mode uses.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,75 +77,62 @@ impl ModesConfig {
 impl ModeParams {
     /// Checks that every number makes sense. `mode` names the section in errors.
     pub fn check(&self, mode: &'static str) -> Result<(), ModesConfigError> {
-        let positive = "must be a finite number above zero";
-        let not_negative = "must be a finite number, zero or more";
-        let fraction = "must be between 0 and 1";
-        check(mode, "thrust_scale", self.thrust_scale, positive, |v| {
-            v > 0.0
-        })?;
-        check(
-            mode,
-            "tank_capacity_kg",
-            self.tank_capacity_kg,
-            positive,
-            |v| v > 0.0,
-        )?;
-        check(mode, "refill_kg_s", self.refill_kg_s, not_negative, |v| {
-            v >= 0.0
-        })?;
-        let wheels = self.refill_min_wheels as f32;
-        check(mode, "refill_min_wheels", wheels, "must be 1 to 4", |v| {
-            (1.0..=4.0).contains(&v)
-        })?;
-        let fade = self.empty_fade_fraction;
-        check(
-            mode,
-            "empty_fade_fraction",
-            fade,
-            "must be above 0 and at most 1",
-            |v| v > 0.0 && v <= 1.0,
-        )?;
-        check(mode, "hop_ff", self.hop_ff, fraction, |v| {
-            (0.0..=1.0).contains(&v)
-        })?;
-        check(mode, "hop_s", self.hop_s, not_negative, |v| v >= 0.0)?;
-        check(
-            mode,
-            "hop_cooldown_s",
-            self.hop_cooldown_s,
-            not_negative,
-            |v| v >= 0.0,
-        )?;
-        check(
-            mode,
-            "hop_min_air_kg",
-            self.hop_min_air_kg,
-            not_negative,
-            |v| v >= 0.0,
-        )?;
-        check(mode, "boost_ff", self.boost_ff, fraction, |v| {
-            (0.0..=1.0).contains(&v)
-        })
+        let field = FieldChecker { mode };
+        field.positive("thrust_scale", self.thrust_scale)?;
+        field.positive("tank_capacity_kg", self.tank_capacity_kg)?;
+        field.not_negative("refill_kg_s", self.refill_kg_s)?;
+        if !(1..=WHEEL_COUNT).contains(&self.refill_min_wheels) {
+            let wheels = self.refill_min_wheels as f32;
+            return Err(field.bad("refill_min_wheels", "must be 1 to 4", wheels));
+        }
+        field.positive("empty_fade_fraction", self.empty_fade_fraction)?;
+        field.fraction("empty_fade_fraction", self.empty_fade_fraction)?;
+        field.fraction("hop_ff", self.hop_ff)?;
+        field.not_negative("hop_s", self.hop_s)?;
+        field.not_negative("hop_cooldown_s", self.hop_cooldown_s)?;
+        field.not_negative("hop_min_air_kg", self.hop_min_air_kg)?;
+        field.fraction("boost_ff", self.boost_ff)
     }
 }
 
-/// Fails with a clear message unless `value` is finite and passes `is_ok`.
-fn check(
+/// Checks the fields of one mode section and builds errors that name it.
+struct FieldChecker {
     mode: &'static str,
-    field: &'static str,
-    value: f32,
-    reason: &'static str,
-    is_ok: fn(f32) -> bool,
-) -> Result<(), ModesConfigError> {
-    if value.is_finite() && is_ok(value) {
-        return Ok(());
+}
+
+impl FieldChecker {
+    /// Finite and above zero.
+    fn positive(&self, field: &'static str, value: f32) -> Result<(), ModesConfigError> {
+        if value.is_finite() && value > 0.0 {
+            return Ok(());
+        }
+        Err(self.bad(field, "must be a finite number above zero", value))
     }
-    Err(ModesConfigError::BadValue {
-        mode,
-        field,
-        reason,
-        value,
-    })
+
+    /// Finite and zero or more.
+    fn not_negative(&self, field: &'static str, value: f32) -> Result<(), ModesConfigError> {
+        if value.is_finite() && value >= 0.0 {
+            return Ok(());
+        }
+        Err(self.bad(field, "must be a finite number, zero or more", value))
+    }
+
+    /// Between 0 and 1, inclusive.
+    fn fraction(&self, field: &'static str, value: f32) -> Result<(), ModesConfigError> {
+        if (0.0..=1.0).contains(&value) {
+            return Ok(());
+        }
+        Err(self.bad(field, "must be between 0 and 1", value))
+    }
+
+    fn bad(&self, field: &'static str, reason: &'static str, value: f32) -> ModesConfigError {
+        ModesConfigError::BadValue {
+            mode: self.mode,
+            field,
+            reason,
+            value,
+        }
+    }
 }
 
 #[cfg(test)]

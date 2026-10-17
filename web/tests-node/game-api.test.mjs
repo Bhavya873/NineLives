@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Game, HopBlocked, HudField, modesToml, vehicleToml } from './load-wasm.mjs';
+import { Game, HopBlocked, HudField, ModeCode, modesToml, vehicleToml } from './load-wasm.mjs';
 
 const FULL_THROTTLE = new Uint8Array([127, 0, 0, 0]);
 
@@ -34,7 +34,7 @@ test('the mode comes back with a restored snapshot', () => {
   game.set_mode('realistic');
   game.restore(saved);
 
-  assert.equal(game.mode_name(), 'arcade');
+  assert.equal(game.hud()[HudField.Mode], ModeCode.Arcade);
 });
 
 test('restoring a snapshot puts the car and the clock back exactly', () => {
@@ -70,7 +70,7 @@ test('switching to arcade gives unlimited air; unknown modes are refused', () =>
 
   game.set_mode('arcade');
 
-  assert.equal(game.mode_name(), 'arcade');
+  assert.equal(game.hud()[HudField.Mode], ModeCode.Arcade);
   assert.equal(game.hud()[HudField.UnlimitedAir], 1);
   assert.equal(game.hud()[HudField.AirFraction], 1);
   assert.throws(() => game.set_mode('turbo'), /unknown mode/);

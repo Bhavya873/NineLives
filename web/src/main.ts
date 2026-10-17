@@ -7,20 +7,30 @@ import vehicleToml from '../../configs/vehicle.toml?raw';
 import { requireElement } from './dom';
 import { startGameLoop } from './game-loop';
 import { findHud, updateHud } from './hud/hud';
-import { onKeyPress, readInputFrame, startKeyboard } from './input/keyboard';
+import {
+  BUTTON_BOOST,
+  BUTTON_HOP,
+  onKeyPress,
+  readInputFrame,
+  startKeyboard,
+} from './input/keyboard';
 import { followCar, snapCamera } from './render/chase-camera';
 import { FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
 import { createGameScene, type PhysicsFrames, placeCar } from './render/scene';
-import initWasm, { Game, HudField } from './wasm/nl_wasm.js';
+import initWasm, { Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
 async function start(): Promise<void> {
   await initWasm();
   if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
     throw new Error('The wasm build and the renderer disagree on the pose layout');
   }
+  if (Game.button_hop() !== BUTTON_HOP || Game.button_boost() !== BUTTON_BOOST) {
+    throw new Error('The wasm build and the keyboard disagree on the button bits');
+  }
   const game = new Game(vehicleToml, modesToml);
   onKeyPress('KeyM', () => {
-    game.set_mode(game.mode_name() === 'arcade' ? 'realistic' : 'arcade');
+    const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
+    game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
 
   const frames: PhysicsFrames = {
@@ -56,7 +66,7 @@ async function start(): Promise<void> {
       followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000, airborne);
       updateHud(hud, {
         speedMS: hudValues[HudField.SpeedMS] ?? 0,
-        modeName: game.mode_name(),
+        mode: hudValues[HudField.Mode] ?? ModeCode.Custom,
         airFraction: hudValues[HudField.AirFraction] ?? 1,
         unlimitedAir: hudValues[HudField.UnlimitedAir] === 1,
         hopBlocked: hudValues[HudField.HopBlocked] ?? 0,

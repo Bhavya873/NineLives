@@ -7,7 +7,7 @@
 mod common;
 
 use common::{arcade, new_world, new_world_in, realistic};
-use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_HZ};
+use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT, PHYSICS_HZ};
 use nl_sim::hop_boost::HopBlockedReason;
 use nl_sim::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
 use nl_sim::world::World;
@@ -162,7 +162,7 @@ fn boost_adds_about_0_9_g_in_realistic_and_twice_that_in_arcade() {
 
         run(&mut world, buttons(BUTTON_BOOST), 0.5);
 
-        let acceleration_g = (world.forward_speed_m_s() - speed_before_m_s) / 0.5 / 9.81;
+        let acceleration_g = (world.forward_speed_m_s() - speed_before_m_s) / 0.5 / GRAVITY_M_S2;
         assert!(
             (acceleration_g - expected_g).abs() < 0.1,
             "{acceleration_g} g, expected {expected_g} g"

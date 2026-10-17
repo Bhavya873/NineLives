@@ -10,7 +10,7 @@
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
-use nl_sim::input::{INPUT_FRAME_BYTES, InputFrame};
+use nl_sim::input::{BUTTON_BOOST, BUTTON_HOP, INPUT_FRAME_BYTES, InputFrame};
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
@@ -44,10 +44,23 @@ pub enum HudField {
     BoostActive = 8,
     /// 1 when the current mode has unlimited air (the HUD shows ∞), else 0.
     UnlimitedAir = 9,
+    /// The current mode: a `ModeCode` value. Read from the world, so it is still
+    /// right after `restore`.
+    Mode = 10,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::UnlimitedAir as usize + 1;
+const HUD_LENGTH: usize = HudField::Mode as usize + 1;
+
+/// The values `HudField.Mode` can take.
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum ModeCode {
+    Realistic = 0,
+    Arcade = 1,
+    /// Anything else, e.g. a mode sampled between the two for training.
+    Custom = 2,
+}
 
 /// The values `HudField.HopBlocked` can take (SPEC §7.8).
 #[wasm_bindgen]
@@ -81,20 +94,6 @@ impl Game {
         let modes = ModesConfig::from_toml_str(modes_toml)?;
         let world = World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION);
         Ok(Game { world, modes })
-    }
-
-    /// The current mode's name: "realistic", "arcade", or "custom" for anything else
-    /// (e.g. a mode sampled in between). Read from the world, so it is still right
-    /// after `restore`.
-    pub fn mode_name(&self) -> String {
-        let mode = self.world.mode();
-        if mode == self.modes.realistic {
-            "realistic".to_string()
-        } else if mode == self.modes.arcade {
-            "arcade".to_string()
-        } else {
-            "custom".to_string()
-        }
     }
 
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
@@ -146,6 +145,7 @@ impl Game {
         values[HudField::BoostActive as usize] = one_if(hop_boost.boost_active());
         values[HudField::HopBlocked as usize] = hop_blocked_code(self.world.hop_blocked_reason());
         values[HudField::UnlimitedAir as usize] = one_if(self.world.mode().unlimited_air);
+        values[HudField::Mode as usize] = self.mode_code() as u8 as f32;
         values
     }
 
@@ -186,6 +186,16 @@ impl Game {
         FLOATS_PER_POSE
     }
 
+    /// The input-frame button bit for Hop (the web checks its copy against this).
+    pub fn button_hop() -> u16 {
+        BUTTON_HOP
+    }
+
+    /// The input-frame button bit for Boost.
+    pub fn button_boost() -> u16 {
+        BUTTON_BOOST
+    }
+
     /// Number of thruster nozzles (10).
     pub fn nozzle_count() -> usize {
         NOZZLE_COUNT
@@ -193,6 +203,18 @@ impl Game {
 }
 
 impl Game {
+    /// Which preset the world's current mode is.
+    fn mode_code(&self) -> ModeCode {
+        let mode = self.world.mode();
+        if mode == self.modes.realistic {
+            ModeCode::Realistic
+        } else if mode == self.modes.arcade {
+            ModeCode::Arcade
+        } else {
+            ModeCode::Custom
+        }
+    }
+
     /// Looks up a mode by its name in the UI.
     fn mode_params(&self, mode: &str) -> Result<ModeParams, JsError> {
         match mode {

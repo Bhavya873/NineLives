@@ -12,9 +12,12 @@ const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
 
-/** Button bits, matching BUTTON_HOP and BUTTON_BOOST in crates/nl-sim/src/input.rs. */
-const BUTTON_HOP = 1 << 0;
-const BUTTON_BOOST = 1 << 1;
+/**
+ * Button bits, matching BUTTON_HOP and BUTTON_BOOST in crates/nl-sim/src/input.rs.
+ * main.ts checks them against the wasm build at start-up.
+ */
+export const BUTTON_HOP = 1 << 0;
+export const BUTTON_BOOST = 1 << 1;
 
 /** Every held key this module handles, so the page does not scroll on arrows or Space. */
 const HANDLED_KEYS = [
