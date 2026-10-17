@@ -19,6 +19,7 @@ import {
 } from 'three';
 
 import { buildCarBody, buildWheel } from './car-mesh';
+import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend';
 
 const GROUND_SIZE_M = 4000;
 const SKY_TOP = '#5b8fd9';
@@ -34,8 +35,46 @@ export interface GameScene {
   wheels: Group[];
 }
 
+/** The last two physics states, so each frame can blend between them (SPEC §11.2). */
+export interface PhysicsFrames {
+  previousChassis: Float32Array;
+  latestChassis: Float32Array;
+  previousWheels: Float32Array;
+  latestWheels: Float32Array;
+}
+
+/** Where the sun sits relative to the car, so its shadow box always covers the car. */
+const SUN_OFFSET_M = { x: 30, y: 60, z: 20 };
+
+/** Reused for each wheel so placing the car allocates nothing per frame. */
+const wheelPose = newBlendedPose();
+
+/**
+ * Moves the car, wheels and sun to the pose `blend` of the way between the previous
+ * and latest physics tick. Writes the car's blended pose into `carPose` for the camera.
+ */
+export function placeCar(
+  view: GameScene,
+  frames: PhysicsFrames,
+  blend: number,
+  carPose: BlendedPose,
+): void {
+  blendPose(frames.previousChassis, frames.latestChassis, 0, blend, carPose);
+  view.carBody.position.copy(carPose.position);
+  view.carBody.quaternion.copy(carPose.rotation);
+
+  view.wheels.forEach((wheel, index) => {
+    blendPose(frames.previousWheels, frames.latestWheels, index, blend, wheelPose);
+    wheel.position.copy(wheelPose.position);
+    wheel.quaternion.copy(wheelPose.rotation);
+  });
+
+  view.sun.position.copy(carPose.position).add(SUN_OFFSET_M);
+  view.sun.target.position.copy(carPose.position);
+}
+
 /** Builds the scene and attaches its canvas to `container`. */
-export function createGameScene(container: HTMLElement): GameScene {
+export function createGameScene(container: HTMLElement, wheelCount: number): GameScene {
   const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
@@ -53,7 +92,7 @@ export function createGameScene(container: HTMLElement): GameScene {
   scene.add(buildGround());
 
   const carBody = buildCarBody();
-  const wheels = [buildWheel(), buildWheel(), buildWheel(), buildWheel()];
+  const wheels = Array.from({ length: wheelCount }, () => buildWheel());
   scene.add(carBody, ...wheels);
 
   const gameScene = { renderer, scene, camera, sun, carBody, wheels };

@@ -21,8 +21,7 @@ const BODY_WIDTH_M = 1.72;
 const CABIN_WIDTH_M = 1.36;
 
 // The shapes stay close to the physics boxes in configs/vehicle.toml (body from
-// y = -0.45 to 0.45, roof up to 0.55), so landings and roof hits look right. The body
-// is drawn narrower than the 2.0 m physics box so the wheels show at the sides.
+// y = -0.45 to 0.45, roof up to 0.55), so landings and roof hits look right.
 
 /**
  * Lower body outline seen from the left, as [x forward, y up] points in metres around
