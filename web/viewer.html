@@ -33,6 +33,17 @@
         bottom: 16px;
         color: #a9b6c4;
       }
+      #arena-toggle {
+        top: 16px;
+        left: auto;
+        right: 16px;
+        border: 1px solid #3a4a5c;
+        cursor: pointer;
+        font: inherit;
+      }
+      #arena-toggle:hover {
+        background: rgba(30, 44, 60, 0.9);
+      }
       a {
         color: #9fd1ff;
       }
@@ -41,9 +52,10 @@
   <body>
     <div id="viewer"></div>
     <div id="viewer-status" class="panel">Loading checkpoints…</div>
+    <button id="arena-toggle" class="panel" type="button">Switch arena</button>
     <div id="viewer-help" class="panel">
-      64 cars, the same 64 drops, one checkpoint at a time · → / N next · ← / P previous · faded
-      cars crashed · <a href="./">back to the game</a>
+      64 cars, the same 64 drops, one checkpoint at a time · → / N next · ← / P previous · O flat /
+      obstacle arena · faded cars crashed · <a href="./">back to the game</a>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>
   </body>
