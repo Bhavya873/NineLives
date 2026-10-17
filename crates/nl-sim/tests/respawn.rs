@@ -8,7 +8,7 @@
 mod common;
 
 use common::{LEVEL, buttons, new_world, run_and_collect};
-use nl_sim::conventions::PHYSICS_HZ;
+use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_HZ};
 use nl_sim::events::SimEvent;
 use nl_sim::input::BUTTON_RESET;
 use nl_sim::world::World;
@@ -124,4 +124,43 @@ fn the_clock_keeps_running_through_a_respawn() {
 
     let expected_steps = steps_before + (RESPAWN_DELAY_S * PHYSICS_HZ as f32) as u64;
     assert_eq!(world.step_count(), expected_steps);
+}
+
+#[test]
+fn a_crash_closes_every_valve_on_the_frozen_wreck() {
+    let mut world = new_game_world();
+    world
+        .place_car(OUT_OF_BOUNDS_M, LEVEL, [0.0; 3], [0.0; 3])
+        .unwrap();
+    // Open every valve on the very step that crashes.
+    world.set_controller_throttles([1.0; NOZZLE_COUNT]);
+
+    run_and_collect(&mut world, 1.0 / PHYSICS_HZ as f32);
+
+    assert!(world.is_crashed());
+    assert_eq!(world.effective_throttles(), [0.0; NOZZLE_COUNT]);
+}
+
+#[test]
+fn a_wreck_never_becomes_the_checkpoint() {
+    let mut world = new_game_world();
+    let start = world.chassis_pose();
+    crash(&mut world);
+
+    world.set_checkpoint();
+    run_and_collect(&mut world, RESPAWN_DELAY_S);
+
+    assert_eq!(world.chassis_pose().position_m, start.position_m);
+}
+
+#[test]
+fn restoring_a_snapshot_keeps_the_auto_respawn_setting() {
+    let snapshot_without_auto_respawn = new_world().snapshot().unwrap();
+    let mut world = new_game_world();
+
+    world.restore(&snapshot_without_auto_respawn).unwrap();
+    crash(&mut world);
+    let events = run_and_collect(&mut world, RESPAWN_DELAY_S);
+
+    assert_eq!(count_respawns(&events), 1);
 }
