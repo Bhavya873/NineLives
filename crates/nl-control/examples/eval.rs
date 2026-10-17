@@ -3,7 +3,8 @@
 //!
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0
-//! (`--controller ai` reads `--policy`, default models/policy.json)
+//! (`--controller ai` reads `--policy`, default models/policy.json; `--dr` turns on
+//! domain randomization, SPEC §9.8, and adds `_dr` to the file name)
 
 use std::error::Error;
 
@@ -13,6 +14,7 @@ use nl_control::{ControllerChoices, ControllerKind, Pd};
 use nl_policy::Policy;
 use nl_sim::episode::EpisodeResult;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
+use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 
@@ -24,6 +26,7 @@ struct Args {
     episodes: u64,
     seed: u64,
     policy: String,
+    randomize: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -37,13 +40,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("--mode must be realistic or arcade")?;
 
     let mut controller = build_controller(&args, &vehicle, mode)?;
+    let randomization = args.randomize.then_some(&scenarios.randomization);
     let mut results: Vec<EpisodeResult> = Vec::new();
     for episode in 0..args.episodes {
         let seed = args
             .seed
             .checked_add(episode)
             .ok_or("--seed is too large")?;
-        let result = run_episode(&vehicle, mode, &scenarios, stage, &mut controller, seed)?;
+        let variation = EpisodeVariation::for_seed(randomization, &vehicle, mode, seed);
+        let result = run_episode(&variation, &scenarios, stage, &mut controller, seed)?;
         results.push(result);
     }
     write_report(&args, &results)
@@ -58,12 +63,14 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
         "stage": stage_name,
         "mode": args.mode,
         "first_seed": args.seed,
+        "randomized": args.randomize,
         "summary": summary,
         "episodes": results,
     });
     std::fs::create_dir_all("results")?;
+    let suffix = if args.randomize { "_dr" } else { "" };
     let path = format!(
-        "results/eval_{}_{}_{}.json",
+        "results/eval_{}_{}_{}{suffix}.json",
         args.controller, stage_name, args.mode
     );
     // Compact: 1000 per-episode rows pretty-printed are several hundred KB per file.
@@ -103,12 +110,16 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
         episodes: 1000,
         seed: 0,
         policy: "models/policy.json".to_string(),
+        randomize: false,
     };
-    let words: Vec<String> = std::env::args().skip(1).collect();
-    for pair in words.chunks(2) {
-        let [name, value] = pair else {
-            return Err(format!("{} needs a value", pair[0]).into());
-        };
+    let mut words = std::env::args().skip(1);
+    while let Some(name) = words.next() {
+        if name == "--dr" {
+            args.randomize = true;
+            continue;
+        }
+        let value = words.next().ok_or(format!("{name} needs a value"))?;
+        let (name, value) = (&name, &value);
         match name.as_str() {
             "--controller" => args.controller = value.clone(),
             "--stage" => args.stage = value.clone(),

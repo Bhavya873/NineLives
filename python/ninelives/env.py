@@ -50,9 +50,14 @@ class NineLivesVecEnv(VecEnv):
     render_mode = None
 
     def __init__(
-        self, n_envs: int, seed: int = 0, mode: str = "realistic", stage: str = "A"
+        self,
+        n_envs: int,
+        seed: int = 0,
+        mode: str = "realistic",
+        stage: str = "A",
+        randomize: bool = False,
     ) -> None:
-        self.sim = BatchedSim(n_envs, load_sim_config(mode, stage), seed)
+        self.sim = BatchedSim(n_envs, load_sim_config(mode, stage, randomize), seed)
         super().__init__(n_envs, observation_space(), action_space())
 
     def seed(self, seed: int | None = None) -> list[int | None]:

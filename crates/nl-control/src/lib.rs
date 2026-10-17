@@ -6,6 +6,7 @@
 
 use nl_sim::car_state::CarState;
 use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::episode::Episode;
 use nl_sim::input::InputFrame;
 use nl_sim::obs::{OBS_DIM, Observation, observe};
 use nl_sim::world::World;
@@ -39,14 +40,28 @@ pub struct ControlCtx {
 }
 
 impl ControlCtx {
-    /// What a controller sees of `world` now, with the driver's `input`. Every runner
-    /// (game, eval) builds the context this way, so all controllers see the same car.
+    /// What a controller sees of `world` now, with the driver's `input`: the game's
+    /// context (no latency, no sensor noise). Episodes use `for_episode` instead.
     pub fn for_world(world: &World, input: InputFrame) -> ControlCtx {
         let state = world.car_state();
         ControlCtx {
             input,
             state,
             observation: observe(world, &state),
+        }
+    }
+}
+
+impl ControlCtx {
+    /// What a controller sees of a running episode: the state and observation with the
+    /// episode's sensor noise, and `prev_action` as last commanded (SPEC §9.8). Eval and
+    /// training use this, so PD and the AI see the same noisy car.
+    pub fn for_episode(episode: &mut Episode, input: InputFrame) -> ControlCtx {
+        let (state, observation) = episode.controller_view();
+        ControlCtx {
+            input,
+            state,
+            observation,
         }
     }
 }

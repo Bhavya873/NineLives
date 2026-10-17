@@ -10,7 +10,8 @@ use crate::car_state::Touchdown;
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
 use crate::modes::ModeParams;
-use crate::obs::{Observation, observe};
+use crate::obs::Observation;
+use crate::randomization::EpisodeVariation;
 use crate::reward::{RewardConfig, RewardTerms, StepSummary, reward_terms};
 use crate::scenarios::{ScenariosConfig, Stage};
 use crate::vehicle_config::VehicleConfig;
@@ -27,6 +28,9 @@ pub struct TrainingConfig {
     pub scenarios: ScenariosConfig,
     /// Reward weights (reward.toml).
     pub reward: RewardConfig,
+    /// Draw each episode's car and world from `scenarios.randomization` (SPEC §9.8).
+    /// Training turns this on; eval leaves it off.
+    pub randomize: bool,
 }
 
 /// What one control step produced.
@@ -103,11 +107,9 @@ impl TrainingEnv {
     /// error there is no running episode until the next successful `reset`.
     pub fn reset(&mut self, seed: u64) -> Result<Observation, PlaceCarError> {
         self.episode = None;
-        let config = &self.config;
         let (stage, level) = (self.next_stage, self.next_level);
-        let scenarios = config.scenarios.at_level(stage, level);
-        let episode = Episode::start(&config.vehicle, config.mode, &scenarios, stage, seed)?;
-        let observation = observe(episode.world(), &episode.car_state());
+        let mut episode = self.start_episode(stage, level, seed)?;
+        let observation = episode.observe();
         self.episode = Some(episode);
         self.stage = stage;
         self.level = level;
@@ -145,7 +147,7 @@ impl TrainingEnv {
         let summary = self.summarise(&episode, throttles, air_used_kg, saved, crashed);
         self.previous_throttles = throttles;
         let outcome = StepOutcome {
-            observation: observe(episode.world(), &episode.car_state()),
+            observation: episode.observe(),
             terms: reward_terms(&summary, &self.config.reward),
             terminated: crashed || status == EpisodeStatus::Succeeded,
             truncated: status == EpisodeStatus::TimedOut,
@@ -153,6 +155,17 @@ impl TrainingEnv {
         };
         self.episode = Some(episode);
         Some(outcome)
+    }
+
+    /// A new episode of `stage` at `level` from `seed`, with a randomized car and world
+    /// (SPEC §9.8) when `randomize` is on.
+    fn start_episode(&self, stage: Stage, level: u32, seed: u64) -> Result<Episode, PlaceCarError> {
+        let config = &self.config;
+        let scenarios = config.scenarios.at_level(stage, level);
+        let randomization = config.randomize.then_some(&scenarios.randomization);
+        let variation =
+            EpisodeVariation::for_seed(randomization, &config.vehicle, config.mode, seed);
+        Episode::start(&variation, &scenarios, stage, seed)
     }
 
     /// Counts flight time: how long nothing (wheels, body or roof) has touched anything.

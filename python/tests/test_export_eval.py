@@ -113,3 +113,11 @@ def test_the_export_command_writes_a_policy_rust_can_load(tmp_path):
     rust_actions = policy_actions(out.read_text(), observations)
     sb3_actions, _ = model.predict(normalizer.normalize_obs(observations), deterministic=True)
     assert np.abs(rust_actions - sb3_actions).max() < PARITY_TOLERANCE
+
+
+def test_eval_with_domain_randomization_changes_the_episodes_and_the_file_name(tmp_path):
+    plain = evaluate("pd", "A", "realistic", episodes=10, first_seed=0)
+    randomized = evaluate("pd", "A", "realistic", episodes=10, first_seed=0, randomize=True)
+
+    assert plain["episodes"] != randomized["episodes"]
+    assert write_report(randomized, tmp_path).name == "eval_pd_A_realistic_dr.json"

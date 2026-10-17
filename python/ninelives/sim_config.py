@@ -12,8 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIGS_DIR = REPO_ROOT / "configs"
 
 
-def load_sim_config(mode: str = "realistic", stage: str = "A") -> str:
-    """The BatchedSim config JSON for `mode` ("realistic" or "arcade") and `stage`."""
+def load_sim_config(mode: str = "realistic", stage: str = "A", randomize: bool = False) -> str:
+    """The sim config JSON for `mode` ("realistic" or "arcade") and `stage`; `randomize`
+    turns on SPEC §9.8 domain randomization for BatchedSim episodes (training only)."""
     if not CONFIGS_DIR.is_dir():
         raise FileNotFoundError(
             f"configs folder not found at {CONFIGS_DIR}: install ninelives from the repo "
@@ -27,5 +28,6 @@ def load_sim_config(mode: str = "realistic", stage: str = "A") -> str:
         "controllers_toml": (CONFIGS_DIR / "controllers.toml").read_text(),
         "mode": mode,
         "stage": stage,
+        "randomize": randomize,
     }
     return json.dumps(config)

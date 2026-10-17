@@ -123,3 +123,13 @@ def test_a_bad_activation_is_refused_before_training(tmp_path):
 
     with pytest.raises(ValueError, match="activation"):
         run(tmp_path, path)
+
+
+def test_a_quoted_randomize_flag_is_refused_instead_of_meaning_true(tmp_path):
+    config = yaml.safe_load(small_config(tmp_path, 1024).read_text())
+    config["randomize"] = "false"
+    path = tmp_path / "quoted.yaml"
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match="randomize must be true or false"):
+        run(tmp_path, path)

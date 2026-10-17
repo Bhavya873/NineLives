@@ -23,6 +23,9 @@ struct SimConfigJson {
     stage: String,
     /// configs/controllers.toml (PD's gains, for `run_eval`).
     controllers_toml: String,
+    /// Domain randomization (SPEC §9.8) for `BatchedSim` episodes and, with `eval --dr`,
+    /// for `run_eval`.
+    randomize: bool,
 }
 
 /// A parsed config: what to build each environment from, and which stage it starts in.
@@ -56,6 +59,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
             mode,
             scenarios,
             reward,
+            randomize: fields.randomize,
         },
         stage,
         controllers_toml: fields.controllers_toml,

@@ -37,3 +37,30 @@ max_speed_m_s = 2.0
 levels = 5
 first_max_tilt_deg = 30.0
 first_max_spin_rad_s = 0.0
+
+[randomization]
+# SPEC §9.8: each training episode draws its own car and world from these ranges
+# ([low, high], drawn evenly) when training turns randomization on. Eval leaves it off.
+mass_factor = [0.9, 1.1]
+# Centre of mass moved up to this far along each body axis, in m.
+center_of_mass_offset_m = 0.1
+inertia_factor = [0.9, 1.1]
+# Drawn separately for every nozzle.
+max_force_factor = [0.85, 1.15]
+valve_time_constant_s = [0.02, 0.06]
+# Whole control steps between the policy acting and the valves hearing it.
+latency_control_steps = [0, 2]
+ground_friction = [0.6, 1.2]
+# Wind up to this speed along each horizontal world axis, either way, in m/s.
+wind_m_s = 3.0
+thrust_scale = [1.0, 2.0]
+# Otherwise the tank holds tank_capacity_kg.
+unlimited_air_probability = 0.4
+tank_capacity_kg = [150.0, 350.0]
+
+[randomization.noise]
+# Gaussian observation noise (standard deviations).
+gravity_dir = 0.01
+spin_rad_s = 0.05
+speed_m_s = 0.1
+height_m = 0.05

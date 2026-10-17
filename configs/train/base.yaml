@@ -2,8 +2,9 @@
 # tune; log each run in docs/EXPERIMENTS.md. Paths are relative to the repo root.
 
 seed: 0
-mode: realistic        # physics preset ("realistic" or "arcade")
+mode: realistic        # base preset; with randomize, only its Hop/Boost settings stay (§9.8)
 stage: A               # SPEC §9.6; M5 trains Stage A only
+randomize: true        # SPEC §9.8 domain randomization (mode, car, latency, noise)
 total_steps: 30_000_000
 
 ppo:
