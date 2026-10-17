@@ -593,7 +593,7 @@ class Game {
 
 **M2 — Browser viewer**
 - [ ] `nl-wasm` exposes `Game`; the web app renders the car and ground and drives with the keyboard at 60 fps.
-- [ ] Chase camera, the fixed-step loop and interpolation work. Golden trace matches on wasm.
+- [x] Chase camera, the fixed-step loop and interpolation work. Golden trace matches on wasm.
 
 **M3 — Thrusters, tank, modes, events**
 - [ ] 10 nozzles per 7.4 with valve lag; the tank per 7.5; modes per 7.6; Hop/Boost per 7.8; events per 7.9.
