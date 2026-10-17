@@ -27,6 +27,7 @@ This plan turns the spec into an ordered build. It doesn't restate the spec. Sec
 | D3 | **Stop for review** after M4 (before training starts) and after M7 (before polish). | Built into §4. |
 | D4 | **Small-feature PRs, authored by the owner, reviewed by the owner.** | §6. The GitHub connection acts as `Bhavya873`, so PRs show you as the author. Commits are authored as Bhavya Modi, with a `Co-Authored-By: Claude` trailer. |
 | D5 | **Code a junior developer could have written and can read.** | New coding standard (§7). `CLAUDE.md` gets updated to match. |
+| D6 | **Watch the cars learn.** Training stays PPO (many headless cars feed one shared policy), plus a *training viewer*: a crowd of cars (about 64) runs each saved checkpoint through an obstacle arena, so you see them improve round by round. | M5 exports a few evenly spaced checkpoints as policy JSON; M6 adds the viewer on Stage A drops; M7's obstacle arena course gives it ramps and blocks. |
 | D7 | **Lab-arena look everywhere:** checkered floor, neutral lighting, plain-coloured ramps and blocks, like a physics simulator's test arena. | Done for the floor, light and backdrop after M3; course pieces use plain colours in M7. |
 
 ---
@@ -64,9 +65,9 @@ Effort: **S** is a few hours, **M** is about a session, **L** is several session
 | **M3 Thrusters, tank, modes, events** | nozzles + valve lag, tank, modes, Hop/Boost, events, **explosion + respawn**, Chaos; web flames, nozzle map, air gauge, toasts, Manual | L | 4 |
 | **M4 PD baseline + Rust eval** | PD + allocation, Stages A/B, Rust eval runner, Off vs PD numbers, controller toggle | M | 2 |
 | 🛑 **Review gate 1** | You review M0–M4 and the measured sim speed before we start spending hours on training | | |
-| **M5 Python env + first policy** | `ObsSpec`, reward, domain randomization, `BatchedSim`, SB3 env, train/eval/export, parity test, **training harness (§5)**, Stage A policy | L | 4 |
-| **M6 AI in the browser** | `load_policy` with hash check, AI toggle, drop-test button, wasm-vs-Python eval check | S | 1 |
-| **M7 Courses + full curriculum** | all piece types (plain-coloured, D7), `gauntlet.json`, procedural generator, driver bot, Stages C/D/E, full training, full eval matrix, Gauntlet playable with checkpoints + results screen | L | 4 |
+| **M5 Python env + first policy** | `ObsSpec`, reward, domain randomization, `BatchedSim`, SB3 env, train/eval/export (plus **up to 8 checkpoints as policy JSON**, D6), parity test, **training harness (§5)**, Stage A policy | L | 4 |
+| **M6 AI in the browser** | `load_policy` with hash check, AI toggle, drop-test button, wasm-vs-Python eval check, **training viewer** (a crowd of cars replays checkpoint 1, 2, 3… on Stage A drops; D6) | M | 2 |
+| **M7 Courses + full curriculum** | all piece types (plain-coloured, D7), an **obstacle arena** course for the training viewer (D6), `gauntlet.json`, procedural generator, driver bot, Stages C/D/E, full training, full eval matrix, Gauntlet playable with checkpoints + results screen | L | 4 |
 | 🛑 **Review gate 2** | You review the policy (by playing it) and the eval numbers before polish | | |
 | **M8 Polish + write-up** | ghost, title screen, results tab, reduced motion, F3 overlay, static deploy, **hover-hack experiment**, charts, README | M | 3 |
 | **M9 Optional** | anatomy figure, pressure falloff + air mass, gamepad | — | — |

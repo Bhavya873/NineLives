@@ -452,6 +452,7 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 3. Report both in the README with the explanation: pay for landing, charge for airtime, never pay for merely surviving.
 
 ### 9.12 Export (`models/policy.json`) *(req)*
+For the training viewer (§11.6), training also exports up to 8 evenly spaced checkpoints of the run behind `models/policy.json` in this format to `web/public/checkpoints/<run-id>/<n>.json` (weights rounded to 4 significant digits, under 3 MB in total). Those few are committed, like `models/policy.json`; every other checkpoint stays in `runs/` (gitignored) or on the `ckpt/<run-id>` branch (ADR-003).
 ```json
 {
   "format": "ninelives-policy", "version": 1,
@@ -546,6 +547,7 @@ class Game {
 - **Results screen** at the finish: time, saves, crashes, air used, and the delta vs the ghost.
 - **Ghost:** record `InputFrame`s per tick plus seed, course, mode, controller, policy hash and `build_hash`. Replay in a second `Game` instance and render it translucent. Store the best run in `localStorage` (wrap every read and write in try/catch; discard on build-hash mismatch).
 - **Results tab:** shows the committed SVG charts from `results/`.
+- **Training viewer:** pick a run and watch a crowd of cars (about 64, each its own wasm `Game`, translucent) drive with checkpoint 1, 2, 3… of the policy, auto-advancing, with each checkpoint's saves, crashes and distance. Stage A drops in the flat arena first (M6), then the obstacle arena (M7).
 
 ### 11.7 Performance and deploy
 - Target 60 fps on a mid-range laptop. Budget: sim tick ≤ 1.5 ms; render ≤ 8 ms. Measure and show an optional FPS / ms overlay (F3).
@@ -614,14 +616,17 @@ class Game {
 - [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
 - [ ] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
 - [ ] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
+- [ ] Up to 8 evenly spaced checkpoints are exported as policy JSON for the training viewer (§9.12).
 
 **M6 — AI in the browser**
 - [ ] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.
+- [ ] The training viewer (§11.6) replays the exported checkpoints with a crowd of cars on Stage A drops.
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [ ] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
 - [ ] Stages B–E trained; the policy is re-exported; eval on all stages and both modes.
 - [ ] The Gauntlet is playable start to finish with checkpoints and the results screen.
+- [ ] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
 - [ ] Ghost, title screen, results tab, reduced motion, the performance overlay, static deploy.
