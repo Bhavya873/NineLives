@@ -5,3 +5,4 @@
 //! the browser (through `nl-wasm`) both call into it.
 
 pub mod conventions;
+pub mod vehicle_config;
