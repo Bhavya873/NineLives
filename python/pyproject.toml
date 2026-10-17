@@ -46,3 +46,6 @@ known-first-party = ["ninelives", "ninelives_sim"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Import ninelives from this folder even when the editable install's .pth file is
+# skipped (macOS hides .pth files in iCloud-synced folders, and Python 3.12 ignores them).
+pythonpath = ["."]
