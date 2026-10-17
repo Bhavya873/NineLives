@@ -7,10 +7,10 @@ import {
   DirectionalLight,
   Fog,
   Group,
-  NearestFilter,
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
+  NearestFilter,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
@@ -24,11 +24,14 @@ import { buildCarBody, buildWheel } from './car-mesh.ts';
 import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
+/** Beyond this the floor is pure fog colour, so the camera draws nothing further. */
+const FOG_END_M = 700;
 /** Side of one floor square; big enough to read speed from at a glance. */
 const CHECKER_SIZE_M = 2;
 const CHECKER_LIGHT = '#3b5470';
 const CHECKER_DARK = '#22344a';
 const BACKDROP_TOP = '#5a7ea3';
+/** Also the page background in index.html (shown before the canvas draws); keep them equal. */
 const BACKDROP_HORIZON = '#121a24';
 
 /** Everything the renderer draws, kept together so the game can move it each frame. */
@@ -96,11 +99,11 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
   container.appendChild(renderer.domElement);
 
   const scene = new Scene();
-  scene.background = buildSkyGradient();
+  scene.background = buildBackdropGradient();
   // The floor fades into the dark horizon, so the arena has no visible edge.
-  scene.fog = new Fog(new Color(BACKDROP_HORIZON), 120, 700);
+  scene.fog = new Fog(new Color(BACKDROP_HORIZON), 120, FOG_END_M);
 
-  const camera = new PerspectiveCamera(60, 1, 0.1, 2000);
+  const camera = new PerspectiveCamera(60, 1, 0.1, FOG_END_M + 50);
   scene.add(new HemisphereLight(0xffffff, 0x2a3440, 1.3));
   const sun = buildSun();
   scene.add(sun, sun.target);
@@ -123,18 +126,29 @@ function resizeToWindow({ renderer, camera }: GameScene): void {
   camera.updateProjectionMatrix();
 }
 
-/** A vertical sky gradient drawn once into a tiny canvas. */
-function buildSkyGradient(): CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-  if (context) {
-    const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+/** A vertical backdrop gradient (BACKDROP_TOP to BACKDROP_HORIZON) in a tiny canvas. */
+function buildBackdropGradient(): CanvasTexture {
+  return buildCanvasTexture(1, 256, (context) => {
+    const gradient = context.createLinearGradient(0, 0, 0, 256);
     gradient.addColorStop(0, BACKDROP_TOP);
     gradient.addColorStop(1, BACKDROP_HORIZON);
     context.fillStyle = gradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillRect(0, 0, 1, 256);
+  });
+}
+
+/** A texture drawn once by `draw` into a small canvas of `width` × `height` pixels. */
+function buildCanvasTexture(
+  width: number,
+  height: number,
+  draw: (context: CanvasRenderingContext2D) => void,
+): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (context) {
+    draw(context);
   }
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
@@ -168,19 +182,13 @@ function buildGround(): Mesh {
 
 /** A 2×2 checker drawn once into a tiny canvas and tiled across the whole floor. */
 function buildCheckerTexture(): CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 2;
-  canvas.height = 2;
-  const context = canvas.getContext('2d');
-  if (context) {
+  const texture = buildCanvasTexture(2, 2, (context) => {
     context.fillStyle = CHECKER_LIGHT;
     context.fillRect(0, 0, 2, 2);
     context.fillStyle = CHECKER_DARK;
     context.fillRect(0, 0, 1, 1);
     context.fillRect(1, 1, 1, 1);
-  }
-  const texture = new CanvasTexture(canvas);
-  texture.colorSpace = SRGBColorSpace;
+  });
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
   // Sharp square edges up close; one texture tile is two squares.

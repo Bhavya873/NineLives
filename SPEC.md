@@ -452,6 +452,7 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 3. Report both in the README with the explanation: pay for landing, charge for airtime, never pay for merely surviving.
 
 ### 9.12 Export (`models/policy.json`) *(req)*
+Training also exports each saved checkpoint in this format to `results/checkpoints/<run-id>/<n>.json`, for the training viewer (§11.6).
 ```json
 {
   "format": "ninelives-policy", "version": 1,
@@ -615,14 +616,17 @@ class Game {
 - [ ] `nl-py` `BatchedSim` and `NineLivesVecEnv`; all Python tests pass.
 - [ ] PPO trains on Stage A with the curriculum; the export and parity tests pass; `models/policy.json` is committed.
 - [ ] `python -m ninelives.eval` produces results for Off/PD/AI on Stage A.
+- [ ] Each saved checkpoint is also exported as policy JSON for the training viewer (§9.12).
 
 **M6 — AI in the browser**
 - [ ] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.
+- [ ] The training viewer (§11.6) replays checkpoint 1, 2, 3… with a crowd of cars; on Stage A drop scenarios in the flat arena until M7 adds the obstacle arena.
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [ ] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
 - [ ] Stages B–E trained; the policy is re-exported; eval on all stages and both modes.
 - [ ] The Gauntlet is playable start to finish with checkpoints and the results screen.
+- [ ] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
 - [ ] Ghost, title screen, results tab, reduced motion, the performance overlay, static deploy.

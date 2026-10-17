@@ -65,8 +65,8 @@ Effort: **S** is a few hours, **M** is about a session, **L** is several session
 | **M3 Thrusters, tank, modes, events** | nozzles + valve lag, tank, modes, Hop/Boost, events, **explosion + respawn**, Chaos; web flames, nozzle map, air gauge, toasts, Manual | L | 4 |
 | **M4 PD baseline + Rust eval** | PD + allocation, Stages A/B, Rust eval runner, Off vs PD numbers, controller toggle | M | 2 |
 | 🛑 **Review gate 1** | You review M0–M4 and the measured sim speed before we start spending hours on training | | |
-| **M5 Python env + first policy** | `ObsSpec`, reward, domain randomization, `BatchedSim`, SB3 env, train/eval/export, parity test, **training harness (§5)**, Stage A policy | L | 4 |
-| **M6 AI in the browser** | `load_policy` with hash check, AI toggle, drop-test button, wasm-vs-Python eval check, **training viewer** (a crowd of cars replays checkpoint 1, 2, 3…; D6) | M | 2 |
+| **M5 Python env + first policy** | `ObsSpec`, reward, domain randomization, `BatchedSim`, SB3 env, train/eval/export (**a policy JSON per checkpoint**, D6), parity test, **training harness (§5)**, Stage A policy | L | 4 |
+| **M6 AI in the browser** | `load_policy` with hash check, AI toggle, drop-test button, wasm-vs-Python eval check, **training viewer** (a crowd of cars replays checkpoint 1, 2, 3… on Stage A drops in the flat arena; D6) | M | 2 |
 | **M7 Courses + full curriculum** | all piece types (plain-coloured, D7), an **obstacle arena** course for the training viewer, `gauntlet.json`, procedural generator, driver bot, Stages C/D/E, full training, full eval matrix, Gauntlet playable with checkpoints + results screen | L | 4 |
 | 🛑 **Review gate 2** | You review the policy (by playing it) and the eval numbers before polish | | |
 | **M8 Polish + write-up** | ghost, title screen, results tab, reduced motion, F3 overlay, static deploy, **hover-hack experiment**, charts, README | M | 3 |
