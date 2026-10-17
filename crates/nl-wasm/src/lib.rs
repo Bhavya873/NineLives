@@ -15,14 +15,23 @@ use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, Worl
 use wasm_bindgen::prelude::*;
 
 /// Number of floats in one pose: position x, y, z then quaternion x, y, z, w.
-pub const FLOATS_PER_POSE: usize = 7;
+const FLOATS_PER_POSE: usize = 7;
 
-/// Index of each value in the array returned by `Game::hud`.
-pub const HUD_SPEED_M_S: usize = 0;
-pub const HUD_TIME_S: usize = 1;
-pub const HUD_WHEELS_TOUCHING: usize = 2;
-/// Number of values in the HUD array.
-pub const HUD_LENGTH: usize = 3;
+/// Where each value sits in the array returned by `Game::hud`. JavaScript sees this
+/// as an object, so it can write `hud[HudField.SpeedMS]` instead of a bare number.
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum HudField {
+    /// Forward speed in m/s (negative when reversing).
+    SpeedMS = 0,
+    /// Simulated time since the game started, in seconds.
+    TimeS = 1,
+    /// How many wheels touch the ground (0 to 4).
+    WheelsTouching = 2,
+}
+
+/// Number of values in the HUD array. Keep it one more than the last `HudField`.
+const HUD_LENGTH: usize = 3;
 
 /// One running game: a world and the car in it.
 #[wasm_bindgen]
@@ -64,12 +73,12 @@ impl Game {
         flatten_poses(&self.world.wheel_poses())
     }
 
-    /// Values for the on-screen display. Read them with the `HUD_*` indices.
+    /// Values for the on-screen display. Read them with the `HudField` indices.
     pub fn hud(&self) -> Vec<f32> {
         let mut values = vec![0.0; HUD_LENGTH];
-        values[HUD_SPEED_M_S] = self.world.forward_speed_m_s();
-        values[HUD_TIME_S] = self.world.time_s() as f32;
-        values[HUD_WHEELS_TOUCHING] = self
+        values[HudField::SpeedMS as usize] = self.world.forward_speed_m_s();
+        values[HudField::TimeS as usize] = self.world.time_s() as f32;
+        values[HudField::WheelsTouching as usize] = self
             .world
             .wheels_touching()
             .iter()
@@ -109,6 +118,11 @@ impl Game {
     /// The fixed physics step length in seconds (1/120).
     pub fn physics_dt_s() -> f32 {
         PHYSICS_DT_S
+    }
+
+    /// Number of floats per pose in `chassis_pose` and `wheel_poses` (7).
+    pub fn floats_per_pose() -> usize {
+        FLOATS_PER_POSE
     }
 
     /// Number of thruster nozzles (10).

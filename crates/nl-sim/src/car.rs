@@ -8,6 +8,7 @@
 use rapier3d::control::{DynamicRayCastVehicleController, WheelTuning};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::f32::consts::TAU;
 
 use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
@@ -158,17 +159,31 @@ impl Car {
 
     /// Where each wheel is drawn, in wheel order FL, FR, RL, RR.
     ///
-    /// A wheel's centre sits at the end of its suspension. Its rotation is the
-    /// chassis rotation, then the steering angle about the body's up axis, then the
-    /// roll about the axle (+Z). Rolling forward spins a wheel about -Z, so the roll
-    /// angle is negated.
+    /// Built from the chassis pose *now*, so the wheels never lag or detach from the
+    /// body. A wheel's centre sits at the end of its suspension: the length its ray
+    /// measured when it touches the ground, otherwise the rest length (in the air,
+    /// upside down, or before the first step). Its rotation is the chassis rotation, then the steering
+    /// angle about the body's up axis, then the roll about the axle (+Z). Rolling
+    /// forward spins a wheel about -Z, so the roll angle is negated.
     pub fn wheel_poses(&self, physics: &PhysicsWorld) -> [Pose; WHEEL_COUNT] {
-        let chassis_rotation = *physics.bodies[self.chassis].rotation();
+        let chassis_pose = physics.bodies[self.chassis].position();
+        let is_upright = self.is_upright(physics);
         let mut poses = [Pose::new(Vector::ZERO, Rotation::IDENTITY); WHEEL_COUNT];
         for (index, wheel) in self.wheels.wheels().iter().enumerate() {
+            let ray_measured_length = is_upright && wheel.raycast_info().is_in_contact;
+            let suspension_length_m = if ray_measured_length {
+                wheel.raycast_info().suspension_length
+            } else {
+                wheel.suspension_rest_length
+            };
+            let mount_m = chassis_pose * wheel.chassis_connection_point_cs;
+            let down = chassis_pose.rotation * wheel.direction_cs;
+            let centre_m = mount_m + down * suspension_length_m;
+
             let steer = Rotation::from_rotation_y(wheel.steering);
-            let roll = Rotation::from_rotation_z(-wheel.rotation);
-            poses[index] = Pose::new(wheel.center(), chassis_rotation * steer * roll);
+            // Wrap the ever-growing roll angle so f32 keeps its precision on long drives.
+            let roll = Rotation::from_rotation_z(-wheel.rotation.rem_euclid(TAU));
+            poses[index] = Pose::new(centre_m, chassis_pose.rotation * steer * roll);
         }
         poses
     }

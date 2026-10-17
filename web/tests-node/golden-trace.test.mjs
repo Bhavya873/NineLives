@@ -1,5 +1,6 @@
 // SPEC §7.10: the browser build must produce bit-identical physics to the native build.
 // The native test (crates/nl-sim/tests/determinism.rs) checks the same stored hash.
+// Needs `npm run wasm` first; run with `npm run test:wasm`.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
