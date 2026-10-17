@@ -3,8 +3,12 @@
 //! `World::step` advances exactly one physics step of `PHYSICS_DT_S` (1/120 s).
 //! M1 has only flat ground and driving; thrusters, the air tank and events join
 //! the step in M3, following the order in SPEC §7.1.
+//!
+//! `snapshot` and `restore` save and load the whole world as bytes. They power the
+//! game's "reset to checkpoint", training checkpoints and the determinism tests.
 
 use rapier3d::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
 use crate::conventions::{PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
@@ -28,7 +32,15 @@ pub struct ChassisPose {
     pub rotation_xyzw: [f32; 4],
 }
 
+/// Why a snapshot could not be made or loaded.
+#[derive(Debug, thiserror::Error)]
+pub enum SnapshotError {
+    #[error("world snapshot could not be encoded or decoded: {0}")]
+    Encoding(#[from] postcard::Error),
+}
+
 /// A world with flat ground and one car.
+#[derive(Serialize, Deserialize)]
 pub struct World {
     physics: PhysicsWorld,
     car: Car,
@@ -65,6 +77,18 @@ impl World {
         self.car.prepare_physics_step(&mut self.physics, input);
         self.physics.step();
         self.step_count += 1;
+    }
+
+    /// Saves the complete state of the world as bytes.
+    pub fn snapshot(&self) -> Result<Vec<u8>, SnapshotError> {
+        Ok(postcard::to_allocvec(self)?)
+    }
+
+    /// Replaces this world with one saved by `snapshot`. Stepping the restored world
+    /// with the same inputs gives bit-identical results to the original.
+    pub fn restore(&mut self, snapshot: &[u8]) -> Result<(), SnapshotError> {
+        *self = postcard::from_bytes(snapshot)?;
+        Ok(())
     }
 
     /// Number of physics steps taken since the world was built.

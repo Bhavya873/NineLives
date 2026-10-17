@@ -6,6 +6,7 @@
 
 pub mod car;
 pub mod conventions;
+pub mod golden_trace;
 pub mod input;
 pub mod vehicle_config;
 pub mod world;

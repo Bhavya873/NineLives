@@ -5,12 +5,12 @@
 //! that every number makes physical sense, so a typo fails loudly at load time
 //! instead of producing a strange simulation later.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::conventions::WHEEL_COUNT;
 
 /// Everything `configs/vehicle.toml` describes.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VehicleConfig {
     pub chassis: ChassisConfig,
@@ -21,7 +21,7 @@ pub struct VehicleConfig {
 }
 
 /// The car body. See `[chassis]` in `configs/vehicle.toml`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChassisConfig {
     /// Mass without air in the tank.
@@ -35,7 +35,7 @@ pub struct ChassisConfig {
 }
 
 /// Air resistance on the body. See `[air_drag]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AirDragConfig {
     pub air_density_kg_m3: f32,
@@ -44,7 +44,7 @@ pub struct AirDragConfig {
 }
 
 /// The four raycast wheels and their suspension. See `[wheels]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WheelConfig {
     /// Suspension attachment points in the body frame, in wheel order FL, FR, RL, RR.
@@ -70,7 +70,7 @@ pub struct WheelConfig {
 }
 
 /// Engine and brakes. See `[drive]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DriveConfig {
     pub max_engine_force_per_wheel_n: f32,
@@ -87,7 +87,7 @@ pub struct DriveConfig {
 }
 
 /// Front-wheel steering limits. See `[steering]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SteeringConfig {
     /// Steering limit when standing still.

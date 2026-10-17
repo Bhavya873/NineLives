@@ -7,6 +7,7 @@
 
 use rapier3d::control::{DynamicRayCastVehicleController, WheelTuning};
 use rapier3d::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
@@ -18,6 +19,10 @@ const FRONT_LEFT_WHEEL: usize = 0;
 const FRONT_RIGHT_WHEEL: usize = 1;
 
 /// The car's handles into the physics world, plus its driving state.
+///
+/// It is saved inside a `World` snapshot together with the physics world those
+/// handles point into; on its own a `Car` means nothing.
+#[derive(Serialize, Deserialize)]
 pub struct Car {
     /// The chassis rigid body.
     pub chassis: RigidBodyHandle,
