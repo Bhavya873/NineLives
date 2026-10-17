@@ -23,6 +23,11 @@ const FLAME_MIN_THROTTLE = 0.02;
 const FLAME_MAX_OPACITY = 0.85;
 const FLAME_COLOUR = 0xd6ecff;
 const NOZZLE_COLOUR = 0x30343b;
+/**
+ * Nozzle cones are drawn this far out along the exhaust from the physics position, so the
+ * lift nozzles (just inside the body box) show below the car.
+ */
+const NOZZLE_DRAW_OFFSET_M = 0.12;
 
 /** One nozzle's flame. */
 export type Flame = Mesh<ConeGeometry, MeshBasicMaterial>;
@@ -35,7 +40,8 @@ const CONE_AXIS = new Vector3(0, 1, 0);
  * returns the flames in nozzle order.
  */
 export function createFlames(carBody: Group, nozzles: NozzlePlace[]): Flame[] {
-  const nozzleGeometry = new CylinderGeometry(0.05, 0.09, 0.12, 8);
+  // Narrow at the car, wide toward the gas, like a bell.
+  const nozzleGeometry = new CylinderGeometry(0.09, 0.05, 0.12, 8);
   const nozzleMaterial = new MeshStandardMaterial({ color: NOZZLE_COLOUR, flatShading: true });
   // A unit-length cone with its wide base at the nozzle and its tip along +Y, so
   // scaling Y by the flame length stretches it away from the car.
@@ -46,8 +52,9 @@ export function createFlames(carBody: Group, nozzles: NozzlePlace[]): Flame[] {
   for (const place of nozzles) {
     // The nozzle cone points along the exhaust; its flame, a child, inherits that.
     const nozzle = new Mesh(nozzleGeometry, nozzleMaterial);
-    nozzle.position.fromArray(place.positionM);
-    nozzle.quaternion.setFromUnitVectors(CONE_AXIS, exhaust.fromArray(place.exhaust));
+    exhaust.fromArray(place.exhaust);
+    nozzle.position.fromArray(place.positionM).addScaledVector(exhaust, NOZZLE_DRAW_OFFSET_M);
+    nozzle.quaternion.setFromUnitVectors(CONE_AXIS, exhaust);
     const flame = new Mesh(flameGeometry, buildFlameMaterial());
     flame.visible = false;
     nozzle.add(flame);

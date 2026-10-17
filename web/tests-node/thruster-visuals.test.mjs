@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import { Group } from 'three';
 
-import { airGaugeText } from '../src/hud/air-gauge.ts';
+import { airGaugeText, createAirGauge, updateAirGauge } from '../src/hud/air-gauge.ts';
 import { mapPercent } from '../src/hud/nozzle-map.ts';
 import { readNozzleLayout } from '../src/nozzle-layout.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
@@ -54,4 +54,35 @@ test('the nozzle map spans the car from edge to edge', () => {
 test('the air gauge shows whole percent, or ∞ with unlimited air', () => {
   assert.equal(airGaugeText(0.456, false), '46%');
   assert.equal(airGaugeText(0.1, true), '∞');
+});
+
+/** Stand-ins for the gauge's page elements: only what the module touches. */
+function fakeGauge() {
+  const classes = new Set();
+  const box = {
+    classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) },
+  };
+  return { gauge: createAirGauge(box, { style: { width: '' } }, { textContent: '' }), classes };
+}
+
+test('the air gauge flashes the moment air drops below 15%, not a percent later', () => {
+  const { gauge, classes } = fakeGauge();
+
+  updateAirGauge(gauge, 0.152, false);
+  assert.equal(classes.has('low'), false);
+  updateAirGauge(gauge, 0.149, false);
+
+  assert.equal(gauge.label.textContent, '15%');
+  assert.equal(classes.has('low'), true);
+  assert.equal(gauge.fill.style.width, '14.9%');
+});
+
+test('unlimited air shows ∞, a full bar and never flashes', () => {
+  const { gauge, classes } = fakeGauge();
+
+  updateAirGauge(gauge, 0, true);
+
+  assert.equal(gauge.label.textContent, '∞');
+  assert.equal(gauge.fill.style.width, '100.0%');
+  assert.equal(classes.has('low'), false);
 });

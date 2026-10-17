@@ -7,6 +7,8 @@ import type { NozzlePlace } from '../nozzle-layout.ts';
 const MARGIN_M = 0.4;
 /** A dot never fades out completely, so idle nozzles still show where they are. */
 const IDLE_OPACITY = 0.25;
+/** Map scale; the same on both axes so the car is not stretched. */
+const PIXELS_PER_M = 26;
 /** Glow steps; coarse enough that most frames write nothing. */
 const OPACITY_STEPS = 20;
 
@@ -18,6 +20,8 @@ const OPACITY_STEPS = 20;
 export function createNozzleMap(container: HTMLElement, nozzles: NozzlePlace[]): HTMLElement[] {
   const halfLengthM = largestAbs(nozzles, 0) + MARGIN_M;
   const halfWidthM = largestAbs(nozzles, 2) + MARGIN_M;
+  container.style.width = `${Math.round(2 * halfWidthM * PIXELS_PER_M)}px`;
+  container.style.height = `${Math.round(2 * halfLengthM * PIXELS_PER_M)}px`;
   const outline = document.createElement('div');
   outline.className = 'car-outline';
   const insetLength = mapPercent(-(halfLengthM - MARGIN_M), halfLengthM);

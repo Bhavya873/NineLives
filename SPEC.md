@@ -494,7 +494,8 @@ class Game {
   tick(input: Uint8Array /* packed InputFrame */): void;  // advances exactly one physics step
   chassis_pose(): Float32Array;             // [px,py,pz,qx,qy,qz,qw]
   wheel_poses(): Float32Array;              // 4 × 7
-  nozzle_throttles(): Float32Array;         // 10 effective throttles
+  nozzle_throttles(): Float32Array;         // 10 flame sizes: valve opening × tank gate
+  nozzle_layout(): Float32Array;            // 10 × [x, y, z, exhaust x, y, z] in the body frame
   hud(): Float32Array;                      // fixed layout: speed, air_frac, tilt, |ω|, saves, crashes, time, hop_cd, …
   drain_events(): Float32Array;             // 4 per event: EventKind, then up to 3 values (Save stats, CrashCode)
   is_crashed(): boolean;

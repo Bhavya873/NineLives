@@ -40,13 +40,14 @@
         font-size: 14px;
       }
       #hud-status {
+        /* SPEC §11.5: mode (and controller, course section later) top-left. */
         left: 16px;
-        bottom: 64px;
+        top: 72px;
         font-size: 16px;
       }
       #hud-air {
         left: 16px;
-        bottom: 112px;
+        bottom: 64px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -79,10 +80,10 @@
         }
       }
       #hud-nozzles {
+        /* nozzle-map.ts sizes it from the nozzle positions, in metres. */
         right: 16px;
         bottom: 16px;
-        width: 72px;
-        height: 132px;
+        padding: 0;
       }
       #hud-nozzles .car-outline {
         /* nozzle-map.ts sets the inset so the outline matches the nozzle dots. */

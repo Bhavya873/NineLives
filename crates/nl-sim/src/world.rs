@@ -389,10 +389,21 @@ impl World {
         self.controller_throttles = throttles;
     }
 
-    /// How open each thruster valve is now, 0..1, in nozzle order. The renderer sizes
-    /// the flames from these.
+    /// How open each thruster valve is now, 0..1, in nozzle order.
     pub fn effective_throttles(&self) -> [f32; NOZZLE_COUNT] {
         self.car.effective_throttles()
+    }
+
+    /// How much gas each nozzle is really blowing, 0..1, in nozzle order: the valve
+    /// opening times the tank gate (SPEC §7.5), so an empty tank shows no flames even
+    /// with the valves open. The renderer sizes the flames from these.
+    pub fn flame_fractions(&self) -> [f32; NOZZLE_COUNT] {
+        let gate = self.tank.thrust_gate(&self.mode);
+        let mut fractions = self.car.effective_throttles();
+        for fraction in &mut fractions {
+            *fraction *= gate;
+        }
+        fractions
     }
 
     /// Moves the car to a new position, orientation and velocity, for tests and for

@@ -189,10 +189,10 @@ impl Game {
         flatten_poses(&self.world.wheel_poses())
     }
 
-    /// How open each of the 10 thruster valves is now (0..1), in nozzle order.
-    /// The renderer sizes each flame from these.
+    /// How much gas each of the 10 nozzles is blowing now (0..1), in nozzle order:
+    /// valve opening times the tank gate. The renderer sizes each flame from these.
     pub fn nozzle_throttles(&self) -> Vec<f32> {
-        self.world.effective_throttles().to_vec()
+        self.world.flame_fractions().to_vec()
     }
 
     /// Where the renderer draws each nozzle and its flame, in nozzle order, 6 floats
