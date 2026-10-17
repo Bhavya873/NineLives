@@ -73,6 +73,12 @@ impl Game {
         flatten_poses(&self.world.wheel_poses())
     }
 
+    /// How open each of the 10 thruster valves is now (0..1), in nozzle order.
+    /// The renderer sizes each flame from these.
+    pub fn nozzle_throttles(&self) -> Vec<f32> {
+        self.world.effective_throttles().to_vec()
+    }
+
     /// Values for the on-screen display. Read them with the `HudField` indices.
     pub fn hud(&self) -> Vec<f32> {
         let mut values = vec![0.0; HUD_LENGTH];

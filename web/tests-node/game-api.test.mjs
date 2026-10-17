@@ -23,6 +23,7 @@ test('full throttle moves the car along +X', () => {
   assert.equal(pose.length, Game.floats_per_pose());
   assert.ok(pose[0] > 5, `x after 2 s: ${pose[0]}`);
   assert.equal(game.wheel_poses().length, 4 * Game.floats_per_pose());
+  assert.deepEqual(Array.from(game.nozzle_throttles()), new Array(Game.nozzle_count()).fill(0));
 });
 
 test('restoring a snapshot puts the car and the clock back exactly', () => {
