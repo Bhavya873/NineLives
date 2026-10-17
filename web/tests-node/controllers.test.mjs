@@ -3,18 +3,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { ControllerCode, Game, HudField, modesToml, vehicleToml } from './load-wasm.mjs';
+import { ControllerCode, Game, HudField, modesToml, tickMany, vehicleToml } from './load-wasm.mjs';
 
 /** An input frame holding the manual button for `nozzle`. */
 function holdingNozzle(nozzle) {
   const buttons = 1 << (Game.first_manual_nozzle_bit() + nozzle);
   return new Uint8Array([0, 0, buttons & 0xff, buttons >> 8]);
-}
-
-function tickMany(game, input, count) {
-  for (let tick = 0; tick < count; tick += 1) {
-    game.tick(input);
-  }
 }
 
 test('the game starts with the Off controller, which ignores the nozzle keys', () => {
@@ -52,5 +46,15 @@ test('switching back to Off closes the valves Manual left open', () => {
 test('an unknown controller name is refused with a helpful message', () => {
   const game = new Game(vehicleToml, modesToml, 0n);
 
-  assert.throws(() => game.set_controller('autopilot'), /use "off" or "manual"/);
+  assert.throws(() => game.set_controller('autopilot'), /use one of: off, manual/);
+});
+
+test('cycling the controller goes Off, Manual and back to Off', () => {
+  const game = new Game(vehicleToml, modesToml, 0n);
+
+  game.cycle_controller();
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Manual);
+  game.cycle_controller();
+
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Off);
 });

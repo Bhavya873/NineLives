@@ -7,9 +7,11 @@
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::input::InputFrame;
 
+mod controller_kind;
 mod manual;
 mod off;
 
+pub use controller_kind::{CONTROLLER_NAMES, ControllerKind, UnknownController};
 pub use manual::Manual;
 pub use off::Off;
 

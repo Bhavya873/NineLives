@@ -25,8 +25,8 @@ const MODE_TEXT: Record<number, string> = {
 
 /** Controller names, by wasm `ControllerCode` value. */
 const CONTROLLER_TEXT: Record<number, string> = {
-  [ControllerCode.Off]: 'Thrusters: Off',
-  [ControllerCode.Manual]: 'Thrusters: Manual (keys 1–0)',
+  [ControllerCode.Off]: 'Controller: Off',
+  [ControllerCode.Manual]: 'Controller: Manual (keys 1–0)',
 };
 
 /** The numbers the HUD shows, already read from the game. */

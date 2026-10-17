@@ -12,15 +12,10 @@ import {
   ModeCode,
   modesToml,
   vehicleToml,
+  tickMany,
 } from './load-wasm.mjs';
 
 const FULL_THROTTLE = new Uint8Array([127, 0, 0, 0]);
-
-function tickMany(game, input, count) {
-  for (let step = 0; step < count; step += 1) {
-    game.tick(input);
-  }
-}
 
 test('full throttle moves the car along +X', () => {
   const game = new Game(vehicleToml, modesToml, 0n);

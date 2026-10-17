@@ -26,8 +26,8 @@ import {
   FIRST_MANUAL_NOZZLE_BIT,
   onKeyPress,
   readInputFrame,
+  bindTapButton,
   startKeyboard,
-  tapButton,
 } from './input/keyboard.ts';
 import { followCar, snapCamera } from './render/chase-camera.ts';
 import {
@@ -79,18 +79,9 @@ async function start(): Promise<void> {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
-  // SPEC §11.3: T cycles the controller. Until PD and the AI exist (M4–M5) that is
-  // Off ↔ Manual; Manual is the debug controller for feeling each nozzle.
-  onKeyPress('KeyT', () => {
-    const isManual = game.hud()[HudField.Controller] === ControllerCode.Manual;
-    game.set_controller(isManual ? 'off' : 'manual');
-  });
-  const chaosButton = requireElement('chaos-button');
-  chaosButton.addEventListener('click', () => {
-    tapButton(BUTTON_CHAOS);
-    // Give the keyboard back, or Space (Hop) would "click" the focused button again.
-    chaosButton.blur();
-  });
+  // SPEC §11.3: T cycles the controller; the sim owns the order.
+  onKeyPress('KeyT', () => game.cycle_controller());
+  bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
 
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),

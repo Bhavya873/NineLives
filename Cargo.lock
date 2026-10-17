@@ -298,6 +298,7 @@ name = "nl-control"
 version = "0.1.0"
 dependencies = [
  "nl-sim",
+ "thiserror",
 ]
 
 [[package]]

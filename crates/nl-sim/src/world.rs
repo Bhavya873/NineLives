@@ -17,7 +17,10 @@ use crate::car::Car;
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
 use crate::contacts::{MotionBeforeStep, read_body_contacts};
-use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
+use crate::conventions::{
+    NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
+    gravity_vector,
+};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
@@ -382,9 +385,15 @@ impl World {
         touching.iter().filter(|wheel_down| **wheel_down).count()
     }
 
+    /// True when the next `step` starts a control step: controllers run at 60 Hz, once
+    /// every `PHYSICS_STEPS_PER_CONTROL_STEP` physics steps (SPEC §7.1). Every runner
+    /// (game, eval, training) asks this rather than counting steps itself.
+    pub fn is_control_step(&self) -> bool {
+        self.step_count % PHYSICS_STEPS_PER_CONTROL_STEP as u64 == 0
+    }
+
     /// Sets the throttles (0..1 per nozzle, in nozzle order) that the controller wants.
-    /// They are held until the next call. Controllers run at 60 Hz, so callers set
-    /// them every `PHYSICS_STEPS_PER_CONTROL_STEP` physics steps (SPEC §7.1).
+    /// They are held until the next call; callers set them when `is_control_step`.
     pub fn set_controller_throttles(&mut self, throttles: [f32; NOZZLE_COUNT]) {
         self.controller_throttles = throttles;
     }

@@ -18,3 +18,10 @@ export const vehicleToml = readFileSync(
   new URL('../../configs/vehicle.toml', import.meta.url),
   'utf8',
 );
+
+/** Runs `count` ticks of the same packed input frame. */
+export function tickMany(game, input, count) {
+  for (let tick = 0; tick < count; tick += 1) {
+    game.tick(input);
+  }
+}
