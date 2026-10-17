@@ -11,13 +11,15 @@ const STEER_LEFT_KEYS = ['KeyA', 'ArrowLeft'];
 const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
+const CHAOS_KEYS = ['KeyC'];
 
 /**
- * Button bits, matching BUTTON_HOP and BUTTON_BOOST in crates/nl-sim/src/input.rs.
+ * Button bits, matching the BUTTON_* constants in crates/nl-sim/src/input.rs.
  * main.ts checks them against the wasm build at start-up.
  */
 export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
+export const BUTTON_CHAOS = 1 << 2;
 
 /** Every held key this module handles, so the page does not scroll on arrows or Space. */
 const HANDLED_KEYS = [
@@ -27,16 +29,18 @@ const HANDLED_KEYS = [
   ...STEER_RIGHT_KEYS,
   ...HOP_KEYS,
   ...BOOST_KEYS,
+  ...CHAOS_KEYS,
 ];
 
 /** Keys that are currently held down, by `KeyboardEvent.code`. */
 const heldKeys = new Set<string>();
 
 /**
- * Hop key presses not yet sent to the game. A quick tap can go down and up between two
- * ticks on a slow frame; remembering the press makes sure the game still sees it.
+ * Bits of the press-to-trigger buttons (Hop, Chaos) pressed since the last frame. A quick
+ * tap can go down and up between two ticks on a slow frame; remembering the press makes
+ * sure the game still sees it.
  */
-let hopPressedSinceLastFrame = false;
+let tappedButtons = 0;
 
 /** One-shot actions for single key presses (e.g. M toggles the mode), by key code. */
 const pressActions = new Map<string, () => void>();
@@ -60,7 +64,10 @@ export function startKeyboard(target: Window): void {
     }
     heldKeys.add(event.code);
     if (HOP_KEYS.includes(event.code)) {
-      hopPressedSinceLastFrame = true;
+      tappedButtons |= BUTTON_HOP;
+    }
+    if (CHAOS_KEYS.includes(event.code)) {
+      tappedButtons |= BUTTON_CHAOS;
     }
     if (!event.repeat) {
       pressActions.get(event.code)?.();
@@ -85,13 +92,16 @@ export function readInputFrame(): Uint8Array {
   frameSigned[0] = axis(THROTTLE_KEYS, BRAKE_KEYS);
   // Positive steer is left, matching the sim's yaw sign (SPEC §4).
   frameSigned[1] = axis(STEER_LEFT_KEYS, STEER_RIGHT_KEYS);
-  let buttons = 0;
-  if (isAnyHeld(HOP_KEYS) || hopPressedSinceLastFrame) {
+  let buttons = tappedButtons;
+  tappedButtons = 0;
+  if (isAnyHeld(HOP_KEYS)) {
     buttons |= BUTTON_HOP;
   }
-  hopPressedSinceLastFrame = false;
   if (isAnyHeld(BOOST_KEYS)) {
     buttons |= BUTTON_BOOST;
+  }
+  if (isAnyHeld(CHAOS_KEYS)) {
+    buttons |= BUTTON_CHAOS;
   }
   // Bytes 2 and 3 are the buttons, little-endian.
   frame[2] = buttons & 0xff;

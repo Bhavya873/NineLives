@@ -17,7 +17,9 @@ const STEPS_BETWEEN_PRINTS: u32 = 30;
 fn main() -> Result<(), Box<dyn Error>> {
     let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML)?;
     let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?;
-    let mut world = World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION);
+    let seed = 0;
+    let mut world =
+        World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
 
     println!("  time_s      x_m      y_m      z_m   speed_m_s  wheels");
     for step in 0..DRIVE_SECONDS * PHYSICS_HZ {

@@ -136,3 +136,27 @@ name = "B_R"
 position_m = [-2.1, 0.0, 0.4]
 direction = [1.0, 0.0, 0.0]
 max_force_n = 8000.0
+[events]
+# Event rules from SPEC §7.9. Angles are in degrees here for readability.
+# An upset starts after this long with no wheel touching, or above this tilt.
+upset_airborne_s = 0.3
+upset_tilt_deg = 60.0
+# A save: back on all 4 wheels, nearly level and nearly still, held this long.
+save_tilt_deg = 15.0
+save_max_spin_rad_s = 1.5
+save_hold_s = 0.5
+# Crash if the body or roof hits something faster than this along the contact normal.
+crash_impact_speed_m_s = 6.0
+# Crash if the roof touches anything while tilted past this ("upside down").
+upside_down_tilt_deg = 120.0
+# Crash if tilted past `stuck_tilt_deg` for longer than `stuck_s`.
+stuck_tilt_deg = 100.0
+stuck_s = 2.0
+# Crash below this height.
+out_of_bounds_y_m = -20.0
+
+[chaos]
+# A random knock (SPEC §7.12): a push and a twist in random directions, each up to
+# these sizes.
+max_linear_impulse_n_s = 8000.0
+max_angular_impulse_n_m_s = 3000.0

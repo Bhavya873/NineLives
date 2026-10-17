@@ -106,6 +106,11 @@ impl Car {
         }
     }
 
+    /// The car's settings.
+    pub fn config(&self) -> &VehicleConfig {
+        &self.config
+    }
+
     /// Exhaust speed of the cold gas, from the vehicle config.
     pub fn exhaust_speed_m_s(&self) -> f32 {
         self.config.thrusters.exhaust_speed_m_s

@@ -5,7 +5,10 @@
 //! the browser (through `nl-wasm`) both call into it.
 
 pub mod car;
+pub mod chaos;
+pub mod contacts;
 pub mod conventions;
+pub mod events;
 pub mod golden_trace;
 pub mod hop_boost;
 pub mod input;

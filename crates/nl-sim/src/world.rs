@@ -7,13 +7,18 @@
 //! `snapshot` and `restore` save and load the whole world as bytes. They power the
 //! game's "reset to checkpoint", training checkpoints and the determinism tests.
 
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
+use crate::chaos::apply_chaos_knock;
+use crate::contacts::{MotionBeforeStep, read_body_contacts};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
+use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
-use crate::input::InputFrame;
+use crate::input::{BUTTON_CHAOS, InputFrame};
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
 use crate::vehicle_config::VehicleConfig;
@@ -49,9 +54,12 @@ impl Pose {
     }
 }
 
+/// Most events kept waiting for `drain_events`; older ones are dropped.
+const MAX_PENDING_EVENTS: usize = 256;
+
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 3;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 4;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -87,12 +95,21 @@ pub struct World {
     mode: ModeParams,
     tank: AirTank,
     hop_boost: HopBoost,
+    events: EventTracker,
+    /// Events not yet collected by `drain_events`. Not saved in snapshots, so a
+    /// restored world never reports the same event twice.
+    #[serde(skip)]
+    pending_events: Vec<SimEvent>,
+    chaos_button_was_down: bool,
+    /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
+    rng: ChaCha8Rng,
     step_count: u64,
 }
 
 impl World {
     /// Builds flat ground and puts the car at the origin, facing world +X, with a full
-    /// tank for `mode`.
+    /// tank for `mode`. `seed` starts the random generator (used by Chaos), so the same
+    /// seed and inputs always give the same run.
     ///
     /// `ground_friction` applies when the car's body scrapes the ground. Tyre grip
     /// comes from `wheels.friction_slip` in the vehicle config instead, because
@@ -101,6 +118,7 @@ impl World {
         vehicle_config: &VehicleConfig,
         mode: ModeParams,
         ground_friction: f32,
+        seed: u64,
     ) -> World {
         let mut physics = PhysicsWorld::new();
         physics.gravity = gravity_vector();
@@ -120,6 +138,10 @@ impl World {
             mode,
             tank: AirTank::full(&mode),
             hop_boost: HopBoost::default(),
+            events: EventTracker::default(),
+            pending_events: Vec::new(),
+            chaos_button_was_down: false,
+            rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
     }
@@ -131,6 +153,7 @@ impl World {
         let air_kg = self.tank.air_kg();
         self.hop_boost
             .update(input, wheels_down, air_kg, &self.mode, PHYSICS_DT_S);
+        self.knock_if_chaos_pressed(input);
         // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
         let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
         let commanded = combine_throttles(feed_forward, self.controller_throttles);
@@ -139,15 +162,77 @@ impl World {
         let thrust_n =
             self.car
                 .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
-        // 9. The physics step.
+        // 9. The physics step. Impacts are judged on the speed from just before it.
+        let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
         self.physics.step();
+        let wheels_down_after = self.wheels_touching_count();
         // 10. The tank: pay for this step's thrust, then refill if on the ground.
         let exhaust_m_s = self.car.exhaust_speed_m_s();
         self.tank
             .use_air(thrust_n, exhaust_m_s, PHYSICS_DT_S, &self.mode);
         self.tank
-            .refill(self.wheels_touching_count(), PHYSICS_DT_S, &self.mode);
+            .refill(wheels_down_after, PHYSICS_DT_S, &self.mode);
+        // 11. Events (SPEC §7.9).
+        self.update_events(&motion_before, wheels_down_after);
         self.step_count += 1;
+    }
+
+    /// Applies a Chaos knock when the Chaos button goes down (SPEC §7.12).
+    fn knock_if_chaos_pressed(&mut self, input: InputFrame) {
+        let chaos_down = input.is_pressed(BUTTON_CHAOS);
+        if chaos_down && !self.chaos_button_was_down {
+            let body = &mut self.physics.bodies[self.car.chassis];
+            apply_chaos_knock(body, &self.car.config().chaos, &mut self.rng);
+        }
+        self.chaos_button_was_down = chaos_down;
+    }
+
+    /// Feeds this step's state to the event rules and keeps any new events.
+    fn update_events(&mut self, motion_before: &MotionBeforeStep, wheels_down: usize) {
+        // After a crash nothing more is reported, so skip reading the contacts.
+        if self.events.crashed() {
+            return;
+        }
+        let contacts = read_body_contacts(
+            &self.physics,
+            self.car.body_collider,
+            self.car.roof_collider,
+            motion_before,
+        );
+        let body = &self.physics.bodies[self.car.chassis];
+        let inputs = EventInputs {
+            wheels_down,
+            tilt_rad: self.tilt_rad(),
+            spin_rad_s: body.angvel().length(),
+            air_used_kg: self.tank.air_used_kg(),
+            height_m: body.translation().y,
+            impact_speed_m_s: contacts.impact_speed_m_s,
+            roof_touching: contacts.roof_touching,
+        };
+        let config = &self.car.config().events;
+        self.events
+            .update(&inputs, config, PHYSICS_DT_S, &mut self.pending_events);
+        // Callers that never drain (e.g. a headless benchmark) must not grow memory
+        // forever, so only the newest events are kept.
+        if self.pending_events.len() > MAX_PENDING_EVENTS {
+            let extra = self.pending_events.len() - MAX_PENDING_EVENTS;
+            self.pending_events.drain(..extra);
+        }
+    }
+
+    /// Returns and forgets the events since the last call (SPEC §7.9).
+    pub fn drain_events(&mut self) -> Vec<SimEvent> {
+        std::mem::take(&mut self.pending_events)
+    }
+
+    /// True once the car has crashed. Placing the car again clears it.
+    pub fn is_crashed(&self) -> bool {
+        self.events.crashed()
+    }
+
+    /// Angle between the car's up axis and world up: 0 level, π upside down.
+    pub fn tilt_rad(&self) -> f32 {
+        self.car.up_alignment(&self.physics).clamp(-1.0, 1.0).acos()
     }
 
     /// Switches to another mode's physics, e.g. Realistic ↔ Arcade. The air left
@@ -245,6 +330,8 @@ impl World {
 
         self.controller_throttles = [0.0; NOZZLE_COUNT];
         self.hop_boost = HopBoost::default();
+        self.events.reset();
+        self.pending_events.clear();
         self.car.reset_actuators();
         let body = &mut self.physics.bodies[self.car.chassis];
         body.set_position(
@@ -281,6 +368,24 @@ impl World {
             });
         }
         *self = world;
+        Ok(())
+    }
+
+    /// Starts a new life from a checkpoint saved with `snapshot` (SPEC §7.9): the car
+    /// and course state come from the checkpoint, events start fresh, the tank is
+    /// refilled, and the current mode, clock and random generator carry on (so Chaos does not replay the
+    /// same knocks after every respawn). On error the world is left unchanged.
+    pub fn respawn_from(&mut self, checkpoint: &[u8]) -> Result<(), SnapshotError> {
+        let mode = self.mode;
+        let rng = self.rng.clone();
+        let step_count = self.step_count;
+        self.restore(checkpoint)?;
+        self.mode = mode;
+        self.rng = rng;
+        self.step_count = step_count;
+        // `restore` already emptied the pending events (they are not in snapshots).
+        self.events.reset();
+        self.refill_tank();
         Ok(())
     }
 

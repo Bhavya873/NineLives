@@ -8,9 +8,10 @@
 //! policy, events and courses are added in M3–M7, following SPEC §11.1.
 
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
+use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
-use nl_sim::input::{BUTTON_BOOST, BUTTON_HOP, INPUT_FRAME_BYTES, InputFrame};
+use nl_sim::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, INPUT_FRAME_BYTES, InputFrame};
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
@@ -81,19 +82,60 @@ pub enum HopBlocked {
 pub struct Game {
     world: World,
     modes: ModesConfig,
+    /// The snapshot `respawn` goes back to (SPEC §7.9, §11.3 "R").
+    checkpoint: Vec<u8>,
+}
+
+/// Number of floats per event in `Game::drain_events`.
+const FLOATS_PER_EVENT: usize = 4;
+
+/// What happened, the first of the 4 floats of each event from `drain_events`.
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum EventKind {
+    /// The last wheel left the ground.
+    AirborneStart = 1,
+    /// A wheel touched the ground again.
+    AirborneEnd = 2,
+    /// The car was knocked off balance.
+    UpsetStart = 3,
+    /// Followed by: duration in s, air used in kg, peak tilt in rad.
+    Save = 4,
+    /// Followed by: a `CrashCode`.
+    Crash = 5,
+}
+
+/// Why the car crashed, the second float of a `Crash` event.
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum CrashCode {
+    /// The body or roof hit something too fast.
+    HardImpact = 1,
+    /// The roof touched something while upside down.
+    UpsideDown = 2,
+    /// Tipped over for too long.
+    Stuck = 3,
+    /// Fell out of the world.
+    OutOfBounds = 4,
 }
 
 #[wasm_bindgen]
 impl Game {
     /// Builds a game on flat ground from the text of `configs/vehicle.toml` and
-    /// `configs/modes.toml`, starting in Realistic mode. Throws if a config is
-    /// invalid; the message names the bad field.
+    /// `configs/modes.toml`, starting in Realistic mode. `seed` drives the random
+    /// Chaos knocks. Throws if a config is invalid; the message names the bad field.
     #[wasm_bindgen(constructor)]
-    pub fn new(vehicle_toml: &str, modes_toml: &str) -> Result<Game, JsError> {
+    pub fn new(vehicle_toml: &str, modes_toml: &str, seed: u64) -> Result<Game, JsError> {
         let config = VehicleConfig::from_toml_str(vehicle_toml)?;
         let modes = ModesConfig::from_toml_str(modes_toml)?;
-        let world = World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION);
-        Ok(Game { world, modes })
+        let world =
+            World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
+        let checkpoint = world.snapshot()?;
+        Ok(Game {
+            world,
+            modes,
+            checkpoint,
+        })
     }
 
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
@@ -160,6 +202,35 @@ impl Game {
         Ok(())
     }
 
+    /// Remembers the current state as the place `respawn` returns to.
+    pub fn set_checkpoint(&mut self) -> Result<(), JsError> {
+        self.checkpoint = self.world.snapshot()?;
+        Ok(())
+    }
+
+    /// Puts the car back at the last checkpoint with a full tank, e.g. after a crash
+    /// (SPEC §7.9) or when the player presses R. The mode, clock and Chaos random
+    /// numbers carry on, and any crash is cleared.
+    pub fn respawn(&mut self) -> Result<(), JsError> {
+        self.world.respawn_from(&self.checkpoint)?;
+        Ok(())
+    }
+
+    /// True once the car has crashed; `respawn` clears it.
+    pub fn is_crashed(&self) -> bool {
+        self.world.is_crashed()
+    }
+
+    /// Events since the last call, 4 floats each: an `EventKind` then up to three
+    /// values (see `EventKind`), unused ones 0.
+    pub fn drain_events(&mut self) -> Vec<f32> {
+        let mut values = Vec::new();
+        for event in self.world.drain_events() {
+            values.extend_from_slice(&event_floats(event));
+        }
+        values
+    }
+
     /// Identifies this build, so saved ghosts from an incompatible build are ignored.
     /// For now it is the crate version and snapshot format; M8 adds the physics hash.
     pub fn build_hash() -> String {
@@ -196,6 +267,16 @@ impl Game {
         BUTTON_BOOST
     }
 
+    /// The input-frame button bit for Chaos.
+    pub fn button_chaos() -> u16 {
+        BUTTON_CHAOS
+    }
+
+    /// Number of floats per event in `drain_events` (4).
+    pub fn floats_per_event() -> usize {
+        FLOATS_PER_EVENT
+    }
+
     /// Number of thruster nozzles (10).
     pub fn nozzle_count() -> usize {
         NOZZLE_COUNT
@@ -225,6 +306,42 @@ impl Game {
             ))),
         }
     }
+}
+
+/// One event as 4 numbers for JavaScript (see `EventKind`).
+fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
+    match event {
+        SimEvent::AirborneStart => [kind_code(EventKind::AirborneStart), 0.0, 0.0, 0.0],
+        SimEvent::AirborneEnd => [kind_code(EventKind::AirborneEnd), 0.0, 0.0, 0.0],
+        SimEvent::UpsetStart => [kind_code(EventKind::UpsetStart), 0.0, 0.0, 0.0],
+        SimEvent::Save {
+            duration_s,
+            air_used_kg,
+            peak_tilt_rad,
+        } => [
+            kind_code(EventKind::Save),
+            duration_s,
+            air_used_kg,
+            peak_tilt_rad,
+        ],
+        SimEvent::Crash { cause } => [kind_code(EventKind::Crash), crash_code(cause), 0.0, 0.0],
+    }
+}
+
+/// An `EventKind` as the number JavaScript sees.
+fn kind_code(kind: EventKind) -> f32 {
+    kind as u8 as f32
+}
+
+/// A crash cause as its `CrashCode` number.
+fn crash_code(cause: CrashCause) -> f32 {
+    let code = match cause {
+        CrashCause::HardImpact => CrashCode::HardImpact,
+        CrashCause::UpsideDown => CrashCode::UpsideDown,
+        CrashCause::Stuck => CrashCode::Stuck,
+        CrashCause::OutOfBounds => CrashCode::OutOfBounds,
+    };
+    code as u8 as f32
 }
 
 /// 1.0 for true, 0.0 for false, for the all-numbers HUD array.

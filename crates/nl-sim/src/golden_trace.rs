@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP};
-use crate::input::{BUTTON_BOOST, BUTTON_HOP, InputFrame};
+use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, InputFrame};
 use crate::modes::{ModesConfig, ModesConfigError};
 use crate::vehicle_config::{VehicleConfig, VehicleConfigError};
 use crate::world::{DEFAULT_GROUND_FRICTION, SnapshotError, World};
@@ -26,6 +26,9 @@ pub const GOLDEN_VEHICLE_TOML: &str = include_str!("../tests/golden/vehicle.toml
 /// The frozen modes the golden hash was recorded with (the trace uses Realistic).
 pub const GOLDEN_MODES_TOML: &str = include_str!("../tests/golden/modes.toml");
 
+/// Seed for the world's random generator during the golden trace.
+const GOLDEN_TRACE_SEED: u64 = 0;
+
 /// FNV-1a 64-bit starting value and multiplier (the standard constants).
 const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -36,7 +39,7 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 pub struct GoldenTraceResult {
     /// Steps that were run.
     pub steps: u32,
-    /// Hash of every step's pose and velocities plus the final snapshot, as 16 hex digits.
+    /// Hash of every step's pose, velocities and events plus the final snapshot, as 16 hex digits.
     #[serde(rename = "hash")]
     pub hash_hex: String,
     /// Where the car ended up, for a human-readable sanity check.
@@ -44,18 +47,20 @@ pub struct GoldenTraceResult {
 }
 
 /// The scripted driver input for `step`: wait, accelerate, Hop, Boost, turn left,
-/// turn right, brake, then reverse. It is a pure function of the step number.
+/// turn right (with a Chaos knock at 9 s), brake, then reverse. It is a pure
+/// function of the step number.
 pub fn scripted_input(step: u32) -> InputFrame {
     let second = step / PHYSICS_HZ;
     let (throttle, steer, buttons) = match second {
-        0 => (0, 0, 0),              // settle on the suspension
-        1..=2 => (127, 0, 0),        // full throttle
-        3 => (127, 0, BUTTON_HOP),   // Hop while driving (held: still only one Hop)
-        4 => (127, 0, BUTTON_BOOST), // Boost
-        5..=7 => (80, 100, 0),       // throttle and turn left
-        8..=10 => (80, -100, 0),     // throttle and turn right
-        11..=12 => (-127, 0, 0),     // brake
-        _ => (-90, 30, 0),           // reverse while turning
+        0 => (0, 0, 0),                // settle on the suspension
+        1..=2 => (127, 0, 0),          // full throttle
+        3 => (127, 0, BUTTON_HOP),     // Hop while driving (held: still only one Hop)
+        4 => (127, 0, BUTTON_BOOST),   // Boost
+        5..=7 => (80, 100, 0),         // throttle and turn left
+        8 | 10 => (80, -100, 0),       // throttle and turn right
+        9 => (80, -100, BUTTON_CHAOS), // turn right and get knocked (once)
+        11..=12 => (-127, 0, 0),       // brake
+        _ => (-90, 30, 0),             // reverse while turning
     };
     InputFrame {
         throttle,
@@ -98,18 +103,30 @@ pub enum GoldenTraceError {
 
     #[error(transparent)]
     Snapshot(#[from] SnapshotError),
+
+    #[error("golden trace: could not encode an event: {0}")]
+    EventEncoding(#[from] postcard::Error),
 }
 
 /// Runs the golden trace with the frozen golden car.
 pub fn run_golden_trace() -> Result<GoldenTraceResult, GoldenTraceError> {
     let config = VehicleConfig::from_toml_str(GOLDEN_VEHICLE_TOML)?;
     let modes = ModesConfig::from_toml_str(GOLDEN_MODES_TOML)?;
-    let mut world = World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION);
+    let mut world = World::new_on_flat_ground(
+        &config,
+        modes.realistic,
+        DEFAULT_GROUND_FRICTION,
+        GOLDEN_TRACE_SEED,
+    );
 
     let mut hash = FNV_OFFSET_BASIS;
     for step in 0..GOLDEN_TRACE_STEPS {
         step_scripted(&mut world, step);
         hash = hash_world_state(hash, &world);
+        // Events are part of the sim's output too, so they must be deterministic.
+        for event in world.drain_events() {
+            hash = fnv1a_add_bytes(hash, &postcard::to_allocvec(&event)?);
+        }
     }
     hash = fnv1a_add_bytes(hash, &world.snapshot()?);
 
