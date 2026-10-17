@@ -41,6 +41,8 @@ export interface Arena {
   sun: DirectionalLight;
   /** The sky dome; the game moves it with the car. */
   backdrop: Mesh;
+  /** The endless checkered floor; hidden on a course, which brings its own floor. */
+  ground: Mesh;
 }
 
 /** The game's view: the arena plus the one car. */
@@ -127,9 +129,10 @@ export function createArena(container: HTMLElement): Arena {
   scene.add(new HemisphereLight(0xffffff, 0x2a3440, 0.7));
   const sun = buildSun();
   scene.add(sun, sun.target);
-  scene.add(buildGround());
+  const ground = buildGround();
+  scene.add(ground);
 
-  const arena = { renderer, scene, camera, sun, backdrop };
+  const arena = { renderer, scene, camera, sun, backdrop, ground };
   resizeToWindow(arena);
   window.addEventListener('resize', () => resizeToWindow(arena));
   return arena;
@@ -178,15 +181,23 @@ function buildSun(): DirectionalLight {
 function buildGround(): Mesh {
   const ground = new Mesh(
     new PlaneGeometry(GROUND_SIZE_M, GROUND_SIZE_M),
-    new MeshStandardMaterial({ map: buildCheckerTexture(), roughness: 0.9 }),
+    buildCheckerMaterial(GROUND_SIZE_M, GROUND_SIZE_M),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   return ground;
 }
 
-/** A 2×2 checker drawn once into a tiny canvas and tiled across the whole floor. */
-function buildCheckerTexture(): CanvasTexture {
+/**
+ * The floor's checkered material for a surface `widthM` × `depthM` metres, so its
+ * squares are `CHECKER_SIZE_M` wide. Course floor boxes use it too, so they match.
+ */
+export function buildCheckerMaterial(widthM: number, depthM: number): MeshStandardMaterial {
+  return new MeshStandardMaterial({ map: buildCheckerTexture(widthM, depthM), roughness: 0.9 });
+}
+
+/** A 2×2 checker drawn once into a tiny canvas and tiled across `widthM` × `depthM`. */
+function buildCheckerTexture(widthM: number, depthM: number): CanvasTexture {
   const texture = buildCanvasTexture(2, 2, (context) => {
     context.fillStyle = CHECKER_LIGHT;
     context.fillRect(0, 0, 2, 2);
@@ -198,8 +209,7 @@ function buildCheckerTexture(): CanvasTexture {
   texture.wrapT = RepeatWrapping;
   // Sharp square edges up close; one texture tile is two squares.
   texture.magFilter = NearestFilter;
-  const tiles = GROUND_SIZE_M / (2 * CHECKER_SIZE_M);
-  texture.repeat.set(tiles, tiles);
+  texture.repeat.set(widthM / (2 * CHECKER_SIZE_M), depthM / (2 * CHECKER_SIZE_M));
   texture.anisotropy = 8;
   return texture;
 }

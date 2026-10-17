@@ -78,7 +78,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 9;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 10;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -134,6 +134,8 @@ pub struct World {
     course_bounds: Option<BoundsSpec>,
     /// The course's checkpoint and finish lines and kick plates, and the car's progress.
     triggers: CourseTriggers,
+    /// World time when the car crossed the finish line, in s.
+    finish_time_s: Option<f32>,
     /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
@@ -222,6 +224,7 @@ impl World {
             auto_respawn_after_steps: None,
             course_bounds,
             triggers: CourseTriggers::default(),
+            finish_time_s: None,
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
@@ -383,11 +386,12 @@ impl World {
                 respawn_position_m,
                 yaw_rad,
             } => {
-                self.checkpoint = self.checkpoint_at_line(respawn_position_m, yaw_rad);
+                self.checkpoint = World::checkpoint_at_line(respawn_position_m, yaw_rad);
                 self.keep_event(SimEvent::CheckpointReached { number });
             }
             TriggerAction::Finish => {
                 let time_s = self.time_s() as f32;
+                self.finish_time_s = Some(time_s);
                 self.keep_event(SimEvent::Finished { time_s });
             }
             TriggerAction::KickPlate {
@@ -403,18 +407,15 @@ impl World {
         }
     }
 
-    /// A respawn point on a checkpoint line: upright, facing along the line's heading,
-    /// keeping the car's forward speed so a checkpoint before a jump can still clear it.
-    /// Built from the line, not the car, so a car that tumbles over a line still
-    /// respawns sensibly.
-    fn checkpoint_at_line(&self, respawn_position_m: [f32; 3], yaw_rad: f32) -> Checkpoint {
+    /// A respawn point on a checkpoint line: upright, at rest, facing along the line's
+    /// heading. Built from the line, not the car, so a car that tumbles over a line
+    /// still respawns sensibly; at rest, so a crash just past a checkpoint can never
+    /// repeat itself forever (a respawn at the old speed did, into the big ramp).
+    fn checkpoint_at_line(respawn_position_m: [f32; 3], yaw_rad: f32) -> Checkpoint {
         let rotation = Rotation::from_rotation_y(yaw_rad);
-        let heading = rotation * Vector::X;
-        let velocity = self.physics.bodies[self.car.chassis].linvel();
-        let forward_speed_m_s = velocity.dot(heading).max(0.0);
         Checkpoint {
             pose: Pose::new(Vector::from_array(respawn_position_m), rotation),
-            linear_velocity_m_s: (heading * forward_speed_m_s).to_array(),
+            linear_velocity_m_s: [0.0; 3],
             angular_velocity_rad_s: [0.0; 3],
         }
     }
@@ -432,6 +433,11 @@ impl World {
     /// True once the car has crossed the course's finish line.
     pub fn is_finished(&self) -> bool {
         self.triggers.is_finished()
+    }
+
+    /// World time when the car crossed the finish line, in s; None before that.
+    pub fn finish_time_s(&self) -> Option<f32> {
+        self.finish_time_s
     }
 
     /// Queues one event for `drain_events`.
@@ -690,8 +696,10 @@ impl World {
         body.set_position(target.pose.to_rapier(), true);
         body.set_linvel(Vector::from_array(target.linear_velocity_m_s), true);
         body.set_angvel(Vector::from_array(target.angular_velocity_rad_s), true);
-        // Refresh the scene-query tree so the wheel rays see the car's new place.
-        self.physics.detect_collisions(&(), &());
+        // No `detect_collisions` here: the ground never moves, so the wheel rays already
+        // see it, and running Rapier's collision pass outside a step after moving a car
+        // that touched a course piece broke its island bookkeeping (a panic in debug
+        // builds on the next step).
     }
 
     /// Saves the complete state of the world as bytes: the format version, then the world.

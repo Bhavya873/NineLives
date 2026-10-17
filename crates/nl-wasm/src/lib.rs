@@ -5,7 +5,7 @@
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
-//! the Off, PD and Manual controllers. The policy and courses follow in M5–M7 (SPEC §11.1).
+//! the Off, PD, AI and Manual controllers, and courses (`course.rs`, M7).
 
 use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off};
 use std::sync::Arc;
@@ -25,6 +25,7 @@ use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
 use wasm_bindgen::prelude::*;
 
+mod course;
 mod crowd;
 mod eval;
 
@@ -73,10 +74,18 @@ pub enum HudField {
     OutOfAir = 14,
     /// Which controller fires the thrusters: a `ControllerCode` value.
     Controller = 15,
+    /// Course checkpoints behind the car (0 on flat ground).
+    CheckpointsReached = 16,
+    /// Checkpoints on the course (0 on flat ground).
+    CheckpointCount = 17,
+    /// 1 once the car has crossed the course's finish line, else 0.
+    Finished = 18,
+    /// Course time at the finish, in s (0 until then).
+    FinishTimeS = 19,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::Controller as usize + 1;
+const HUD_LENGTH: usize = HudField::FinishTimeS as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
 #[wasm_bindgen]
@@ -120,6 +129,10 @@ pub enum HopBlocked {
 #[wasm_bindgen]
 pub struct Game {
     world: World,
+    /// The car, kept to rebuild the world for a course (`load_course`).
+    vehicle: VehicleConfig,
+    /// The seed the game started with; a rebuilt world reuses it.
+    seed: u64,
     modes: ModesConfig,
     /// Where each nozzle sits and which way its exhaust points (see `nozzle_layout`).
     nozzle_layout: Vec<f32>,
@@ -202,6 +215,8 @@ impl Game {
             ControllerChoices::from_configs(&config, modes.realistic, controllers_toml, None)?;
         Ok(Game {
             world,
+            vehicle: config.clone(),
+            seed,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
             controller: ControllerKind::Off(Off),
@@ -341,6 +356,10 @@ impl Game {
         values[HudField::Crashed as usize] = one_if(crashed);
         values[HudField::OutOfAir as usize] = one_if(self.world.is_out_of_air());
         values[HudField::Controller as usize] = controller_code(&self.controller) as u8 as f32;
+        values[HudField::CheckpointsReached as usize] = self.world.checkpoints_reached() as f32;
+        values[HudField::CheckpointCount as usize] = self.world.checkpoint_count() as f32;
+        values[HudField::Finished as usize] = one_if(self.world.is_finished());
+        values[HudField::FinishTimeS as usize] = self.world.finish_time_s().unwrap_or(0.0);
         values
     }
 

@@ -48,6 +48,10 @@ export function toastForEvents(events: Float32Array): string | null {
     } else if (kind === EventKind.Crash) {
       const cause = CRASH_CAUSE_TEXT[events[start + 1] ?? 0] ?? '';
       text = cause ? `CRASH · ${cause}` : 'CRASH';
+    } else if (kind === EventKind.CheckpointReached) {
+      text = 'CHECKPOINT';
+    } else if (kind === EventKind.Finished) {
+      text = 'FINISH';
     }
   }
   return text;

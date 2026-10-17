@@ -288,10 +288,10 @@ mod tests {
     #[test]
     fn a_step_that_passes_beside_a_line_does_not_cross_it() {
         let mut triggers = finish_line_at_40_m();
-        triggers.update([38.0, 0.6, 9.0]);
+        triggers.update([38.0, 0.6, 12.0]);
 
-        // The lane is 12 m wide, so z = 9 m is beside the line's end.
-        let hits = triggers.update([42.0, 0.6, 9.0]);
+        // The line is 20 m wide, so z = 12 m is beside its end.
+        let hits = triggers.update([42.0, 0.6, 12.0]);
 
         assert!(hits.is_empty());
     }

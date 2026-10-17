@@ -13,7 +13,7 @@ use crate::world::Pose;
 pub struct Checkpoint {
     /// Where the centre of mass is and which way the car faces.
     pub pose: Pose,
-    /// Velocity, so a checkpoint before a jump still has the speed to clear it.
+    /// Velocity: the car's own when set from the car, 0 for a course checkpoint line.
     pub linear_velocity_m_s: [f32; 3],
     /// Angular velocity.
     pub angular_velocity_rad_s: [f32; 3],
