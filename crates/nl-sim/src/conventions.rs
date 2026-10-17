@@ -12,6 +12,9 @@ pub const PHYSICS_DT_S: f32 = 1.0 / 120.0;
 /// The controller runs once every this many physics steps (60 Hz). SPEC §4.
 pub const PHYSICS_STEPS_PER_CONTROL_STEP: u32 = 2;
 
+/// Length of one control step, in seconds (1/60 s).
+pub const CONTROL_DT_S: f32 = PHYSICS_DT_S * PHYSICS_STEPS_PER_CONTROL_STEP as f32;
+
 /// Gravity acceleration, in m/s². The world's +Y axis points up.
 pub const GRAVITY_M_S2: f32 = 9.81;
 
@@ -35,11 +38,6 @@ pub fn gravity_vector() -> Vector {
     Vector::new(0.0, -GRAVITY_M_S2, 0.0)
 }
 
-/// Length of one control step, in seconds (1/60 s).
-pub fn control_dt_s() -> f32 {
-    PHYSICS_DT_S * PHYSICS_STEPS_PER_CONTROL_STEP as f32
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,7 +53,7 @@ mod tests {
 
     #[test]
     fn control_runs_at_60_hz() {
-        let control_hz = 1.0 / control_dt_s();
+        let control_hz = 1.0 / CONTROL_DT_S;
 
         assert!((control_hz - 60.0).abs() < 1e-3);
     }

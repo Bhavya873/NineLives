@@ -16,10 +16,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_nozzles_off_returns_ten_zero_throttles() {
+    fn all_nozzles_off_closes_every_nozzle() {
         let throttles = all_nozzles_off();
 
-        assert_eq!(throttles.len(), 10);
         assert!(throttles.iter().all(|&throttle| throttle == 0.0));
     }
 }

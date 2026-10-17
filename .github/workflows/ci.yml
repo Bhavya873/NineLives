@@ -1,5 +1,5 @@
 # Continuous integration: three jobs, one per language (SPEC §12).
-# Training never runs in CI.
+# Training never runs in CI. rust-toolchain.toml picks the Rust components and targets.
 name: CI
 
 on:
@@ -9,8 +9,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Must match the wasm-bindgen crate version in Cargo.lock.
-  WASM_BINDGEN_VERSION: 0.2.129
 
 jobs:
   rust:
@@ -18,8 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
@@ -37,20 +33,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python/requirements-dev.lock
       - name: Install Python dependencies
         run: |
           python -m venv .venv
           .venv/bin/pip install -r python/requirements-dev.lock
           .venv/bin/pip install -e python
       - name: Build the Rust module
-        run: |
-          source .venv/bin/activate
-          maturin develop --release -m crates/nl-py/Cargo.toml
+        run: VIRTUAL_ENV=.venv .venv/bin/maturin develop -m crates/nl-py/Cargo.toml
       - name: Ruff
         run: |
-          source .venv/bin/activate
-          ruff check python
-          ruff format --check python
+          .venv/bin/ruff check python
+          .venv/bin/ruff format --check python
       - name: Pytest
         run: .venv/bin/pytest python/tests
 
@@ -62,24 +57,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      - name: Read the wasm-bindgen version from Cargo.lock
+        id: bindgen
+        working-directory: .
+        run: echo "version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@v2
         with:
-          tool: wasm-bindgen-cli@${{ env.WASM_BINDGEN_VERSION }}
+          tool: wasm-bindgen-cli@${{ steps.bindgen.outputs.version }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - name: Build wasm
-        run: npm run wasm
       - name: Lint
         run: npm run lint
+      - name: Build wasm
+        run: npm run wasm
       - name: Build
         run: npm run build
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('web/package-lock.json') }}
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Playwright smoke test

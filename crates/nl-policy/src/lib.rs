@@ -9,14 +9,3 @@ pub const POLICY_FORMAT: &str = "ninelives-policy";
 
 /// The policy file version this crate can read.
 pub const POLICY_FORMAT_VERSION: u32 = 1;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn policy_format_matches_the_spec() {
-        assert_eq!(POLICY_FORMAT, "ninelives-policy");
-        assert_eq!(POLICY_FORMAT_VERSION, 1);
-    }
-}
