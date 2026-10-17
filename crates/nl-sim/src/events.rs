@@ -47,6 +47,7 @@ pub enum SimEvent {
 /// What the tracker looks at on each physics step.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EventInputs {
+    /// How many wheels touch the ground (0..4).
     pub wheels_down: usize,
     /// Angle between the car's up axis and world up.
     pub tilt_rad: f32,

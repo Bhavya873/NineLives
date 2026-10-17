@@ -54,6 +54,9 @@ impl Pose {
     }
 }
 
+/// Most events kept waiting for `drain_events`; older ones are dropped.
+const MAX_PENDING_EVENTS: usize = 256;
+
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
 pub const SNAPSHOT_FORMAT_VERSION: u32 = 4;
@@ -93,7 +96,9 @@ pub struct World {
     tank: AirTank,
     hop_boost: HopBoost,
     events: EventTracker,
-    /// Events not yet collected by `drain_events`.
+    /// Events not yet collected by `drain_events`. Not saved in snapshots, so a
+    /// restored world never reports the same event twice.
+    #[serde(skip)]
     pending_events: Vec<SimEvent>,
     chaos_button_was_down: bool,
     /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
@@ -202,6 +207,12 @@ impl World {
         let config = &self.car.config().events;
         self.events
             .update(&inputs, config, PHYSICS_DT_S, &mut self.pending_events);
+        // Callers that never drain (e.g. a headless benchmark) must not grow memory
+        // forever, so only the newest events are kept.
+        if self.pending_events.len() > MAX_PENDING_EVENTS {
+            let extra = self.pending_events.len() - MAX_PENDING_EVENTS;
+            self.pending_events.drain(..extra);
+        }
     }
 
     /// Returns and forgets the events since the last call (SPEC §7.9).
@@ -352,6 +363,24 @@ impl World {
             });
         }
         *self = world;
+        Ok(())
+    }
+
+    /// Starts a new life from a checkpoint saved with `snapshot` (SPEC §7.9): the car,
+    /// course state and events come from the checkpoint, the tank is refilled, and the
+    /// current mode, clock and random generator carry on (so Chaos does not replay the
+    /// same knocks after every respawn). On error the world is left unchanged.
+    pub fn respawn_from(&mut self, checkpoint: &[u8]) -> Result<(), SnapshotError> {
+        let mode = self.mode;
+        let rng = self.rng.clone();
+        let step_count = self.step_count;
+        self.restore(checkpoint)?;
+        self.mode = mode;
+        self.rng = rng;
+        self.step_count = step_count;
+        self.events.reset();
+        self.pending_events.clear();
+        self.refill_tank();
         Ok(())
     }
 

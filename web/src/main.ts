@@ -38,13 +38,6 @@ async function start(): Promise<void> {
   // A new random seed each visit; it only affects Chaos knocks.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
   const game = new Game(vehicleToml, modesToml, seed);
-  let respawnTimer: number | undefined;
-  const respawnNow = () => {
-    window.clearTimeout(respawnTimer);
-    respawnTimer = undefined;
-    game.respawn();
-  };
-  onKeyPress('KeyR', respawnNow);
   onKeyPress('KeyM', () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
@@ -64,6 +57,19 @@ async function start(): Promise<void> {
   const carPose = newBlendedPose();
   placeCar(view, frames, 1, carPose);
   snapCamera(view.camera, carPose);
+
+  let respawnTimer: number | undefined;
+  const respawnNow = () => {
+    window.clearTimeout(respawnTimer);
+    respawnTimer = undefined;
+    game.respawn();
+    // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
+    frames.previousChassis = frames.latestChassis = game.chassis_pose();
+    frames.previousWheels = frames.latestWheels = game.wheel_poses();
+    placeCar(view, frames, 1, carPose);
+    snapCamera(view.camera, carPose);
+  };
+  onKeyPress('KeyR', respawnNow);
   let lastRenderMs = performance.now();
 
   startGameLoop(Game.physics_dt_s(), {

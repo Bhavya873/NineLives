@@ -10,8 +10,11 @@ use rapier3d::prelude::*;
 /// The chassis motion saved just before a physics step.
 #[derive(Debug, Clone, Copy)]
 pub struct MotionBeforeStep {
+    /// Velocity of the centre of mass, world frame.
     pub linear_velocity_m_s: Vector,
+    /// Angular velocity, world frame.
     pub angular_velocity_rad_s: Vector,
+    /// Centre of mass position, world frame.
     pub centre_of_mass_m: Vector,
 }
 
@@ -41,7 +44,11 @@ pub struct BodyContacts {
     pub roof_touching: bool,
 }
 
-/// Looks at every active contact of the body and roof colliders after a step.
+/// A contact point counts as touching when the shapes are this close or overlapping.
+/// Rapier also keeps "predicted" points a few centimetres apart; those are ignored.
+const TOUCH_DISTANCE_M: f32 = 0.005;
+
+/// Looks at every touching contact point of the body and roof colliders after a step.
 /// Other bodies are treated as still (true for the ground and course pieces).
 pub fn read_body_contacts(
     physics: &PhysicsWorld,
@@ -52,13 +59,13 @@ pub fn read_body_contacts(
     let mut contacts = BodyContacts::default();
     for (collider, is_roof) in [(body_collider, false), (roof_collider, true)] {
         for pair in physics.narrow_phase.contact_pairs_with(collider) {
-            if !pair.has_any_active_contact() {
+            let Some(speed_m_s) = fastest_touching_approach_m_s(physics, pair, collider, before)
+            else {
                 continue;
-            }
+            };
             if is_roof {
                 contacts.roof_touching = true;
             }
-            let speed_m_s = fastest_approach_m_s(physics, pair, collider, before);
             contacts.impact_speed_m_s = contacts.impact_speed_m_s.max(speed_m_s);
         }
     }
@@ -66,18 +73,18 @@ pub fn read_body_contacts(
 }
 
 /// The fastest speed at which `our_collider` was moving into the other collider, over
-/// all contact points of the pair.
-fn fastest_approach_m_s(
+/// the pair's touching points; `None` if no point is touching.
+fn fastest_touching_approach_m_s(
     physics: &PhysicsWorld,
     pair: &ContactPair,
     our_collider: ColliderHandle,
     before: &MotionBeforeStep,
-) -> f32 {
+) -> Option<f32> {
     // Rapier's normal points from collider1 to collider2. Flip it if we are collider2,
     // so it always points from our car into the other object.
     let we_are_first = pair.collider1 == our_collider;
     let first_collider_pose = physics.colliders[pair.collider1].position();
-    let mut fastest_m_s: f32 = 0.0;
+    let mut fastest_m_s: Option<f32> = None;
     for manifold in pair.manifolds() {
         let normal = if we_are_first {
             manifold.data.normal
@@ -85,9 +92,12 @@ fn fastest_approach_m_s(
             -manifold.data.normal
         };
         for point in &manifold.points {
+            if point.dist > TOUCH_DISTANCE_M {
+                continue;
+            }
             let point_m = first_collider_pose * point.local_p1;
-            let approach_m_s = before.velocity_at(point_m).dot(normal);
-            fastest_m_s = fastest_m_s.max(approach_m_s);
+            let approach_m_s = before.velocity_at(point_m).dot(normal).max(0.0);
+            fastest_m_s = Some(fastest_m_s.unwrap_or(0.0).max(approach_m_s));
         }
     }
     fastest_m_s

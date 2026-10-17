@@ -93,8 +93,11 @@ const FLOATS_PER_EVENT: usize = 4;
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub enum EventKind {
+    /// The last wheel left the ground.
     AirborneStart = 1,
+    /// A wheel touched the ground again.
     AirborneEnd = 2,
+    /// The car was knocked off balance.
     UpsetStart = 3,
     /// Followed by: duration in s, air used in kg, peak tilt in rad.
     Save = 4,
@@ -106,9 +109,13 @@ pub enum EventKind {
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub enum CrashCode {
+    /// The body or roof hit something too fast.
     HardImpact = 1,
+    /// The roof touched something while upside down.
     UpsideDown = 2,
+    /// Tipped over for too long.
     Stuck = 3,
+    /// Fell out of the world.
     OutOfBounds = 4,
 }
 
@@ -202,12 +209,10 @@ impl Game {
     }
 
     /// Puts the car back at the last checkpoint with a full tank, e.g. after a crash
-    /// (SPEC §7.9) or when the player presses R. The current mode is kept.
+    /// (SPEC §7.9) or when the player presses R. The mode, clock and Chaos random
+    /// numbers carry on, and any crash is cleared.
     pub fn respawn(&mut self) -> Result<(), JsError> {
-        let mode = self.world.mode();
-        self.world.restore(&self.checkpoint)?;
-        self.world.set_mode(mode);
-        self.world.refill_tank();
+        self.world.respawn_from(&self.checkpoint)?;
         Ok(())
     }
 

@@ -186,6 +186,18 @@ pub enum VehicleConfigError {
     )]
     SteeringLimitsReversed { low: f32, high: f32 },
 
+    #[error("vehicle.toml: `{field}` must be a finite number, but it is {value}")]
+    NotFinite { field: &'static str, value: f32 },
+
+    #[error("vehicle.toml: `{field}` must be at most 180 degrees, but it is {value}")]
+    AngleTooLarge { field: &'static str, value: f32 },
+
+    #[error(
+        "vehicle.toml: `events.save_tilt_deg` ({save}) must be smaller than \
+         `events.upset_tilt_deg` ({upset}), or a save could start a new upset at once"
+    )]
+    SaveTiltNotBelowUpsetTilt { save: f32, upset: f32 },
+
     #[error("vehicle.toml: nozzle {index} must be named \"{expected}\", but it is \"{found}\"")]
     WrongNozzleOrder {
         index: usize,
@@ -320,10 +332,24 @@ impl EventConfig {
         must_not_be_negative("events.stuck_s", self.stuck_s)?;
         if !self.out_of_bounds_y_m.is_finite() {
             let value = self.out_of_bounds_y_m;
-            return Err(VehicleConfigError::NotPositive {
-                field: "events.out_of_bounds_y_m (must be finite)",
-                value,
-            });
+            let field = "events.out_of_bounds_y_m";
+            return Err(VehicleConfigError::NotFinite { field, value });
+        }
+        let angles = [
+            ("events.upset_tilt_deg", self.upset_tilt_deg),
+            ("events.save_tilt_deg", self.save_tilt_deg),
+            ("events.upside_down_tilt_deg", self.upside_down_tilt_deg),
+            ("events.stuck_tilt_deg", self.stuck_tilt_deg),
+        ];
+        for (field, value) in angles {
+            if value > 180.0 {
+                return Err(VehicleConfigError::AngleTooLarge { field, value });
+            }
+        }
+        if self.save_tilt_deg >= self.upset_tilt_deg {
+            let save = self.save_tilt_deg;
+            let upset = self.upset_tilt_deg;
+            return Err(VehicleConfigError::SaveTiltNotBelowUpsetTilt { save, upset });
         }
         Ok(())
     }

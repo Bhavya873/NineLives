@@ -39,7 +39,7 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 pub struct GoldenTraceResult {
     /// Steps that were run.
     pub steps: u32,
-    /// Hash of every step's pose and velocities plus the final snapshot, as 16 hex digits.
+    /// Hash of every step's pose, velocities and events plus the final snapshot, as 16 hex digits.
     #[serde(rename = "hash")]
     pub hash_hex: String,
     /// Where the car ended up, for a human-readable sanity check.
@@ -57,8 +57,8 @@ pub fn scripted_input(step: u32) -> InputFrame {
         3 => (127, 0, BUTTON_HOP),     // Hop while driving (held: still only one Hop)
         4 => (127, 0, BUTTON_BOOST),   // Boost
         5..=7 => (80, 100, 0),         // throttle and turn left
+        8 | 10 => (80, -100, 0),       // throttle and turn right
         9 => (80, -100, BUTTON_CHAOS), // turn right and get knocked (once)
-        8..=10 => (80, -100, 0),       // throttle and turn right
         11..=12 => (-127, 0, 0),       // brake
         _ => (-90, 30, 0),             // reverse while turning
     };
@@ -103,6 +103,9 @@ pub enum GoldenTraceError {
 
     #[error(transparent)]
     Snapshot(#[from] SnapshotError),
+
+    #[error("golden trace: could not encode an event: {0}")]
+    EventEncoding(#[from] postcard::Error),
 }
 
 /// Runs the golden trace with the frozen golden car.
@@ -120,6 +123,10 @@ pub fn run_golden_trace() -> Result<GoldenTraceResult, GoldenTraceError> {
     for step in 0..GOLDEN_TRACE_STEPS {
         step_scripted(&mut world, step);
         hash = hash_world_state(hash, &world);
+        // Events are part of the sim's output too, so they must be deterministic.
+        for event in world.drain_events() {
+            hash = fnv1a_add_bytes(hash, &postcard::to_allocvec(&event)?);
+        }
     }
     hash = fnv1a_add_bytes(hash, &world.snapshot()?);
 
