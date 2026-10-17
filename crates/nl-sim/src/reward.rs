@@ -30,6 +30,12 @@ pub struct RewardWeights {
     pub save: f32,
     /// Multiplies the crash penalty.
     pub crash: f32,
+    /// Cost per HardLanding event (a wheel bottomed out at touchdown, PLAN §3.3).
+    pub hard_landing: f32,
+    /// Cost per step while unsettled after the first touchdown (PLAN §3.3).
+    pub unsettled: f32,
+    /// Multiplies the share of the tank left, paid once on success (PLAN §3.3).
+    pub air_left: f32,
 }
 
 /// The constants inside the SPEC §9.4 formulas (`[shape]`).
@@ -48,6 +54,8 @@ pub struct RewardShape {
     pub save_spin_scale_rad_s: f32,
     /// Fall speed at which the save quality reaches 0, in m/s.
     pub save_fall_scale_m_s: f32,
+    /// Heading error at touchdown at which the save quality reaches 0, in degrees.
+    pub save_heading_scale_deg: f32,
     /// What a crash costs (before its weight).
     pub crash_penalty: f32,
 }
@@ -90,15 +98,11 @@ impl RewardConfig {
                 return Err(RewardConfigError::OutOfRange { field, rule, value });
             }
         }
+        let shape = &config.shape;
         let divisors = [
-            (
-                "shape.save_spin_scale_rad_s",
-                config.shape.save_spin_scale_rad_s,
-            ),
-            (
-                "shape.save_fall_scale_m_s",
-                config.shape.save_fall_scale_m_s,
-            ),
+            ("shape.save_spin_scale_rad_s", shape.save_spin_scale_rad_s),
+            ("shape.save_fall_scale_m_s", shape.save_fall_scale_m_s),
+            ("shape.save_heading_scale_deg", shape.save_heading_scale_deg),
         ];
         for (field, value) in divisors {
             if value <= 0.0 {
@@ -110,7 +114,7 @@ impl RewardConfig {
     }
 
     /// Every number with its name, for the checks above.
-    fn named_numbers(&self) -> [(&'static str, f32); 15] {
+    fn named_numbers(&self) -> [(&'static str, f32); 19] {
         let w = &self.weights;
         let s = &self.shape;
         [
@@ -122,12 +126,16 @@ impl RewardConfig {
             ("weights.smoothness", w.smoothness),
             ("weights.save", w.save),
             ("weights.crash", w.crash),
+            ("weights.hard_landing", w.hard_landing),
+            ("weights.unsettled", w.unsettled),
+            ("weights.air_left", w.air_left),
             ("shape.spin_cap_rad2_s2", s.spin_cap_rad2_s2),
             ("shape.airborne_grace_s", s.airborne_grace_s),
             ("shape.save_base", s.save_base),
             ("shape.save_quality", s.save_quality),
             ("shape.save_spin_scale_rad_s", s.save_spin_scale_rad_s),
             ("shape.save_fall_scale_m_s", s.save_fall_scale_m_s),
+            ("shape.save_heading_scale_deg", s.save_heading_scale_deg),
             ("shape.crash_penalty", s.crash_penalty),
         ]
     }
@@ -147,6 +155,12 @@ pub struct StepSummary {
     /// Fall speed (positive downward) just before that touchdown, in m/s; only read when
     /// `saved`.
     pub landing_fall_m_s: f32,
+    /// Heading error at that touchdown, in rad (PLAN §3.3); None if unknown. Only read
+    /// when `saved`.
+    pub landing_heading_error_rad: Option<f32>,
+    /// Speed kept after that touchdown (PLAN §3.3); None if not measured (a slow
+    /// take-off or a start in the air). Only read when `saved`.
+    pub landing_speed_kept: Option<f32>,
     /// Air the thrusters used during the step, in kg.
     pub air_used_kg: f32,
     /// The tank's capacity, in kg.
@@ -164,6 +178,15 @@ pub struct StepSummary {
     pub saved: bool,
     /// The car crashed during the step.
     pub crashed: bool,
+    /// HardLanding events during the step.
+    pub hard_landings: u32,
+    /// After the episode's first touchdown, the car was not settled at the end of the
+    /// step (four wheels down, slow spin, little sideways speed; SPEC §9.5).
+    pub unsettled: bool,
+    /// The episode succeeded on this step (SPEC §9.5).
+    pub succeeded: bool,
+    /// Share of the tank left at the end of the step, 0..1 (1 with unlimited air).
+    pub air_left_fraction: f32,
 }
 
 /// The reward of one step, term by term (each already weighted), so training can log
@@ -184,11 +207,17 @@ pub struct RewardTerms {
     pub save: f32,
     /// Cost of a crash (≤ 0).
     pub crash: f32,
+    /// Cost of hard landings (≤ 0).
+    pub hard_landing: f32,
+    /// Cost of being unsettled after touching down (≤ 0).
+    pub unsettled: f32,
+    /// Bonus for the air left at success (≥ 0).
+    pub air_left: f32,
 }
 
 impl RewardTerms {
     /// The term names, in `as_array` order (training logs them under these names).
-    pub const NAMES: [&'static str; 7] = [
+    pub const NAMES: [&'static str; 10] = [
         "tilt",
         "spin",
         "air",
@@ -196,10 +225,13 @@ impl RewardTerms {
         "smoothness",
         "save",
         "crash",
+        "hard_landing",
+        "unsettled",
+        "air_left",
     ];
 
     /// The terms in `NAMES` order.
-    pub fn as_array(&self) -> [f32; 7] {
+    pub fn as_array(&self) -> [f32; 10] {
         [
             self.tilt,
             self.spin,
@@ -208,12 +240,19 @@ impl RewardTerms {
             self.smoothness,
             self.save,
             self.crash,
+            self.hard_landing,
+            self.unsettled,
+            self.air_left,
         ]
     }
 
     /// The sum of all terms: the reward PPO sees.
     pub fn total(&self) -> f32 {
-        self.tilt + self.spin + self.air + self.airborne + self.smoothness + self.save + self.crash
+        let mut total = 0.0;
+        for term in self.as_array() {
+            total += term;
+        }
+        total
     }
 }
 
@@ -245,6 +284,13 @@ pub fn reward_terms(step: &StepSummary, config: &RewardConfig) -> RewardTerms {
         smoothness: -w.smoothness * squared_change(&step.throttles, &step.previous_throttles),
         save,
         crash,
+        hard_landing: -w.hard_landing * step.hard_landings as f32,
+        unsettled: if step.unsettled { -w.unsettled } else { 0.0 },
+        air_left: if step.succeeded {
+            w.air_left * step.air_left_fraction.clamp(0.0, 1.0)
+        } else {
+            0.0
+        },
     }
 }
 
@@ -257,12 +303,22 @@ fn air_term(step: &StepSummary, weights: &RewardWeights) -> f32 {
     -weights.air_limited * step.air_used_kg / step.tank_capacity_kg.max(f32::EPSILON)
 }
 
-/// SPEC §9.4 save quality q: 1 for a still, soft landing, falling to 0 with the spin or
-/// fall speed at touchdown.
+/// SPEC §9.4 save quality q: 1 for a still, soft landing facing the take-off heading
+/// with its speed kept, falling to 0 with the spin, fall speed or heading error at
+/// touchdown, or the speed lost. An unknown heading error or speed kept counts as perfect.
 fn save_quality(step: &StepSummary, shape: &RewardShape) -> f32 {
-    let still = (1.0 - step.landing_spin_rad_s / shape.save_spin_scale_rad_s).clamp(0.0, 1.0);
-    let soft = (1.0 - step.landing_fall_m_s / shape.save_fall_scale_m_s).clamp(0.0, 1.0);
-    still * soft
+    let still = clamp01(1.0 - step.landing_spin_rad_s / shape.save_spin_scale_rad_s);
+    let soft = clamp01(1.0 - step.landing_fall_m_s / shape.save_fall_scale_m_s);
+    let heading_scale_rad = shape.save_heading_scale_deg.to_radians();
+    let error_rad = step.landing_heading_error_rad.unwrap_or(0.0);
+    let facing = clamp01(1.0 - error_rad / heading_scale_rad);
+    let kept = clamp01(step.landing_speed_kept.unwrap_or(1.0));
+    still * soft * facing * kept
+}
+
+/// `value` limited to 0..1.
+fn clamp01(value: f32) -> f32 {
+    value.clamp(0.0, 1.0)
 }
 
 /// |now − before|², summed over the nozzles.

@@ -3,7 +3,9 @@
 //! runner, the M5 Python binding and the browser replay all step episodes through this,
 //! so "success", "crash" and "time limit" mean the same thing everywhere. It also applies
 //! the episode's domain randomization (SPEC §9.8): the varied car and world, actuation
-//! latency and observation noise, so training and eval randomize the same way.
+//! latency and observation noise, so training and eval randomize the same way. It also
+//! measures landing quality (PLAN §3.3): hard landings, heading error, speed kept,
+//! settle time and air left.
 
 use std::collections::VecDeque;
 
@@ -14,6 +16,7 @@ use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
 use crate::events::{CrashCause, SimEvent};
 use crate::input::InputFrame;
+use crate::landing::LandingQuality;
 use crate::obs::{Observation, PREV_ACTION_INDEX, observe};
 use crate::randomization::{EpisodeVariation, ObsNoise, add_state_noise, noise_rng};
 use crate::scenarios::{EpisodeConfig, ScenariosConfig, Stage, start_episode};
@@ -24,7 +27,8 @@ use crate::world::{PlaceCarError, World};
 pub enum EpisodeStatus {
     /// Still going.
     Running,
-    /// All four wheels down for `success_hold_s`, unbroken, with no crash (SPEC §9.5).
+    /// All four wheels down for `success_hold_s` and the throttles quiet for
+    /// `success_quiet_hold_s`, both unbroken, with no crash (SPEC §9.5).
     Succeeded,
     /// The car crashed; this ends the episode.
     Crashed(CrashCause),
@@ -37,7 +41,8 @@ pub enum EpisodeStatus {
 pub struct EpisodeResult {
     /// The seed the episode was started from.
     pub seed: u64,
-    /// All four wheels down for `success_hold_s`, unbroken, with no crash.
+    /// All four wheels down for `success_hold_s` and quiet throttles for
+    /// `success_quiet_hold_s`, both unbroken, with no crash.
     pub success: bool,
     /// Save events seen (a recovery from an upset, SPEC §7.9).
     pub saves: u32,
@@ -56,6 +61,19 @@ pub struct EpisodeResult {
     pub touchdown_fall_m_s: Option<f32>,
     /// How long the episode ran, in seconds.
     pub duration_s: f32,
+    /// HardLanding events seen (a wheel bottomed out at touchdown, PLAN §3.3).
+    pub hard_landings: u32,
+    /// Heading error at the touchdown of the latest save, in degrees; None without a
+    /// save or a clear heading.
+    pub landing_heading_error_deg: Option<f32>,
+    /// Speed kept after the touchdown of the latest save; None without a save or a
+    /// fast enough take-off from the wheels.
+    pub speed_kept: Option<f32>,
+    /// From the first touchdown until the car was settled for good, in s; None if it
+    /// never touched down, was not settled at the end, or crashed.
+    pub settle_time_s: Option<f32>,
+    /// Air left in the tank at the end, in kg (the full tank with unlimited air).
+    pub air_left_kg: f32,
 }
 
 /// The numbers an episode gathers while it runs.
@@ -67,6 +85,16 @@ struct Tally {
     peak_tilt_rad: f32,
     /// The motion just before the first touch.
     touchdown: Option<Touchdown>,
+    /// World time of the first touch, in s.
+    first_touch_s: Option<f32>,
+    /// When the current unbroken run of being settled began.
+    settled_since_s: Option<f32>,
+    /// When the current unbroken run of quiet throttles began.
+    quiet_since_s: Option<f32>,
+    /// HardLanding events seen.
+    hard_landings: u32,
+    /// The landing quality of the latest save.
+    last_save_quality: Option<LandingQuality>,
     /// When the current unbroken run of all four wheels down began.
     wheels_down_since_s: Option<f32>,
     /// The landing of the latest save (what the reward's save quality judges).
@@ -171,6 +199,23 @@ impl Episode {
         self.tally.last_save_landing
     }
 
+    /// HardLanding events so far.
+    pub fn hard_landings(&self) -> u32 {
+        self.tally.hard_landings
+    }
+
+    /// How well the latest save's landing kept the take-off heading and speed (PLAN
+    /// §3.3); None before the first save. A stage's success rule can read the heading
+    /// error here.
+    pub fn last_save_quality(&self) -> Option<LandingQuality> {
+        self.tally.last_save_quality
+    }
+
+    /// True once the car has touched down but is not settled on the latest step.
+    pub fn unsettled_after_touchdown(&self) -> bool {
+        self.tally.first_touch_s.is_some() && self.tally.settled_since_s.is_none()
+    }
+
     /// True if anything (a wheel, the body or the roof) touched the ground on the
     /// latest step; false while the car flies.
     pub fn anything_touching(&self) -> bool {
@@ -199,6 +244,8 @@ impl Episode {
         self.tally.peak_tilt_rad = self.tally.peak_tilt_rad.max(self.world.tilt_rad());
         self.track_touchdown(&before);
         self.track_wheels_down();
+        self.track_settled();
+        self.track_quiet_throttles();
         for event in self.world.drain_events() {
             self.record(event);
         }
@@ -210,7 +257,7 @@ impl Episode {
         if let Some(cause) = self.tally.crash_cause {
             return EpisodeStatus::Crashed(cause);
         }
-        if self.held_on_wheels_long_enough() {
+        if self.held_on_wheels_long_enough() && self.quiet_long_enough() {
             return EpisodeStatus::Succeeded;
         }
         if self.steps >= self.limit_steps {
@@ -232,7 +279,30 @@ impl Episode {
             touchdown_spin_rad_s: self.tally.touchdown.map(|touchdown| touchdown.spin_rad_s),
             touchdown_fall_m_s: self.tally.touchdown.map(|touchdown| touchdown.fall_m_s),
             duration_s: self.world.time_s() as f32,
+            hard_landings: self.tally.hard_landings,
+            landing_heading_error_deg: self
+                .tally
+                .last_save_quality
+                .and_then(|quality| quality.heading_error_rad)
+                .map(f32::to_degrees),
+            speed_kept: self
+                .tally
+                .last_save_quality
+                .and_then(|quality| quality.speed_kept),
+            settle_time_s: self.settle_time_s(),
+            air_left_kg: self.world.air_kg(),
         }
+    }
+
+    /// From the first touch until the current settled run began, if the car is settled
+    /// and has not crashed (a frozen wreck can look settled).
+    fn settle_time_s(&self) -> Option<f32> {
+        if self.tally.crash_cause.is_some() {
+            return None;
+        }
+        let first_touch_s = self.tally.first_touch_s?;
+        let settled_since_s = self.tally.settled_since_s?;
+        Some((settled_since_s - first_touch_s).max(0.0))
     }
 
     /// The first time anything touches the ground, keeps the spin and fall speed from
@@ -241,16 +311,40 @@ impl Episode {
         self.touching = self.state.wheels_down() > 0 || self.world.chassis_touching();
         if self.touching && self.tally.touchdown.is_none() {
             self.tally.touchdown = Some(Touchdown::of(before));
+            self.tally.first_touch_s = Some(self.world.time_s() as f32);
         }
+    }
+
+    /// PLAN §3.3: starts or breaks the run of being settled: four wheels down, slow
+    /// spin and little sideways speed.
+    fn track_settled(&mut self) {
+        let rules = &self.rules;
+        let side_speed_m_s = self.state.linear_velocity_body_m_s[2].abs();
+        let settled = self.state.wheels_down() == WHEEL_COUNT
+            && self.state.spin_rad_s() < rules.settle_max_spin_rad_s
+            && side_speed_m_s < rules.settle_max_side_speed_m_s;
+        let now_s = self.world.time_s() as f32;
+        self.tally.settled_since_s = start_or_break_run(self.tally.settled_since_s, settled, now_s);
+    }
+
+    /// PLAN §3.3: starts or breaks the run of quiet throttles (the controller's
+    /// throttle sum below `success_quiet_throttle_sum`) that success needs.
+    fn track_quiet_throttles(&mut self) {
+        let mut throttle_sum = 0.0;
+        for throttle in self.commanded_throttles {
+            throttle_sum += throttle;
+        }
+        let quiet = throttle_sum < self.rules.success_quiet_throttle_sum;
+        let now_s = self.world.time_s() as f32;
+        self.tally.quiet_since_s = start_or_break_run(self.tally.quiet_since_s, quiet, now_s);
     }
 
     /// Starts or breaks the run of all four wheels down that success needs.
     fn track_wheels_down(&mut self) {
-        if self.state.wheels_down() < WHEEL_COUNT {
-            self.tally.wheels_down_since_s = None;
-        } else if self.tally.wheels_down_since_s.is_none() {
-            self.tally.wheels_down_since_s = Some(self.world.time_s() as f32);
-        }
+        let all_down = self.state.wheels_down() == WHEEL_COUNT;
+        let now_s = self.world.time_s() as f32;
+        let since_s = self.tally.wheels_down_since_s;
+        self.tally.wheels_down_since_s = start_or_break_run(since_s, all_down, now_s);
     }
 
     /// Adds one event to the tally.
@@ -259,21 +353,42 @@ impl Episode {
             SimEvent::Save {
                 air_used_kg,
                 landing,
+                quality,
                 ..
             } => {
                 self.tally.saves += 1;
                 self.tally.air_used_in_saves_kg += air_used_kg;
                 self.tally.last_save_landing = Some(landing);
+                self.tally.last_save_quality = Some(quality);
             }
+            SimEvent::HardLanding { .. } => self.tally.hard_landings += 1,
             SimEvent::Crash { cause } => self.tally.crash_cause = Some(cause),
             _ => {}
         }
     }
 
     fn held_on_wheels_long_enough(&self) -> bool {
-        match self.tally.wheels_down_since_s {
-            Some(since_s) => self.world.time_s() as f32 - since_s >= self.rules.success_hold_s,
+        self.held_for(self.tally.wheels_down_since_s, self.rules.success_hold_s)
+    }
+
+    fn quiet_long_enough(&self) -> bool {
+        self.held_for(self.tally.quiet_since_s, self.rules.success_quiet_hold_s)
+    }
+
+    /// True if a run that began at `since_s` has lasted at least `hold_s` by now.
+    fn held_for(&self, since_s: Option<f32>, hold_s: f32) -> bool {
+        match since_s {
+            Some(since_s) => self.world.time_s() as f32 - since_s >= hold_s,
             None => false,
         }
     }
+}
+
+/// The start time of an unbroken run: kept while `holds`, set to `now_s` when a run
+/// begins, and None when it breaks.
+fn start_or_break_run(since_s: Option<f32>, holds: bool, now_s: f32) -> Option<f32> {
+    if !holds {
+        return None;
+    }
+    Some(since_s.unwrap_or(now_s))
 }

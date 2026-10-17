@@ -157,6 +157,17 @@ out_of_bounds_y_m = -20.0
 # Game only: after a crash the wreck stays frozen this long, then the car respawns at
 # the last checkpoint. Training ends the episode at the crash instead.
 respawn_delay_s = 1.5
+# Landing quality (PLAN §3.3). A touchdown is a hard landing (an event and a reward
+# cost, not a crash) when any wheel's suspension compression (0 extended, 1 bottomed
+# out) reaches hard_landing_compression within hard_landing_window_s of the first wheel
+# touching.
+hard_landing_compression = 0.95
+hard_landing_window_s = 0.2
+# Speed kept = forward speed speed_kept_delay_s after touchdown ÷ forward speed at
+# take-off, measured only when the car took off from its wheels faster than
+# speed_kept_min_take_off_m_s (so drops and tip-overs are not judged on it).
+speed_kept_delay_s = 0.5
+speed_kept_min_take_off_m_s = 3.0
 
 [chaos]
 # A random knock (SPEC §7.12): a push and a twist in random directions, each up to

@@ -3,8 +3,18 @@
 
 [episode]
 # An episode ends early on a crash, or on success: all four wheels down for this long,
-# unbroken, with no crash.
+# unbroken, with no crash...
 success_hold_s = 1.0
+# ...and the controller's throttle sum below success_quiet_throttle_sum for the last
+# success_quiet_hold_s of it, unbroken, so blowing air while parked is not a finished
+# episode (PLAN §3.3). Success needs four wheels down, so lifting a wheel can't dodge it.
+success_quiet_throttle_sum = 0.05
+success_quiet_hold_s = 0.5
+# Settled (PLAN §3.3): four wheels down, spin below settle_max_spin_rad_s and sideways
+# speed below settle_max_side_speed_m_s. Settle time runs from the first touchdown until
+# the car is settled for good; the reward charges each unsettled step after a touchdown.
+settle_max_spin_rad_s = 1.5
+settle_max_side_speed_m_s = 1.0
 # Otherwise it is cut off after this long (Stage A and B).
 time_limit_s = 8.0
 # Starts are lifted so the body's lowest corner is at least this high (Stage B: exactly).

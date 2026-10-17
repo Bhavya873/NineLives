@@ -19,6 +19,7 @@ pub mod golden_trace;
 pub mod hash;
 pub mod hop_boost;
 pub mod input;
+pub mod landing;
 pub mod modes;
 pub mod obs;
 pub mod randomization;

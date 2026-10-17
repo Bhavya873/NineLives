@@ -63,6 +63,15 @@ pub struct FinishedEpisode {
     pub control_steps: u32,
 }
 
+/// What happened to the episode during one control step, for the reward.
+#[derive(Debug, Clone, Copy)]
+struct StepEvents {
+    saved: bool,
+    crashed: bool,
+    succeeded: bool,
+    hard_landings: u32,
+}
+
 /// A running training environment. Call `reset` before the first `step`.
 pub struct TrainingEnv {
     config: TrainingConfig,
@@ -129,6 +138,7 @@ impl TrainingEnv {
             return None;
         }
         let saves_before = episode.saves();
+        let hard_landings_before = episode.hard_landings();
         let air_before_kg = episode.world().air_used_kg();
         // Physics steps until the next control step (SPEC §7.1: two of them), or the end.
         loop {
@@ -142,9 +152,14 @@ impl TrainingEnv {
         self.control_steps += 1;
         let status = episode.status();
         let crashed = matches!(status, EpisodeStatus::Crashed(_));
-        let saved = episode.saves() > saves_before;
+        let step_events = StepEvents {
+            saved: episode.saves() > saves_before,
+            crashed,
+            succeeded: status == EpisodeStatus::Succeeded,
+            hard_landings: episode.hard_landings() - hard_landings_before,
+        };
         let air_used_kg = episode.world().air_used_kg() - air_before_kg;
-        let summary = self.summarise(&episode, throttles, air_used_kg, saved, crashed);
+        let summary = self.summarise(&episode, throttles, air_used_kg, step_events);
         self.previous_throttles = throttles;
         let outcome = StepOutcome {
             observation: episode.observe(),
@@ -183,26 +198,32 @@ impl TrainingEnv {
         episode: &Episode,
         throttles: [f32; NOZZLE_COUNT],
         air_used_kg: f32,
-        saved: bool,
-        crashed: bool,
+        events: StepEvents,
     ) -> StepSummary {
         let state = episode.car_state();
         let mode = episode.world().mode();
-        // Only read when `saved`, and then the save just set it (SPEC §9.4).
+        // Only read when `saved`, and then the save just set them (SPEC §9.4).
         let landing = episode.last_save_landing().unwrap_or(Touchdown::of(&state));
+        let quality = episode.last_save_quality().unwrap_or_default();
         StepSummary {
             up_alignment: state.up_alignment(),
             spin_rad_s: state.spin_rad_s(),
             landing_spin_rad_s: landing.spin_rad_s,
             landing_fall_m_s: landing.fall_m_s,
+            landing_heading_error_rad: quality.heading_error_rad,
+            landing_speed_kept: quality.speed_kept,
             air_used_kg,
             tank_capacity_kg: mode.tank_capacity_kg,
             unlimited_air: mode.unlimited_air,
             throttles,
             previous_throttles: self.previous_throttles,
             airborne_s: self.flying_s,
-            saved,
-            crashed,
+            saved: events.saved,
+            crashed: events.crashed,
+            hard_landings: events.hard_landings,
+            unsettled: episode.unsettled_after_touchdown(),
+            succeeded: events.succeeded,
+            air_left_fraction: episode.world().air_fraction(),
         }
     }
 

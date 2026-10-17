@@ -193,3 +193,31 @@ fn a_curriculum_that_starts_harder_than_it_ends_is_refused_by_name() {
         "{error}"
     );
 }
+
+#[test]
+fn a_hard_level_drop_pays_the_hard_landing_cost_and_the_air_left_bonus() {
+    let mut config = config();
+    config.scenarios.curriculum_a.levels = 1;
+    config.scenarios.stage_a.height_m = [3.0, 3.0];
+    config.scenarios.stage_a.max_tilt_deg = 0.0;
+    config.scenarios.stage_a.max_spin_rad_s = 0.0;
+    config.scenarios.stage_a.horizontal_speed_m_s = [0.0, 0.0];
+    config.scenarios.stage_a.vertical_speed_m_s = [0.0, 0.0];
+    let mut env = TrainingEnv::new(config, Stage::A);
+    env.reset(0).unwrap();
+
+    let outcomes = run_to_end(&mut env, VALVES_SHUT);
+
+    let mut hard_landing_cost = 0.0;
+    for outcome in &outcomes {
+        hard_landing_cost += outcome.terms.hard_landing;
+    }
+    let last = outcomes.last().unwrap();
+    assert!(
+        (hard_landing_cost + 1.0).abs() < 1e-6,
+        "{hard_landing_cost}"
+    );
+    assert!(last.terminated);
+    // Closed valves use no air, so the whole tank is left: weight 1.0 × 1.0.
+    assert!((last.terms.air_left - 1.0).abs() < 1e-6);
+}

@@ -78,7 +78,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 10;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 11;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -353,6 +353,9 @@ impl World {
             height_m: body.translation().y,
             impact_speed_m_s: contacts.impact_speed_m_s,
             roof_touching: contacts.roof_touching,
+            nose_world: (body.rotation() * Vector::X).to_array(),
+            forward_speed_m_s: self.car.forward_speed_m_s(&self.physics),
+            max_suspension_compression: largest(self.suspension_compressions()),
             outside_course: self
                 .course_bounds
                 .is_some_and(|bounds| !bounds.contains(body.center_of_mass().to_array())),
@@ -783,6 +786,15 @@ impl World {
     pub fn steering_angle_rad(&self) -> f32 {
         self.car.steering_angle_rad()
     }
+}
+
+/// The largest of the wheels' values.
+fn largest(values: [f32; WHEEL_COUNT]) -> f32 {
+    let mut largest = values[0];
+    for value in values {
+        largest = largest.max(value);
+    }
+    largest
 }
 
 /// Fails if any value is NaN or infinite.

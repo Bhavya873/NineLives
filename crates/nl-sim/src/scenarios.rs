@@ -53,6 +53,15 @@ pub struct EpisodeConfig {
     /// Every start is lifted so the body's lowest point is at least this far above the
     /// ground (Stage B: exactly this far), in m, so no start begins inside the ground.
     pub spawn_clearance_m: f32,
+    /// Success also needs the controller's throttle sum to stay below this (PLAN §3.3)...
+    pub success_quiet_throttle_sum: f32,
+    /// ...for this long, unbroken, in s, so idle thrust can't count as a finished episode.
+    pub success_quiet_hold_s: f32,
+    /// The car is settled when all four wheels are down, it spins slower than this
+    /// (in rad/s)...
+    pub settle_max_spin_rad_s: f32,
+    /// ...and slides sideways slower than this, in m/s (PLAN §3.3 settle time).
+    pub settle_max_side_speed_m_s: f32,
 }
 
 /// Stage A, the drop (`[stage_a]`). Ranges are [low, high].
@@ -304,6 +313,22 @@ impl ScenariosConfig {
         let numbers = [
             ("episode.success_hold_s", self.episode.success_hold_s),
             ("episode.spawn_clearance_m", self.episode.spawn_clearance_m),
+            (
+                "episode.success_quiet_throttle_sum",
+                self.episode.success_quiet_throttle_sum,
+            ),
+            (
+                "episode.success_quiet_hold_s",
+                self.episode.success_quiet_hold_s,
+            ),
+            (
+                "episode.settle_max_spin_rad_s",
+                self.episode.settle_max_spin_rad_s,
+            ),
+            (
+                "episode.settle_max_side_speed_m_s",
+                self.episode.settle_max_side_speed_m_s,
+            ),
             ("stage_a.max_tilt_deg", self.stage_a.max_tilt_deg),
             ("stage_a.max_spin_rad_s", self.stage_a.max_spin_rad_s),
             ("stage_b.max_pitch_yaw_deg", self.stage_b.max_pitch_yaw_deg),

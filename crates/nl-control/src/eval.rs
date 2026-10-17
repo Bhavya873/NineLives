@@ -33,6 +33,16 @@ pub struct EvalSummary {
     pub touchdown_fall_median_m_s: Option<f32>,
     /// 95th-percentile fall speed at first touchdown, in m/s.
     pub touchdown_fall_p95_m_s: Option<f32>,
+    /// Episodes with at least one hard landing (PLAN §3.3).
+    pub hard_landing_rate: f32,
+    /// Median heading error at the latest save's touchdown, in degrees.
+    pub landing_heading_error_median_deg: Option<f32>,
+    /// Median speed kept after the latest save's touchdown (fast take-offs only).
+    pub speed_kept_median: Option<f32>,
+    /// Median settle time, in s, over episodes that ended settled.
+    pub settle_time_median_s: Option<f32>,
+    /// Median air left at the end of successful episodes, in kg.
+    pub air_left_at_success_median_kg: Option<f32>,
 }
 
 /// Runs one episode of `stage` from `seed` with `controller`, which acts at 60 Hz.
@@ -67,16 +77,43 @@ pub fn step_episode(
     episode.step(*throttles)
 }
 
+/// The landing-quality values of many episodes, gathered for percentiles (PLAN §3.3).
+#[derive(Default)]
+struct LandingSamples {
+    hard_landing_episodes: usize,
+    heading_errors_deg: Vec<f32>,
+    speeds_kept: Vec<f32>,
+    settle_times_s: Vec<f32>,
+    air_left_at_success_kg: Vec<f32>,
+}
+
+impl LandingSamples {
+    fn add(&mut self, result: &EpisodeResult) {
+        if result.hard_landings > 0 {
+            self.hard_landing_episodes += 1;
+        }
+        self.heading_errors_deg
+            .extend(result.landing_heading_error_deg);
+        self.speeds_kept.extend(result.speed_kept);
+        self.settle_times_s.extend(result.settle_time_s);
+        if result.success {
+            self.air_left_at_success_kg.push(result.air_left_kg);
+        }
+    }
+}
+
 /// Summarises many episodes.
 pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
     let mut spins = Vec::new();
     let mut falls = Vec::new();
+    let mut landings = LandingSamples::default();
     let mut successes = 0;
     let mut saved = 0;
     let mut crashed = 0;
     let mut total_saves = 0;
     let mut total_air_kg = 0.0;
     for result in results {
+        landings.add(result);
         if result.success {
             successes += 1;
         }
@@ -103,6 +140,11 @@ pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
         touchdown_spin_p95_rad_s: percentile(&mut spins, 0.95),
         touchdown_fall_median_m_s: percentile(&mut falls, 0.5),
         touchdown_fall_p95_m_s: percentile(&mut falls, 0.95),
+        hard_landing_rate: rate(landings.hard_landing_episodes),
+        landing_heading_error_median_deg: percentile(&mut landings.heading_errors_deg, 0.5),
+        speed_kept_median: percentile(&mut landings.speeds_kept, 0.5),
+        settle_time_median_s: percentile(&mut landings.settle_times_s, 0.5),
+        air_left_at_success_median_kg: percentile(&mut landings.air_left_at_success_kg, 0.5),
     }
 }
 
