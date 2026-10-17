@@ -8,12 +8,14 @@ use crate::{ControlCtx, Controller, Manual, Off};
 
 /// Every controller there is. A plain enum rather than trait objects (CLAUDE.md: plain
 /// constructs); PD and the AI join it in M4–M5.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Each variant holds its controller, so controllers that keep state between control
+/// steps (PD's filters, the AI's normaliser) keep it.
+#[derive(Debug, Clone, PartialEq)]
 pub enum ControllerKind {
     /// No thrusters (Hop and Boost still work).
-    Off,
+    Off(Off),
     /// Debug: keys 1–0 fire nozzles 0–9.
-    Manual,
+    Manual(Manual),
 }
 
 /// The names `from_name` accepts, in the order T cycles through them.
@@ -30,35 +32,35 @@ impl ControllerKind {
     /// The controller called `name` ("off" or "manual").
     pub fn from_name(name: &str) -> Result<ControllerKind, UnknownController> {
         match name {
-            "off" => Ok(ControllerKind::Off),
-            "manual" => Ok(ControllerKind::Manual),
+            "off" => Ok(ControllerKind::Off(Off)),
+            "manual" => Ok(ControllerKind::Manual(Manual)),
             other => Err(UnknownController {
                 name: other.to_string(),
             }),
         }
     }
 
-    /// The controller after this one in the T-key cycle, wrapping round.
-    pub fn next(self) -> ControllerKind {
+    /// A fresh controller of the kind after this one in the T-key cycle, wrapping round.
+    pub fn next(&self) -> ControllerKind {
         match self {
-            ControllerKind::Off => ControllerKind::Manual,
-            ControllerKind::Manual => ControllerKind::Off,
+            ControllerKind::Off(_) => ControllerKind::Manual(Manual),
+            ControllerKind::Manual(_) => ControllerKind::Off(Off),
         }
     }
 
     /// Forgets any state the controller keeps (none do yet).
     pub fn reset(&mut self, seed: u64) {
         match self {
-            ControllerKind::Off => Off.reset(seed),
-            ControllerKind::Manual => Manual.reset(seed),
+            ControllerKind::Off(controller) => controller.reset(seed),
+            ControllerKind::Manual(controller) => controller.reset(seed),
         }
     }
 
     /// The throttles this controller wants for this control step.
     pub fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
         match self {
-            ControllerKind::Off => Off.act(ctx),
-            ControllerKind::Manual => Manual.act(ctx),
+            ControllerKind::Off(controller) => controller.act(ctx),
+            ControllerKind::Manual(controller) => controller.act(ctx),
         }
     }
 }
@@ -86,9 +88,9 @@ mod tests {
 
     #[test]
     fn the_cycle_visits_every_controller_and_comes_back() {
-        let start = ControllerKind::Off;
+        let start = ControllerKind::Off(Off);
 
-        assert_eq!(start.next(), ControllerKind::Manual);
+        assert_eq!(start.next(), ControllerKind::Manual(Manual));
         assert_eq!(start.next().next(), start);
     }
 }

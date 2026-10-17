@@ -58,3 +58,14 @@ test('cycling the controller goes Off, Manual and back to Off', () => {
 
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Off);
 });
+
+test('a nozzle tap that lands between two control steps still fires', () => {
+  const game = new Game(vehicleToml, modesToml, 0n);
+  game.set_controller('manual');
+  game.tick(new Uint8Array(4)); // control step; the next tick is not one
+
+  game.tick(holdingNozzle(4)); // the tap
+  tickMany(game, new Uint8Array(4), 3);
+
+  assert.ok(game.nozzle_throttles()[4] > 0, 'the tap reached the Manual controller');
+});

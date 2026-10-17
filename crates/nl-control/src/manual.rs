@@ -6,7 +6,7 @@ use nl_sim::conventions::NOZZLE_COUNT;
 use crate::{ControlCtx, Controller};
 
 /// Fires nozzle `i` at throttle 1 while its manual button is held.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Manual;
 
 impl Controller for Manual {

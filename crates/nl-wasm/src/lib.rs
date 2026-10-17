@@ -7,7 +7,7 @@
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
 //! the Off and Manual controllers. PD, the policy and courses follow in M4–M7 (SPEC §11.1).
 
-use nl_control::{ControlCtx, ControllerKind};
+use nl_control::{ControlCtx, ControllerKind, Off};
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
@@ -114,6 +114,9 @@ pub struct Game {
     nozzle_layout: Vec<f32>,
     /// What fires the thrusters, asked at 60 Hz in `tick`.
     controller: ControllerKind,
+    /// Buttons pressed on any tick since the last control step, so a quick tap of a
+    /// nozzle key between two control steps still reaches the controller.
+    buttons_since_control_step: u16,
     /// Saves and crashes since the game started, counted as events are drained.
     saves: u32,
     crashes: u32,
@@ -171,7 +174,8 @@ impl Game {
             world,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
-            controller: ControllerKind::Off,
+            controller: ControllerKind::Off(Off),
+            buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
         })
@@ -192,7 +196,8 @@ impl Game {
 
     /// Switches to the next controller in the T-key cycle (SPEC §11.3).
     pub fn cycle_controller(&mut self) {
-        self.use_controller(self.controller.next());
+        let next = self.controller.next();
+        self.use_controller(next);
     }
 
     /// Advances exactly one physics step (1/120 s). `input` is a packed 4-byte
@@ -206,8 +211,16 @@ impl Game {
         })?;
         let input = InputFrame::from_bytes(bytes);
         // Controllers run at 60 Hz; the world holds their throttles in between (SPEC §7.1).
+        self.buttons_since_control_step |= input.buttons;
         if self.world.is_control_step() {
-            let throttles = self.controller.act(&ControlCtx { input });
+            let controller_input = InputFrame {
+                buttons: self.buttons_since_control_step,
+                ..input
+            };
+            self.buttons_since_control_step = 0;
+            let throttles = self.controller.act(&ControlCtx {
+                input: controller_input,
+            });
             self.world.set_controller_throttles(throttles);
         }
         self.world.step(input);
@@ -263,7 +276,7 @@ impl Game {
         values[HudField::Crashes as usize] = self.crashes as f32;
         values[HudField::Crashed as usize] = one_if(crashed);
         values[HudField::OutOfAir as usize] = one_if(self.world.is_out_of_air());
-        values[HudField::Controller as usize] = controller_code(self.controller) as u8 as f32;
+        values[HudField::Controller as usize] = controller_code(&self.controller) as u8 as f32;
         values
     }
 
@@ -442,10 +455,10 @@ fn crash_code(cause: CrashCause) -> f32 {
 }
 
 /// The HUD code for a controller.
-fn controller_code(controller: ControllerKind) -> ControllerCode {
+fn controller_code(controller: &ControllerKind) -> ControllerCode {
     match controller {
-        ControllerKind::Off => ControllerCode::Off,
-        ControllerKind::Manual => ControllerCode::Manual,
+        ControllerKind::Off(_) => ControllerCode::Off,
+        ControllerKind::Manual(_) => ControllerCode::Manual,
     }
 }
 

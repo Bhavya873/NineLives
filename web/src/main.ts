@@ -24,6 +24,7 @@ import {
   BUTTON_HOP,
   BUTTON_RESET,
   FIRST_MANUAL_NOZZLE_BIT,
+  MANUAL_NOZZLE_COUNT,
   onKeyPress,
   readInputFrame,
   bindTapButton,
@@ -194,7 +195,8 @@ function checkWasmLayout(): void {
     Game.button_boost() === BUTTON_BOOST &&
     Game.button_chaos() === BUTTON_CHAOS &&
     Game.button_reset() === BUTTON_RESET &&
-    Game.first_manual_nozzle_bit() === FIRST_MANUAL_NOZZLE_BIT;
+    Game.first_manual_nozzle_bit() === FIRST_MANUAL_NOZZLE_BIT &&
+    Game.nozzle_count() === MANUAL_NOZZLE_COUNT;
   if (!buttonsMatch) {
     throw new Error('The wasm build and the keyboard disagree on the button bits');
   }

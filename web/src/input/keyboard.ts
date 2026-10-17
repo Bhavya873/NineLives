@@ -24,6 +24,8 @@ export const BUTTON_CHAOS = 1 << 2;
 export const BUTTON_RESET = 1 << 3;
 /** Bit of the first manual nozzle button; nozzle `i` uses this bit + `i` (SPEC §11.3). */
 export const FIRST_MANUAL_NOZZLE_BIT = 4;
+/** Nozzles the keys 1–0 can fire; main.ts checks it against the wasm nozzle count. */
+export const MANUAL_NOZZLE_COUNT = 10;
 
 /** Each button bit and the keys that press it. */
 const BUTTON_KEYS: { bit: number; keys: string[] }[] = [
@@ -33,7 +35,7 @@ const BUTTON_KEYS: { bit: number; keys: string[] }[] = [
   { bit: BUTTON_RESET, keys: RESET_KEYS },
 ];
 // Keys 1, 2, … 9, 0 fire nozzles 0 to 9 (the sim only listens under Manual).
-for (let nozzle = 0; nozzle < 10; nozzle += 1) {
+for (let nozzle = 0; nozzle < MANUAL_NOZZLE_COUNT; nozzle += 1) {
   const key = `Digit${(nozzle + 1) % 10}`;
   BUTTON_KEYS.push({ bit: 1 << (FIRST_MANUAL_NOZZLE_BIT + nozzle), keys: [key] });
 }

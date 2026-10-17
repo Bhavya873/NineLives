@@ -6,7 +6,7 @@ use nl_sim::conventions::NOZZLE_COUNT;
 use crate::{ControlCtx, Controller};
 
 /// Never fires a nozzle.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Off;
 
 impl Controller for Off {

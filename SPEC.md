@@ -325,9 +325,10 @@ Course JSON, schema version 1:
 pub trait Controller {
     fn reset(&mut self, seed: u64);
     fn act(&mut self, obs: &Obs, ctx: &ControlCtx) -> [f32; 10]; // throttles in [0,1]
-    // Until ObsSpec exists (M4–M5) `act` takes only `ctx` (the driver's InputFrame).
 }
 ```
+
+Until `ObsSpec` exists (M4–M5) `act` takes only `ctx`, which carries the driver's `InputFrame`; PD adds `obs`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
 2. **Manual** (debug only): keys map to individual nozzles at throttle 1.
@@ -522,7 +523,7 @@ class Game {
 | R | reset to the last checkpoint (the `reset` bit in the InputFrame) |
 | C | Chaos (random knock) |
 | M | toggle Realistic / Arcade |
-| T | cycle controller Off → PD → AI |
+| T | cycle controller: Off → Manual in M3; Off → PD → AI → Manual from M5 (Manual stays reachable for debugging) |
 | G | toggle ghost |
 | 1–0 | fire nozzles 0–9 (only when the controller is Manual) |
 | Esc | pause / menu |
