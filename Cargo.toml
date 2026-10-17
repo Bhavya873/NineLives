@@ -28,6 +28,10 @@ rand = { version = "0.10.3", default-features = false }
 rand_chacha = { version = "0.10.0", default-features = false, features = ["serde"] }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 pyo3 = { version = "0.30.1", features = ["extension-module"] }
+# numpy arrays at the Python boundary; its version must match pyo3's.
+numpy = "0.30"
+# Steps independent training worlds in parallel (Rapier's own `parallel` stays off).
+rayon = "1.12"
 # Exact pin: the wasm-bindgen CLI must match this version (CI reads it from Cargo.lock).
 wasm-bindgen = "=0.2.129"
 

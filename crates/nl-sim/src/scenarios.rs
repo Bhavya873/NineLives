@@ -19,8 +19,9 @@ const SCENARIO_RNG_STREAM: u64 = 1;
 /// The repo's `configs/scenarios.toml`, built in so tests and the eval runner share it.
 pub const DEFAULT_SCENARIOS_TOML: &str = include_str!("../../../configs/scenarios.toml");
 
-/// Which kind of start (SPEC §9.6). Stages C–E arrive with courses in M7.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which kind of start (SPEC §9.6). Stages C–E arrive with courses in M7. Results and
+/// training info spell it "A" or "B".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Stage {
     /// Drop from the air in a random attitude and spin.
     A,

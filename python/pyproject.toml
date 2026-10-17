@@ -12,6 +12,12 @@ license = "MIT"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "numpy>=2.1",
+    "gymnasium>=1.2",
+    "stable-baselines3>=2.9",
+    # CPU is enough: a small MLP, and the physics is the bottleneck (PLAN §5.1).
+    "torch>=2.8",
+    "pyyaml>=6",
+    "tensorboard>=2.20",
 ]
 
 [project.optional-dependencies]
