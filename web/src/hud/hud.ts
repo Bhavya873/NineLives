@@ -62,18 +62,22 @@ export function findHud(): Hud {
 
 /** Updates the HUD from the game's latest values. */
 export function updateHud(hud: Hud, values: HudValues): void {
-  // The frozen wreck keeps its last velocity, so show it as stopped.
-  const speedMS = values.crashed ? 0 : values.speedMS;
-  const speedKmH = Math.abs(speedMS) * KM_PER_H_PER_M_PER_S;
-  hud.speed.textContent = `${speedKmH.toFixed(0)} km/h`;
+  const speedKmH = Math.abs(values.speedMS) * KM_PER_H_PER_M_PER_S;
+  setText(hud.speed, `${speedKmH.toFixed(0)} km/h`);
 
   const air = values.unlimitedAir ? '∞' : `${Math.round(values.airFraction * 100)}%`;
   const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
   const mode = MODE_TEXT[values.mode] ?? '';
   const crash = values.crashed ? 'Respawning…' : '';
-  hud.status.textContent = [mode, `Air ${air}`, hop, crash].filter(Boolean).join(' · ');
+  setText(hud.status, [mode, `Air ${air}`, hop, crash].filter(Boolean).join(' · '));
+  setText(hud.stats, statsText(values));
+}
 
-  hud.stats.textContent = statsText(values);
+/** Writes `text` only when it changed, so an unchanged HUD costs the page no layout work. */
+function setText(element: HTMLElement, text: string): void {
+  if (element.textContent !== text) {
+    element.textContent = text;
+  }
 }
 
 /** The top-right lines: saves, lives used, time, and the Hop cooldown while it runs. */

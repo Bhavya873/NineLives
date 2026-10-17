@@ -33,7 +33,7 @@ test('the explosion plays for about 1.5 s and then hides', () => {
   assert.equal(explosion.group.visible, false);
 });
 
-test('about 20 debris pieces fly up and come to rest on the ground', () => {
+test('about 20 debris pieces fly up and out, then fall', () => {
   const explosion = createExplosion(new Scene(), false);
   startExplosion(explosion, new Vector3(0, 1, 0));
 
@@ -41,13 +41,26 @@ test('about 20 debris pieces fly up and come to rest on the ground', () => {
   for (const piece of explosion.debris) {
     assert.ok(piece.mesh.position.y > 0, `piece at y ${piece.mesh.position.y}`);
   }
+  const risingAt = explosion.debris.map((piece) => piece.velocityMS.y);
   play(explosion, 1.2);
 
   assert.equal(explosion.debris.length, 20);
-  for (const piece of explosion.debris) {
-    // Group space: the ground is 1 m below the crash point.
-    assert.ok(piece.mesh.position.y >= -1, `piece below the ground at ${piece.mesh.position.y}`);
-  }
+  explosion.debris.forEach((piece, index) => {
+    assert.ok(piece.velocityMS.y < (risingAt[index] ?? 0), 'gravity slows every piece');
+  });
+});
+
+test('the flash light stays in the scene and goes dark after the effect', () => {
+  const scene = new Scene();
+  const explosion = createExplosion(scene, false);
+  startExplosion(explosion, new Vector3());
+
+  play(explosion, 0.05);
+  assert.ok(explosion.flash.intensity > 0);
+  play(explosion, 2);
+
+  assert.equal(explosion.flash.intensity, 0);
+  assert.equal(explosion.flash.parent, scene);
 });
 
 test('reduced motion means no camera shake and fewer pieces', () => {

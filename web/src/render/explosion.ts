@@ -5,6 +5,7 @@
 import {
   DoubleSide,
   Group,
+  MathUtils,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -24,9 +25,9 @@ const DEBRIS_SIZE_M = 0.25;
 /** Debris launch speed range, in m/s. */
 const DEBRIS_MIN_SPEED_M_S = 4;
 const DEBRIS_MAX_SPEED_M_S = 11;
+/** Largest debris spin about each axis, in rad/s. */
+const DEBRIS_MAX_SPIN_RAD_S = 8;
 const DEBRIS_GRAVITY_M_S2 = 9.81;
-/** Debris that hits the ground keeps this much of its speed. */
-const DEBRIS_BOUNCE = 0.3;
 const FLASH_S = 0.25;
 const FLASH_INTENSITY = 400;
 const RING_MAX_RADIUS_M = 9;
@@ -43,7 +44,12 @@ interface Debris {
 
 /** The explosion's three.js objects and how far through the effect it is. */
 export interface Explosion {
+  /** The ring and debris; hidden while the effect is not playing. */
   group: Group;
+  /**
+   * Kept in the scene at all times (dark when idle): adding or hiding a light changes
+   * the scene's light count, which makes three.js recompile every material mid-crash.
+   */
   flash: PointLight;
   ring: Mesh<RingGeometry, MeshBasicMaterial>;
   debris: Debris[];
@@ -63,21 +69,28 @@ export function createExplosion(scene: Scene, reducedMotion: boolean): Explosion
   );
   ring.rotation.x = -Math.PI / 2;
   const debris = buildDebris(reducedMotion ? DEBRIS_COUNT_REDUCED_MOTION : DEBRIS_COUNT);
-  group.add(flash, ring, ...debris.map((piece) => piece.mesh));
-  scene.add(group);
+  group.add(ring, ...debris.map((piece) => piece.mesh));
+  scene.add(group, flash);
   return { group, flash, ring, debris, ageS: DURATION_S, reducedMotion };
 }
 
 /** Starts the effect at `position` (where the car crashed). */
 export function startExplosion(explosion: Explosion, position: Vector3): void {
   explosion.group.position.copy(position);
+  explosion.flash.position.copy(position);
   explosion.group.visible = true;
   explosion.ageS = 0;
+  const spinSpread = 2 * DEBRIS_MAX_SPIN_RAD_S;
   for (const piece of explosion.debris) {
     piece.mesh.position.set(0, 0, 0);
     randomUpwardDirection(piece.velocityMS);
-    piece.velocityMS.multiplyScalar(randomBetween(DEBRIS_MIN_SPEED_M_S, DEBRIS_MAX_SPEED_M_S));
-    piece.spinRadS.set(randomBetween(-8, 8), randomBetween(-8, 8), randomBetween(-8, 8));
+    const speedMS = MathUtils.randFloat(DEBRIS_MIN_SPEED_M_S, DEBRIS_MAX_SPEED_M_S);
+    piece.velocityMS.multiplyScalar(speedMS);
+    piece.spinRadS.set(
+      MathUtils.randFloatSpread(spinSpread),
+      MathUtils.randFloatSpread(spinSpread),
+      MathUtils.randFloatSpread(spinSpread),
+    );
   }
 }
 
@@ -90,18 +103,17 @@ export function isExplosionPlaying(explosion: Explosion): boolean {
 export function updateExplosion(explosion: Explosion, frameS: number): void {
   if (!isExplosionPlaying(explosion)) {
     explosion.group.visible = false;
+    explosion.flash.intensity = 0;
     return;
   }
   explosion.ageS += frameS;
   const age = explosion.ageS;
-  explosion.flash.intensity = FLASH_INTENSITY * Math.max(0, 1 - age / FLASH_S);
-  const ringProgress = Math.min(1, age / RING_S);
-  explosion.ring.scale.setScalar(0.1 + ringProgress * RING_MAX_RADIUS_M);
+  explosion.flash.intensity = FLASH_INTENSITY * MathUtils.clamp(1 - age / FLASH_S, 0, 1);
+  const ringProgress = MathUtils.clamp(age / RING_S, 0, 1);
+  explosion.ring.scale.setScalar(MathUtils.lerp(0.1, RING_MAX_RADIUS_M, ringProgress));
   explosion.ring.material.opacity = 1 - ringProgress;
-  // The ground (world y = 0) in the group's frame; none if the car fell off the world.
-  const groundY = explosion.group.position.y >= 0 ? -explosion.group.position.y : -Infinity;
   for (const piece of explosion.debris) {
-    moveDebris(piece, frameS, groundY);
+    moveDebris(piece, frameS);
   }
 }
 
@@ -115,9 +127,7 @@ export function cameraShake(explosion: Explosion, out: Vector3): Vector3 {
     return out;
   }
   const strength = SHAKE_AMPLITUDE_M * (1 - explosion.ageS / SHAKE_S);
-  return out
-    .set(randomBetween(-1, 1), randomBetween(-1, 1), randomBetween(-1, 1))
-    .multiplyScalar(strength);
+  return out.randomDirection().multiplyScalar(strength);
 }
 
 /** Small dark tetrahedra: the pieces of the car. */
@@ -133,30 +143,22 @@ function buildDebris(count: number): Debris[] {
   return debris;
 }
 
-/** Simple ballistic flight with a dull bounce off the ground at `groundY` (group space). */
-function moveDebris(piece: Debris, frameS: number, groundY: number): void {
+/**
+ * Simple ballistic flight. Pieces that fall below the ground are hidden by it, so no
+ * ground test is needed (and it works the same on any course or off the world).
+ */
+function moveDebris(piece: Debris, frameS: number): void {
   piece.velocityMS.y -= DEBRIS_GRAVITY_M_S2 * frameS;
   piece.mesh.position.addScaledVector(piece.velocityMS, frameS);
   piece.mesh.rotation.x += piece.spinRadS.x * frameS;
   piece.mesh.rotation.y += piece.spinRadS.y * frameS;
   piece.mesh.rotation.z += piece.spinRadS.z * frameS;
-  const restingY = groundY + DEBRIS_SIZE_M / 2;
-  if (piece.mesh.position.y < restingY) {
-    piece.mesh.position.y = restingY;
-    piece.velocityMS.multiplyScalar(DEBRIS_BOUNCE);
-    piece.velocityMS.y = Math.abs(piece.velocityMS.y);
-    piece.spinRadS.multiplyScalar(DEBRIS_BOUNCE);
-  }
 }
 
 /** A random unit vector in the upper half, so debris flies up and out. */
 function randomUpwardDirection(out: Vector3): void {
-  const angleRad = randomBetween(0, 2 * Math.PI);
-  const upward = randomBetween(0.3, 1);
+  const angleRad = MathUtils.randFloat(0, 2 * Math.PI);
+  const upward = MathUtils.randFloat(0.3, 1);
   const sideways = Math.sqrt(1 - upward * upward);
   out.set(Math.cos(angleRad) * sideways, upward, Math.sin(angleRad) * sideways);
-}
-
-function randomBetween(low: number, high: number): number {
-  return low + Math.random() * (high - low);
 }

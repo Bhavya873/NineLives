@@ -190,3 +190,19 @@ fn holding_hop_starts_only_one_hop_even_after_the_cooldown() {
 
     assert_eq!(hops_started, 1);
 }
+
+#[test]
+fn out_of_air_starts_where_thrust_starts_to_fade_and_never_in_arcade() {
+    let mut world = new_world();
+    let capacity_kg = realistic().tank_capacity_kg;
+    let fade_start_kg = realistic().empty_fade_fraction * capacity_kg;
+
+    world.set_air_kg(fade_start_kg * 1.5);
+    assert!(!world.is_out_of_air());
+    world.set_air_kg(fade_start_kg * 0.5);
+    assert!(world.is_out_of_air());
+
+    let mut arcade_world = new_world_in(arcade());
+    arcade_world.set_air_kg(0.0);
+    assert!(!arcade_world.is_out_of_air());
+}
