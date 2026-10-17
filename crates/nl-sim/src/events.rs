@@ -50,6 +50,13 @@ pub enum SimEvent {
     Crash { cause: CrashCause },
     /// The car was put back at the last checkpoint, after a crash or the Reset button.
     Respawn,
+    /// The car crossed a course checkpoint line (0 is the first, in file order); the
+    /// respawn point is now there (SPEC §7.11).
+    CheckpointReached { number: u32 },
+    /// The car crossed the finish line, `time_s` after the world started.
+    Finished { time_s: f32 },
+    /// A kick plate (`piece` index in the course file) pushed the car.
+    Kicked { piece: u32 },
 }
 
 /// What the tracker looks at on each physics step.
