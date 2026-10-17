@@ -43,10 +43,13 @@ impl Stage {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EpisodeConfig {
-    /// Success is a save followed by this long with no crash.
+    /// Success is all four wheels down for this long, unbroken, with no crash, in s.
     pub success_hold_s: f32,
-    /// Episodes are cut off after this long.
+    /// Episodes are cut off after this long, in s.
     pub time_limit_s: f32,
+    /// Every start is lifted so the body's lowest point is at least this far above the
+    /// ground (Stage B: exactly this far), in m, so no start begins inside the ground.
+    pub spawn_clearance_m: f32,
 }
 
 /// Stage A, the drop (`[stage_a]`). Ranges are [low, high].
@@ -55,7 +58,7 @@ pub struct EpisodeConfig {
 pub struct DropConfig {
     /// Height of the centre of mass above the ground, in m.
     pub height_m: [f32; 2],
-    /// Largest tilt from upright, about a random axis, in degrees.
+    /// Largest tilt from upright, about a random horizontal axis, in degrees.
     pub max_tilt_deg: f32,
     /// Largest spin size, about another random axis, in rad/s.
     pub max_spin_rad_s: f32,
@@ -73,8 +76,6 @@ pub struct TipOverConfig {
     pub roll_deg: [f32; 2],
     /// Largest extra pitch and yaw, each way, in degrees.
     pub max_pitch_yaw_deg: f32,
-    /// Height of the centre of mass above the ground, in m.
-    pub height_m: f32,
     /// Largest horizontal sliding speed, in m/s.
     pub max_speed_m_s: f32,
 }
@@ -97,7 +98,9 @@ pub enum ScenariosConfigError {
     #[error("scenarios.toml: {0}")]
     Toml(#[from] toml::de::Error),
 
-    #[error("scenarios.toml: `{field}` must be [low, high] with low ≤ high, but it is {range:?}")]
+    #[error(
+        "scenarios.toml: `{field}` must be [low, high] with low ≤ high (and low ≥ 0 unless it is a vertical speed), but it is {range:?}"
+    )]
     BadRange {
         field: &'static str,
         range: [f32; 2],
@@ -119,23 +122,24 @@ impl ScenariosConfig {
         Ok(config)
     }
 
-    /// Every [low, high] pair must be finite and in order.
+    /// Every [low, high] pair must be finite and in order; only the vertical speed may
+    /// go below zero (a negative height, speed or roll makes no sense).
     fn check_ranges(&self) -> Result<(), ScenariosConfigError> {
+        let a = &self.stage_a;
         let ranges = [
-            ("stage_a.height_m", self.stage_a.height_m),
+            ("stage_a.height_m", a.height_m, false),
             (
                 "stage_a.horizontal_speed_m_s",
-                self.stage_a.horizontal_speed_m_s,
+                a.horizontal_speed_m_s,
+                false,
             ),
-            (
-                "stage_a.vertical_speed_m_s",
-                self.stage_a.vertical_speed_m_s,
-            ),
-            ("stage_b.roll_deg", self.stage_b.roll_deg),
+            ("stage_a.vertical_speed_m_s", a.vertical_speed_m_s, true),
+            ("stage_b.roll_deg", self.stage_b.roll_deg, false),
         ];
-        for (field, range) in ranges {
+        for (field, range, may_be_negative) in ranges {
             let [low, high] = range;
-            if !low.is_finite() || !high.is_finite() || low > high {
+            let in_order = low.is_finite() && high.is_finite() && low <= high;
+            if !in_order || (!may_be_negative && low < 0.0) {
                 return Err(ScenariosConfigError::BadRange { field, range });
             }
         }
@@ -147,10 +151,10 @@ impl ScenariosConfig {
     fn check_numbers(&self) -> Result<(), ScenariosConfigError> {
         let numbers = [
             ("episode.success_hold_s", self.episode.success_hold_s),
+            ("episode.spawn_clearance_m", self.episode.spawn_clearance_m),
             ("stage_a.max_tilt_deg", self.stage_a.max_tilt_deg),
             ("stage_a.max_spin_rad_s", self.stage_a.max_spin_rad_s),
             ("stage_b.max_pitch_yaw_deg", self.stage_b.max_pitch_yaw_deg),
-            ("stage_b.height_m", self.stage_b.height_m),
             ("stage_b.max_speed_m_s", self.stage_b.max_speed_m_s),
         ];
         for (field, value) in numbers {
@@ -181,23 +185,41 @@ pub fn start_episode(
         Stage::A => sample_drop(&config.stage_a, &mut rng),
         Stage::B => sample_tip_over(&config.stage_b, &mut rng),
     };
-    world.place_car(
-        start.pose.position_m,
-        start.pose.rotation_xyzw,
-        start.linear_velocity_m_s,
-        start.angular_velocity_rad_s,
-    )?;
+    place(world, &start, 0.0)?;
+    // Raise (Stage B: or lower) the car until its lowest corner sits the clearance
+    // above the ground: a tilted car reaches further down than its centre suggests.
+    let gap_m = world.lowest_chassis_point_m();
+    let clearance_m = config.episode.spawn_clearance_m;
+    let lift_m = match stage {
+        Stage::A => (clearance_m - gap_m).max(0.0),
+        Stage::B => clearance_m - gap_m,
+    };
+    place(world, &start, lift_m)?;
     world.refill_tank();
     Ok(())
 }
 
-/// SPEC §9.6 Stage A: height, a tilt about a random axis, a spin about another, and a
-/// velocity with a random horizontal heading.
+/// Puts the car at `start`, raised by `lift_m`.
+fn place(world: &mut World, start: &Checkpoint, lift_m: f32) -> Result<(), PlaceCarError> {
+    let [x, y, z] = start.pose.position_m;
+    world.place_car(
+        [x, y + lift_m, z],
+        start.pose.rotation_xyzw,
+        start.linear_velocity_m_s,
+        start.angular_velocity_rad_s,
+    )
+}
+
+/// SPEC §9.6 Stage A: height, a tilt about a random horizontal axis (so the car's tilt
+/// from upright is exactly the drawn angle), a spin about a random axis, and a velocity
+/// with a random horizontal heading.
 fn sample_drop(config: &DropConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
     let height_m = draw(rng, config.height_m);
     let heading = Rotation::from_rotation_y(rng.random_range(0.0..std::f32::consts::TAU));
+    let tilt_axis_rad = rng.random_range(0.0..std::f32::consts::TAU);
+    let tilt_axis = Vector::new(tilt_axis_rad.cos(), 0.0, tilt_axis_rad.sin());
     let tilt_rad = rng.random_range(0.0..=config.max_tilt_deg.to_radians());
-    let rotation = Rotation::from_axis_angle(random_direction(rng), tilt_rad) * heading;
+    let rotation = Rotation::from_axis_angle(tilt_axis, tilt_rad) * heading;
     let spin = random_direction(rng) * rng.random_range(0.0..=config.max_spin_rad_s);
     let direction_rad = rng.random_range(0.0..std::f32::consts::TAU);
     let horizontal_m_s = draw(rng, config.horizontal_speed_m_s);
@@ -210,7 +232,7 @@ fn sample_drop(config: &DropConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
 }
 
 /// SPEC §9.6 Stage B: lying on either side (a roll about the nose), slightly pitched and
-/// yawed, sliding slowly.
+/// yawed, sliding slowly. `start_episode` sets the height.
 fn sample_tip_over(config: &TipOverConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
     let side = if rng.random_range(0.0..1.0) < 0.5 {
         1.0
@@ -231,8 +253,7 @@ fn sample_tip_over(config: &TipOverConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
         0.0,
         speed_m_s * direction_rad.sin(),
     );
-    let position = Vector::new(0.0, config.height_m, 0.0);
-    checkpoint(position, rotation, velocity, Vector::ZERO)
+    checkpoint(Vector::ZERO, rotation, velocity, Vector::ZERO)
 }
 
 /// An even draw from `[low, high]`.

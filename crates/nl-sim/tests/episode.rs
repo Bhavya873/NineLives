@@ -46,3 +46,23 @@ fn an_ended_episode_ignores_further_steps() {
     assert_eq!(again, status);
     assert_eq!(episode.result(), finished);
 }
+
+#[test]
+fn a_car_resting_on_its_wheels_succeeds_after_the_hold_without_any_save() {
+    let mut scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML).unwrap();
+    // A gentle drop: level, low, slow. It lands without an upset, so no Save fires.
+    scenarios.stage_a.height_m = [1.0, 1.0];
+    scenarios.stage_a.max_tilt_deg = 0.0;
+    scenarios.stage_a.max_spin_rad_s = 0.0;
+    scenarios.stage_a.horizontal_speed_m_s = [0.0, 0.0];
+    scenarios.stage_a.vertical_speed_m_s = [0.0, 0.0];
+    let mut episode = Episode::start(&vehicle(), realistic(), &scenarios, Stage::A, 0).unwrap();
+
+    let status = run_to_end(&mut episode);
+
+    assert_eq!(status, EpisodeStatus::Succeeded);
+    let result = episode.result();
+    assert_eq!(result.saves, 0);
+    assert!(result.duration_s < 2.0, "{result:?}");
+    assert!(result.touchdown_fall_m_s.is_some());
+}

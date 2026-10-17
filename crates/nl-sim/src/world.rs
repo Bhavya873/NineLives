@@ -17,7 +17,7 @@ use crate::car::Car;
 use crate::car_state::{CarModel, CarState, height_above_ground_m, read_car_model};
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
-use crate::contacts::{MotionBeforeStep, read_body_contacts};
+use crate::contacts::{MotionBeforeStep, is_touching, read_body_contacts};
 use crate::conventions::{
     NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
     gravity_vector,
@@ -306,6 +306,26 @@ impl World {
             let extra = self.pending_events.len() - MAX_PENDING_EVENTS;
             self.pending_events.drain(..extra);
         }
+    }
+
+    /// True if the body or roof box touches anything now (wheels are rays, not boxes).
+    pub fn chassis_touching(&self) -> bool {
+        is_touching(&self.physics, self.car.body_collider)
+            || is_touching(&self.physics, self.car.roof_collider)
+    }
+
+    /// World height of the lowest point of the body and roof boxes, in m. Scenarios use
+    /// it to start a tilted car clear of the ground.
+    pub fn lowest_chassis_point_m(&self) -> f32 {
+        let body_pose = self.physics.bodies[self.car.chassis].position();
+        let mut lowest_m = f32::INFINITY;
+        for handle in [self.car.body_collider, self.car.roof_collider] {
+            let collider = &self.physics.colliders[handle];
+            let offset = collider.position_wrt_parent().copied().unwrap_or_default();
+            let aabb = collider.shape().compute_aabb(&(*body_pose * offset));
+            lowest_m = lowest_m.min(aabb.mins.y);
+        }
+        lowest_m
     }
 
     /// Returns and forgets the events since the last call (SPEC §7.9).

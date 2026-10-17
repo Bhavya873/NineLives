@@ -399,14 +399,14 @@ The layout lives in Rust (`ObsSpec`). The schema hash covers names and order. Py
 There is no survival bonus *(req)*. Being alive must not pay, or the policy learns to hover (9.11).
 
 ### 9.5 Episode end
-- **Terminated:** crash; or success (Stage A/B: a save held for 1.0 s; Stage C: a save after the hop).
+- **Terminated:** crash; or success (Stage A/B: all four wheels down for 1.0 s unbroken — a clean landing counts even if no upset, and so no Save event, happened; Stage C: a save after the hop). Implemented once in `nl_sim::episode::Episode`.
 - **Truncated:** time limit (A/B 8 s, C 15 s, D/E 45 s).
 
 ### 9.6 Scenario stages
 | Stage | Spawn | Driver | Success |
 |---|---|---|---|
-| A — Drop | height U(1.5, 8) m; tilt U(0, θmax) about a random axis; ω magnitude U(0, ωmax) on a random axis; horizontal v U(0, 15); vertical v U(−5, 3) | none | save |
-| B — Side tip-over | resting on its side at low speed, roll U(60°, 110°) to either side, small pitch and yaw | none | back on 4 wheels, upright, without touching the roof |
+| A — Drop | height U(1.5, 8) m (raised if a tilted corner would be closer than `spawn_clearance_m` to the ground); tilt U(0, θmax) about a random horizontal axis; ω magnitude U(0, ωmax) on a random axis; horizontal v U(0, 15); vertical v U(−5, 3) | none | save |
+| B — Side tip-over | resting on its side at low speed (lowest corner `spawn_clearance_m` above the ground), roll U(60°, 110°) to either side, small pitch and yaw | none | back on 4 wheels, upright, without touching the roof |
 | C — Hop | driving straight at U(5, 25) m/s on flat ground; Hop at a random time; in 50% of episodes a car row of 1–3 cars (1.2–1.5 m tall) placed so the hop must clear it | bot | save after the hop, no obstacle hit |
 | D — Course | procedural course (7.11) | bot | reach the finish with no crash |
 | E — Chaos | any of A, C, D plus 1–3 Chaos impulses at random times | bot or none | as for the base stage |

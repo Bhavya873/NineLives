@@ -38,16 +38,21 @@ fn stage_a_drops_start_in_the_air_within_their_ranges_with_a_full_tank() {
 
         start_episode(&mut world, Stage::A, &config, seed).unwrap();
 
-        let [low_m, high_m] = config.stage_a.height_m;
+        // At least the drawn height, raised if a tilted corner would touch the ground.
+        let [low_m, _] = config.stage_a.height_m;
         let height_m = world.chassis_pose().position_m[1];
+        assert!(height_m >= low_m, "seed {seed}: {height_m} m");
+        let gap_m = world.lowest_chassis_point_m();
         assert!(
-            (low_m..=high_m).contains(&height_m),
-            "seed {seed}: {height_m} m"
+            gap_m >= config.episode.spawn_clearance_m - 1e-3,
+            "seed {seed}"
         );
         let [_, vertical_m_s, _] = world.linear_velocity_m_s();
         let [down_m_s, up_m_s] = config.stage_a.vertical_speed_m_s;
         assert!((down_m_s..=up_m_s).contains(&vertical_m_s), "seed {seed}");
         assert_eq!(world.air_fraction(), 1.0);
+        // The tilt is exactly the drawn angle, up to the configured maximum.
+        assert!(world.tilt_rad().to_degrees() <= config.stage_a.max_tilt_deg + 0.01);
     }
 }
 
@@ -63,12 +68,25 @@ fn stage_b_starts_tipped_onto_a_side() {
         let up_alignment = world.car_state().up_alignment();
         assert!(up_alignment < 0.55, "seed {seed}: {up_alignment}");
         assert!(up_alignment > -0.40, "seed {seed}: {up_alignment}");
+        // Just above the ground, not inside it.
+        let gap_m = world.lowest_chassis_point_m();
+        let clearance_m = config.episode.spawn_clearance_m;
+        assert!((gap_m - clearance_m).abs() < 1e-3, "seed {seed}: {gap_m} m");
     }
 }
 
 #[test]
 fn a_backwards_range_is_refused_with_its_field_name() {
     let broken = DEFAULT_SCENARIOS_TOML.replace("height_m = [1.5, 8.0]", "height_m = [8.0, 1.5]");
+
+    let error = ScenariosConfig::from_toml_str(&broken).unwrap_err();
+
+    assert!(error.to_string().contains("stage_a.height_m"), "{error}");
+}
+
+#[test]
+fn a_negative_height_is_refused_with_its_field_name() {
+    let broken = DEFAULT_SCENARIOS_TOML.replace("height_m = [1.5, 8.0]", "height_m = [-1.0, 8.0]");
 
     let error = ScenariosConfig::from_toml_str(&broken).unwrap_err();
 

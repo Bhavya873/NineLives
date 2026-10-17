@@ -84,12 +84,13 @@ fn pd_rights_stage_b_tip_overs() {
 
 #[test]
 fn the_summary_counts_rates_and_air_per_save() {
-    let episode = |success: bool, saves: u32, air_used_kg: f32| EpisodeResult {
+    let episode = |success: bool, saves: u32, air_used_in_saves_kg: f32| EpisodeResult {
         seed: 0,
         success,
         saves,
         crash_cause: (!success).then_some(CrashCause::HardImpact),
-        air_used_kg,
+        air_used_kg: 100.0,
+        air_used_in_saves_kg,
         peak_tilt_deg: 0.0,
         touchdown_spin_rad_s: Some(1.0),
         touchdown_fall_m_s: Some(2.0),
@@ -101,6 +102,7 @@ fn the_summary_counts_rates_and_air_per_save() {
     assert_eq!(summary.success_rate, 0.5);
     assert_eq!(summary.save_rate, 0.5);
     assert_eq!(summary.crash_rate, 0.5);
+    // Only air spent in saved upsets counts, not the 200 kg used overall.
     assert_eq!(summary.air_per_save_kg, Some(40.0));
     assert_eq!(summary.touchdown_fall_median_m_s, Some(2.0));
 }

@@ -18,13 +18,13 @@ use crate::{ControlCtx, Controller};
 pub struct EvalSummary {
     /// How many episodes ran.
     pub episodes: usize,
-    /// Episodes that succeeded (a save held with no crash).
+    /// Episodes that succeeded (four wheels down for the hold time, no crash).
     pub success_rate: f32,
     /// Episodes with at least one save.
     pub save_rate: f32,
     /// Episodes that ended in a crash.
     pub crash_rate: f32,
-    /// Air used per save, over all episodes, in kg; None if nothing was saved.
+    /// Air used during saved upsets, per save (SPEC §10), in kg; None if nothing was saved.
     pub air_per_save_kg: Option<f32>,
     /// Median spin size at first touchdown, in rad/s.
     pub touchdown_spin_median_rad_s: Option<f32>,
@@ -52,7 +52,7 @@ pub fn run_episode(
         if episode.world().is_control_step() {
             let ctx = ControlCtx {
                 input: InputFrame::default(),
-                state: episode.world().car_state(),
+                state: episode.car_state(),
             };
             throttles = controller.act(&ctx);
         }
@@ -83,7 +83,7 @@ pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
         spins.extend(result.touchdown_spin_rad_s);
         falls.extend(result.touchdown_fall_m_s);
         total_saves += result.saves;
-        total_air_kg += result.air_used_kg;
+        total_air_kg += result.air_used_in_saves_kg;
     }
     let episodes = results.len();
     let rate = |count: usize| count as f32 / episodes.max(1) as f32;

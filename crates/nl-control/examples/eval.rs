@@ -37,7 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut controller = build_controller(&args.controller, &vehicle, mode)?;
     let mut results: Vec<EpisodeResult> = Vec::new();
     for episode in 0..args.episodes {
-        let seed = args.seed + episode;
+        let seed = args
+            .seed
+            .checked_add(episode)
+            .ok_or("--seed is too large")?;
         let result = run_episode(&vehicle, mode, &scenarios, stage, controller.as_mut(), seed)?;
         results.push(result);
     }
