@@ -26,6 +26,7 @@ const MODE_TEXT: Record<number, string> = {
 /** Controller names, by wasm `ControllerCode` value. */
 const CONTROLLER_TEXT: Record<number, string> = {
   [ControllerCode.Off]: 'Controller: Off',
+  [ControllerCode.Pd]: 'Controller: PD',
   [ControllerCode.Manual]: 'Controller: Manual (keys 1–0)',
 };
 

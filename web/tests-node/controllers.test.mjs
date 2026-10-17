@@ -1,5 +1,6 @@
-// Game API tests for the controllers (SPEC §8, §11.1, §11.3): Off fires nothing, Manual
-// fires the nozzle whose key is held, and unknown names are refused.
+// Game API tests for the controllers (SPEC §8, §11.1, §11.3): Off fires nothing, PD saves
+// air on its wheels, Manual fires the nozzle whose key is held, and unknown names are
+// refused.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -46,17 +47,29 @@ test('switching back to Off closes the valves Manual left open', () => {
 test('an unknown controller name is refused with a helpful message', () => {
   const game = new Game(vehicleToml, modesToml, 0n);
 
-  assert.throws(() => game.set_controller('autopilot'), /use one of: off, manual/);
+  assert.throws(() => game.set_controller('autopilot'), /use one of: off, pd, manual/);
 });
 
-test('cycling the controller goes Off, Manual and back to Off', () => {
+test('cycling the controller goes Off, PD, Manual and back to Off', () => {
   const game = new Game(vehicleToml, modesToml, 0n);
 
+  game.cycle_controller();
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
   game.cycle_controller();
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Manual);
   game.cycle_controller();
 
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Off);
+});
+
+test('PD fires nothing while the car sits on its wheels, to save air', () => {
+  const game = new Game(vehicleToml, modesToml, 0n);
+  game.set_controller('pd');
+
+  tickMany(game, new Uint8Array(4), 240);
+
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
+  assert.deepEqual(Array.from(game.nozzle_throttles()), new Array(10).fill(0));
 });
 
 test('a nozzle tap that lands between two control steps still fires', () => {
