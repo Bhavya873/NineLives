@@ -165,14 +165,15 @@ impl World {
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
         self.physics.step();
+        let wheels_down_after = self.wheels_touching_count();
         // 10. The tank: pay for this step's thrust, then refill if on the ground.
         let exhaust_m_s = self.car.exhaust_speed_m_s();
         self.tank
             .use_air(thrust_n, exhaust_m_s, PHYSICS_DT_S, &self.mode);
         self.tank
-            .refill(self.wheels_touching_count(), PHYSICS_DT_S, &self.mode);
-        // 10. Events (SPEC §7.9).
-        self.update_events(&motion_before);
+            .refill(wheels_down_after, PHYSICS_DT_S, &self.mode);
+        // 11. Events (SPEC §7.9).
+        self.update_events(&motion_before, wheels_down_after);
         self.step_count += 1;
     }
 
@@ -187,7 +188,11 @@ impl World {
     }
 
     /// Feeds this step's state to the event rules and keeps any new events.
-    fn update_events(&mut self, motion_before: &MotionBeforeStep) {
+    fn update_events(&mut self, motion_before: &MotionBeforeStep, wheels_down: usize) {
+        // After a crash nothing more is reported, so skip reading the contacts.
+        if self.events.crashed() {
+            return;
+        }
         let contacts = read_body_contacts(
             &self.physics,
             self.car.body_collider,
@@ -196,7 +201,7 @@ impl World {
         );
         let body = &self.physics.bodies[self.car.chassis];
         let inputs = EventInputs {
-            wheels_down: self.wheels_touching_count(),
+            wheels_down,
             tilt_rad: self.tilt_rad(),
             spin_rad_s: body.angvel().length(),
             air_used_kg: self.tank.air_used_kg(),
@@ -366,9 +371,9 @@ impl World {
         Ok(())
     }
 
-    /// Starts a new life from a checkpoint saved with `snapshot` (SPEC §7.9): the car,
-    /// course state and events come from the checkpoint, the tank is refilled, and the
-    /// current mode, clock and random generator carry on (so Chaos does not replay the
+    /// Starts a new life from a checkpoint saved with `snapshot` (SPEC §7.9): the car
+    /// and course state come from the checkpoint, events start fresh, the tank is
+    /// refilled, and the current mode, clock and random generator carry on (so Chaos does not replay the
     /// same knocks after every respawn). On error the world is left unchanged.
     pub fn respawn_from(&mut self, checkpoint: &[u8]) -> Result<(), SnapshotError> {
         let mode = self.mode;
@@ -378,8 +383,8 @@ impl World {
         self.mode = mode;
         self.rng = rng;
         self.step_count = step_count;
+        // `restore` already emptied the pending events (they are not in snapshots).
         self.events.reset();
-        self.pending_events.clear();
         self.refill_tank();
         Ok(())
     }

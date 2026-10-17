@@ -11,6 +11,7 @@ use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::input::{BUTTON_CHAOS, InputFrame};
 use nl_sim::world::World;
+use rapier3d::prelude::Vector;
 
 /// Rotation quaternions (x, y, z, w).
 const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -131,12 +132,7 @@ fn chaos_knocks_the_car_and_repeats_for_the_same_seed() {
     first.step(knock);
     second.step(knock);
 
-    let speed_m_s: f32 = first
-        .linear_velocity_m_s()
-        .iter()
-        .map(|v| v * v)
-        .sum::<f32>()
-        .sqrt();
+    let speed_m_s = Vector::from_array(first.linear_velocity_m_s()).length();
     assert!(speed_m_s > 0.1, "chaos did not move the car");
     assert_eq!(first.snapshot().unwrap(), second.snapshot().unwrap());
 }

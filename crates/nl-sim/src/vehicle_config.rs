@@ -322,30 +322,15 @@ impl SteeringConfig {
 impl EventConfig {
     fn check(&self) -> CheckResult {
         must_be_positive("events.upset_airborne_s", self.upset_airborne_s)?;
-        must_be_positive("events.upset_tilt_deg", self.upset_tilt_deg)?;
-        must_be_positive("events.save_tilt_deg", self.save_tilt_deg)?;
+        must_be_tilt_deg("events.upset_tilt_deg", self.upset_tilt_deg)?;
+        must_be_tilt_deg("events.save_tilt_deg", self.save_tilt_deg)?;
         must_be_positive("events.save_max_spin_rad_s", self.save_max_spin_rad_s)?;
         must_not_be_negative("events.save_hold_s", self.save_hold_s)?;
         must_be_positive("events.crash_impact_speed_m_s", self.crash_impact_speed_m_s)?;
-        must_be_positive("events.upside_down_tilt_deg", self.upside_down_tilt_deg)?;
-        must_be_positive("events.stuck_tilt_deg", self.stuck_tilt_deg)?;
+        must_be_tilt_deg("events.upside_down_tilt_deg", self.upside_down_tilt_deg)?;
+        must_be_tilt_deg("events.stuck_tilt_deg", self.stuck_tilt_deg)?;
         must_not_be_negative("events.stuck_s", self.stuck_s)?;
-        if !self.out_of_bounds_y_m.is_finite() {
-            let value = self.out_of_bounds_y_m;
-            let field = "events.out_of_bounds_y_m";
-            return Err(VehicleConfigError::NotFinite { field, value });
-        }
-        let angles = [
-            ("events.upset_tilt_deg", self.upset_tilt_deg),
-            ("events.save_tilt_deg", self.save_tilt_deg),
-            ("events.upside_down_tilt_deg", self.upside_down_tilt_deg),
-            ("events.stuck_tilt_deg", self.stuck_tilt_deg),
-        ];
-        for (field, value) in angles {
-            if value > 180.0 {
-                return Err(VehicleConfigError::AngleTooLarge { field, value });
-            }
-        }
+        must_be_finite("events.out_of_bounds_y_m", self.out_of_bounds_y_m)?;
         if self.save_tilt_deg >= self.upset_tilt_deg {
             let save = self.save_tilt_deg;
             let upset = self.upset_tilt_deg;
@@ -358,8 +343,10 @@ impl EventConfig {
 impl ChaosConfig {
     fn check(&self) -> CheckResult {
         must_not_be_negative("chaos.max_linear_impulse_n_s", self.max_linear_impulse_n_s)?;
-        let angular = self.max_angular_impulse_n_m_s;
-        must_not_be_negative("chaos.max_angular_impulse_n_m_s", angular)
+        must_not_be_negative(
+            "chaos.max_angular_impulse_n_m_s",
+            self.max_angular_impulse_n_m_s,
+        )
     }
 }
 
@@ -433,6 +420,23 @@ fn all_must_be_positive(field: &'static str, values: [f32; 3]) -> CheckResult {
 fn must_not_be_negative(field: &'static str, value: f32) -> CheckResult {
     if !value.is_finite() || value < 0.0 {
         return Err(VehicleConfigError::Negative { field, value });
+    }
+    Ok(())
+}
+
+/// Fails if `value` is infinite or not a number.
+fn must_be_finite(field: &'static str, value: f32) -> CheckResult {
+    if !value.is_finite() {
+        return Err(VehicleConfigError::NotFinite { field, value });
+    }
+    Ok(())
+}
+
+/// Fails unless `value` is a tilt from world up in degrees: above 0 and at most 180.
+fn must_be_tilt_deg(field: &'static str, value: f32) -> CheckResult {
+    must_be_positive(field, value)?;
+    if value > 180.0 {
+        return Err(VehicleConfigError::AngleTooLarge { field, value });
     }
     Ok(())
 }

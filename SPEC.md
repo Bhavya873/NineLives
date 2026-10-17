@@ -273,7 +273,7 @@ During a Hop the controller cannot reduce lift below `hop_ff`, but it can add up
 - **Boost** only fires while the button is held; it is allowed in the air too.
 
 ### 7.9 Events *(req definitions; start thresholds)*
-- **Airborne start/end:** wheel-contact count goes 4→0 / 0→4.
+- **Airborne start/end:** wheel-contact count goes to 0 (no wheel touches) / back above 0 (any wheel touches).
 - **Upset start:** airborne for > 0.3 s, or tilt > 60°.
 - **Save:** during an upset, 4 wheels touching, tilt < 15°, |ω| < 1.5 rad/s, held for 0.5 s. Emits `Save { duration, air_used, peak_tilt }`.
 - **Crash:** any chassis or roof collider contact with relative normal speed > 6 m/s (`HardImpact`); **or** any roof contact while tilt > 120°, at any speed (`UpsideDown`); **or** stuck (tilt > 100° for > 2 s) (`Stuck`); **or** out of bounds (y < −20 or outside the course box) (`OutOfBounds`). Emits `Crash { cause }`.
@@ -487,7 +487,7 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 ### 11.1 Wasm API (`nl-wasm`)
 ```ts
 class Game {
-  constructor(vehicleToml: string, modesToml: string, courseJson: string, seed: bigint);
+  constructor(vehicleToml: string, modesToml: string, seed: bigint);  // courseJson joins in M6
   set_mode(mode: "realistic" | "arcade"): void;
   set_controller(kind: "off" | "pd" | "ai" | "manual"): void;
   load_policy(json: string): void;          // throws if obs_schema_hash mismatches
@@ -496,7 +496,9 @@ class Game {
   wheel_poses(): Float32Array;              // 4 × 7
   nozzle_throttles(): Float32Array;         // 10 effective throttles
   hud(): Float32Array;                      // fixed layout: speed, air_frac, tilt, |ω|, saves, crashes, time, hop_cd, …
-  drain_events(): Uint32Array;              // packed event codes
+  drain_events(): Float32Array;             // 4 per event: EventKind, then up to 3 values (Save stats, CrashCode)
+  is_crashed(): boolean;
+  set_checkpoint(): void; respawn(): void;  // respawn: checkpoint pose, full tank, fresh events
   snapshot(): Uint8Array; restore(s: Uint8Array): void;
   build_hash(): string;
 }

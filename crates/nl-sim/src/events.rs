@@ -76,7 +76,7 @@ struct Upset {
 /// Remembers what is needed between steps to apply the SPEC §7.9 rules.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct EventTracker {
-    airborne: bool,
+    /// Time since the last wheel left the ground; 0 while any wheel touches.
     airborne_s: f32,
     upset: Option<Upset>,
     stuck_s: f32,
@@ -105,7 +105,8 @@ impl EventTracker {
         if self.crashed {
             return;
         }
-        if let Some(cause) = self.crash_cause(inputs, config, dt_s) {
+        self.update_stuck_timer(inputs, config, dt_s);
+        if let Some(cause) = self.crash_cause(inputs, config) {
             self.crashed = true;
             self.upset = None;
             events.push(SimEvent::Crash { cause });
@@ -116,12 +117,7 @@ impl EventTracker {
     }
 
     /// The first crash rule that applies this step, if any (SPEC §7.9).
-    fn crash_cause(
-        &mut self,
-        inputs: &EventInputs,
-        config: &EventConfig,
-        dt_s: f32,
-    ) -> Option<CrashCause> {
+    fn crash_cause(&self, inputs: &EventInputs, config: &EventConfig) -> Option<CrashCause> {
         if inputs.impact_speed_m_s > config.crash_impact_speed_m_s {
             return Some(CrashCause::HardImpact);
         }
@@ -131,30 +127,38 @@ impl EventTracker {
         if inputs.height_m < config.out_of_bounds_y_m {
             return Some(CrashCause::OutOfBounds);
         }
-        if inputs.tilt_rad > config.stuck_tilt_deg.to_radians() {
-            self.stuck_s += dt_s;
-        } else {
-            self.stuck_s = 0.0;
-        }
         if self.stuck_s > config.stuck_s {
             return Some(CrashCause::Stuck);
         }
         None
     }
 
+    /// Counts how long the car has been tipped past the stuck tilt (SPEC §7.9).
+    fn update_stuck_timer(&mut self, inputs: &EventInputs, config: &EventConfig, dt_s: f32) {
+        if inputs.tilt_rad > config.stuck_tilt_deg.to_radians() {
+            self.stuck_s += dt_s;
+        } else {
+            self.stuck_s = 0.0;
+        }
+    }
+
+    fn is_airborne(&self) -> bool {
+        self.airborne_s > 0.0
+    }
+
     /// Airborne starts when no wheel touches, and ends when any wheel touches again.
     fn update_airborne(&mut self, inputs: &EventInputs, dt_s: f32, events: &mut Vec<SimEvent>) {
         let airborne_now = inputs.wheels_down == 0;
-        if airborne_now && !self.airborne {
+        if airborne_now && !self.is_airborne() {
             events.push(SimEvent::AirborneStart);
-            self.airborne_s = 0.0;
         }
-        if !airborne_now && self.airborne {
+        if !airborne_now && self.is_airborne() {
             events.push(SimEvent::AirborneEnd);
         }
-        self.airborne = airborne_now;
         if airborne_now {
             self.airborne_s += dt_s;
+        } else {
+            self.airborne_s = 0.0;
         }
     }
 
@@ -167,7 +171,7 @@ impl EventTracker {
         dt_s: f32,
         events: &mut Vec<SimEvent>,
     ) {
-        let knocked = (self.airborne && self.airborne_s > config.upset_airborne_s)
+        let knocked = self.airborne_s > config.upset_airborne_s
             || inputs.tilt_rad > config.upset_tilt_deg.to_radians();
         if self.upset.is_none() && knocked {
             events.push(SimEvent::UpsetStart);

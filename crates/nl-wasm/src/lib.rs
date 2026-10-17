@@ -311,29 +311,37 @@ impl Game {
 /// One event as 4 numbers for JavaScript (see `EventKind`).
 fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
     match event {
-        SimEvent::AirborneStart => [EventKind::AirborneStart as u8 as f32, 0.0, 0.0, 0.0],
-        SimEvent::AirborneEnd => [EventKind::AirborneEnd as u8 as f32, 0.0, 0.0, 0.0],
-        SimEvent::UpsetStart => [EventKind::UpsetStart as u8 as f32, 0.0, 0.0, 0.0],
+        SimEvent::AirborneStart => [kind_code(EventKind::AirborneStart), 0.0, 0.0, 0.0],
+        SimEvent::AirborneEnd => [kind_code(EventKind::AirborneEnd), 0.0, 0.0, 0.0],
+        SimEvent::UpsetStart => [kind_code(EventKind::UpsetStart), 0.0, 0.0, 0.0],
         SimEvent::Save {
             duration_s,
             air_used_kg,
             peak_tilt_rad,
         } => [
-            EventKind::Save as u8 as f32,
+            kind_code(EventKind::Save),
             duration_s,
             air_used_kg,
             peak_tilt_rad,
         ],
-        SimEvent::Crash { cause } => {
-            let code = match cause {
-                CrashCause::HardImpact => CrashCode::HardImpact,
-                CrashCause::UpsideDown => CrashCode::UpsideDown,
-                CrashCause::Stuck => CrashCode::Stuck,
-                CrashCause::OutOfBounds => CrashCode::OutOfBounds,
-            };
-            [EventKind::Crash as u8 as f32, code as u8 as f32, 0.0, 0.0]
-        }
+        SimEvent::Crash { cause } => [kind_code(EventKind::Crash), crash_code(cause), 0.0, 0.0],
     }
+}
+
+/// An `EventKind` as the number JavaScript sees.
+fn kind_code(kind: EventKind) -> f32 {
+    kind as u8 as f32
+}
+
+/// A crash cause as its `CrashCode` number.
+fn crash_code(cause: CrashCause) -> f32 {
+    let code = match cause {
+        CrashCause::HardImpact => CrashCode::HardImpact,
+        CrashCause::UpsideDown => CrashCode::UpsideDown,
+        CrashCause::Stuck => CrashCode::Stuck,
+        CrashCause::OutOfBounds => CrashCode::OutOfBounds,
+    };
+    code as u8 as f32
 }
 
 /// 1.0 for true, 0.0 for false, for the all-numbers HUD array.
