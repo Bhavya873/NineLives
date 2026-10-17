@@ -1,14 +1,17 @@
 //! The golden trace: a fixed, scripted drive used to prove determinism (SPEC §7.10).
 //!
-//! The same 2000 steps of scripted input are run natively and in wasm. After every
-//! step the car's pose and velocities are folded into a 64-bit FNV-1a hash of their
-//! exact bits. If any bit differs anywhere, the final hash differs. The expected hash
-//! is stored in `crates/nl-sim/tests/golden/flat_drive.json` and checked in CI.
+//! The same 2000 steps of scripted input are run on every platform. After every step
+//! the car's pose and velocities are folded into a 64-bit FNV-1a hash of their exact
+//! bits, and at the end the whole world snapshot is folded in too, so any difference
+//! anywhere changes the hash. The expected result is stored in
+//! `crates/nl-sim/tests/golden/flat_drive.json`, recorded with the frozen car in
+//! `tests/golden/vehicle.toml`. `cargo test` checks it natively; M2 adds the same
+//! check for the wasm build.
 
 use crate::conventions::PHYSICS_HZ;
 use crate::input::InputFrame;
 use crate::vehicle_config::{VehicleConfig, VehicleConfigError};
-use crate::world::World;
+use crate::world::{SnapshotError, World};
 
 /// Number of physics steps in the golden trace (SPEC §7.10).
 pub const GOLDEN_TRACE_STEPS: u32 = 2000;
@@ -50,8 +53,18 @@ pub fn scripted_input(step: u32) -> InputFrame {
     }
 }
 
+/// Why the golden trace could not run.
+#[derive(Debug, thiserror::Error)]
+pub enum GoldenTraceError {
+    #[error(transparent)]
+    Config(#[from] VehicleConfigError),
+
+    #[error(transparent)]
+    Snapshot(#[from] SnapshotError),
+}
+
 /// Runs the golden trace with the given vehicle config text.
-pub fn run_golden_trace(vehicle_toml: &str) -> Result<GoldenTraceResult, VehicleConfigError> {
+pub fn run_golden_trace(vehicle_toml: &str) -> Result<GoldenTraceResult, GoldenTraceError> {
     let config = VehicleConfig::from_toml_str(vehicle_toml)?;
     let mut world = World::new_on_flat_ground(&config, GOLDEN_TRACE_GROUND_FRICTION);
 
@@ -60,6 +73,7 @@ pub fn run_golden_trace(vehicle_toml: &str) -> Result<GoldenTraceResult, Vehicle
         world.step(scripted_input(step));
         hash = hash_world_state(hash, &world);
     }
+    hash = fnv1a_add_bytes(hash, &world.snapshot()?);
 
     Ok(GoldenTraceResult {
         steps: GOLDEN_TRACE_STEPS,

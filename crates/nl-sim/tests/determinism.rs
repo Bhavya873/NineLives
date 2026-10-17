@@ -5,14 +5,14 @@
 #![allow(clippy::unwrap_used)]
 
 use nl_sim::golden_trace::{GOLDEN_TRACE_STEPS, run_golden_trace, scripted_input};
-use nl_sim::vehicle_config::VehicleConfig;
-use nl_sim::world::World;
+use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
+use nl_sim::world::{SNAPSHOT_FORMAT_VERSION, SnapshotError, World};
 
-const VEHICLE_TOML: &str = include_str!("../../../configs/vehicle.toml");
+const GOLDEN_VEHICLE_TOML: &str = include_str!("golden/vehicle.toml");
 const GOLDEN_FLAT_DRIVE_JSON: &str = include_str!("golden/flat_drive.json");
 
 fn new_world() -> World {
-    let config = VehicleConfig::from_toml_str(VEHICLE_TOML).unwrap();
+    let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
     World::new_on_flat_ground(&config, 1.0)
 }
 
@@ -62,7 +62,7 @@ fn restoring_garbage_bytes_is_an_error_not_a_crash() {
 fn the_golden_trace_matches_the_stored_hash() {
     let expected: serde_json::Value = serde_json::from_str(GOLDEN_FLAT_DRIVE_JSON).unwrap();
 
-    let result = run_golden_trace(VEHICLE_TOML).unwrap();
+    let result = run_golden_trace(GOLDEN_VEHICLE_TOML).unwrap();
 
     assert_eq!(result.steps, expected["steps"].as_u64().unwrap() as u32);
     assert_eq!(
@@ -71,4 +71,37 @@ fn the_golden_trace_matches_the_stored_hash() {
         "physics output changed. If that was intended, regenerate the golden file \
          (see examples/golden_trace.rs) and explain why in the PR."
     );
+    let expected_position_m: Vec<f32> = expected["final_position_m"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_f64().unwrap() as f32)
+        .collect();
+    assert_eq!(result.final_position_m.to_vec(), expected_position_m);
+}
+
+#[test]
+fn a_snapshot_with_extra_bytes_is_refused() {
+    let mut world = new_world();
+    let mut bytes = world.snapshot().unwrap();
+    bytes.push(0);
+
+    let result = world.restore(&bytes);
+
+    assert!(matches!(
+        result,
+        Err(SnapshotError::TrailingBytes { extra_bytes: 1 })
+    ));
+}
+
+#[test]
+fn a_snapshot_from_another_format_version_is_refused() {
+    let mut world = new_world();
+    let mut bytes = world.snapshot().unwrap();
+    // The version is the first value; postcard stores small numbers in one byte.
+    bytes[0] = (SNAPSHOT_FORMAT_VERSION + 1) as u8;
+
+    let result = world.restore(&bytes);
+
+    assert!(matches!(result, Err(SnapshotError::WrongVersion { .. })));
 }

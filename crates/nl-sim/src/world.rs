@@ -32,11 +32,21 @@ pub struct ChassisPose {
     pub rotation_xyzw: [f32; 4],
 }
 
+/// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
+/// they contain changes shape, so old snapshots are refused instead of misread.
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
 pub enum SnapshotError {
     #[error("world snapshot could not be encoded or decoded: {0}")]
     Encoding(#[from] postcard::Error),
+
+    #[error("world snapshot has format version {found}, but this build reads version {expected}")]
+    WrongVersion { found: u32, expected: u32 },
+
+    #[error("world snapshot has {extra_bytes} unexpected bytes after the end")]
+    TrailingBytes { extra_bytes: usize },
 }
 
 /// A world with flat ground and one car.
@@ -79,15 +89,29 @@ impl World {
         self.step_count += 1;
     }
 
-    /// Saves the complete state of the world as bytes.
+    /// Saves the complete state of the world as bytes: the format version, then the world.
     pub fn snapshot(&self) -> Result<Vec<u8>, SnapshotError> {
-        Ok(postcard::to_allocvec(self)?)
+        Ok(postcard::to_allocvec(&(SNAPSHOT_FORMAT_VERSION, self))?)
     }
 
     /// Replaces this world with one saved by `snapshot`. Stepping the restored world
     /// with the same inputs gives bit-identical results to the original.
+    /// On any error this world is left unchanged.
     pub fn restore(&mut self, snapshot: &[u8]) -> Result<(), SnapshotError> {
-        *self = postcard::from_bytes(snapshot)?;
+        let (version, after_version): (u32, &[u8]) = postcard::take_from_bytes(snapshot)?;
+        if version != SNAPSHOT_FORMAT_VERSION {
+            return Err(SnapshotError::WrongVersion {
+                found: version,
+                expected: SNAPSHOT_FORMAT_VERSION,
+            });
+        }
+        let (world, leftover): (World, &[u8]) = postcard::take_from_bytes(after_version)?;
+        if !leftover.is_empty() {
+            return Err(SnapshotError::TrailingBytes {
+                extra_bytes: leftover.len(),
+            });
+        }
+        *self = world;
         Ok(())
     }
 

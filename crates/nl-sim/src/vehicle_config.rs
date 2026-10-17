@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::conventions::WHEEL_COUNT;
 
+/// The text of the repo's `configs/vehicle.toml`, built into the library so tests,
+/// examples, Python and the browser can all start from the same car.
+pub const DEFAULT_VEHICLE_TOML: &str = include_str!("../../../configs/vehicle.toml");
+
 /// Everything `configs/vehicle.toml` describes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -244,8 +248,7 @@ fn must_not_be_negative(field: &'static str, value: f32) -> CheckResult {
 mod tests {
     use super::*;
 
-    /// The real config file shipped in the repo.
-    const REPO_VEHICLE_TOML: &str = include_str!("../../../configs/vehicle.toml");
+    const REPO_VEHICLE_TOML: &str = DEFAULT_VEHICLE_TOML;
 
     #[test]
     fn the_repo_vehicle_config_loads() {

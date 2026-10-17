@@ -1,0 +1,70 @@
+# FROZEN copy of configs/vehicle.toml used only by the golden trace.
+# Tuning configs/vehicle.toml must not change the golden hash, so this file stays as
+# it was when the hash was recorded. Only edit it together with flat_drive.json.
+
+# The car: chassis, wheels, suspension and drive (SPEC §7.2–7.3).
+# Every value here is a starting value to tune. Units are SI and the body frame is
+# +X forward, +Y up, +Z right, with the origin at the centre of mass (SPEC §4).
+
+[chassis]
+dry_mass_kg = 1800.0
+# Half-size of the main body box, in metres (x = half length, y = half height, z = half width).
+half_extents_m = [2.1, 0.45, 1.0]
+# A thin box on top of the body, so a roof hit can be told apart from a body hit (SPEC §7.9).
+roof_half_extents_m = [1.2, 0.05, 0.8]
+# Moments of inertia about the body axes: roll (X), yaw (Y), pitch (Z), in kg·m².
+# Set by hand because a real car is not a uniform box.
+inertia_kg_m2 = [850.0, 3250.0, 2900.0]
+
+[air_drag]
+# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2).
+air_density_kg_m3 = 1.2
+drag_area_m2 = 0.6
+
+[wheels]
+# Where each suspension is attached, in the body frame, in wheel order FL, FR, RL, RR.
+# Left is -Z, right is +Z.
+mount_points_m = [
+    [1.3, 0.0, -0.85],
+    [1.3, 0.0, 0.85],
+    [-1.3, 0.0, -0.85],
+    [-1.3, 0.0, 0.85],
+]
+radius_m = 0.34
+suspension_rest_length_m = 0.3
+suspension_max_travel_m = 0.2
+# Rapier's raycast vehicle multiplies these by the car's mass, so they are
+# accelerations: stiffness in (m/s²) per metre of compression, damping in (m/s²) per (m/s).
+# With 4 wheels, each wheel compresses about g / (4 · stiffness) = 0.05 m at rest,
+# which puts the centre of mass about 0.6 m above the ground.
+suspension_stiffness_per_kg = 50.0
+suspension_compression_damping_per_kg = 3.5
+suspension_relaxation_damping_per_kg = 5.0
+max_suspension_force_n = 40000.0
+# Tyre grip: sideways grip is about friction_slip × g (1.2 g here), and Rapier allows
+# twice that for driving and braking forces.
+friction_slip = 1.2
+side_friction_stiffness = 1.0
+
+[drive]
+# All-wheel drive.
+max_engine_force_per_wheel_n = 6000.0
+max_speed_m_s = 45.0
+max_reverse_speed_m_s = 8.0
+# Brake impulse per wheel per physics step, in N·s.
+# 40 N·s × 120 steps/s × 4 wheels ≈ 19 kN, about 1.1 g of braking for 1800 kg.
+brake_impulse_per_wheel_n_s = 40.0
+# A tiny brake on every wheel when no pedal is pressed, so the car slowly coasts to a
+# stop instead of rolling forever. 1.5 N·s × 120 × 4 ≈ 0.7 kN, about 0.04 g.
+rolling_resistance_impulse_per_wheel_n_s = 1.5
+# Below this forward speed, pulling back on the throttle reverses instead of braking.
+reverse_below_speed_m_s = 0.5
+
+[steering]
+# Front wheels only. The limit shrinks linearly from the low-speed value to the
+# high-speed value as speed rises from 0 to `high_speed_m_s`.
+max_angle_low_speed_rad = 0.5
+max_angle_high_speed_rad = 0.15
+high_speed_m_s = 40.0
+# How fast the wheels can turn, in rad/s.
+max_rate_rad_s = 2.0
