@@ -1,18 +1,20 @@
-// The 3D scene: sky, light, ground, and the car (SPEC §11.4).
-// It owns three.js objects only; it never reads input or talks to the physics.
+// The 3D scene: a lab-arena look (SPEC §11.4, the owner's 2026-10-17 choice): a dark
+// gradient backdrop, a blue-grey checkered floor and neutral light, like a physics
+// simulator's test arena, plus the car. Three.js objects only; no input or physics.
 import {
   CanvasTexture,
   Color,
   DirectionalLight,
   Fog,
-  GridHelper,
   Group,
+  NearestFilter,
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  RepeatWrapping,
   Scene,
   SRGBColorSpace,
   WebGLRenderer,
@@ -22,8 +24,12 @@ import { buildCarBody, buildWheel } from './car-mesh.ts';
 import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
-const SKY_TOP = '#5b8fd9';
-const SKY_HORIZON = '#cfe3f5';
+/** Side of one floor square; big enough to read speed from at a glance. */
+const CHECKER_SIZE_M = 2;
+const CHECKER_LIGHT = '#3b5470';
+const CHECKER_DARK = '#22344a';
+const BACKDROP_TOP = '#5a7ea3';
+const BACKDROP_HORIZON = '#121a24';
 
 /** Everything the renderer draws, kept together so the game can move it each frame. */
 export interface GameScene {
@@ -91,10 +97,11 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
 
   const scene = new Scene();
   scene.background = buildSkyGradient();
-  scene.fog = new Fog(new Color(SKY_HORIZON), 150, 900);
+  // The floor fades into the dark horizon, so the arena has no visible edge.
+  scene.fog = new Fog(new Color(BACKDROP_HORIZON), 120, 700);
 
   const camera = new PerspectiveCamera(60, 1, 0.1, 2000);
-  scene.add(new HemisphereLight(0xdfefff, 0x4a5a3a, 1.2));
+  scene.add(new HemisphereLight(0xffffff, 0x2a3440, 1.3));
   const sun = buildSun();
   scene.add(sun, sun.target);
   scene.add(buildGround());
@@ -124,8 +131,8 @@ function buildSkyGradient(): CanvasTexture {
   const context = canvas.getContext('2d');
   if (context) {
     const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, SKY_TOP);
-    gradient.addColorStop(1, SKY_HORIZON);
+    gradient.addColorStop(0, BACKDROP_TOP);
+    gradient.addColorStop(1, BACKDROP_HORIZON);
     context.fillStyle = gradient;
     context.fillRect(0, 0, canvas.width, canvas.height);
   }
@@ -148,19 +155,38 @@ function buildSun(): DirectionalLight {
   return sun;
 }
 
-/** Flat ground at y = 0 with a grid, so speed is easy to see. */
-function buildGround(): Group {
-  const ground = new Group();
-  const plane = new Mesh(
+/** Flat ground at y = 0, checkered so speed and position are easy to see. */
+function buildGround(): Mesh {
+  const ground = new Mesh(
     new PlaneGeometry(GROUND_SIZE_M, GROUND_SIZE_M),
-    new MeshStandardMaterial({ color: 0x7c9a5c, flatShading: true }),
+    new MeshStandardMaterial({ map: buildCheckerTexture(), roughness: 0.9 }),
   );
-  plane.rotation.x = -Math.PI / 2;
-  plane.receiveShadow = true;
-  ground.add(plane);
-
-  const grid = new GridHelper(GROUND_SIZE_M, GROUND_SIZE_M / 10, 0x4f6b38, 0x5a7841);
-  grid.position.y = 0.01;
-  ground.add(grid);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   return ground;
+}
+
+/** A 2×2 checker drawn once into a tiny canvas and tiled across the whole floor. */
+function buildCheckerTexture(): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2;
+  canvas.height = 2;
+  const context = canvas.getContext('2d');
+  if (context) {
+    context.fillStyle = CHECKER_LIGHT;
+    context.fillRect(0, 0, 2, 2);
+    context.fillStyle = CHECKER_DARK;
+    context.fillRect(0, 0, 1, 1);
+    context.fillRect(1, 1, 1, 1);
+  }
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  // Sharp square edges up close; one texture tile is two squares.
+  texture.magFilter = NearestFilter;
+  const tiles = GROUND_SIZE_M / (2 * CHECKER_SIZE_M);
+  texture.repeat.set(tiles, tiles);
+  texture.anisotropy = 8;
+  return texture;
 }

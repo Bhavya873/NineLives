@@ -529,7 +529,7 @@ class Game {
 | Esc | pause / menu |
 
 ### 11.4 Visuals
-- Low-poly generic sports car (no brand shapes), flat-shaded course, a clear sky gradient, soft shadows from one directional light.
+- Low-poly generic sports car (no brand shapes) in a **lab arena**: a blue-grey checkered floor, a dark gradient backdrop the floor fades into, neutral light, soft shadows from one directional light, and plain-coloured, flat-shaded course pieces (ramps, blocks), like a physics simulator's test arena.
 - **Nozzles:** small cones on the body at the 7.4 positions. Each flame is an additive-blended cone mesh whose length and opacity follow its effective throttle, plus a light puff of particles. Colour is a cold blue-white (cold gas), never fire.
 - **Camera:** smoothed chase camera that stays world-up when the car flips, so the player sees the flip. A slight pull-back while airborne.
 - Respect `prefers-reduced-motion`: no camera shake, fewer particles.
@@ -546,6 +546,7 @@ class Game {
 - **Results screen** at the finish: time, saves, crashes, air used, and the delta vs the ghost.
 - **Ghost:** record `InputFrame`s per tick plus seed, course, mode, controller, policy hash and `build_hash`. Replay in a second `Game` instance and render it translucent. Store the best run in `localStorage` (wrap every read and write in try/catch; discard on build-hash mismatch).
 - **Results tab:** shows the committed SVG charts from `results/`.
+- **Training viewer:** pick a run and watch a crowd of cars (about 64, each its own wasm `Game`, translucent) drive the obstacle arena with checkpoint 1, 2, 3… of the policy, auto-advancing, with each checkpoint's saves, crashes and distance. Training exports a `policy.json` per checkpoint for it (§9).
 
 ### 11.7 Performance and deploy
 - Target 60 fps on a mid-range laptop. Budget: sim tick ≤ 1.5 ms; render ≤ 8 ms. Measure and show an optional FPS / ms overlay (F3).
