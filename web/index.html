@@ -100,6 +100,23 @@
         background: #d6ecff;
         box-shadow: 0 0 8px 2px #8fd0ff;
       }
+      #chaos-button {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        padding: 8px 18px;
+        border: 0;
+        border-radius: 6px;
+        background: rgb(0 0 0 / 55%);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #chaos-button:hover {
+        background: rgb(0 0 0 / 70%);
+      }
       #hud-stats {
         right: 16px;
         top: 16px;
@@ -130,9 +147,10 @@
     <div id="hud-nozzles" class="hud"></div>
     <div id="hud-stats" class="hud"></div>
     <div id="hud-toast" class="hud" hidden></div>
+    <button id="chaos-button" type="button" title="A random knock (C)">Chaos</button>
     <div id="hud-help" class="hud">
-      W/S or ↑/↓ drive · A/D or ←/→ steer · Space hop · Shift boost · M mode · C chaos · R
-      respawn<br />
+      W/S or ↑/↓ drive · A/D or ←/→ steer · Space hop · Shift boost · M mode · T controller · C
+      chaos · R respawn<br />
       The tank slowly refills while the car is on its wheels (a game rule, not real physics).
     </div>
     <script type="module" src="/src/main.ts"></script>

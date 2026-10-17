@@ -4,7 +4,7 @@
 // It reads plain numbers and writes text; it never touches physics.
 
 import { requireElement, setText } from '../dom.ts';
-import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
+import { ControllerCode, HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
 
@@ -23,11 +23,19 @@ const MODE_TEXT: Record<number, string> = {
   [ModeCode.Custom]: 'Custom',
 };
 
+/** Controller names, by wasm `ControllerCode` value. */
+const CONTROLLER_TEXT: Record<number, string> = {
+  [ControllerCode.Off]: 'Controller: Off',
+  [ControllerCode.Manual]: 'Controller: Manual (keys 1–0)',
+};
+
 /** The numbers the HUD shows, already read from the game. */
 export interface HudValues {
   speedMS: number;
   /** A wasm `ModeCode` value. */
   mode: number;
+  /** A wasm `ControllerCode` value. */
+  controller: number;
   /** Air left, 0..1. Arcade has unlimited air. */
   airFraction: number;
   unlimitedAir: boolean;
@@ -72,8 +80,9 @@ export function updateHud(hud: Hud, values: HudValues): void {
 
   const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
   const mode = MODE_TEXT[values.mode] ?? '';
+  const controller = CONTROLLER_TEXT[values.controller] ?? '';
   const crash = values.crashed ? 'Respawning…' : '';
-  setText(hud.status, [mode, hop, crash].filter(Boolean).join(' · '));
+  setText(hud.status, [mode, controller, hop, crash].filter(Boolean).join(' · '));
   setText(hud.stats, statsText(values));
 }
 

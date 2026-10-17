@@ -298,6 +298,7 @@ name = "nl-control"
 version = "0.1.0"
 dependencies = [
  "nl-sim",
+ "thiserror",
 ]
 
 [[package]]
@@ -330,6 +331,7 @@ dependencies = [
 name = "nl-wasm"
 version = "0.1.0"
 dependencies = [
+ "nl-control",
  "nl-sim",
  "wasm-bindgen",
 ]

@@ -23,8 +23,11 @@ import {
   BUTTON_CHAOS,
   BUTTON_HOP,
   BUTTON_RESET,
+  FIRST_MANUAL_NOZZLE_BIT,
+  MANUAL_NOZZLE_COUNT,
   onKeyPress,
   readInputFrame,
+  bindTapButton,
   startKeyboard,
 } from './input/keyboard.ts';
 import { followCar, snapCamera } from './render/chase-camera.ts';
@@ -46,7 +49,7 @@ import {
 } from './render/scene.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
-import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
+import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
 /** Reused each frame so the render loop allocates nothing for these. */
 const shake = new Vector3();
@@ -54,6 +57,7 @@ const crashPosition = new Vector3();
 const hudValues: HudValues = {
   speedMS: 0,
   mode: ModeCode.Realistic,
+  controller: ControllerCode.Off,
   airFraction: 1,
   unlimitedAir: false,
   hopBlocked: 0,
@@ -76,6 +80,9 @@ async function start(): Promise<void> {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
+  // SPEC §11.3: T cycles the controller; the sim owns the order.
+  onKeyPress('KeyT', () => game.cycle_controller());
+  bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
 
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),
@@ -187,7 +194,9 @@ function checkWasmLayout(): void {
     Game.button_hop() === BUTTON_HOP &&
     Game.button_boost() === BUTTON_BOOST &&
     Game.button_chaos() === BUTTON_CHAOS &&
-    Game.button_reset() === BUTTON_RESET;
+    Game.button_reset() === BUTTON_RESET &&
+    Game.first_manual_nozzle_bit() === FIRST_MANUAL_NOZZLE_BIT &&
+    Game.nozzle_count() === MANUAL_NOZZLE_COUNT;
   if (!buttonsMatch) {
     throw new Error('The wasm build and the keyboard disagree on the button bits');
   }
@@ -210,6 +219,7 @@ function snapViewToGame(
 function fillHudValues(values: Float32Array, out: HudValues): void {
   out.speedMS = values[HudField.SpeedMS] ?? 0;
   out.mode = values[HudField.Mode] ?? ModeCode.Custom;
+  out.controller = values[HudField.Controller] ?? ControllerCode.Off;
   out.airFraction = values[HudField.AirFraction] ?? 1;
   out.unlimitedAir = values[HudField.UnlimitedAir] === 1;
   out.hopBlocked = values[HudField.HopBlocked] ?? 0;

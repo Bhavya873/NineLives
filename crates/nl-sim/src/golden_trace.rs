@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP};
+use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, InputFrame};
 use crate::modes::{ModesConfig, ModesConfigError};
 use crate::vehicle_config::{VehicleConfig, VehicleConfigError};
@@ -86,7 +86,7 @@ pub fn scripted_throttles(step: u32) -> [f32; NOZZLE_COUNT] {
 /// Runs one physics step of the script: like a real controller, the throttles are
 /// set only at 60 Hz and the world holds them in between.
 pub fn step_scripted(world: &mut World, step: u32) {
-    if step % PHYSICS_STEPS_PER_CONTROL_STEP == 0 {
+    if world.is_control_step() {
         world.set_controller_throttles(scripted_throttles(step));
     }
     world.step(scripted_input(step));

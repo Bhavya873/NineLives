@@ -4,15 +4,17 @@
 //! JavaScript values (strings, byte arrays) into `nl-sim` calls and turn results
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
-//! So far: driving, thrusters, the air tank, modes, Hop and Boost, events and respawn.
-//! Controllers, the policy and courses are added in M3–M7, following SPEC §11.1.
+//! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
+//! the Off and Manual controllers. PD, the policy and courses follow in M4–M7 (SPEC §11.1).
 
+use nl_control::{ControlCtx, ControllerKind, Off};
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
 use nl_sim::input::{
-    BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, INPUT_FRAME_BYTES, InputFrame,
+    BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, FIRST_MANUAL_NOZZLE_BIT,
+    INPUT_FRAME_BYTES, InputFrame,
 };
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::vehicle_config::VehicleConfig;
@@ -62,10 +64,22 @@ pub enum HudField {
     Crashed = 13,
     /// 1 while the tank is so low that thrust fades ("NO AIR"), else 0.
     OutOfAir = 14,
+    /// Which controller fires the thrusters: a `ControllerCode` value.
+    Controller = 15,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::OutOfAir as usize + 1;
+const HUD_LENGTH: usize = HudField::Controller as usize + 1;
+
+/// The values `HudField.Controller` can take (SPEC §8).
+#[wasm_bindgen]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ControllerCode {
+    /// No thrusters (Hop and Boost still work).
+    Off = 0,
+    /// Debug: keys 1–0 fire nozzles 0–9.
+    Manual = 1,
+}
 
 /// The values `HudField.Mode` can take.
 #[wasm_bindgen]
@@ -98,6 +112,11 @@ pub struct Game {
     modes: ModesConfig,
     /// Where each nozzle sits and which way its exhaust points (see `nozzle_layout`).
     nozzle_layout: Vec<f32>,
+    /// What fires the thrusters, asked at 60 Hz in `tick`.
+    controller: ControllerKind,
+    /// Buttons pressed on any tick since the last control step, so a quick tap of a
+    /// nozzle key between two control steps still reaches the controller.
+    buttons_since_control_step: u16,
     /// Saves and crashes since the game started, counted as events are drained.
     saves: u32,
     crashes: u32,
@@ -155,6 +174,8 @@ impl Game {
             world,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
+            controller: ControllerKind::Off(Off),
+            buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
         })
@@ -166,6 +187,19 @@ impl Game {
         Ok(())
     }
 
+    /// Chooses what fires the thrusters by name: "off" or "manual" ("pd" and "ai" arrive
+    /// in M4–M5). Throws on any other name. It takes over at the next control step.
+    pub fn set_controller(&mut self, kind: &str) -> Result<(), JsError> {
+        self.use_controller(ControllerKind::from_name(kind)?);
+        Ok(())
+    }
+
+    /// Switches to the next controller in the T-key cycle (SPEC §11.3).
+    pub fn cycle_controller(&mut self) {
+        let next = self.controller.next();
+        self.use_controller(next);
+    }
+
     /// Advances exactly one physics step (1/120 s). `input` is a packed 4-byte
     /// `InputFrame`: throttle (i8), steer (i8), buttons (u16, little-endian).
     pub fn tick(&mut self, input: &[u8]) -> Result<(), JsError> {
@@ -175,7 +209,21 @@ impl Game {
                 input.len()
             ))
         })?;
-        self.world.step(InputFrame::from_bytes(bytes));
+        let input = InputFrame::from_bytes(bytes);
+        // Controllers run at 60 Hz; the world holds their throttles in between (SPEC §7.1).
+        self.buttons_since_control_step |= input.buttons;
+        if self.world.is_control_step() {
+            let controller_input = InputFrame {
+                buttons: self.buttons_since_control_step,
+                ..input
+            };
+            self.buttons_since_control_step = 0;
+            let throttles = self.controller.act(&ControlCtx {
+                input: controller_input,
+            });
+            self.world.set_controller_throttles(throttles);
+        }
+        self.world.step(input);
         Ok(())
     }
 
@@ -228,6 +276,7 @@ impl Game {
         values[HudField::Crashes as usize] = self.crashes as f32;
         values[HudField::Crashed as usize] = one_if(crashed);
         values[HudField::OutOfAir as usize] = one_if(self.world.is_out_of_air());
+        values[HudField::Controller as usize] = controller_code(&self.controller) as u8 as f32;
         values
     }
 
@@ -319,6 +368,11 @@ impl Game {
         FLOATS_PER_EVENT
     }
 
+    /// Bit of the first manual nozzle button; nozzle `i` uses this bit + `i`.
+    pub fn first_manual_nozzle_bit() -> u32 {
+        FIRST_MANUAL_NOZZLE_BIT
+    }
+
     /// Number of floats per nozzle in `nozzle_layout` (6).
     pub fn floats_per_nozzle() -> usize {
         FLOATS_PER_NOZZLE
@@ -331,6 +385,14 @@ impl Game {
 }
 
 impl Game {
+    /// Starts `controller` fresh. The throttles the old one asked for are dropped now,
+    /// so they do not linger until the new one's first control step.
+    fn use_controller(&mut self, mut controller: ControllerKind) {
+        controller.reset(0);
+        self.controller = controller;
+        self.world.set_controller_throttles([0.0; NOZZLE_COUNT]);
+    }
+
     /// Which preset the world's current mode is.
     fn mode_code(&self) -> ModeCode {
         let mode = self.world.mode();
@@ -390,6 +452,14 @@ fn crash_code(cause: CrashCause) -> f32 {
         CrashCause::OutOfBounds => CrashCode::OutOfBounds,
     };
     code as u8 as f32
+}
+
+/// The HUD code for a controller.
+fn controller_code(controller: &ControllerKind) -> ControllerCode {
+    match controller {
+        ControllerKind::Off(_) => ControllerCode::Off,
+        ControllerKind::Manual(_) => ControllerCode::Manual,
+    }
 }
 
 /// 1.0 for true, 0.0 for false, for the all-numbers HUD array.
