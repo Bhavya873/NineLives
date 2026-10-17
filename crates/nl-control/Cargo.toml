@@ -1,0 +1,13 @@
+[package]
+name = "nl-control"
+description = "Nine Lives controllers: Off, Manual, PD baseline and thruster allocation."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nl-sim.workspace = true
+
+[lints]
+workspace = true
