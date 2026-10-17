@@ -74,10 +74,16 @@ pub struct WheelConfig {
 #[serde(deny_unknown_fields)]
 pub struct DriveConfig {
     pub max_engine_force_per_wheel_n: f32,
-    /// The engine stops pushing at this speed.
+    /// The engine stops pushing forward at this speed.
     pub max_speed_m_s: f32,
+    /// The engine stops pushing backward at this speed.
+    pub max_reverse_speed_m_s: f32,
     /// Brake impulse per wheel per physics step.
     pub brake_impulse_per_wheel_n_s: f32,
+    /// Brake impulse per wheel per physics step when no pedal is pressed.
+    pub rolling_resistance_impulse_per_wheel_n_s: f32,
+    /// Below this forward speed, a negative throttle reverses instead of braking.
+    pub reverse_below_speed_m_s: f32,
 }
 
 /// Front-wheel steering limits. See `[steering]`.
@@ -182,8 +188,16 @@ impl DriveConfig {
         let engine_force_n = self.max_engine_force_per_wheel_n;
         must_not_be_negative("drive.max_engine_force_per_wheel_n", engine_force_n)?;
         must_be_positive("drive.max_speed_m_s", self.max_speed_m_s)?;
+        must_be_positive("drive.max_reverse_speed_m_s", self.max_reverse_speed_m_s)?;
         let brake_n_s = self.brake_impulse_per_wheel_n_s;
-        must_not_be_negative("drive.brake_impulse_per_wheel_n_s", brake_n_s)
+        must_not_be_negative("drive.brake_impulse_per_wheel_n_s", brake_n_s)?;
+        let rolling_n_s = self.rolling_resistance_impulse_per_wheel_n_s;
+        must_not_be_negative(
+            "drive.rolling_resistance_impulse_per_wheel_n_s",
+            rolling_n_s,
+        )?;
+        let reverse_m_s = self.reverse_below_speed_m_s;
+        must_not_be_negative("drive.reverse_below_speed_m_s", reverse_m_s)
     }
 }
 

@@ -6,8 +6,11 @@
 
 use rapier3d::math::Vector;
 
-/// Length of one physics step, in seconds. SPEC §4: 120 Hz.
-pub const PHYSICS_DT_S: f32 = 1.0 / 120.0;
+/// Physics steps per second. SPEC §4: 120 Hz.
+pub const PHYSICS_HZ: u32 = 120;
+
+/// Length of one physics step, in seconds.
+pub const PHYSICS_DT_S: f32 = 1.0 / PHYSICS_HZ as f32;
 
 /// The controller runs once every this many physics steps (60 Hz). SPEC §4.
 pub const PHYSICS_STEPS_PER_CONTROL_STEP: u32 = 2;

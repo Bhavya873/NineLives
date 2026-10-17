@@ -4,5 +4,8 @@
 //! events, observations and rewards are computed. Python (through `nl-py`) and
 //! the browser (through `nl-wasm`) both call into it.
 
+pub mod car;
 pub mod conventions;
+pub mod input;
 pub mod vehicle_config;
+pub mod world;
