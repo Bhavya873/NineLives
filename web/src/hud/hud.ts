@@ -1,6 +1,6 @@
-// The on-screen display (SPEC §11.5). So far: speed, mode, air, why Hop is unavailable,
-// and the top-right stats (saves, lives used, time, Hop cooldown). Toasts live in
-// toasts.ts; the nozzle map and air gauge come in a later M3 PR.
+// The on-screen display's text (SPEC §11.5): speed, mode, why Hop is unavailable, and
+// the top-right stats (saves, lives used, time, Hop cooldown). The air gauge, nozzle
+// map and toasts each have their own file in this folder.
 // It reads plain numbers and writes text; it never touches physics.
 
 import { requireElement } from '../dom.ts';
@@ -70,11 +70,10 @@ export function updateHud(hud: Hud, values: HudValues): void {
   const speedKmH = Math.abs(values.speedMS) * KM_PER_H_PER_M_PER_S;
   setText(hud.speed, `${speedKmH.toFixed(0)} km/h`);
 
-  const air = values.unlimitedAir ? '∞' : `${Math.round(values.airFraction * 100)}%`;
   const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
   const mode = MODE_TEXT[values.mode] ?? '';
   const crash = values.crashed ? 'Respawning…' : '';
-  setText(hud.status, [mode, `Air ${air}`, hop, crash].filter(Boolean).join(' · '));
+  setText(hud.status, [mode, hop, crash].filter(Boolean).join(' · '));
   setText(hud.stats, statsText(values));
 }
 

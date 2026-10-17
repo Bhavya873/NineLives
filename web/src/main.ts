@@ -8,7 +8,9 @@ import { Vector3 } from 'three';
 
 import { prefersReducedMotion, requireElement } from './dom.ts';
 import { startGameLoop } from './game-loop.ts';
+import { createAirGauge, updateAirGauge } from './hud/air-gauge.ts';
 import { findHud, type HudValues, updateHud } from './hud/hud.ts';
+import { createNozzleMap, updateNozzleMap } from './hud/nozzle-map.ts';
 import {
   createToasts,
   showNoAirIfNew,
@@ -33,6 +35,7 @@ import {
   stopExplosion,
   updateExplosion,
 } from './render/explosion.ts';
+import { createFlames, updateFlames } from './render/flames.ts';
 import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend.ts';
 import {
   createGameScene,
@@ -42,6 +45,7 @@ import {
   setCarVisible,
 } from './render/scene.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
+import { FLOATS_PER_NOZZLE } from './sim-layout.ts';
 import initWasm, { EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
 /** Reused each frame so the render loop allocates nothing for these. */
@@ -84,6 +88,14 @@ async function start(): Promise<void> {
   const hud = findHud();
   const toasts = createToasts(requireElement('hud-toast'));
   const explosion = createExplosion(view.scene, prefersReducedMotion());
+  const nozzleLayout = game.nozzle_layout();
+  const flames = createFlames(view.carBody, nozzleLayout);
+  const nozzleMap = createNozzleMap(requireElement('hud-nozzles'), nozzleLayout);
+  const airGauge = createAirGauge(
+    requireElement('hud-air'),
+    requireElement('hud-air-fill'),
+    requireElement('hud-air-label'),
+  );
   startKeyboard(window);
 
   const carPose = newBlendedPose();
@@ -130,8 +142,11 @@ async function start(): Promise<void> {
       reactToEvents(game.drain_events(), nowMs);
       fillHudValues(game.hud(), hudValues);
 
+      // Valve lag already smooths the throttles, so one read per frame is enough.
+      const throttles = game.nozzle_throttles();
       placeCar(view, frames, blend, carPose);
       setCarVisible(view, !hudValues.crashed);
+      updateFlames(flames, throttles);
       followCar(view.camera, carPose, frameS, hudValues.wheelsTouching === 0);
       updateExplosion(explosion, frameS);
       // Shake only this frame's picture, so the camera's smoothing never sees it.
@@ -140,6 +155,8 @@ async function start(): Promise<void> {
       view.camera.position.sub(shake);
 
       updateHud(hud, hudValues);
+      updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
+      updateNozzleMap(nozzleMap, throttles);
       updateToasts(toasts, nowMs);
       showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
     },
@@ -159,6 +176,9 @@ async function start(): Promise<void> {
 function checkWasmLayout(): void {
   if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
     throw new Error('The wasm build and the renderer disagree on the pose layout');
+  }
+  if (Game.floats_per_nozzle() !== FLOATS_PER_NOZZLE) {
+    throw new Error('The wasm build and the renderer disagree on the nozzle layout');
   }
   if (Game.floats_per_event() !== FLOATS_PER_EVENT) {
     throw new Error('The wasm build and the game disagree on the event layout');
