@@ -8,16 +8,16 @@ mod common;
 
 use common::new_world;
 use nl_sim::golden_trace::{
-    GOLDEN_TRACE_STEPS, GoldenTraceResult, run_golden_trace, scripted_input,
+    GOLDEN_TRACE_STEPS, GoldenTraceResult, run_golden_trace, step_scripted,
 };
 use nl_sim::world::{SNAPSHOT_FORMAT_VERSION, SnapshotError, World};
 
 const GOLDEN_FLAT_DRIVE_JSON: &str = include_str!("golden/flat_drive.json");
 
-/// Steps `world` through the scripted inputs for steps `first..last`.
+/// Steps `world` through the scripted inputs and thrusters for steps `first..last`.
 fn run_script(world: &mut World, first: u32, last: u32) {
     for step in first..last {
-        world.step(scripted_input(step));
+        step_scripted(world, step);
     }
 }
 

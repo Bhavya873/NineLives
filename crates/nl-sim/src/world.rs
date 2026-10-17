@@ -11,7 +11,7 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
-use crate::conventions::{PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
+use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
 use crate::input::InputFrame;
 use crate::vehicle_config::VehicleConfig;
 
@@ -48,7 +48,7 @@ impl Pose {
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 2;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -63,11 +63,23 @@ pub enum SnapshotError {
     TrailingBytes { extra_bytes: usize },
 }
 
+/// Why the car could not be placed.
+#[derive(Debug, thiserror::Error)]
+pub enum PlaceCarError {
+    #[error("place_car: `{what}` contains a NaN or infinite number")]
+    NotFinite { what: &'static str },
+
+    #[error("place_car: the rotation quaternion has zero length; use [0, 0, 0, 1] for no rotation")]
+    ZeroRotation,
+}
+
 /// A world with flat ground and one car.
 #[derive(Serialize, Deserialize)]
 pub struct World {
     physics: PhysicsWorld,
     car: Car,
+    /// The throttles the controller asked for last; held until it asks again (SPEC §7.1).
+    controller_throttles: [f32; NOZZLE_COUNT],
     step_count: u64,
 }
 
@@ -92,15 +104,66 @@ impl World {
         World {
             physics,
             car,
+            controller_throttles: [0.0; NOZZLE_COUNT],
             step_count: 0,
         }
     }
 
     /// Advances the world by one physics step (1/120 s).
     pub fn step(&mut self, input: InputFrame) {
-        self.car.prepare_physics_step(&mut self.physics, input);
+        self.car
+            .prepare_physics_step(&mut self.physics, input, self.controller_throttles);
         self.physics.step();
         self.step_count += 1;
+    }
+
+    /// Sets the throttles (0..1 per nozzle, in nozzle order) that the controller wants.
+    /// They are held until the next call. Controllers run at 60 Hz, so callers set
+    /// them every `PHYSICS_STEPS_PER_CONTROL_STEP` physics steps (SPEC §7.1).
+    pub fn set_controller_throttles(&mut self, throttles: [f32; NOZZLE_COUNT]) {
+        self.controller_throttles = throttles;
+    }
+
+    /// How open each thruster valve is now, 0..1, in nozzle order. The renderer sizes
+    /// the flames from these.
+    pub fn effective_throttles(&self) -> [f32; NOZZLE_COUNT] {
+        self.car.effective_throttles()
+    }
+
+    /// Moves the car to a new position, orientation and velocity, for tests and for
+    /// training scenarios (SPEC §9.6). Velocities are in world coordinates.
+    ///
+    /// It also closes every valve, clears the held controller throttles and centres
+    /// the steering, so nothing from the previous run carries over.
+    pub fn place_car(
+        &mut self,
+        position_m: [f32; 3],
+        rotation_xyzw: [f32; 4],
+        linear_velocity_m_s: [f32; 3],
+        angular_velocity_rad_s: [f32; 3],
+    ) -> Result<(), PlaceCarError> {
+        check_finite("position_m", &position_m)?;
+        check_finite("rotation_xyzw", &rotation_xyzw)?;
+        check_finite("linear_velocity_m_s", &linear_velocity_m_s)?;
+        check_finite("angular_velocity_rad_s", &angular_velocity_rad_s)?;
+        let [x, y, z, w] = rotation_xyzw;
+        let rotation = Rotation::from_xyzw(x, y, z, w);
+        if rotation.length() < 1e-6 {
+            return Err(PlaceCarError::ZeroRotation);
+        }
+
+        self.controller_throttles = [0.0; NOZZLE_COUNT];
+        self.car.reset_actuators();
+        let body = &mut self.physics.bodies[self.car.chassis];
+        body.set_position(
+            Pose3::from_parts(Vector::from_array(position_m), rotation.normalize()),
+            true,
+        );
+        body.set_linvel(Vector::from_array(linear_velocity_m_s), true);
+        body.set_angvel(Vector::from_array(angular_velocity_rad_s), true);
+        // Refresh the scene-query tree so the wheel rays see the car's new place.
+        self.physics.detect_collisions(&(), &());
+        Ok(())
     }
 
     /// Saves the complete state of the world as bytes: the format version, then the world.
@@ -162,6 +225,14 @@ impl World {
         self.physics.bodies[self.car.chassis].angvel().to_array()
     }
 
+    /// The car's angular velocity in its own body frame: [roll rate about +X,
+    /// yaw rate about +Y, pitch rate about +Z] (SPEC §4 signs).
+    pub fn angular_velocity_body_rad_s(&self) -> [f32; 3] {
+        let body = &self.physics.bodies[self.car.chassis];
+        let world_rate = body.angvel();
+        (body.rotation().inverse() * world_rate).to_array()
+    }
+
     /// Speed along the car's nose direction. Negative when rolling backwards.
     pub fn forward_speed_m_s(&self) -> f32 {
         self.car.forward_speed_m_s(&self.physics)
@@ -175,6 +246,15 @@ impl World {
     /// Current front-wheel angle. Positive turns left.
     pub fn steering_angle_rad(&self) -> f32 {
         self.car.steering_angle_rad()
+    }
+}
+
+/// Fails if any value is NaN or infinite.
+fn check_finite(what: &'static str, values: &[f32]) -> Result<(), PlaceCarError> {
+    if values.iter().all(|value| value.is_finite()) {
+        Ok(())
+    } else {
+        Err(PlaceCarError::NotFinite { what })
     }
 }
 

@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::conventions::WHEEL_COUNT;
+use crate::conventions::{NOZZLE_COUNT, NOZZLE_NAMES, WHEEL_COUNT};
 
 /// The text of the repo's `configs/vehicle.toml`, built into the library so tests,
 /// examples, Python and the browser can all start from the same car.
@@ -22,6 +22,7 @@ pub struct VehicleConfig {
     pub wheels: WheelConfig,
     pub drive: DriveConfig,
     pub steering: SteeringConfig,
+    pub thrusters: ThrusterConfig,
 }
 
 /// The car body. See `[chassis]` in `configs/vehicle.toml`.
@@ -103,6 +104,32 @@ pub struct SteeringConfig {
     pub max_rate_rad_s: f32,
 }
 
+/// The cold-gas thrusters. See `[thrusters]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ThrusterConfig {
+    /// Time constant of the first-order valve lag (SPEC §7.4).
+    pub valve_time_constant_s: f32,
+    /// Speed of the cold-gas exhaust; air used = thrust / this speed (SPEC §7.5).
+    pub exhaust_speed_m_s: f32,
+    /// The nozzles, in the fixed `NOZZLE_NAMES` order.
+    pub nozzles: [NozzleConfig; NOZZLE_COUNT],
+}
+
+/// One nozzle. See `[[thrusters.nozzles]]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NozzleConfig {
+    /// Must match `NOZZLE_NAMES` at the same index, e.g. "L_FL".
+    pub name: String,
+    /// Where the nozzle is, relative to the centre of mass, in the body frame.
+    pub position_m: [f32; 3],
+    /// Unit vector: the direction the nozzle pushes the car (opposite to the exhaust).
+    pub direction: [f32; 3],
+    /// Push at full throttle in Realistic mode.
+    pub max_force_n: f32,
+}
+
 /// Why a vehicle config could not be used.
 #[derive(Debug, thiserror::Error)]
 pub enum VehicleConfigError {
@@ -120,6 +147,25 @@ pub enum VehicleConfigError {
          `steering.max_angle_low_speed_rad` ({low})"
     )]
     SteeringLimitsReversed { low: f32, high: f32 },
+
+    #[error("vehicle.toml: nozzle {index} must be named \"{expected}\", but it is \"{found}\"")]
+    WrongNozzleOrder {
+        index: usize,
+        expected: &'static str,
+        found: String,
+    },
+
+    #[error(
+        "vehicle.toml: nozzle \"{name}\" direction must have length 1, but it has length {length}"
+    )]
+    DirectionNotUnitLength { name: String, length: f32 },
+
+    #[error("vehicle.toml: nozzle \"{name}\": `{field}` is not valid ({reason})")]
+    BadNozzleValue {
+        name: String,
+        field: &'static str,
+        reason: &'static str,
+    },
 }
 
 /// Short alias so the check functions below fit on one line each.
@@ -139,7 +185,8 @@ impl VehicleConfig {
         self.air_drag.check()?;
         self.wheels.check()?;
         self.drive.check()?;
-        self.steering.check()
+        self.steering.check()?;
+        self.thrusters.check()
     }
 }
 
@@ -220,6 +267,56 @@ impl SteeringConfig {
     }
 }
 
+impl ThrusterConfig {
+    fn check(&self) -> CheckResult {
+        must_be_positive(
+            "thrusters.valve_time_constant_s",
+            self.valve_time_constant_s,
+        )?;
+        must_be_positive("thrusters.exhaust_speed_m_s", self.exhaust_speed_m_s)?;
+        for (index, nozzle) in self.nozzles.iter().enumerate() {
+            nozzle.check(index)?;
+        }
+        Ok(())
+    }
+}
+
+impl NozzleConfig {
+    fn check(&self, index: usize) -> CheckResult {
+        let expected = NOZZLE_NAMES[index];
+        if self.name != expected {
+            return Err(VehicleConfigError::WrongNozzleOrder {
+                index,
+                expected,
+                found: self.name.clone(),
+            });
+        }
+        let [x, y, z] = self.direction;
+        let length = (x * x + y * y + z * z).sqrt();
+        if !length.is_finite() || (length - 1.0).abs() > 1e-3 {
+            return Err(VehicleConfigError::DirectionNotUnitLength {
+                name: self.name.clone(),
+                length,
+            });
+        }
+        if self.position_m.iter().any(|value| !value.is_finite()) {
+            return Err(self.bad_value("position_m", "every number must be finite"));
+        }
+        if !self.max_force_n.is_finite() || self.max_force_n <= 0.0 {
+            return Err(self.bad_value("max_force_n", "must be a finite number above zero"));
+        }
+        Ok(())
+    }
+
+    fn bad_value(&self, field: &'static str, reason: &'static str) -> VehicleConfigError {
+        VehicleConfigError::BadNozzleValue {
+            name: self.name.clone(),
+            field,
+            reason,
+        }
+    }
+}
+
 /// Fails if `value` is zero, negative, infinite or not a number.
 fn must_be_positive(field: &'static str, value: f32) -> CheckResult {
     if !value.is_finite() || value <= 0.0 {
@@ -290,6 +387,40 @@ mod tests {
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
         assert!(error.to_string().contains("turbo"));
+    }
+
+    #[test]
+    fn nozzles_out_of_order_are_rejected() {
+        let broken = DEFAULT_VEHICLE_TOML.replacen("name = \"L_FL\"", "name = \"L_FR\"", 1);
+
+        let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
+
+        assert!(matches!(
+            error,
+            VehicleConfigError::WrongNozzleOrder { index: 0, .. }
+        ));
+    }
+
+    #[test]
+    fn a_nozzle_direction_that_is_not_unit_length_is_rejected() {
+        let broken = DEFAULT_VEHICLE_TOML.replacen(
+            "direction = [0.0, 1.0, 0.0]",
+            "direction = [0.0, 2.0, 0.0]",
+            1,
+        );
+
+        let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
+
+        assert!(error.to_string().contains("L_FL"));
+    }
+
+    #[test]
+    fn a_bad_nozzle_force_names_the_nozzle() {
+        let broken = DEFAULT_VEHICLE_TOML.replacen("max_force_n = 8000.0", "max_force_n = 0.0", 1);
+
+        let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
+
+        assert!(error.to_string().contains("B_L"), "{error}");
     }
 
     #[test]

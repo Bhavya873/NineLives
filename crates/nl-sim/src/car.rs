@@ -10,10 +10,14 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::TAU;
 
-use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT};
+use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
+use crate::thrusters::{Valves, apply_nozzle_forces};
 use crate::vehicle_config::{SteeringConfig, VehicleConfig};
 use crate::world::Pose;
+
+/// Thrust multiplier until modes arrive (M3 modes PR adds Realistic/Arcade).
+const REALISTIC_THRUST_SCALE: f32 = 1.0;
 
 /// Index of the front-left wheel. The front wheels (0 and 1) steer.
 const FRONT_LEFT_WHEEL: usize = 0;
@@ -35,6 +39,8 @@ pub struct Car {
     wheels: DynamicRayCastVehicleController,
     /// Current front-wheel angle. Positive turns left.
     steering_angle_rad: f32,
+    /// The thruster valves and how open they are.
+    valves: Valves,
     config: VehicleConfig,
 }
 
@@ -57,17 +63,51 @@ impl Car {
             roof_collider,
             wheels: build_wheels(config, chassis),
             steering_angle_rad: 0.0,
+            valves: Valves::default(),
             config: config.clone(),
         }
     }
 
     /// Everything the car does before the physics step, in SPEC §7.1 order: read the
-    /// driver's input, reset and add forces, then run the raycast wheels.
+    /// driver's input, move the valves toward the commanded throttles, reset and add
+    /// forces (drag, nozzles), then run the raycast wheels.
     /// Call exactly once per physics step, just before `PhysicsWorld::step`.
-    pub fn prepare_physics_step(&mut self, physics: &mut PhysicsWorld, input: InputFrame) {
+    pub fn prepare_physics_step(
+        &mut self,
+        physics: &mut PhysicsWorld,
+        input: InputFrame,
+        commanded_throttles: [f32; NOZZLE_COUNT],
+    ) {
         self.apply_driver_input(physics, input);
+        let thrusters = &self.config.thrusters;
+        self.valves.update(
+            commanded_throttles,
+            PHYSICS_DT_S,
+            thrusters.valve_time_constant_s,
+        );
         self.reset_forces_and_apply_air_drag(physics);
+        apply_nozzle_forces(
+            &mut physics.bodies[self.chassis],
+            thrusters,
+            self.valves.effective_throttles(),
+            REALISTIC_THRUST_SCALE,
+        );
         self.update_wheels(physics);
+    }
+
+    /// Closes every valve and centres the steering, e.g. when the car is moved to
+    /// start a new run.
+    pub fn reset_actuators(&mut self) {
+        self.valves.close_all();
+        self.steering_angle_rad = 0.0;
+        for wheel in self.wheels.wheels_mut() {
+            wheel.steering = 0.0;
+        }
+    }
+
+    /// How open each thruster valve is now, 0..1, in nozzle order.
+    pub fn effective_throttles(&self) -> [f32; NOZZLE_COUNT] {
+        self.valves.effective_throttles()
     }
 
     /// Sets steering, engine force and brakes from the driver's input.

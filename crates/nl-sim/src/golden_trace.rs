@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::conventions::PHYSICS_HZ;
+use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP};
 use crate::input::InputFrame;
 use crate::vehicle_config::{VehicleConfig, VehicleConfigError};
 use crate::world::{DEFAULT_GROUND_FRICTION, SnapshotError, World};
@@ -68,6 +68,29 @@ pub enum GoldenTraceError {
     Snapshot(#[from] SnapshotError),
 }
 
+/// The scripted thruster throttles for `step`, so the trace also covers the nozzle
+/// forces: a half-strength lift pulse (enough for a short hop), then S_FL, which
+/// pushes the nose right, against the left turn.
+pub fn scripted_throttles(step: u32) -> [f32; NOZZLE_COUNT] {
+    let second = step / PHYSICS_HZ;
+    let mut throttles = [0.0; NOZZLE_COUNT];
+    match second {
+        2 => throttles[..4].fill(0.5), // all four lift nozzles at half
+        6 => throttles[4] = 0.8,       // S_FL, nose-right yaw, during the left turn
+        _ => {}
+    }
+    throttles
+}
+
+/// Runs one physics step of the script: like a real controller, the throttles are
+/// set only at 60 Hz and the world holds them in between.
+pub fn step_scripted(world: &mut World, step: u32) {
+    if step % PHYSICS_STEPS_PER_CONTROL_STEP == 0 {
+        world.set_controller_throttles(scripted_throttles(step));
+    }
+    world.step(scripted_input(step));
+}
+
 /// Runs the golden trace with the frozen golden car.
 pub fn run_golden_trace() -> Result<GoldenTraceResult, GoldenTraceError> {
     let config = VehicleConfig::from_toml_str(GOLDEN_VEHICLE_TOML)?;
@@ -75,7 +98,7 @@ pub fn run_golden_trace() -> Result<GoldenTraceResult, GoldenTraceError> {
 
     let mut hash = FNV_OFFSET_BASIS;
     for step in 0..GOLDEN_TRACE_STEPS {
-        world.step(scripted_input(step));
+        step_scripted(&mut world, step);
         hash = hash_world_state(hash, &world);
     }
     hash = fnv1a_add_bytes(hash, &world.snapshot()?);

@@ -68,3 +68,71 @@ max_angle_high_speed_rad = 0.15
 high_speed_m_s = 40.0
 # How fast the wheels can turn, in rad/s.
 max_rate_rad_s = 2.0
+[thrusters]
+# Valve lag: each valve opens and closes like a first-order filter (SPEC §7.4).
+valve_time_constant_s = 0.03
+# Cold-gas exhaust speed; air used per second = thrust / exhaust speed (SPEC §7.5).
+exhaust_speed_m_s = 600.0
+
+# The 10 nozzles, in the fixed SPEC §4 order. Position is relative to the centre of
+# mass in the body frame (+X forward, +Y up, +Z right). Direction is the push on the
+# car (opposite to the exhaust). Max force is for Realistic mode; modes scale it.
+[[thrusters.nozzles]]
+name = "L_FL"
+position_m = [1.6, -0.3, -0.85]
+direction = [0.0, 1.0, 0.0]
+max_force_n = 12000.0
+
+[[thrusters.nozzles]]
+name = "L_FR"
+position_m = [1.6, -0.3, 0.85]
+direction = [0.0, 1.0, 0.0]
+max_force_n = 12000.0
+
+[[thrusters.nozzles]]
+name = "L_RL"
+position_m = [-1.6, -0.3, -0.85]
+direction = [0.0, 1.0, 0.0]
+max_force_n = 12000.0
+
+[[thrusters.nozzles]]
+name = "L_RR"
+position_m = [-1.6, -0.3, 0.85]
+direction = [0.0, 1.0, 0.0]
+max_force_n = 12000.0
+
+[[thrusters.nozzles]]
+name = "S_FL"
+position_m = [1.4, 0.5, -1.0]
+direction = [0.0, 0.0, 1.0]
+max_force_n = 4000.0
+
+[[thrusters.nozzles]]
+name = "S_RL"
+position_m = [-1.4, 0.5, -1.0]
+direction = [0.0, 0.0, 1.0]
+max_force_n = 4000.0
+
+[[thrusters.nozzles]]
+name = "S_FR"
+position_m = [1.4, 0.5, 1.0]
+direction = [0.0, 0.0, -1.0]
+max_force_n = 4000.0
+
+[[thrusters.nozzles]]
+name = "S_RR"
+position_m = [-1.4, 0.5, 1.0]
+direction = [0.0, 0.0, -1.0]
+max_force_n = 4000.0
+
+[[thrusters.nozzles]]
+name = "B_L"
+position_m = [-2.1, 0.0, -0.4]
+direction = [1.0, 0.0, 0.0]
+max_force_n = 8000.0
+
+[[thrusters.nozzles]]
+name = "B_R"
+position_m = [-2.1, 0.0, 0.4]
+direction = [1.0, 0.0, 0.0]
+max_force_n = 8000.0
