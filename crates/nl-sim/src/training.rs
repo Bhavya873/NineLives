@@ -4,6 +4,8 @@
 //! in eval. `nl-py`'s `BatchedSim` runs many of these side by side; nothing about the
 //! reward or the episode rules lives in Python (CLAUDE.md golden rule 1).
 
+use serde::Serialize;
+
 use crate::car_state::Touchdown;
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
@@ -42,10 +44,12 @@ pub struct StepOutcome {
     pub finished: Option<FinishedEpisode>,
 }
 
-/// A finished episode: the eval row plus what training logs per episode.
-#[derive(Debug, Clone, PartialEq)]
+/// A finished episode: the eval row plus what training logs per episode. As JSON it is
+/// one flat object: the `EpisodeResult` fields plus `stage`, `level` and `control_steps`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FinishedEpisode {
     /// The same row the eval runner writes.
+    #[serde(flatten)]
     pub result: EpisodeResult,
     /// Which stage it was.
     pub stage: Stage,

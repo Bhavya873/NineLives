@@ -187,6 +187,30 @@ pub struct RewardTerms {
 }
 
 impl RewardTerms {
+    /// The term names, in `as_array` order (training logs them under these names).
+    pub const NAMES: [&'static str; 7] = [
+        "tilt",
+        "spin",
+        "air",
+        "airborne",
+        "smoothness",
+        "save",
+        "crash",
+    ];
+
+    /// The terms in `NAMES` order.
+    pub fn as_array(&self) -> [f32; 7] {
+        [
+            self.tilt,
+            self.spin,
+            self.air,
+            self.airborne,
+            self.smoothness,
+            self.save,
+            self.crash,
+        ]
+    }
+
     /// The sum of all terms: the reward PPO sees.
     pub fn total(&self) -> f32 {
         self.tilt + self.spin + self.air + self.airborne + self.smoothness + self.save + self.crash

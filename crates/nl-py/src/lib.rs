@@ -1,10 +1,18 @@
-//! The `ninelives_sim` Python module.
-//!
-//! M5 adds `BatchedSim` (SPEC §9.1). For now the module exposes the fixed
-//! conventions, so Python tests can check they import the right build.
+//! The `ninelives_sim` Python module (SPEC §9.1): `BatchedSim` for training, plus the
+//! observation layout and its schema hash, so Python never re-declares them
+//! (CLAUDE.md golden rules 1 and 4).
+
+mod batched_sim;
+mod config;
+mod env_slot;
 
 use nl_sim::conventions;
+use nl_sim::obs::{OBS_SPEC, obs_schema_hash};
+use nl_sim::reward::RewardTerms;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
+
+use crate::batched_sim::BatchedSim;
 
 /// The nozzle names in their fixed index order.
 #[pyfunction]
@@ -18,10 +26,42 @@ fn physics_dt_s() -> f32 {
     conventions::PHYSICS_DT_S
 }
 
+/// The observation layout (SPEC §9.2): one dict per value with its `name`, `index`,
+/// `low` and `high`, in order.
+#[pyfunction(name = "obs_spec")]
+fn obs_spec_py(py: Python<'_>) -> PyResult<Vec<Bound<'_, PyDict>>> {
+    let mut fields = Vec::with_capacity(OBS_SPEC.len());
+    for (index, field) in OBS_SPEC.iter().enumerate() {
+        let entry = PyDict::new(py);
+        entry.set_item("name", field.name)?;
+        entry.set_item("index", index)?;
+        entry.set_item("low", field.low)?;
+        entry.set_item("high", field.high)?;
+        fields.push(entry);
+    }
+    Ok(fields)
+}
+
+/// The observation schema hash (16 hex digits); policies must carry the same one.
+#[pyfunction(name = "obs_schema_hash")]
+fn obs_schema_hash_py() -> String {
+    obs_schema_hash()
+}
+
+/// The names of `info["reward_terms"]` columns, in order.
+#[pyfunction]
+fn reward_term_names() -> Vec<&'static str> {
+    RewardTerms::NAMES.to_vec()
+}
+
 /// The Python module definition. The function name must match the module name.
 #[pymodule]
 fn ninelives_sim(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<BatchedSim>()?;
     module.add_function(wrap_pyfunction!(nozzle_names, module)?)?;
     module.add_function(wrap_pyfunction!(physics_dt_s, module)?)?;
+    module.add_function(wrap_pyfunction!(obs_spec_py, module)?)?;
+    module.add_function(wrap_pyfunction!(obs_schema_hash_py, module)?)?;
+    module.add_function(wrap_pyfunction!(reward_term_names, module)?)?;
     Ok(())
 }

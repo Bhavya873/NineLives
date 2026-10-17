@@ -354,6 +354,7 @@ The PD controller is required before RL. It proves the problem is controllable a
 - **Auto-reset:** an env that ends returns its terminal observation in `info["terminal_obs"]` (N × OBS_DIM, masked) and its reset observation in `obs`.
 - `info` arrays: `saves`, `crashes`, `crash_cause`, `air_used_kg`, `stage`, `success`, `episode_len`.
 - Envs are stepped in parallel with `rayon`; each env owns its own world and RNG.
+- Implementation notes (`crates/nl-py`): `config_json` holds the text of `vehicle.toml`, `modes.toml`, `scenarios.toml` and `reward.toml` plus `mode` and `stage` (built by `ninelives.sim_config.load_sim_config`; the Rust module reads no files). Env `i` draws its episode seeds from ChaCha8 stream `i` of `seed`; `reset(seeds)` overrides them once. `info` holds `done` (rows whose episode ended), `terminal_obs`, `episode` (per row: the finished episode as a JSON object string with the eval `EpisodeResult` fields, so `success`, `saves`, `crash_cause`, `air_used_kg` and the touchdown numbers, plus `stage`, `level` and `control_steps`; None elsewhere) and `reward_terms` (N × 7, columns from `reward_term_names()`). The episode row replaces separate `saves`/`crashes`/… arrays so its field names match the results files. `set_stage_and_level(stage, level)` applies from each env's next episode.
 
 `ninelives.env`:
 - `NineLivesVecEnv(sb3.common.vec_env.VecEnv)` adapts `BatchedSim` to SB3. It sets `infos[i]["terminal_observation"]` and `infos[i]["TimeLimit.truncated"]`.
