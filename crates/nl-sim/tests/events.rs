@@ -71,7 +71,8 @@ fn landing_upside_down_from_half_a_metre_is_a_crash() {
         .place_car([0.0, 1.05, 0.0], UPSIDE_DOWN, [0.0; 3], [0.0; 3])
         .unwrap();
 
-    let events = run_and_collect(&mut world, 2.0);
+    // Long enough to fall the 0.5 m, short of the 1.5 s respawn delay.
+    let events = run_and_collect(&mut world, 1.0);
 
     assert_eq!(crash_causes(&events), vec![CrashCause::UpsideDown]);
     assert!(world.is_crashed());

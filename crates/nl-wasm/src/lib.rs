@@ -4,14 +4,16 @@
 //! JavaScript values (strings, byte arrays) into `nl-sim` calls and turn results
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
-//! So far: driving, thrusters, the air tank, modes, Hop and Boost. Controllers, the
-//! policy, events and courses are added in M3–M7, following SPEC §11.1.
+//! So far: driving, thrusters, the air tank, modes, Hop and Boost, events and respawn.
+//! Controllers, the policy and courses are added in M3–M7, following SPEC §11.1.
 
 use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
-use nl_sim::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, INPUT_FRAME_BYTES, InputFrame};
+use nl_sim::input::{
+    BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, INPUT_FRAME_BYTES, InputFrame,
+};
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
@@ -48,10 +50,14 @@ pub enum HudField {
     /// The current mode: a `ModeCode` value. Read from the world, so it is still
     /// right after `restore`.
     Mode = 10,
+    /// Saves since the game started.
+    Saves = 11,
+    /// Crashes since the game started (shown as "Lives used").
+    Crashes = 12,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::Mode as usize + 1;
+const HUD_LENGTH: usize = HudField::Crashes as usize + 1;
 
 /// The values `HudField.Mode` can take.
 #[wasm_bindgen]
@@ -82,8 +88,6 @@ pub enum HopBlocked {
 pub struct Game {
     world: World,
     modes: ModesConfig,
-    /// The snapshot `respawn` goes back to (SPEC §7.9, §11.3 "R").
-    checkpoint: Vec<u8>,
 }
 
 /// Number of floats per event in `Game::drain_events`.
@@ -103,6 +107,8 @@ pub enum EventKind {
     Save = 4,
     /// Followed by: a `CrashCode`.
     Crash = 5,
+    /// The car is back at the last checkpoint (after a crash or Reset).
+    Respawn = 6,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -130,12 +136,7 @@ impl Game {
         let modes = ModesConfig::from_toml_str(modes_toml)?;
         let world =
             World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
-        let checkpoint = world.snapshot()?;
-        Ok(Game {
-            world,
-            modes,
-            checkpoint,
-        })
+        Ok(Game { world, modes })
     }
 
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
@@ -188,10 +189,12 @@ impl Game {
         values[HudField::HopBlocked as usize] = hop_blocked_code(self.world.hop_blocked_reason());
         values[HudField::UnlimitedAir as usize] = one_if(self.world.mode().unlimited_air);
         values[HudField::Mode as usize] = self.mode_code() as u8 as f32;
+        values[HudField::Saves as usize] = self.world.saves() as f32;
+        values[HudField::Crashes as usize] = self.world.crashes() as f32;
         values
     }
 
-    /// Saves the whole game state as bytes, for checkpoints and respawning.
+    /// Saves the whole game state as bytes.
     pub fn snapshot(&self) -> Result<Vec<u8>, JsError> {
         Ok(self.world.snapshot()?)
     }
@@ -202,21 +205,13 @@ impl Game {
         Ok(())
     }
 
-    /// Remembers the current state as the place `respawn` returns to.
-    pub fn set_checkpoint(&mut self) -> Result<(), JsError> {
-        self.checkpoint = self.world.snapshot()?;
-        Ok(())
+    /// Makes the car's current pose and motion the place it respawns. A crash
+    /// respawns there by itself after the delay; the Reset button does it at once.
+    pub fn set_checkpoint(&mut self) {
+        self.world.set_checkpoint();
     }
 
-    /// Puts the car back at the last checkpoint with a full tank, e.g. after a crash
-    /// (SPEC §7.9) or when the player presses R. The mode, clock and Chaos random
-    /// numbers carry on, and any crash is cleared.
-    pub fn respawn(&mut self) -> Result<(), JsError> {
-        self.world.respawn_from(&self.checkpoint)?;
-        Ok(())
-    }
-
-    /// True once the car has crashed; `respawn` clears it.
+    /// True from a crash until the respawn (the wreck stays frozen meanwhile).
     pub fn is_crashed(&self) -> bool {
         self.world.is_crashed()
     }
@@ -272,6 +267,11 @@ impl Game {
         BUTTON_CHAOS
     }
 
+    /// The input-frame button bit for Reset (respawn at the last checkpoint).
+    pub fn button_reset() -> u16 {
+        BUTTON_RESET
+    }
+
     /// Number of floats per event in `drain_events` (4).
     pub fn floats_per_event() -> usize {
         FLOATS_PER_EVENT
@@ -325,6 +325,7 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
             peak_tilt_rad,
         ],
         SimEvent::Crash { cause } => [kind_code(EventKind::Crash), crash_code(cause), 0.0, 0.0],
+        SimEvent::Respawn => [kind_code(EventKind::Respawn), 0.0, 0.0, 0.0],
     }
 }
 

@@ -154,6 +154,9 @@ stuck_tilt_deg = 100.0
 stuck_s = 2.0
 # Crash below this height.
 out_of_bounds_y_m = -20.0
+# Game only: after a crash the wreck stays frozen this long, then the car respawns at
+# the last checkpoint. Training ends the episode at the crash instead.
+respawn_delay_s = 1.5
 
 [chaos]
 # A random knock (SPEC §7.12): a push and a twist in random directions, each up to

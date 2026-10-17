@@ -12,6 +12,7 @@ const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
 const CHAOS_KEYS = ['KeyC'];
+const RESET_KEYS = ['KeyR'];
 
 /**
  * Button bits, matching the BUTTON_* constants in crates/nl-sim/src/input.rs.
@@ -20,6 +21,7 @@ const CHAOS_KEYS = ['KeyC'];
 export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
 export const BUTTON_CHAOS = 1 << 2;
+export const BUTTON_RESET = 1 << 3;
 
 /** Every held key this module handles, so the page does not scroll on arrows or Space. */
 const HANDLED_KEYS = [
@@ -30,13 +32,14 @@ const HANDLED_KEYS = [
   ...HOP_KEYS,
   ...BOOST_KEYS,
   ...CHAOS_KEYS,
+  ...RESET_KEYS,
 ];
 
 /** Keys that are currently held down, by `KeyboardEvent.code`. */
 const heldKeys = new Set<string>();
 
 /**
- * Bits of the press-to-trigger buttons (Hop, Chaos) pressed since the last frame. A quick
+ * Bits of the press-to-trigger buttons (Hop, Chaos, Reset) pressed since the last frame. A quick
  * tap can go down and up between two ticks on a slow frame; remembering the press makes
  * sure the game still sees it.
  */
@@ -68,6 +71,9 @@ export function startKeyboard(target: Window): void {
     }
     if (CHAOS_KEYS.includes(event.code)) {
       tappedButtons |= BUTTON_CHAOS;
+    }
+    if (RESET_KEYS.includes(event.code)) {
+      tappedButtons |= BUTTON_RESET;
     }
     if (!event.repeat) {
       pressActions.get(event.code)?.();
@@ -102,6 +108,9 @@ export function readInputFrame(): Uint8Array {
   }
   if (isAnyHeld(CHAOS_KEYS)) {
     buttons |= BUTTON_CHAOS;
+  }
+  if (isAnyHeld(RESET_KEYS)) {
+    buttons |= BUTTON_RESET;
   }
   // Bytes 2 and 3 are the buttons, little-endian.
   frame[2] = buttons & 0xff;

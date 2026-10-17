@@ -42,6 +42,8 @@ pub enum SimEvent {
     },
     /// The car crashed. In the game it explodes and respawns; in training the episode ends.
     Crash { cause: CrashCause },
+    /// The car was put back at the last checkpoint, after a crash or the Reset button.
+    Respawn,
 }
 
 /// What the tracker looks at on each physics step.
