@@ -41,17 +41,22 @@ export function startGameLoop(tickS: number, callbacks: LoopCallbacks): void {
   let lastFrameMs: number | null = null;
 
   function onFrame(nowMs: number): void {
+    // Ask for the next frame first, so one error cannot stop the game for good.
+    requestAnimationFrame(onFrame);
+
     const elapsedS = lastFrameMs === null ? 0 : (nowMs - lastFrameMs) / 1000;
     lastFrameMs = nowMs;
 
-    const plan = planTicks(leftoverS, elapsedS, tickS);
-    for (let tick = 0; tick < plan.ticks; tick += 1) {
-      callbacks.tick();
+    try {
+      const plan = planTicks(leftoverS, elapsedS, tickS);
+      for (let tick = 0; tick < plan.ticks; tick += 1) {
+        callbacks.tick();
+      }
+      leftoverS = plan.leftoverS;
+      callbacks.render(leftoverS / tickS);
+    } catch (error) {
+      console.error('Nine Lives: error in the game loop:', error);
     }
-    leftoverS = plan.leftoverS;
-
-    callbacks.render(leftoverS / tickS);
-    requestAnimationFrame(onFrame);
   }
 
   requestAnimationFrame(onFrame);

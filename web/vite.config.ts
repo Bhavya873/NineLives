@@ -8,7 +8,8 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   server: {
-    // The game imports configs/vehicle.toml from the repo root, one level up.
-    fs: { allow: ['..'] },
+    // The game imports configs/vehicle.toml from the repo root. Allow only that folder
+    // (plus this one), so the dev server never serves other files from the repo.
+    fs: { allow: ['.', '../configs'] },
   },
 });

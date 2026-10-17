@@ -19,6 +19,12 @@ const heldKeys = new Set<string>();
 /** Starts listening to the keyboard. Call once at start-up. */
 export function startKeyboard(target: Window): void {
   target.addEventListener('keydown', (event) => {
+    // Browsers often never send keyup for keys pressed during a Cmd/Ctrl/Alt shortcut,
+    // so drop everything rather than risk a key that stays held forever.
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      heldKeys.clear();
+      return;
+    }
     if (HANDLED_KEYS.includes(event.code)) {
       event.preventDefault();
     }
@@ -33,15 +39,16 @@ export function startKeyboard(target: Window): void {
   });
 }
 
+/** The frame handed to the game each tick; reused so no memory is allocated per tick. */
+const frame = new Uint8Array(4);
+/** The same bytes seen as signed numbers, for throttle and steer. */
+const frameSigned = new Int8Array(frame.buffer);
+
 /** Builds the input frame for the next tick from the keys held right now. */
 export function readInputFrame(): Uint8Array {
-  const throttle = axis(THROTTLE_KEYS, BRAKE_KEYS);
+  frameSigned[0] = axis(THROTTLE_KEYS, BRAKE_KEYS);
   // Positive steer is left, matching the sim's yaw sign (SPEC §4).
-  const steer = axis(STEER_LEFT_KEYS, STEER_RIGHT_KEYS);
-  const frame = new Uint8Array(4);
-  const signed = new Int8Array(frame.buffer);
-  signed[0] = throttle;
-  signed[1] = steer;
+  frameSigned[1] = axis(STEER_LEFT_KEYS, STEER_RIGHT_KEYS);
   // Bytes 2 and 3 are the buttons (Hop, Boost, ...), added in M3.
   return frame;
 }

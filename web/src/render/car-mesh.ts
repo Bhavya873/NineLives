@@ -20,24 +20,28 @@ const BODY_WIDTH_M = 1.72;
 /** The glass cabin sits on top of the body and is narrower, like a real car's. */
 const CABIN_WIDTH_M = 1.36;
 
+// The shapes stay close to the physics boxes in configs/vehicle.toml (body from
+// y = -0.45 to 0.45, roof up to 0.55), so landings and roof hits look right. The body
+// is drawn narrower than the 2.0 m physics box so the wheels show at the sides.
+
 /**
  * Lower body outline seen from the left, as [x forward, y up] points in metres around
  * the centre of mass: low nose, sloping bonnet, flat deck up to the rear spoiler lip.
  */
 const BODY_PROFILE_M: [number, number][] = [
-  [2.1, -0.2],
+  [2.1, -0.4],
   [2.1, 0.02],
   [0.9, 0.22],
   [-1.95, 0.26],
   [-2.1, 0.32],
-  [-2.1, -0.2],
+  [-2.1, -0.4],
 ];
 
 /** Cabin outline: raked windscreen, short roof, long fastback rear window. */
 const CABIN_PROFILE_M: [number, number][] = [
   [0.9, 0.22],
-  [0.35, 0.62],
-  [-0.8, 0.62],
+  [0.35, 0.55],
+  [-0.8, 0.55],
   [-1.75, 0.25],
 ];
 

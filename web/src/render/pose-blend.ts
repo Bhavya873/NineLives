@@ -2,6 +2,7 @@
 // A pose is 7 floats: position x, y, z, then quaternion x, y, z, w.
 import { Quaternion, Vector3 } from 'three';
 
+/** Floats in one pose. main.ts checks this against Game.floats_per_pose() at start-up. */
 export const FLOATS_PER_POSE = 7;
 
 /** One pose as three.js objects. */

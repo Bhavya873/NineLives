@@ -7,16 +7,17 @@ import { startGameLoop } from './game-loop';
 import { findHud, updateHud } from './hud/hud';
 import { readInputFrame, startKeyboard } from './input/keyboard';
 import { followCar, snapCamera } from './render/chase-camera';
-import { blendPose, newBlendedPose } from './render/pose-blend';
+import { blendPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
 import { createGameScene } from './render/scene';
 import initWasm, { Game, HudField } from './wasm/nl_wasm.js';
-
-const WHEEL_COUNT = 4;
 
 async function start(): Promise<void> {
   await initWasm();
   const game = new Game(vehicleToml);
   const tickS = Game.physics_dt_s();
+  if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
+    throw new Error('The wasm build and the renderer disagree on the pose layout');
+  }
 
   const container = document.getElementById('game');
   if (!container) {
@@ -31,6 +32,7 @@ async function start(): Promise<void> {
   let latestChassis = previousChassis;
   let previousWheels = game.wheel_poses();
   let latestWheels = previousWheels;
+  const wheelCount = latestWheels.length / FLOATS_PER_POSE;
 
   const carPose = newBlendedPose();
   const wheelPose = newBlendedPose();
@@ -52,7 +54,7 @@ async function start(): Promise<void> {
       view.carBody.position.copy(carPose.position);
       view.carBody.quaternion.copy(carPose.rotation);
 
-      for (let wheel = 0; wheel < WHEEL_COUNT; wheel += 1) {
+      for (let wheel = 0; wheel < wheelCount; wheel += 1) {
         blendPose(previousWheels, latestWheels, wheel, blend, wheelPose);
         view.wheels[wheel]?.position.copy(wheelPose.position);
         view.wheels[wheel]?.quaternion.copy(wheelPose.rotation);
@@ -63,10 +65,12 @@ async function start(): Promise<void> {
       view.sun.target.position.copy(carPose.position);
 
       const nowMs = performance.now();
-      followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000);
+      const hudValues = game.hud();
+      const airborne = hudValues[HudField.WheelsTouching] === 0;
+      followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000, airborne);
       lastRenderMs = nowMs;
 
-      updateHud(hud, game.hud()[HudField.SpeedMS] ?? 0);
+      updateHud(hud, hudValues[HudField.SpeedMS] ?? 0);
       view.renderer.render(view.scene, view.camera);
     },
   });
