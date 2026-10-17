@@ -27,6 +27,7 @@ use crate::conventions::{
 };
 use crate::course::{BoundsSpec, CourseSpec};
 use crate::course_build::{build_course_shapes, shape_collider};
+use crate::course_triggers::{CourseTriggers, TriggerAction};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
@@ -77,7 +78,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 8;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 9;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -131,6 +132,8 @@ pub struct World {
     auto_respawn_after_steps: Option<u32>,
     /// The course's bounds box; leaving it is an out-of-bounds crash. None on flat ground.
     course_bounds: Option<BoundsSpec>,
+    /// The course's checkpoint and finish lines and kick plates, and the car's progress.
+    triggers: CourseTriggers,
     /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
@@ -167,14 +170,15 @@ impl World {
         seed: u64,
     ) -> World {
         let mut physics = new_physics();
-        for shape in build_course_shapes(course) {
-            if let Some(collider) = shape_collider(&shape, ground_friction) {
+        let shapes = build_course_shapes(course);
+        for shape in &shapes {
+            if let Some(collider) = shape_collider(shape, ground_friction) {
                 physics.insert_collider(collider, None);
             }
         }
         let start_m = Vector::from_array(course.start.pos);
         let yaw_rad = course.start.yaw.to_radians();
-        World::with_car(
+        let mut world = World::with_car(
             physics,
             vehicle_config,
             mode,
@@ -182,7 +186,9 @@ impl World {
             yaw_rad,
             Some(course.bounds),
             seed,
-        )
+        );
+        world.triggers = CourseTriggers::from_course(course, &shapes);
+        world
     }
 
     /// Adds the car to `physics` at `start_m`, facing `yaw_rad`, and wraps it all up.
@@ -215,6 +221,7 @@ impl World {
             steps_since_crash: 0,
             auto_respawn_after_steps: None,
             course_bounds,
+            triggers: CourseTriggers::default(),
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
@@ -275,7 +282,10 @@ impl World {
             .use_air(thrust_n, exhaust_m_s, PHYSICS_DT_S, &self.mode);
         self.tank
             .refill(wheels_down_after, PHYSICS_DT_S, &self.mode);
-        // 11. Events (SPEC §7.9).
+        // 11. Course triggers (SPEC §7.11), before the crash rules so a line crossed on
+        // the step of a crash still counts. Kick impulses act from the next step.
+        self.update_triggers();
+        // 12. Events (SPEC §7.9).
         self.update_events(&motion_before, wheels_down_after);
     }
 
@@ -352,6 +362,76 @@ impl World {
             // The wreck stays frozen, so close its valves rather than show live flames.
             self.reset_controls();
         }
+    }
+
+    /// Acts on the course triggers the car entered this step.
+    fn update_triggers(&mut self) {
+        if self.triggers.is_empty() {
+            return;
+        }
+        let centre_of_mass_m = self.physics.bodies[self.car.chassis].center_of_mass();
+        for action in self.triggers.update(centre_of_mass_m.to_array()) {
+            self.act_on_trigger(action);
+        }
+    }
+
+    /// Moves the respawn point, reports the finish, or applies a kick plate's push.
+    fn act_on_trigger(&mut self, action: TriggerAction) {
+        match action {
+            TriggerAction::Checkpoint {
+                number,
+                respawn_position_m,
+                yaw_rad,
+            } => {
+                self.checkpoint = self.checkpoint_at_line(respawn_position_m, yaw_rad);
+                self.keep_event(SimEvent::CheckpointReached { number });
+            }
+            TriggerAction::Finish => {
+                let time_s = self.time_s() as f32;
+                self.keep_event(SimEvent::Finished { time_s });
+            }
+            TriggerAction::KickPlate {
+                piece,
+                impulse_n_s,
+                angular_n_m_s,
+            } => {
+                let body = &mut self.physics.bodies[self.car.chassis];
+                body.apply_impulse(Vector::from_array(impulse_n_s), true);
+                body.apply_torque_impulse(Vector::from_array(angular_n_m_s), true);
+                self.keep_event(SimEvent::Kicked { piece });
+            }
+        }
+    }
+
+    /// A respawn point on a checkpoint line: upright, facing along the line's heading,
+    /// keeping the car's forward speed so a checkpoint before a jump can still clear it.
+    /// Built from the line, not the car, so a car that tumbles over a line still
+    /// respawns sensibly.
+    fn checkpoint_at_line(&self, respawn_position_m: [f32; 3], yaw_rad: f32) -> Checkpoint {
+        let rotation = Rotation::from_rotation_y(yaw_rad);
+        let heading = rotation * Vector::X;
+        let velocity = self.physics.bodies[self.car.chassis].linvel();
+        let forward_speed_m_s = velocity.dot(heading).max(0.0);
+        Checkpoint {
+            pose: Pose::new(Vector::from_array(respawn_position_m), rotation),
+            linear_velocity_m_s: (heading * forward_speed_m_s).to_array(),
+            angular_velocity_rad_s: [0.0; 3],
+        }
+    }
+
+    /// How many checkpoints the course has (0 on flat ground).
+    pub fn checkpoint_count(&self) -> u32 {
+        self.triggers.checkpoint_count()
+    }
+
+    /// How many checkpoints are behind the car.
+    pub fn checkpoints_reached(&self) -> u32 {
+        self.triggers.checkpoints_reached()
+    }
+
+    /// True once the car has crossed the course's finish line.
+    pub fn is_finished(&self) -> bool {
+        self.triggers.is_finished()
     }
 
     /// Queues one event for `drain_events`.
@@ -603,6 +683,7 @@ impl World {
         // The wheel rays were cast at the old pose; forget them so contact and
         // suspension read "not touching" until the next step casts them again.
         self.car.forget_wheel_rays();
+        self.triggers.forget_car();
         self.events.reset();
         self.steps_since_crash = 0;
         let body = &mut self.physics.bodies[self.car.chassis];

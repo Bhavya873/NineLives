@@ -12,6 +12,7 @@ pub mod contacts;
 pub mod conventions;
 pub mod course;
 pub mod course_build;
+pub mod course_triggers;
 pub mod episode;
 pub mod events;
 pub mod golden_trace;

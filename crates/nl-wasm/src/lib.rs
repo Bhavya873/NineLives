@@ -158,6 +158,12 @@ pub enum EventKind {
     Crash = 5,
     /// The car is back at the last checkpoint (after a crash or Reset).
     Respawn = 6,
+    /// Followed by: the checkpoint's number (0 first).
+    CheckpointReached = 7,
+    /// Followed by: the time since the world started, in s.
+    Finished = 8,
+    /// Followed by: the kick plate's piece index in the course file.
+    Kicked = 9,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -492,6 +498,14 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
         ],
         SimEvent::Crash { cause } => [kind_code(EventKind::Crash), crash_code(cause), 0.0, 0.0],
         SimEvent::Respawn => [kind_code(EventKind::Respawn), 0.0, 0.0, 0.0],
+        SimEvent::CheckpointReached { number } => [
+            kind_code(EventKind::CheckpointReached),
+            number as f32,
+            0.0,
+            0.0,
+        ],
+        SimEvent::Finished { time_s } => [kind_code(EventKind::Finished), time_s, 0.0, 0.0],
+        SimEvent::Kicked { piece } => [kind_code(EventKind::Kicked), piece as f32, 0.0, 0.0],
     }
 }
 
