@@ -2,9 +2,12 @@
 //! wasm `set_controller` and both eval runners go through this one list, so the names
 //! and the cycle order live in one place.
 
-use nl_policy::Policy;
+use nl_policy::{Policy, PolicyError};
 use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::modes::ModeParams;
+use nl_sim::vehicle_config::VehicleConfig;
 
+use crate::config::{ControllersConfig, ControllersConfigError};
 use crate::{Ai, ControlCtx, Controller, Manual, Off, Pd};
 
 /// Every controller there is. A plain enum rather than trait objects (CLAUDE.md: plain
@@ -34,6 +37,57 @@ pub struct ControllerChoices {
     pub pd: Pd,
     /// The AI's policy; "ai" cannot be chosen without one.
     pub policy: Option<Policy>,
+}
+
+impl ControllerChoices {
+    /// The choices for the car `vehicle` describes in `mode`: PD with the gains in
+    /// `controllers_toml`, and the policy in `policy_json` if given. The game and every
+    /// eval runner build their choices this way.
+    pub fn from_configs(
+        vehicle: &VehicleConfig,
+        mode: ModeParams,
+        controllers_toml: &str,
+        policy_json: Option<&str>,
+    ) -> Result<ControllerChoices, BuildControllerError> {
+        let controllers = ControllersConfig::from_toml_str(controllers_toml)?;
+        let policy = match policy_json {
+            Some(text) => Some(Policy::from_json(text)?),
+            None => None,
+        };
+        Ok(ControllerChoices {
+            pd: Pd::for_vehicle(vehicle, mode, &controllers),
+            policy,
+        })
+    }
+}
+
+/// Why `ControllerChoices::from_configs` or `build_controller` failed.
+#[derive(Debug, thiserror::Error)]
+pub enum BuildControllerError {
+    /// controllers.toml is invalid.
+    #[error(transparent)]
+    Controllers(#[from] ControllersConfigError),
+    /// The policy file is invalid or made for another observation layout.
+    #[error(transparent)]
+    Policy(#[from] PolicyError),
+    /// The name is unknown, or "ai" was asked for without a policy.
+    #[error(transparent)]
+    Choice(#[from] ControllerChoiceError),
+}
+
+/// The controller called `name` ("off", "pd", "ai" or "manual") for the car `vehicle`
+/// describes in `mode`. `policy_json` is read only for "ai", so a stale policy file
+/// never stops PD or Off from being built.
+pub fn build_controller(
+    name: &str,
+    vehicle: &VehicleConfig,
+    mode: ModeParams,
+    controllers_toml: &str,
+    policy_json: Option<&str>,
+) -> Result<ControllerKind, BuildControllerError> {
+    let policy_json = if name == "ai" { policy_json } else { None };
+    let choices = ControllerChoices::from_configs(vehicle, mode, controllers_toml, policy_json)?;
+    Ok(ControllerKind::from_name(name, &choices)?)
 }
 
 /// Why a controller could not be chosen.

@@ -22,7 +22,8 @@ mod pd;
 
 pub use ai::Ai;
 pub use controller_kind::{
-    CONTROLLER_NAMES, ControllerChoiceError, ControllerChoices, ControllerKind,
+    BuildControllerError, CONTROLLER_NAMES, ControllerChoiceError, ControllerChoices,
+    ControllerKind, build_controller,
 };
 pub use manual::Manual;
 pub use off::Off;

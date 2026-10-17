@@ -530,6 +530,7 @@ class Game {
 | Shift | Boost |
 | R | reset to the last checkpoint (the `reset` bit in the InputFrame) |
 | C | Chaos (random knock) |
+| X | Drop test: throw the car into a random Stage A start (§9.6), to watch the controller save it |
 | M | toggle Realistic / Arcade |
 | T | cycle controller: Off → Manual in M3; Off → PD → Manual in M4; Off → PD → AI → Manual from M5 (Manual stays reachable for debugging) |
 | G | toggle ghost |
@@ -626,7 +627,7 @@ class Game {
 - [x] Up to 8 evenly spaced checkpoints are exported as policy JSON for the training viewer (§9.12).
 
 **M6 — AI in the browser**
-- [ ] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.
+- [x] `load_policy`, with the hash check, and controller AI work in the game; drop tests in the browser match Python eval qualitatively.
 - [ ] The training viewer (§11.6) replays the exported checkpoints with a crowd of cars on Stage A drops.
 
 **M7 — Hop, course, driver bot, full curriculum**
