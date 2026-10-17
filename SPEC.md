@@ -379,7 +379,9 @@ The PD controller is required before RL. It proves the problem is controllable a
 | 26–30 | terrain_probe | ground height relative to the centre of mass at 2, 4, 6, 8 and 10 m ahead along the horizontal heading (downward world rays), capped |
 | 31–40 | prev_action | the last 10 throttles |
 
-The layout lives in Rust (`ObsSpec`). The schema hash covers names and order. Python, the export and the browser all check the hash *(req)*.
+The layout lives in Rust (`ObsSpec`). The schema hash covers names, order and clamp ranges. Python, the export and the browser all check the hash *(req)*.
+
+Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range listed in `OBS_SPEC` (spin ±30 rad/s, velocity ±60 m/s, thrust scale 0..3, Hop time 0..1 s), so the ranges double as the Gymnasium `Box` bounds. `prev_action` holds the controller throttles in [0, 1], not the policy's [−1, 1] actions. Each terrain probe is a world-down ray from 20 m above the centre of mass at that distance along the nose direction flattened onto the ground (world +X when the nose points straight up or down); a probe that hits nothing reads −20. Suspension compression is (rest length − measured length) / max travel, 0 when the wheel does not touch. The schema hash is FNV-1a 64 over each field's `name low high` line in order, as 16 hex digits (v1: `16d2f5faa7964d05`); it covers the clamp ranges as well as names and order, so a policy never runs on inputs clamped differently from training. Python and the browser read the hash from Rust rather than recomputing it.
 
 ### 9.3 Action
 `Box(low=−1, high=1, shape=(10,))`, mapped in the sim to `u = (a + 1) / 2`.
@@ -393,7 +395,7 @@ The layout lives in Rust (`ObsSpec`). The schema hash covers names and order. Py
 | Air (unlimited) | `−Σ u` | 0.002 |
 | Airborne time | `−1` per step while airborne for longer than 0.5 s | 0.02 |
 | Smoothness | `−‖u_t − u_{t−1}‖²` | 0.002 |
-| Save (event) | `2 + 3·q`, `q = clamp(1 − ‖ω‖/4) · clamp(1 − v_down/6)` | 1 |
+| Save (event) | `2 + 3·q`, `q = clamp(1 − ‖ω‖/4) · clamp(1 − v_down/6)`, with ‖ω‖ and v_down taken just before the touchdown that led to the save | 1 |
 | Crash (event, terminal) | `−10` | 1 |
 
 There is no survival bonus *(req)*. Being alive must not pay, or the policy learns to hover (9.11).
@@ -411,7 +413,7 @@ There is no survival bonus *(req)*. Being alive must not pay, or the policy lear
 | D — Course | procedural course (7.11) | bot | reach the finish with no crash |
 | E — Chaos | any of A, C, D plus 1–3 Chaos impulses at random times | bot or none | as for the base stage |
 
-Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels.
+Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels. The levels live in `[curriculum_a]` of `configs/scenarios.toml`; the last level is the full `[stage_a]`, which eval always uses. A level change applies from each env's next episode.
 
 ### 9.7 Driver bot (training only)
 - Pure-pursuit steering on the course centerline: lookahead `6 + 0.3·v` m; P control on speed toward a target U(10, 30) m/s.

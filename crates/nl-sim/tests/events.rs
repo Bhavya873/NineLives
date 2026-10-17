@@ -6,13 +6,10 @@
 
 mod common;
 
-use common::{LEVEL, RIGHT_SIDE_DOWN, new_world, run_and_collect};
+use common::{LEVEL, RIGHT_SIDE_DOWN, UPSIDE_DOWN, new_world, run_and_collect};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::input::{BUTTON_CHAOS, InputFrame};
 use rapier3d::prelude::Vector;
-
-/// Rotation quaternions (x, y, z, w).
-const UPSIDE_DOWN: [f32; 4] = [1.0, 0.0, 0.0, 0.0];
 
 fn crash_causes(events: &[SimEvent]) -> Vec<CrashCause> {
     let mut causes = Vec::new();

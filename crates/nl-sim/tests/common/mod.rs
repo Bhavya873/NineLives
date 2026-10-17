@@ -7,6 +7,8 @@ use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::events::SimEvent;
 use nl_sim::input::InputFrame;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
+use nl_sim::reward::{DEFAULT_REWARD_TOML, RewardConfig};
+use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
@@ -29,6 +31,16 @@ pub fn vehicle() -> VehicleConfig {
     VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap()
 }
 
+/// The repo's scenarios.
+pub fn scenarios() -> ScenariosConfig {
+    ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML).unwrap()
+}
+
+/// The repo's reward weights.
+pub fn reward() -> RewardConfig {
+    RewardConfig::from_toml_str(DEFAULT_REWARD_TOML).unwrap()
+}
+
 /// A fresh flat-ground world with the repo's car in `mode`.
 pub fn new_world_in(mode: ModeParams) -> World {
     let seed = 0;
@@ -42,6 +54,9 @@ pub fn new_world() -> World {
 
 /// No rotation: the car upright, facing world +X (quaternion x, y, z, w).
 pub const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+
+/// Rolled 180° about the forward axis (+X): upside down, roof towards the ground.
+pub const UPSIDE_DOWN: [f32; 4] = [1.0, 0.0, 0.0, 0.0];
 
 /// Rolled +90° about the forward axis (+X): lying on its right side (+Z down).
 pub const RIGHT_SIDE_DOWN: [f32; 4] = [

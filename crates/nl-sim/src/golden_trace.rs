@@ -8,6 +8,7 @@
 //! `tests/golden/vehicle.toml`. `cargo test` checks it natively; M2 adds the same
 //! check for the wasm build.
 
+use crate::hash::{FNV_OFFSET_BASIS, fnv1a_add_bytes};
 use serde::{Deserialize, Serialize};
 
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ};
@@ -28,10 +29,6 @@ pub const GOLDEN_MODES_TOML: &str = include_str!("../tests/golden/modes.toml");
 
 /// Seed for the world's random generator during the golden trace.
 const GOLDEN_TRACE_SEED: u64 = 0;
-
-/// FNV-1a 64-bit starting value and multiplier (the standard constants).
-const FNV_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// The result of running the golden trace. It is stored as JSON in
 /// `tests/golden/flat_drive.json`.
@@ -154,27 +151,9 @@ fn hash_world_state(mut hash: u64, world: &World) -> u64 {
     hash
 }
 
-/// One round of the FNV-1a hash: for each byte, xor it in, then multiply.
-fn fnv1a_add_bytes(mut hash: u64, bytes: &[u8]) -> u64 {
-    for byte in bytes {
-        hash ^= *byte as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    hash
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn fnv1a_of_the_letter_a_matches_the_published_value() {
-        // Known FNV-1a 64-bit test vector: "a" -> af63dc4c8601ec8c.
-        assert_eq!(
-            fnv1a_add_bytes(FNV_OFFSET_BASIS, b"a"),
-            0xaf63_dc4c_8601_ec8c
-        );
-    }
 
     #[test]
     fn the_script_starts_still_and_then_accelerates() {

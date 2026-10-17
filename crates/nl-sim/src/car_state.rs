@@ -13,6 +13,12 @@ use crate::thrusters::nozzle_force_and_torque_at_full_throttle;
 
 /// Longest downward ray for `CarState::height_m` (SPEC §9.2: capped at 20 m).
 pub const MAX_HEIGHT_M: f32 = 20.0;
+/// Number of terrain probes (SPEC §9.2 rows 26–30).
+pub const TERRAIN_PROBE_COUNT: usize = 5;
+/// How far ahead the terrain probes look, along the car's horizontal heading, in m.
+pub const TERRAIN_PROBE_DISTANCES_M: [f32; TERRAIN_PROBE_COUNT] = [2.0, 4.0, 6.0, 8.0, 10.0];
+/// Terrain probe heights are capped to ±this, in m (the same cap as the height).
+pub const TERRAIN_PROBE_CAP_M: f32 = MAX_HEIGHT_M;
 /// Rows of a wrench: force x, y, z then torque x, y, z (body frame).
 pub const WRENCH_SIZE: usize = 6;
 /// The first `FORCE_ROWS` rows of a wrench are force; the rest are torque.
@@ -58,11 +64,36 @@ impl CarState {
         -self.gravity_dir_body[1]
     }
 
+    /// Size of the angular velocity, in rad/s.
+    pub fn spin_rad_s(&self) -> f32 {
+        let [x, y, z] = self.angular_velocity_body_rad_s;
+        (x * x + y * y + z * z).sqrt()
+    }
+
     /// How fast the car falls (positive downward), in m/s.
     pub fn falling_speed_m_s(&self) -> f32 {
         let [gx, gy, gz] = self.gravity_dir_body;
         let [vx, vy, vz] = self.linear_velocity_body_m_s;
         gx * vx + gy * vy + gz * vz
+    }
+}
+
+/// How the car was moving just before it touched down.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Touchdown {
+    /// Spin size, in rad/s.
+    pub spin_rad_s: f32,
+    /// Fall speed (positive downward), in m/s.
+    pub fall_m_s: f32,
+}
+
+impl Touchdown {
+    /// The motion of `state` (the car on the step before it touched).
+    pub fn of(state: &CarState) -> Touchdown {
+        Touchdown {
+            spin_rad_s: state.spin_rad_s(),
+            fall_m_s: state.falling_speed_m_s(),
+        }
     }
 }
 
@@ -94,13 +125,53 @@ pub struct CarModel {
 
 /// SPEC §9.2: a world-down ray from the centre of mass, ignoring the car itself.
 pub(crate) fn height_above_ground_m(physics: &PhysicsWorld, car: &Car) -> f32 {
-    let body = &physics.bodies[car.chassis];
-    let ray = Ray::new(body.translation(), Vector::new(0.0, -1.0, 0.0));
+    let centre = physics.bodies[car.chassis].translation();
+    distance_down_m(physics, car, centre, MAX_HEIGHT_M).unwrap_or(MAX_HEIGHT_M)
+}
+
+/// How far straight down from `start` the nearest thing other than the car is, looking
+/// at most `max_m`; None if nothing is that close. The height and the terrain probes
+/// both use it, so they always see the world the same way.
+fn distance_down_m(physics: &PhysicsWorld, car: &Car, start: Vector, max_m: f32) -> Option<f32> {
+    let ray = Ray::new(start, Vector::new(0.0, -1.0, 0.0));
     let filter = QueryFilter::default().exclude_rigid_body(car.chassis);
-    match physics.cast_ray(&ray, MAX_HEIGHT_M, true, filter) {
-        Some((_, distance_m)) => distance_m,
-        None => MAX_HEIGHT_M,
+    physics
+        .cast_ray(&ray, max_m, true, filter)
+        .map(|(_, distance_m)| distance_m)
+}
+
+/// SPEC §9.2 rows 26–30: the ground height relative to the centre of mass at each of
+/// `TERRAIN_PROBE_DISTANCES_M` ahead along the car's horizontal heading, capped to
+/// ±`TERRAIN_PROBE_CAP_M`. Each probe is a world-down ray starting the cap above the
+/// centre of mass, so a ramp or wall taller than the car shows up as a positive height.
+/// A probe that finds nothing reads minus the cap (a drop deeper than the cap).
+pub(crate) fn terrain_probe_heights_m(
+    physics: &PhysicsWorld,
+    car: &Car,
+) -> [f32; TERRAIN_PROBE_COUNT] {
+    let cap_m = TERRAIN_PROBE_CAP_M;
+    let body = &physics.bodies[car.chassis];
+    let centre = body.translation();
+    let heading = horizontal_heading(body.rotation());
+    let mut heights_m = [-cap_m; TERRAIN_PROBE_COUNT];
+    for (index, distance_m) in TERRAIN_PROBE_DISTANCES_M.iter().enumerate() {
+        let start = centre + heading * *distance_m + Vector::new(0.0, cap_m, 0.0);
+        if let Some(hit_distance_m) = distance_down_m(physics, car, start, 2.0 * cap_m) {
+            heights_m[index] = cap_m - hit_distance_m;
+        }
     }
+    heights_m
+}
+
+/// The car's nose direction flattened onto the ground plane, as a unit vector. When the
+/// nose points almost straight up or down there is no clear heading, so world +X is used.
+fn horizontal_heading(rotation: &Rotation) -> Vector {
+    let nose = *rotation * Vector::X;
+    let flat = Vector::new(nose.x, 0.0, nose.z);
+    if flat.length() < 1e-3 {
+        return Vector::X;
+    }
+    flat.normalize()
 }
 
 /// Reads the car's mass, inertia and nozzle pushes.

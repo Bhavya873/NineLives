@@ -1,0 +1,36 @@
+# Reward per control step (SPEC §9.4). Every number is a starting value to tune; log
+# each change in docs/EXPERIMENTS.md. There is no survival bonus, on purpose: being
+# alive must not pay, or the policy learns to hover (SPEC §9.11).
+
+[weights]
+# Tilt: weight × (up·world_up − 1), so 0 upright and −2 × weight upside down.
+tilt = 0.05
+# Spin: weight × −min(|ω|², spin_cap).
+spin = 0.002
+# Air with a limited tank: weight × −(air used this step / tank capacity).
+air_limited = 2.0
+# Air when unlimited: weight × −(sum of the 10 throttles).
+air_unlimited = 0.002
+# Airborne: weight × −1 per step while flying (no wheel, body or roof touching) longer
+# than airborne_grace_s.
+airborne = 0.02
+# Smoothness: weight × −|u_t − u_(t−1)|².
+smoothness = 0.002
+# Save event: weight × (save_base + save_quality × q).
+save = 1.0
+# Crash event (ends the episode): weight × −crash_penalty.
+crash = 1.0
+
+[shape]
+# |ω|² above this is not charged more (rad²/s²).
+spin_cap_rad2_s2 = 50.0
+# Airtime shorter than this is free (a hop or a short drop).
+airborne_grace_s = 0.5
+# Save = save_base + save_quality × q, with
+# q = clamp01(1 − |ω| / save_spin_scale) × clamp01(1 − fall speed / save_fall_scale),
+# with |ω| and the fall speed taken just before the wheels touched down.
+save_base = 2.0
+save_quality = 3.0
+save_spin_scale_rad_s = 4.0
+save_fall_scale_m_s = 6.0
+crash_penalty = 10.0

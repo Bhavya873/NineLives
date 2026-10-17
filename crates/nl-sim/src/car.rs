@@ -106,6 +106,13 @@ impl Car {
         }
     }
 
+    /// Throws away what the wheel rays last saw (contact, suspension length, wheel spin),
+    /// for when the car is moved: those rays were cast at the old pose. The next physics
+    /// step casts them again.
+    pub fn forget_wheel_rays(&mut self) {
+        self.wheels = build_wheels(&self.config, self.chassis);
+    }
+
     /// The car's settings.
     pub fn config(&self) -> &VehicleConfig {
         &self.config
@@ -193,6 +200,23 @@ impl Car {
             touching[index] = wheel.raycast_info().is_in_contact;
         }
         touching
+    }
+
+    /// How far each wheel's spring is pushed in, 0 (fully out, or not touching) to 1
+    /// (at the end of its travel), in wheel order FL, FR, RL, RR (SPEC §9.2 rows 14–17).
+    /// Like `wheels_touching`, it comes from the last wheel rays.
+    pub fn suspension_compressions(&self, physics: &PhysicsWorld) -> [f32; WHEEL_COUNT] {
+        let touching = self.wheels_touching(physics);
+        let mut compressions = [0.0; WHEEL_COUNT];
+        for (index, wheel) in self.wheels.wheels().iter().enumerate() {
+            if !touching[index] {
+                continue;
+            }
+            let pushed_in_m = wheel.suspension_rest_length - wheel.raycast_info().suspension_length;
+            let travel_m = wheel.max_suspension_travel;
+            compressions[index] = (pushed_in_m / travel_m).clamp(0.0, 1.0);
+        }
+        compressions
     }
 
     /// True when the car's up axis points at least a little upwards. Below that, the
