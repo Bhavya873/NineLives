@@ -1,15 +1,63 @@
-// Entry point for the web game.
-// The next PR replaces this placeholder with the renderer, input and game loop. For
-// now it loads the wasm module and shows the build name, to prove the build works.
-import initWasm, { Game } from './wasm/nl_wasm.js';
+// Entry point for the web game. It wires the pieces together:
+// keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
+// Each piece lives in its own folder: input/, render/, hud/; the loop is in game-loop.ts.
+import vehicleToml from '../../configs/vehicle.toml?raw';
+
+import { requireElement } from './dom';
+import { startGameLoop } from './game-loop';
+import { findHud, updateHud } from './hud/hud';
+import { readInputFrame, startKeyboard } from './input/keyboard';
+import { followCar, snapCamera } from './render/chase-camera';
+import { FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend';
+import { createGameScene, type PhysicsFrames, placeCar } from './render/scene';
+import initWasm, { Game, HudField } from './wasm/nl_wasm.js';
 
 async function start(): Promise<void> {
   await initWasm();
-
-  const buildInfoElement = document.getElementById('build-info');
-  if (buildInfoElement) {
-    buildInfoElement.textContent = `${Game.build_hash()} · physics ${Math.round(1 / Game.physics_dt_s())} Hz`;
+  if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
+    throw new Error('The wasm build and the renderer disagree on the pose layout');
   }
+  const game = new Game(vehicleToml);
+
+  const frames: PhysicsFrames = {
+    previousChassis: game.chassis_pose(),
+    latestChassis: game.chassis_pose(),
+    previousWheels: game.wheel_poses(),
+    latestWheels: game.wheel_poses(),
+  };
+  const wheelCount = frames.latestWheels.length / FLOATS_PER_POSE;
+  const view = createGameScene(requireElement('game'), wheelCount);
+  const hud = findHud();
+  startKeyboard(window);
+
+  const carPose = newBlendedPose();
+  placeCar(view, frames, 1, carPose);
+  snapCamera(view.camera, carPose);
+  let lastRenderMs = performance.now();
+
+  startGameLoop(Game.physics_dt_s(), {
+    tick: () => {
+      frames.previousChassis = frames.latestChassis;
+      frames.previousWheels = frames.latestWheels;
+      game.tick(readInputFrame());
+      frames.latestChassis = game.chassis_pose();
+      frames.latestWheels = game.wheel_poses();
+    },
+    render: (blend) => {
+      const nowMs = performance.now();
+      const hudValues = game.hud();
+      const airborne = hudValues[HudField.WheelsTouching] === 0;
+
+      placeCar(view, frames, blend, carPose);
+      followCar(view.camera, carPose, (nowMs - lastRenderMs) / 1000, airborne);
+      updateHud(hud, hudValues[HudField.SpeedMS] ?? 0);
+      view.renderer.render(view.scene, view.camera);
+      lastRenderMs = nowMs;
+    },
+  });
+
+  // A small read-only hook so automated tests can see where the car is.
+  Object.assign(window, { ninelivesDebug: { chassisPose: () => Array.from(game.chassis_pose()) } });
 }
 
 start().catch((error: unknown) => {
