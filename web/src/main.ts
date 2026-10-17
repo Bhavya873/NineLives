@@ -8,7 +8,7 @@ async function start(): Promise<void> {
 
   const buildInfoElement = document.getElementById('build-info');
   if (buildInfoElement) {
-    buildInfoElement.textContent = `${Game.build_hash()} · physics ${1 / Game.physics_dt_s()} Hz`;
+    buildInfoElement.textContent = `${Game.build_hash()} · physics ${Math.round(1 / Game.physics_dt_s())} Hz`;
   }
 }
 
