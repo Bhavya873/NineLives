@@ -54,10 +54,7 @@ fn run_with(world: &mut World, controller: &mut dyn Controller, seconds: f32) ->
     let mut events = Vec::new();
     for _ in 0..(seconds * PHYSICS_HZ as f32).round() as usize {
         if world.is_control_step() {
-            let ctx = ControlCtx {
-                input: InputFrame::default(),
-                state: world.car_state(),
-            };
+            let ctx = ControlCtx::for_world(world, InputFrame::default());
             world.set_controller_throttles(controller.act(&ctx));
         }
         world.step(InputFrame::default());

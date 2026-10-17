@@ -328,7 +328,7 @@ pub trait Controller {
 }
 ```
 
-Until `ObsSpec` exists (M5) `act` takes only `ctx`: the driver's `InputFrame` and the car's `CarState` (the physical quantities the observation packs). M5 adds `obs` for the AI. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
+`act` takes only `ctx`: the driver's `InputFrame`, the car's `CarState` (the physical quantities the observation packs) and, from M5, the `observation` built from them (§9.2), which the AI reads. Every runner builds it with `ControlCtx::for_world`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
 2. **Manual** (debug only): keys map to individual nozzles at throttle 1.
@@ -354,7 +354,7 @@ The PD controller is required before RL. It proves the problem is controllable a
 - **Auto-reset:** an env that ends returns its terminal observation in `info["terminal_obs"]` (N × OBS_DIM, masked) and its reset observation in `obs`.
 - `info` arrays: `saves`, `crashes`, `crash_cause`, `air_used_kg`, `stage`, `success`, `episode_len`.
 - Envs are stepped in parallel with `rayon`; each env owns its own world and RNG.
-- Implementation notes (`crates/nl-py`): `config_json` holds the text of `vehicle.toml`, `modes.toml`, `scenarios.toml` and `reward.toml` plus `mode` and `stage` (built by `ninelives.sim_config.load_sim_config`; the Rust module reads no files). Env `i` draws its episode seeds from ChaCha8 stream `i` of `seed`; `reset(seeds)` overrides them once. `info` holds `done` (rows whose episode ended), `terminal_obs`, `episode` (per row: the finished episode as a JSON object string with the eval `EpisodeResult` fields, so `success`, `saves`, `crash_cause`, `air_used_kg` and the touchdown numbers, plus `stage`, `level` and `control_steps`; None elsewhere) and `reward_terms` (N × 7, columns from `reward_term_names()`). The episode row replaces separate `saves`/`crashes`/… arrays so its field names match the results files. `set_stage_and_level(stage, level)` applies from each env's next episode.
+- Implementation notes (`crates/nl-py`): `config_json` holds the text of `vehicle.toml`, `modes.toml`, `scenarios.toml`, `reward.toml` and `controllers.toml` plus `mode` and `stage` (built by `ninelives.sim_config.load_sim_config`; the Rust module reads no files). Env `i` draws its episode seeds from ChaCha8 stream `i` of `seed`; `reset(seeds)` overrides them once. `info` holds `done` (rows whose episode ended), `terminal_obs`, `episode` (per row: the finished episode as a JSON object string with the eval `EpisodeResult` fields, so `success`, `saves`, `crash_cause`, `air_used_kg` and the touchdown numbers, plus `stage`, `level` and `control_steps`; None elsewhere) and `reward_terms` (N × 7, columns from `reward_term_names()`). The episode row replaces separate `saves`/`crashes`/… arrays so its field names match the results files. `set_stage_and_level(stage, level)` applies from each env's next episode.
 
 `ninelives.env`:
 - `NineLivesVecEnv(sb3.common.vec_env.VecEnv)` adapts `BatchedSim` to SB3. It sets `infos[i]["terminal_observation"]` and `infos[i]["TimeLimit.truncated"]`.
@@ -477,7 +477,7 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 ## 10. Evaluation
 
 - The Rust runner (M4, no Python): `cargo run --release -p nl-control --example eval -- --controller {off,pd} --stage {A,B} --mode {realistic,arcade} --episodes 1000 --seed 0`. Both runners step `nl_sim::episode::Episode`, so success, crash and time limit mean the same thing.
-- `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`.
+- `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`. It runs the episodes in Rust (`ninelives_sim.run_eval`, the same `run_episode` and summary as the Rust runner), so the two runners give identical rows; the Rust runner also takes `--controller ai --policy <file>`.
 - A fixed seed list makes runs reproducible. Domain randomization is off by default in eval (`--dr` turns it on).
 - **Outputs:** `results/eval_<controller>_<stage>_<mode>.json` (no date: a rerun overwrites the file and git shows the change; the M5 Python eval adds a `.csv`), with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down).
 - **Metrics:** save rate, crash rate, air used per save (kg), touchdown spin and vertical speed (median and p95), and Gauntlet completion rate with the driver bot.

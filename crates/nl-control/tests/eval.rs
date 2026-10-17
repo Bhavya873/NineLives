@@ -12,7 +12,6 @@ use nl_sim::events::CrashCause;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
-use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
 fn vehicle() -> VehicleConfig {
     VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap()
@@ -29,9 +28,8 @@ fn scenarios() -> ScenariosConfig {
 }
 
 fn pd() -> Pd {
-    let world = World::new_on_flat_ground(&vehicle(), realistic(), DEFAULT_GROUND_FRICTION, 0);
     let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
-    Pd::new(&world.car_model(), &config)
+    Pd::for_vehicle(&vehicle(), realistic(), &config)
 }
 
 fn run(

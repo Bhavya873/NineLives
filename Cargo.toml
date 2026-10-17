@@ -18,6 +18,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 nl-sim = { path = "crates/nl-sim" }
 nl-control = { path = "crates/nl-control" }
+nl-policy = { path = "crates/nl-policy" }
 rapier3d = { version = "0.36.1", features = ["enhanced-determinism", "serde-serialize"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

@@ -24,6 +24,7 @@ def load_sim_config(mode: str = "realistic", stage: str = "A") -> str:
         "modes_toml": (CONFIGS_DIR / "modes.toml").read_text(),
         "scenarios_toml": (CONFIGS_DIR / "scenarios.toml").read_text(),
         "reward_toml": (CONFIGS_DIR / "reward.toml").read_text(),
+        "controllers_toml": (CONFIGS_DIR / "controllers.toml").read_text(),
         "mode": mode,
         "stage": stage,
     }

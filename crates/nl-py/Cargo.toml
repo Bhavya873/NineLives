@@ -12,6 +12,8 @@ name = "ninelives_sim"
 crate-type = ["cdylib"]
 
 [dependencies]
+nl-control.workspace = true
+nl-policy.workspace = true
 nl-sim.workspace = true
 numpy.workspace = true
 pyo3.workspace = true

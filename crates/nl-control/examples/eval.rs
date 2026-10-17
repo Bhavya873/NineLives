@@ -1,19 +1,20 @@
-//! The Rust eval runner's command line (SPEC §10, M4). Runs Off or PD through seeded
-//! episodes of Stage A or B and writes `results/eval_<controller>_<stage>_<mode>.json`.
+//! The Rust eval runner's command line (SPEC §10). Runs Off, PD or the AI policy through
+//! seeded episodes of Stage A or B and writes `results/eval_<controller>_<stage>_<mode>.json`.
 //!
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0
+//! (`--controller ai` reads `--policy`, default models/policy.json)
 
 use std::error::Error;
 
 use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
 use nl_control::eval::{run_episode, summarise};
-use nl_control::{Controller, Off, Pd};
+use nl_control::{ControllerChoices, ControllerKind, Pd};
+use nl_policy::Policy;
 use nl_sim::episode::EpisodeResult;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
-use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
 /// What the command line asked for.
 struct Args {
@@ -22,6 +23,7 @@ struct Args {
     mode: String,
     episodes: u64,
     seed: u64,
+    policy: String,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -34,14 +36,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .by_name(&args.mode)
         .ok_or("--mode must be realistic or arcade")?;
 
-    let mut controller = build_controller(&args.controller, &vehicle, mode)?;
+    let mut controller = build_controller(&args, &vehicle, mode)?;
     let mut results: Vec<EpisodeResult> = Vec::new();
     for episode in 0..args.episodes {
         let seed = args
             .seed
             .checked_add(episode)
             .ok_or("--seed is too large")?;
-        let result = run_episode(&vehicle, mode, &scenarios, stage, controller.as_mut(), seed)?;
+        let result = run_episode(&vehicle, mode, &scenarios, stage, &mut controller, seed)?;
         results.push(result);
     }
     write_report(&args, &results)
@@ -71,21 +73,25 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-/// Off, or PD built for this car.
+/// The controller named by `--controller`: Off, PD built for this car, or the AI with
+/// the policy from `--policy` (read only when the AI is asked for).
 fn build_controller(
-    name: &str,
+    args: &Args,
     vehicle: &VehicleConfig,
     mode: ModeParams,
-) -> Result<Box<dyn Controller>, Box<dyn Error>> {
-    match name {
-        "off" => Ok(Box::new(Off)),
-        "pd" => {
-            let world = World::new_on_flat_ground(vehicle, mode, DEFAULT_GROUND_FRICTION, 0);
-            let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML)?;
-            Ok(Box::new(Pd::new(&world.car_model(), &config)))
-        }
-        _ => Err("--controller must be off or pd".into()),
+) -> Result<ControllerKind, Box<dyn Error>> {
+    let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML)?;
+    let mut policy = None;
+    if args.controller == "ai" {
+        let text = std::fs::read_to_string(&args.policy)
+            .map_err(|error| format!("--policy {}: {error}", args.policy))?;
+        policy = Some(Policy::from_json(&text)?);
     }
+    let choices = ControllerChoices {
+        pd: Pd::for_vehicle(vehicle, mode, &config),
+        policy,
+    };
+    Ok(ControllerKind::from_name(&args.controller, &choices)?)
 }
 
 /// Reads `--name value` pairs; anything missing gets the default shown in the header.
@@ -96,6 +102,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
         mode: "realistic".to_string(),
         episodes: 1000,
         seed: 0,
+        policy: "models/policy.json".to_string(),
     };
     let words: Vec<String> = std::env::args().skip(1).collect();
     for pair in words.chunks(2) {
@@ -108,6 +115,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
             "--mode" => args.mode = value.clone(),
             "--episodes" => args.episodes = whole_number(name, value)?,
             "--seed" => args.seed = whole_number(name, value)?,
+            "--policy" => args.policy = value.clone(),
             other => return Err(format!("unknown option {other}").into()),
         }
     }

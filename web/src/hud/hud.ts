@@ -27,6 +27,7 @@ const MODE_TEXT: Record<number, string> = {
 const CONTROLLER_TEXT: Record<number, string> = {
   [ControllerCode.Off]: 'Controller: Off',
   [ControllerCode.Pd]: 'Controller: PD',
+  [ControllerCode.Ai]: 'Controller: AI',
   [ControllerCode.Manual]: 'Controller: Manual (keys 1–0)',
 };
 
