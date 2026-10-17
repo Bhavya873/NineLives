@@ -436,6 +436,8 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 | Thrust scale | U(1.0, 2.0) |
 | Unlimited air | probability 0.4; otherwise tank U(150, 350) kg |
 
+Implementation notes (`nl-sim/src/randomization.rs`): the ranges live in `[randomization]` of `configs/scenarios.toml`; each episode draws them from its own seed on ChaCha8 stream 2 (noise during the episode uses stream 3), so a seed always gives the same car. The inertia factor is one draw for all three axes; the force factor is one draw per nozzle. The centre-of-mass offset (`chassis.center_of_mass_offset_m`) and wind (`air_drag.wind_m_s`) are vehicle.toml fields that default to 0. `Episode` applies a variation (`EpisodeVariation`, or `EpisodeVariation::none`): the varied car, mode and ground at the start, then latency (the valves get the throttles of `latency` control steps ago) and observation noise (`Episode::observe`). The observation's `prev_action` shows what the controller commanded, the same signal the smoothness cost uses. Training turns randomization on (`randomize: true` in the training YAML); eval leaves it off unless `--dr` is given (results get a `_dr` suffix); the game leaves it off.
+
 ### 9.9 Curriculum callback
 - Track the success rate over the last 500 episodes per stage. When it exceeds 85%, advance that stage's level or unlock the next stage.
 - Once unlocked, sample stages with weights A 0.25, B 0.15, C 0.2, D 0.3, E 0.1, so earlier skills are not forgotten.

@@ -10,6 +10,7 @@ use nl_control::{Controller, Off, Pd};
 use nl_sim::episode::EpisodeResult;
 use nl_sim::events::CrashCause;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
+use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 
@@ -41,8 +42,7 @@ fn run(
     for seed in seeds {
         results.push(
             run_episode(
-                &vehicle(),
-                realistic(),
+                &EpisodeVariation::none(&vehicle(), realistic()),
                 &scenarios(),
                 stage,
                 controller,

@@ -34,6 +34,7 @@ class TrainConfig:
     seed: int
     mode: str
     stage: str
+    randomize: bool
     total_steps: int
     ppo: PpoSettings
     clip_obs: float
@@ -53,6 +54,7 @@ def load_train_config(path: Path) -> TrainConfig:
             seed=int(raw["seed"]),
             mode=str(raw["mode"]),
             stage=str(raw["stage"]),
+            randomize=strict_bool("randomize", raw["randomize"]),
             total_steps=int(raw["total_steps"]),
             ppo=read_ppo(raw["ppo"]),
             clip_obs=float(raw["normalize"]["clip_obs"]),
@@ -66,6 +68,13 @@ def load_train_config(path: Path) -> TrainConfig:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error
     check_ranges(path, config)
     return config
+
+
+def strict_bool(name: str, value: object) -> bool:
+    """`value` if it is true or false; a quoted "false" must not quietly mean True."""
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be true or false, not {value!r}")
+    return value
 
 
 def read_ppo(raw: dict[str, Any]) -> PpoSettings:

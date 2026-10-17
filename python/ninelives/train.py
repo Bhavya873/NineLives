@@ -93,7 +93,9 @@ def train(argv: list[str] | None = None) -> RunState:
     run_dir = args.runs_dir / args.run_id
     if not args.resume and (run_dir / "latest").exists():
         raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
-    env = NineLivesVecEnv(config.ppo.n_envs, config.seed, config.mode, config.stage)
+    env = NineLivesVecEnv(
+        config.ppo.n_envs, config.seed, config.mode, config.stage, config.randomize
+    )
     if args.resume:
         model, state = resume_run(config, env, run_dir)
     else:

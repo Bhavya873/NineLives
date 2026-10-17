@@ -14,13 +14,16 @@ pub const OBS_DIM: usize = 41;
 /// One observation: `OBS_DIM` numbers in `OBS_SPEC` order.
 pub type Observation = [f32; OBS_DIM];
 
+/// First index of `prev_action` (one value per nozzle).
+pub const PREV_ACTION_INDEX: usize = 31;
+
 /// Largest spin the observation reports per axis, in rad/s; faster is clamped.
 const MAX_SPIN_RAD_S: f32 = 30.0;
 /// Largest speed the observation reports per axis, in m/s (the car's cap is 45 m/s).
 const MAX_SPEED_M_S: f32 = 60.0;
-/// Highest `thrust_scale` the observation expects: Arcade's 2.0 times the largest
-/// domain-randomized force factor (1.15, SPEC §9.8), rounded up.
-const MAX_THRUST_SCALE: f32 = 3.0;
+/// Highest mode `thrust_scale` the observation can show (Arcade and the randomization
+/// range go up to 2.0); scenarios.toml refuses a randomization range above it.
+pub const MAX_THRUST_SCALE: f32 = 3.0;
 /// Longest Hop push the observation expects, in s (Realistic's is 0.4 s).
 const MAX_HOP_TIME_S: f32 = 1.0;
 
@@ -158,8 +161,8 @@ impl ObsWriter {
 
     /// Writes one value into the next field.
     fn put(&mut self, value: f32) {
-        if let Some(range) = OBS_SPEC.get(self.next_index) {
-            self.observation[self.next_index] = value.clamp(range.low, range.high);
+        if self.next_index < OBS_DIM {
+            self.observation[self.next_index] = clamp_to_range(self.next_index, value);
         }
         self.next_index += 1;
     }
@@ -170,6 +173,12 @@ impl ObsWriter {
             self.put(*value);
         }
     }
+}
+
+/// `value` clamped to the range of the field at `index` (which must be below OBS_DIM).
+pub(crate) fn clamp_to_range(index: usize, value: f32) -> f32 {
+    let field = &OBS_SPEC[index];
+    value.clamp(field.low, field.high)
 }
 
 /// 1.0 for true, 0.0 for false.

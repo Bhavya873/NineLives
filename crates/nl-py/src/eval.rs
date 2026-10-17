@@ -12,6 +12,7 @@ use nl_policy::Policy;
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::episode::EpisodeResult;
 use nl_sim::obs::{OBS_DIM, Observation};
+use nl_sim::randomization::EpisodeVariation;
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -86,10 +87,15 @@ fn eval_one(
     seed: u64,
 ) -> Result<EpisodeResult, String> {
     let training = &config.training;
+    // SPEC §10: eval leaves randomization off unless the config asks (`eval --dr`).
+    let randomization = training
+        .randomize
+        .then_some(&training.scenarios.randomization);
+    let variation =
+        EpisodeVariation::for_seed(randomization, &training.vehicle, training.mode, seed);
     let mut controller = prototype.clone();
     run_episode(
-        &training.vehicle,
-        training.mode,
+        &variation,
         &training.scenarios,
         config.stage,
         &mut controller,
