@@ -413,7 +413,7 @@ There is no survival bonus *(req)*. Being alive must not pay, or the policy lear
 | D — Course | procedural course (7.11) | bot | reach the finish with no crash |
 | E — Chaos | any of A, C, D plus 1–3 Chaos impulses at random times | bot or none | as for the base stage |
 
-Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels.
+Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels. The levels live in `[curriculum_a]` of `configs/scenarios.toml`; the last level is the full `[stage_a]`, which eval always uses. A level change applies from each env's next episode.
 
 ### 9.7 Driver bot (training only)
 - Pure-pursuit steering on the course centerline: lookahead `6 + 0.3·v` m; P control on speed toward a target U(10, 30) m/s.

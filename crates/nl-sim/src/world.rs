@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
 use crate::car_state::{
-    CarModel, CarState, TERRAIN_PROBE_COUNT, height_above_ground_m, read_car_model,
+    CarModel, CarState, TERRAIN_PROBE_COUNT, Touchdown, height_above_ground_m, read_car_model,
     terrain_probe_heights_m,
 };
 use crate::chaos::apply_chaos_knock;
@@ -68,7 +68,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 5;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 6;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -281,6 +281,10 @@ impl World {
             wheels_down,
             tilt_rad: self.tilt_rad(),
             spin_rad_s: body.angvel().length(),
+            motion_before_step: Touchdown {
+                spin_rad_s: motion_before.angular_velocity_rad_s.length(),
+                fall_m_s: -motion_before.linear_velocity_m_s.y,
+            },
             air_used_kg: self.tank.air_used_kg(),
             height_m: body.translation().y,
             impact_speed_m_s: contacts.impact_speed_m_s,

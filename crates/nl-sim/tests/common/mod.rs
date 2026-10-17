@@ -7,6 +7,8 @@ use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::events::SimEvent;
 use nl_sim::input::InputFrame;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
+use nl_sim::reward::{DEFAULT_REWARD_TOML, RewardConfig};
+use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
@@ -27,6 +29,16 @@ pub fn arcade() -> ModeParams {
 /// The repo's car.
 pub fn vehicle() -> VehicleConfig {
     VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap()
+}
+
+/// The repo's scenarios.
+pub fn scenarios() -> ScenariosConfig {
+    ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML).unwrap()
+}
+
+/// The repo's reward weights.
+pub fn reward() -> RewardConfig {
+    RewardConfig::from_toml_str(DEFAULT_REWARD_TOML).unwrap()
 }
 
 /// A fresh flat-ground world with the repo's car in `mode`.

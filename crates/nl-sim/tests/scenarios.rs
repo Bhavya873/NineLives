@@ -6,12 +6,8 @@
 
 mod common;
 
-use common::new_world;
+use common::{new_world, scenarios};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
-
-fn scenarios() -> ScenariosConfig {
-    ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML).unwrap()
-}
 
 #[test]
 fn the_same_seed_gives_the_same_start_and_another_seed_does_not() {

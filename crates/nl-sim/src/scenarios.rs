@@ -80,6 +80,18 @@ pub struct TipOverConfig {
     pub max_speed_m_s: f32,
 }
 
+/// How Stage A gets harder during training (`[curriculum_a]`, SPEC §9.6).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurriculumAConfig {
+    /// Number of difficulty levels; level `levels - 1` is the full `[stage_a]`.
+    pub levels: u32,
+    /// Largest tilt at level 0, in degrees.
+    pub first_max_tilt_deg: f32,
+    /// Largest spin at level 0, in rad/s.
+    pub first_max_spin_rad_s: f32,
+}
+
 /// Everything in scenarios.toml.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -90,6 +102,8 @@ pub struct ScenariosConfig {
     pub stage_a: DropConfig,
     /// The `[stage_b]` section.
     pub stage_b: TipOverConfig,
+    /// The `[curriculum_a]` section.
+    pub curriculum_a: CurriculumAConfig,
 }
 
 /// Why scenarios.toml could not be used.
@@ -111,6 +125,13 @@ pub enum ScenariosConfigError {
 
     #[error("scenarios.toml: `episode.time_limit_s` must be above zero, but it is {0}")]
     NoTimeLimit(f32),
+
+    #[error("scenarios.toml: `{field}` must be {rule}, but it is {value}")]
+    BadCurriculum {
+        field: &'static str,
+        rule: &'static str,
+        value: f32,
+    },
 }
 
 impl ScenariosConfig {
@@ -119,7 +140,74 @@ impl ScenariosConfig {
         let config: ScenariosConfig = toml::from_str(text)?;
         config.check_ranges()?;
         config.check_numbers()?;
+        config.check_curriculum()?;
         Ok(config)
+    }
+
+    /// These scenarios with `stage` at curriculum `level` (0 = easiest). Only Stage A
+    /// has levels so far; any other stage gets the config unchanged.
+    pub fn at_level(&self, stage: Stage, level: u32) -> ScenariosConfig {
+        match stage {
+            Stage::A => ScenariosConfig {
+                stage_a: self.stage_a_at_level(level),
+                ..*self
+            },
+            Stage::B => *self,
+        }
+    }
+
+    /// Stage A at curriculum `level` (0 = easiest): the largest tilt and spin move
+    /// evenly from the level-0 values to `[stage_a]`'s, which the last level (and any
+    /// level above it) uses. Everything else is `[stage_a]` as written (SPEC §9.6).
+    pub fn stage_a_at_level(&self, level: u32) -> DropConfig {
+        let curriculum = &self.curriculum_a;
+        // With a single level (or none) there is no curriculum: always the full stage.
+        let progress = if curriculum.levels <= 1 {
+            1.0
+        } else {
+            (level as f32 / (curriculum.levels - 1) as f32).min(1.0)
+        };
+        let full = self.stage_a;
+        DropConfig {
+            max_tilt_deg: lerp(curriculum.first_max_tilt_deg, full.max_tilt_deg, progress),
+            max_spin_rad_s: lerp(
+                curriculum.first_max_spin_rad_s,
+                full.max_spin_rad_s,
+                progress,
+            ),
+            ..full
+        }
+    }
+
+    /// The curriculum must have a level and start no harder than it ends.
+    fn check_curriculum(&self) -> Result<(), ScenariosConfigError> {
+        let curriculum = &self.curriculum_a;
+        if curriculum.levels == 0 {
+            return Err(ScenariosConfigError::BadCurriculum {
+                field: "curriculum_a.levels",
+                rule: "at least 1",
+                value: 0.0,
+            });
+        }
+        let firsts = [
+            (
+                "curriculum_a.first_max_tilt_deg",
+                curriculum.first_max_tilt_deg,
+                self.stage_a.max_tilt_deg,
+            ),
+            (
+                "curriculum_a.first_max_spin_rad_s",
+                curriculum.first_max_spin_rad_s,
+                self.stage_a.max_spin_rad_s,
+            ),
+        ];
+        for (field, value, last) in firsts {
+            if !(0.0..=last).contains(&value) {
+                let rule = "between 0 and the matching stage_a maximum";
+                return Err(ScenariosConfigError::BadCurriculum { field, rule, value });
+            }
+        }
+        Ok(())
     }
 
     /// Every [low, high] pair must be finite and in order; only the vertical speed may
@@ -254,6 +342,11 @@ fn sample_tip_over(config: &TipOverConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
         speed_m_s * direction_rad.sin(),
     );
     checkpoint(Vector::ZERO, rotation, velocity, Vector::ZERO)
+}
+
+/// The value `progress` (0..1) of the way from `first` to `last`.
+fn lerp(first: f32, last: f32, progress: f32) -> f32 {
+    first + (last - first) * progress
 }
 
 /// An even draw from `[low, high]`.

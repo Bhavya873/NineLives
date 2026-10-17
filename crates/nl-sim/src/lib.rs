@@ -22,5 +22,6 @@ pub mod reward;
 pub mod scenarios;
 pub mod tank;
 pub mod thrusters;
+pub mod training;
 pub mod vehicle_config;
 pub mod world;
