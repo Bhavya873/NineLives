@@ -9,8 +9,9 @@ use serde::{Deserialize, Serialize};
 use crate::conventions::WHEEL_COUNT;
 use crate::vehicle_config::EventConfig;
 
-/// Why the car crashed (SPEC §7.9).
+/// Why the car crashed (SPEC §7.9). Results files spell it in snake_case ("hard_impact").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CrashCause {
     /// The body or roof hit something too fast.
     HardImpact,

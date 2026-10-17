@@ -17,6 +17,9 @@ kv = 2.0
 # car is lying on the ground: roll torque only, to flip back onto its wheels.
 on_ground_height_m = 1.2
 lying_max_fall_speed_m_s = 1.0
+# Lying on the ground, the roll torque is multiplied by this (tipping over the side edge
+# needs far more torque than turning in the air).
+ground_roll_gain = 5.0
 
 [allocation]
 # Solve min |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1 by projected gradient (SPEC §8).

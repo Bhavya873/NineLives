@@ -1,0 +1,111 @@
+//! The Rust eval runner (SPEC §10, M4): run a controller through many seeded episodes of
+//! one stage and summarise how it did. No Python needed; the M5 Python eval steps the
+//! same `nl_sim::episode::Episode`, so the numbers can be compared.
+
+use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::episode::{Episode, EpisodeResult, EpisodeStatus};
+use nl_sim::input::InputFrame;
+use nl_sim::modes::ModeParams;
+use nl_sim::scenarios::{ScenariosConfig, Stage};
+use nl_sim::vehicle_config::VehicleConfig;
+use nl_sim::world::PlaceCarError;
+use serde::Serialize;
+
+use crate::{ControlCtx, Controller};
+
+/// The whole run, summarised (SPEC §10's metrics). Rates are fractions, 0..1.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EvalSummary {
+    /// How many episodes ran.
+    pub episodes: usize,
+    /// Episodes that succeeded (four wheels down for the hold time, no crash).
+    pub success_rate: f32,
+    /// Episodes with at least one save.
+    pub save_rate: f32,
+    /// Episodes that ended in a crash.
+    pub crash_rate: f32,
+    /// Air used during saved upsets, per save (SPEC §10), in kg; None if nothing was saved.
+    pub air_per_save_kg: Option<f32>,
+    /// Median spin size at first touchdown, in rad/s.
+    pub touchdown_spin_median_rad_s: Option<f32>,
+    /// 95th-percentile spin size at first touchdown, in rad/s.
+    pub touchdown_spin_p95_rad_s: Option<f32>,
+    /// Median fall speed at first touchdown, in m/s.
+    pub touchdown_fall_median_m_s: Option<f32>,
+    /// 95th-percentile fall speed at first touchdown, in m/s.
+    pub touchdown_fall_p95_m_s: Option<f32>,
+}
+
+/// Runs one episode of `stage` from `seed` with `controller`, which acts at 60 Hz.
+pub fn run_episode(
+    vehicle: &VehicleConfig,
+    mode: ModeParams,
+    scenarios: &ScenariosConfig,
+    stage: Stage,
+    controller: &mut dyn Controller,
+    seed: u64,
+) -> Result<EpisodeResult, PlaceCarError> {
+    let mut episode = Episode::start(vehicle, mode, scenarios, stage, seed)?;
+    controller.reset(seed);
+    let mut throttles = [0.0; NOZZLE_COUNT];
+    while episode.status() == EpisodeStatus::Running {
+        if episode.world().is_control_step() {
+            let ctx = ControlCtx {
+                input: InputFrame::default(),
+                state: episode.car_state(),
+            };
+            throttles = controller.act(&ctx);
+        }
+        episode.step(throttles);
+    }
+    Ok(episode.result())
+}
+
+/// Summarises many episodes.
+pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
+    let mut spins = Vec::new();
+    let mut falls = Vec::new();
+    let mut successes = 0;
+    let mut saved = 0;
+    let mut crashed = 0;
+    let mut total_saves = 0;
+    let mut total_air_kg = 0.0;
+    for result in results {
+        if result.success {
+            successes += 1;
+        }
+        if result.saves > 0 {
+            saved += 1;
+        }
+        if result.crash_cause.is_some() {
+            crashed += 1;
+        }
+        spins.extend(result.touchdown_spin_rad_s);
+        falls.extend(result.touchdown_fall_m_s);
+        total_saves += result.saves;
+        total_air_kg += result.air_used_in_saves_kg;
+    }
+    let episodes = results.len();
+    let rate = |count: usize| count as f32 / episodes.max(1) as f32;
+    EvalSummary {
+        episodes,
+        success_rate: rate(successes),
+        save_rate: rate(saved),
+        crash_rate: rate(crashed),
+        air_per_save_kg: (total_saves > 0).then(|| total_air_kg / total_saves as f32),
+        touchdown_spin_median_rad_s: percentile(&mut spins, 0.5),
+        touchdown_spin_p95_rad_s: percentile(&mut spins, 0.95),
+        touchdown_fall_median_m_s: percentile(&mut falls, 0.5),
+        touchdown_fall_p95_m_s: percentile(&mut falls, 0.95),
+    }
+}
+
+/// The value below which `fraction` of `values` lie (nearest rank); None if empty.
+fn percentile(values: &mut [f32], fraction: f32) -> Option<f32> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f32::total_cmp);
+    let rank = ((values.len() - 1) as f32 * fraction).round() as usize;
+    values.get(rank).copied()
+}

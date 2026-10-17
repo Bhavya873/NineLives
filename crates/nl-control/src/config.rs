@@ -31,6 +31,9 @@ pub struct PdConfig {
     pub on_ground_height_m: f32,
     /// See `on_ground_height_m`.
     pub lying_max_fall_speed_m_s: f32,
+    /// Lying on the ground, the roll torque is multiplied by this: tipping the car over
+    /// its side edge needs much more than turning it in the air.
+    pub ground_roll_gain: f32,
 }
 
 /// Everything in controllers.toml.
@@ -75,6 +78,7 @@ impl ControllersConfig {
             ("pd.kv", pd.kv),
             ("pd.on_ground_height_m", pd.on_ground_height_m),
             ("pd.lying_max_fall_speed_m_s", pd.lying_max_fall_speed_m_s),
+            ("pd.ground_roll_gain", pd.ground_roll_gain),
             ("allocation.force_weight", allocation.force_weight),
             ("allocation.torque_weight", allocation.torque_weight),
             ("allocation.regularisation", allocation.regularisation),

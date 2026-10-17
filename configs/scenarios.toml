@@ -1,0 +1,30 @@
+# Training and eval scenarios (SPEC §9.5, §9.6). Ranges are [low, high], drawn evenly.
+# Numbers marked (start) in the SPEC: tune freely and log the change in EXPERIMENTS.md.
+
+[episode]
+# An episode ends early on a crash, or on success: all four wheels down for this long,
+# unbroken, with no crash.
+success_hold_s = 1.0
+# Otherwise it is cut off after this long (Stage A and B).
+time_limit_s = 8.0
+# Starts are lifted so the body's lowest corner is at least this high (Stage B: exactly).
+spawn_clearance_m = 0.05
+
+[stage_a]
+# Drop: the car starts in the air in a random attitude and spin.
+# Centre-of-mass height; raised further if a tilted corner would be below the clearance.
+height_m = [1.5, 8.0]
+# Tilt from upright about a random horizontal axis, up to this; the curriculum raises it to 180.
+max_tilt_deg = 180.0
+# Spin size, about a random axis, up to this; the curriculum raises it to 6.
+max_spin_rad_s = 6.0
+horizontal_speed_m_s = [0.0, 15.0]
+# Positive is up.
+vertical_speed_m_s = [-5.0, 3.0]
+
+[stage_b]
+# Side tip-over: the car starts just above the ground, lying on one side.
+roll_deg = [60.0, 110.0]
+# Plus a small random pitch and yaw, up to this either way.
+max_pitch_yaw_deg = 10.0
+max_speed_m_s = 2.0
