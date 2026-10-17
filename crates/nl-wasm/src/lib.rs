@@ -220,6 +220,7 @@ impl Game {
             self.buttons_since_control_step = 0;
             let throttles = self.controller.act(&ControlCtx {
                 input: controller_input,
+                state: self.world.car_state(),
             });
             self.world.set_controller_throttles(throttles);
         }

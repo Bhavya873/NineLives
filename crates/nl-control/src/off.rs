@@ -29,6 +29,7 @@ mod tests {
                 buttons: u16::MAX,
                 ..InputFrame::default()
             },
+            ..ControlCtx::default()
         };
 
         let throttles = Off.act(&ctx);

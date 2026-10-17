@@ -8,7 +8,9 @@ rust-version.workspace = true
 
 [dependencies]
 nl-sim.workspace = true
+serde.workspace = true
 thiserror.workspace = true
+toml.workspace = true
 
 [lints]
 workspace = true

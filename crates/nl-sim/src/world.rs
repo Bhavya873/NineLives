@@ -14,6 +14,7 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
+use crate::car_state::{CarModel, CarState, read_car_model, read_car_state};
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
 use crate::contacts::{MotionBeforeStep, read_body_contacts};
@@ -383,6 +384,22 @@ impl World {
     pub fn wheels_touching_count(&self) -> usize {
         let touching = self.wheels_touching();
         touching.iter().filter(|wheel_down| **wheel_down).count()
+    }
+
+    /// What a controller sees of the car now (SPEC §8, §9.2).
+    pub fn car_state(&self) -> CarState {
+        let thrust_scale = self.mode.thrust_scale * self.tank.thrust_gate(&self.mode);
+        read_car_state(
+            &self.physics,
+            &self.car,
+            self.wheels_touching_count(),
+            thrust_scale,
+        )
+    }
+
+    /// The car's mass, inertia and what each nozzle can push (for PD's allocation).
+    pub fn car_model(&self) -> CarModel {
+        read_car_model(&self.physics, &self.car)
     }
 
     /// True when the next `step` starts a control step: controllers run at 60 Hz, once
