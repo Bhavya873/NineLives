@@ -16,7 +16,7 @@ web/src/wasm/
 web/test-results/
 web/playwright-report/
 
-# Training checkpoints live on ckpt/<run-id> branches, never on main
+# Training checkpoints stay on the training machine, never in git (ADR-003)
 runs/
 
 # Editors and OS
