@@ -80,7 +80,7 @@ fn a_settled_car_has_all_wheels_down_and_arcade_doubles_thrust() {
     assert_eq!(state.wheels_down(), 4);
     assert!(state.on_wheels());
     assert_eq!(state.mode_thrust_scale, 2.0);
-    assert_eq!(state.thrust_multiplier(), 2.0);
+    assert_eq!(state.tank_gate, 1.0);
 }
 
 #[test]

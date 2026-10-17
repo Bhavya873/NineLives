@@ -13,9 +13,10 @@ brake_height_m = 3.0
 brake_speed_m_s = 4.0
 target_descent_m_s = 1.5
 kv = 2.0
-# Below this height and not upright, the car is lying on the ground: roll torque only,
-# to flip back onto its wheels.
+# Below this height, not upright and falling slower than lying_max_fall_speed_m_s, the
+# car is lying on the ground: roll torque only, to flip back onto its wheels.
 on_ground_height_m = 1.2
+lying_max_fall_speed_m_s = 1.0
 
 [allocation]
 # Solve min |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1 by projected gradient (SPEC §8).

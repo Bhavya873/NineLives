@@ -64,11 +64,6 @@ impl CarState {
         let [vx, vy, vz] = self.linear_velocity_body_m_s;
         gx * vx + gy * vy + gz * vz
     }
-
-    /// What every nozzle's push is multiplied by right now: mode scale times tank gate.
-    pub fn thrust_multiplier(&self) -> f32 {
-        self.mode_thrust_scale * self.tank_gate
-    }
 }
 
 impl Default for CarState {

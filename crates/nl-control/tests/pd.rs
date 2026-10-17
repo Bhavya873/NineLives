@@ -138,6 +138,89 @@ fn a_car_lying_on_its_right_side_gets_a_negative_roll_torque_to_come_back() {
 }
 
 #[test]
+fn a_nose_up_car_gets_a_negative_pitch_torque_to_bring_the_nose_down() {
+    let pd = Pd::new(&car_model(), &controllers());
+    // Pitched 30° nose up (about +Z): gravity points backward and down in the body.
+    let state = CarState {
+        gravity_dir_body: [-0.5, -0.866, 0.0],
+        wheel_contact: [false; 4],
+        height_m: 6.0,
+        ..CarState::default()
+    };
+
+    let wrench = pd.wanted_wrench(&state);
+
+    assert!(wrench[5] < 0.0, "pitch torque {wrench:?}");
+    assert_eq!(wrench[3], 0.0, "no roll error, so no roll torque");
+}
+
+#[test]
+fn an_exactly_upside_down_car_still_gets_a_roll_torque() {
+    let pd = Pd::new(&car_model(), &controllers());
+    let state = CarState {
+        gravity_dir_body: [0.0, 1.0, 0.0],
+        wheel_contact: [false; 4],
+        height_m: 6.0,
+        ..CarState::default()
+    };
+
+    let wrench = pd.wanted_wrench(&state);
+
+    assert!(wrench[3] != 0.0, "roll torque {wrench:?}");
+    assert_eq!(wrench[4], 0.0);
+    assert_eq!(wrench[5], 0.0);
+}
+
+#[test]
+fn the_thruster_matrix_has_rank_6_so_every_axis_is_controllable() {
+    // SPEC §12: B (6×10) has rank 6. Gaussian elimination on B with each row scaled to
+    // its strongest entry, counting pivots that are clearly not zero.
+    let model = car_model();
+    let mut rows: Vec<Vec<f32>> = Vec::new();
+    for row in 0..6 {
+        let values: Vec<f32> = model
+            .nozzle_wrenches
+            .iter()
+            .map(|wrench| wrench[row])
+            .collect();
+        let strongest = values
+            .iter()
+            .fold(0.0_f32, |max, value| max.max(value.abs()));
+        rows.push(values.iter().map(|value| value / strongest).collect());
+    }
+
+    assert_eq!(matrix_rank(rows), 6);
+}
+
+/// Rank by Gaussian elimination with partial pivoting.
+fn matrix_rank(mut rows: Vec<Vec<f32>>) -> usize {
+    let columns = rows[0].len();
+    let mut rank = 0;
+    for column in 0..columns {
+        let Some(pivot) = (rank..rows.len())
+            .max_by(|a, b| rows[*a][column].abs().total_cmp(&rows[*b][column].abs()))
+        else {
+            break;
+        };
+        if rows[pivot][column].abs() < 1e-4 {
+            continue;
+        }
+        rows.swap(rank, pivot);
+        let pivot_row = rows[rank].clone();
+        for (other, row) in rows.iter_mut().enumerate() {
+            if other != rank {
+                let factor = row[column] / pivot_row[column];
+                for (value, pivot_value) in row.iter_mut().zip(&pivot_row).skip(column) {
+                    *value -= factor * pivot_value;
+                }
+            }
+        }
+        rank += 1;
+    }
+    rank
+}
+
+#[test]
 fn pd_damps_a_spin_with_an_opposing_torque() {
     let pd = Pd::new(&car_model(), &controllers());
     let state = CarState {

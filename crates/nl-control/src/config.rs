@@ -26,8 +26,11 @@ pub struct PdConfig {
     pub target_descent_m_s: f32,
     /// Braking gain on the fall-speed error (1/s).
     pub kv: f32,
-    /// Below this height and not upright, the car is lying on the ground.
+    /// Below this height, not upright and slower than `lying_max_fall_speed_m_s`, the
+    /// car is lying on the ground.
     pub on_ground_height_m: f32,
+    /// See `on_ground_height_m`.
+    pub lying_max_fall_speed_m_s: f32,
 }
 
 /// Everything in controllers.toml.
@@ -71,6 +74,7 @@ impl ControllersConfig {
             ("pd.target_descent_m_s", pd.target_descent_m_s),
             ("pd.kv", pd.kv),
             ("pd.on_ground_height_m", pd.on_ground_height_m),
+            ("pd.lying_max_fall_speed_m_s", pd.lying_max_fall_speed_m_s),
             ("allocation.force_weight", allocation.force_weight),
             ("allocation.torque_weight", allocation.torque_weight),
             ("allocation.regularisation", allocation.regularisation),
