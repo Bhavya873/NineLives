@@ -1,29 +1,37 @@
-// The 3D scene: sky, light, ground, and the car (SPEC §11.4).
-// It owns three.js objects only; it never reads input or talks to the physics.
+// The 3D scene: a lab-arena look (SPEC §11.4, the owner's 2026-10-17 choice): a dark
+// gradient backdrop, a blue-grey checkered floor and neutral light, like a physics
+// simulator's test arena, plus the car. Three.js objects only; no input or physics.
 import {
   CanvasTexture,
   Color,
   DirectionalLight,
   Fog,
-  GridHelper,
   Group,
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
+  NearestFilter,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  RepeatWrapping,
   Scene,
   SRGBColorSpace,
   WebGLRenderer,
 } from 'three';
 
+import { BACKDROP_HORIZON, BACKDROP_RADIUS_M, buildBackdropDome } from './backdrop.ts';
 import { buildCarBody, buildWheel } from './car-mesh.ts';
 import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
-const SKY_TOP = '#5b8fd9';
-const SKY_HORIZON = '#cfe3f5';
+/** The floor starts fading into the backdrop here and is pure backdrop colour by the end. */
+const FOG_START_M = 120;
+const FOG_END_M = 700;
+/** Side of one floor square; big enough to read speed from at a glance. */
+const CHECKER_SIZE_M = 2;
+const CHECKER_LIGHT = '#3b5470';
+const CHECKER_DARK = '#22344a';
 
 /** Everything the renderer draws, kept together so the game can move it each frame. */
 export interface GameScene {
@@ -31,6 +39,8 @@ export interface GameScene {
   scene: Scene;
   camera: PerspectiveCamera;
   sun: DirectionalLight;
+  /** The sky dome; it moves with the car. */
+  backdrop: Mesh;
   carBody: Group;
   wheels: Group[];
 }
@@ -71,6 +81,7 @@ export function placeCar(
 
   view.sun.position.copy(carPose.position).add(SUN_OFFSET_M);
   view.sun.target.position.copy(carPose.position);
+  view.backdrop.position.copy(carPose.position);
 }
 
 /** Shows or hides the car and its wheels, e.g. hidden while the wreck explodes. */
@@ -90,11 +101,15 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
   container.appendChild(renderer.domElement);
 
   const scene = new Scene();
-  scene.background = buildSkyGradient();
-  scene.fog = new Fog(new Color(SKY_HORIZON), 150, 900);
+  scene.background = new Color(BACKDROP_HORIZON);
+  // The floor fades into the dome's horizon colour, so the arena has no visible edge.
+  scene.fog = new Fog(new Color(BACKDROP_HORIZON), FOG_START_M, FOG_END_M);
+  const backdrop = buildBackdropDome();
+  scene.add(backdrop);
 
-  const camera = new PerspectiveCamera(60, 1, 0.1, 2000);
-  scene.add(new HemisphereLight(0xdfefff, 0x4a5a3a, 1.2));
+  const camera = new PerspectiveCamera(60, 1, 0.1, BACKDROP_RADIUS_M + 100);
+  // Soft fill light, kept low so the sun's shadow still reads on the dark floor.
+  scene.add(new HemisphereLight(0xffffff, 0x2a3440, 0.7));
   const sun = buildSun();
   scene.add(sun, sun.target);
   scene.add(buildGround());
@@ -103,7 +118,7 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
   const wheels = Array.from({ length: wheelCount }, () => buildWheel());
   scene.add(carBody, ...wheels);
 
-  const gameScene = { renderer, scene, camera, sun, carBody, wheels };
+  const gameScene = { renderer, scene, camera, sun, backdrop, carBody, wheels };
   resizeToWindow(gameScene);
   window.addEventListener('resize', () => resizeToWindow(gameScene));
   return gameScene;
@@ -116,18 +131,18 @@ function resizeToWindow({ renderer, camera }: GameScene): void {
   camera.updateProjectionMatrix();
 }
 
-/** A vertical sky gradient drawn once into a tiny canvas. */
-function buildSkyGradient(): CanvasTexture {
+/** A texture drawn once by `draw` into a small canvas of `width` × `height` pixels. */
+function buildCanvasTexture(
+  width: number,
+  height: number,
+  draw: (context: CanvasRenderingContext2D) => void,
+): CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 256;
+  canvas.width = width;
+  canvas.height = height;
   const context = canvas.getContext('2d');
   if (context) {
-    const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, SKY_TOP);
-    gradient.addColorStop(1, SKY_HORIZON);
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    draw(context);
   }
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
@@ -136,7 +151,7 @@ function buildSkyGradient(): CanvasTexture {
 
 /** One directional light that casts soft shadows near the car. */
 function buildSun(): DirectionalLight {
-  const sun = new DirectionalLight(0xffffff, 2.2);
+  const sun = new DirectionalLight(0xffffff, 2.8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   const reach = 30;
@@ -148,19 +163,32 @@ function buildSun(): DirectionalLight {
   return sun;
 }
 
-/** Flat ground at y = 0 with a grid, so speed is easy to see. */
-function buildGround(): Group {
-  const ground = new Group();
-  const plane = new Mesh(
+/** Flat ground at y = 0, checkered so speed and position are easy to see. */
+function buildGround(): Mesh {
+  const ground = new Mesh(
     new PlaneGeometry(GROUND_SIZE_M, GROUND_SIZE_M),
-    new MeshStandardMaterial({ color: 0x7c9a5c, flatShading: true }),
+    new MeshStandardMaterial({ map: buildCheckerTexture(), roughness: 0.9 }),
   );
-  plane.rotation.x = -Math.PI / 2;
-  plane.receiveShadow = true;
-  ground.add(plane);
-
-  const grid = new GridHelper(GROUND_SIZE_M, GROUND_SIZE_M / 10, 0x4f6b38, 0x5a7841);
-  grid.position.y = 0.01;
-  ground.add(grid);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   return ground;
+}
+
+/** A 2×2 checker drawn once into a tiny canvas and tiled across the whole floor. */
+function buildCheckerTexture(): CanvasTexture {
+  const texture = buildCanvasTexture(2, 2, (context) => {
+    context.fillStyle = CHECKER_LIGHT;
+    context.fillRect(0, 0, 2, 2);
+    context.fillStyle = CHECKER_DARK;
+    context.fillRect(0, 0, 1, 1);
+    context.fillRect(1, 1, 1, 1);
+  });
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  // Sharp square edges up close; one texture tile is two squares.
+  texture.magFilter = NearestFilter;
+  const tiles = GROUND_SIZE_M / (2 * CHECKER_SIZE_M);
+  texture.repeat.set(tiles, tiles);
+  texture.anisotropy = 8;
+  return texture;
 }

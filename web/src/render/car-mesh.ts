@@ -45,7 +45,8 @@ const CABIN_PROFILE_M: [number, number][] = [
 ];
 
 const paint = new MeshStandardMaterial({ color: 0xe0542f, flatShading: true, roughness: 0.45 });
-const glass = new MeshStandardMaterial({ color: 0x1d2a3a, flatShading: true, roughness: 0.15 });
+// Light glass and hubs so the car still reads against the dark arena floor when it flips.
+const glass = new MeshStandardMaterial({ color: 0x8fb0c8, flatShading: true, roughness: 0.15 });
 const tyre = new MeshStandardMaterial({ color: 0x1b1b1b, flatShading: true, roughness: 0.9 });
 const hub = new MeshStandardMaterial({ color: 0xc8c8c8, flatShading: true, metalness: 0.6 });
 

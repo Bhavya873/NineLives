@@ -529,7 +529,7 @@ class Game {
 | Esc | pause / menu |
 
 ### 11.4 Visuals
-- Low-poly generic sports car (no brand shapes), flat-shaded course, a clear sky gradient, soft shadows from one directional light.
+- Low-poly generic sports car (no brand shapes) in a **lab arena**: a blue-grey checkered floor that fades into a dark sky dome (its horizon is the fog colour, so there is no edge), neutral light, soft shadows from one directional light, and plain-coloured, flat-shaded course pieces (ramps, blocks), like a physics simulator's test arena.
 - **Nozzles:** small cones on the body at the 7.4 positions. Each flame is an additive-blended cone mesh whose length and opacity follow its effective throttle, plus a light puff of particles. Colour is a cold blue-white (cold gas), never fire.
 - **Camera:** smoothed chase camera that stays world-up when the car flips, so the player sees the flip. A slight pull-back while airborne.
 - Respect `prefers-reduced-motion`: no camera shake, fewer particles.
