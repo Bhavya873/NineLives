@@ -37,16 +37,21 @@ suspension_stiffness_per_kg = 50.0
 suspension_compression_damping_per_kg = 3.5
 suspension_relaxation_damping_per_kg = 5.0
 max_suspension_force_n = 40000.0
-# Tyre grip: how much of the suspension force can become a forward or sideways push.
-friction_slip = 2.5
+# Tyre grip: sideways grip is about friction_slip × g (1.2 g here), and Rapier allows
+# twice that for driving and braking forces.
+friction_slip = 1.2
 side_friction_stiffness = 1.0
 
 [drive]
 # All-wheel drive.
 max_engine_force_per_wheel_n = 6000.0
 max_speed_m_s = 45.0
+max_reverse_speed_m_s = 8.0
 # Brake impulse per wheel per physics step, in N·s.
-brake_impulse_per_wheel_n_s = 300.0
+# 40 N·s × 120 steps/s × 4 wheels ≈ 19 kN, about 1.1 g of braking for 1800 kg.
+brake_impulse_per_wheel_n_s = 40.0
+# Below this forward speed, pulling back on the throttle reverses instead of braking.
+reverse_below_speed_m_s = 0.5
 
 [steering]
 # Front wheels only. The limit shrinks linearly from the low-speed value to the

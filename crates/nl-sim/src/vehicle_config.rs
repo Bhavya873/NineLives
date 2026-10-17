@@ -5,12 +5,12 @@
 //! that every number makes physical sense, so a typo fails loudly at load time
 //! instead of producing a strange simulation later.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::conventions::WHEEL_COUNT;
 
 /// Everything `configs/vehicle.toml` describes.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VehicleConfig {
     pub chassis: ChassisConfig,
@@ -21,7 +21,7 @@ pub struct VehicleConfig {
 }
 
 /// The car body. See `[chassis]` in `configs/vehicle.toml`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChassisConfig {
     /// Mass without air in the tank.
@@ -35,7 +35,7 @@ pub struct ChassisConfig {
 }
 
 /// Air resistance on the body. See `[air_drag]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AirDragConfig {
     pub air_density_kg_m3: f32,
@@ -44,7 +44,7 @@ pub struct AirDragConfig {
 }
 
 /// The four raycast wheels and their suspension. See `[wheels]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WheelConfig {
     /// Suspension attachment points in the body frame, in wheel order FL, FR, RL, RR.
@@ -70,18 +70,22 @@ pub struct WheelConfig {
 }
 
 /// Engine and brakes. See `[drive]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DriveConfig {
     pub max_engine_force_per_wheel_n: f32,
-    /// The engine stops pushing at this speed.
+    /// The engine stops pushing forward at this speed.
     pub max_speed_m_s: f32,
+    /// The engine stops pushing backward at this speed.
+    pub max_reverse_speed_m_s: f32,
     /// Brake impulse per wheel per physics step.
     pub brake_impulse_per_wheel_n_s: f32,
+    /// Below this forward speed, a negative throttle reverses instead of braking.
+    pub reverse_below_speed_m_s: f32,
 }
 
 /// Front-wheel steering limits. See `[steering]`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SteeringConfig {
     /// Steering limit when standing still.
@@ -182,8 +186,13 @@ impl DriveConfig {
         let engine_force_n = self.max_engine_force_per_wheel_n;
         must_not_be_negative("drive.max_engine_force_per_wheel_n", engine_force_n)?;
         must_be_positive("drive.max_speed_m_s", self.max_speed_m_s)?;
+        must_be_positive("drive.max_reverse_speed_m_s", self.max_reverse_speed_m_s)?;
         let brake_n_s = self.brake_impulse_per_wheel_n_s;
-        must_not_be_negative("drive.brake_impulse_per_wheel_n_s", brake_n_s)
+        must_not_be_negative("drive.brake_impulse_per_wheel_n_s", brake_n_s)?;
+        must_not_be_negative(
+            "drive.reverse_below_speed_m_s",
+            self.reverse_below_speed_m_s,
+        )
     }
 }
 
