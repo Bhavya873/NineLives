@@ -57,6 +57,15 @@ export interface HudValues {
   wheelsTouching: number;
   /** True while the tank is so low that thrust fades (the sim decides). */
   outOfAir: boolean;
+  /** All the air used since the run started, in kg. */
+  airUsedKg: number;
+  /** Course checkpoints behind the car and on the course (both 0 on flat ground). */
+  checkpointsReached: number;
+  checkpointCount: number;
+  /** True once the car crossed the course's finish line. */
+  finished: boolean;
+  /** Course time at the finish, in s. */
+  finishTimeS: number;
 }
 
 /** The HUD's elements, looked up once at start-up. */
@@ -84,7 +93,8 @@ export function updateHud(hud: Hud, values: HudValues): void {
   const mode = MODE_TEXT[values.mode] ?? '';
   const controller = CONTROLLER_TEXT[values.controller] ?? '';
   const crash = values.crashed ? 'Respawning…' : '';
-  setText(hud.status, [mode, controller, hop, crash].filter(Boolean).join(' · '));
+  const course = courseText(values);
+  setText(hud.status, [mode, controller, course, hop, crash].filter(Boolean).join(' · '));
   setText(hud.stats, statsText(values));
 }
 
@@ -101,8 +111,19 @@ export function statsText(values: HudValues): string {
   return lines.join('\n');
 }
 
+/** The course section (SPEC §11.5), e.g. "Checkpoint 2/6"; empty on flat ground. */
+export function courseText(values: HudValues): string {
+  if (values.finished) {
+    return 'Finished';
+  }
+  if (values.checkpointCount === 0) {
+    return '';
+  }
+  return `Checkpoint ${values.checkpointsReached}/${values.checkpointCount}`;
+}
+
 /** Minutes and seconds with tenths, e.g. 1:05.3. */
-function formatTime(timeS: number): string {
+export function formatTime(timeS: number): string {
   const minutes = Math.floor(timeS / 60);
   const seconds = (timeS - minutes * 60).toFixed(1).padStart(4, '0');
   return `${minutes}:${seconds}`;

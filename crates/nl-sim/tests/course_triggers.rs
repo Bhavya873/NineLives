@@ -107,10 +107,7 @@ fn crossing_a_checkpoint_moves_the_respawn_point_there() {
         (19.0..22.0).contains(&respawn_x),
         "respawned at x = {respawn_x}"
     );
-    assert!(
-        world.linear_velocity_m_s()[0] > 5.0,
-        "keeps its speed along the course"
-    );
+    assert_eq!(world.linear_velocity_m_s(), [0.0; 3], "respawns at rest");
 }
 
 #[test]
@@ -231,7 +228,7 @@ fn a_kick_plate_angular_impulse_about_plus_x_spins_the_car_about_plus_x() {
 }
 
 #[test]
-fn a_checkpoint_turned_90_degrees_faces_minus_z_and_respawns_the_car_that_way() {
+fn a_checkpoint_turned_90_degrees_respawns_the_car_facing_minus_z() {
     // Yaw +90° turns the line's run direction from +X to −Z (left turn, SPEC §4).
     let mut world = course_world(r#"{"type": "checkpoint", "pos": [40, 0, -20], "yaw": 90}"#);
     let facing_minus_z = [
@@ -256,9 +253,13 @@ fn a_checkpoint_turned_90_degrees_faces_minus_z_and_respawns_the_car_that_way() 
         events.contains(&SimEvent::CheckpointReached { number: 0 }),
         "{events:?}"
     );
-    let velocity = world.linear_velocity_m_s();
+    // The respawned car faces the line's heading, −Z: its rotation is +90° about +Y.
+    let [qx, qy, qz, qw] = world.chassis_pose().rotation_xyzw;
+    let expected = std::f32::consts::FRAC_1_SQRT_2;
     assert!(
-        velocity[2] < -5.0 && velocity[0].abs() < 0.5,
-        "respawn velocity {velocity:?}"
+        qx.abs() < 1e-3 && qz.abs() < 1e-3,
+        "rotation {:?}",
+        [qx, qy, qz, qw]
     );
+    assert!((qy - expected).abs() < 1e-3 && (qw - expected).abs() < 1e-3);
 }

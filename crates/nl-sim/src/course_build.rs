@@ -5,12 +5,13 @@
 //! car hits (SPEC §7.11).
 
 use rapier3d::prelude::*;
+use serde::Serialize;
 
 use crate::course::{CourseSpec, PieceSpec, Side};
 use crate::world::Pose;
 
 /// Course width across the lane (local Z) where a piece does not give one, in m.
-const LANE_WIDTH_M: f32 = 12.0;
+const LANE_WIDTH_M: f32 = 16.0;
 /// Floor thickness below y = 0, in m.
 const FLOOR_THICKNESS_M: f32 = 1.0;
 /// SPEC §7.11 car row: each parked car is 4.5 m long, 1.9 m wide, 0.6 m apart.
@@ -18,13 +19,19 @@ const PARKED_CAR_LENGTH_M: f32 = 4.5;
 const PARKED_CAR_WIDTH_M: f32 = 1.9;
 const PARKED_CAR_GAP_M: f32 = 0.6;
 /// Bumps: one every this many metres, each this long (half up, half down).
-const BUMP_SPACING_M: f32 = 3.0;
-const BUMP_LENGTH_M: f32 = 1.2;
+const BUMP_SPACING_M: f32 = 6.0;
+const BUMP_LENGTH_M: f32 = 5.0;
+/// Ramp, kicker and bump hulls reach this far below the floor (hidden by it), so even a
+/// nearly flat segment is a solid Rapier can always build a hull from, in m.
+const HULL_BASE_DEPTH_M: f32 = 0.2;
+/// Ramps are built from this many convex segments of rising slope.
+const RAMP_SEGMENTS: usize = 6;
 /// Walls are this thick along the course.
 const WALL_THICKNESS_M: f32 = 1.0;
-/// A wall's jump ramp: this long and steep, ending this far before the wall.
+/// A wall's jump ramp: this long and steep, ending this far before the wall. At 30°
+/// the curved ramp's lip is about 3.2 m high, above a 3 m wall.
 const WALL_RAMP_LENGTH_M: f32 = 10.0;
-const WALL_RAMP_ANGLE_DEG: f32 = 20.0;
+const WALL_RAMP_ANGLE_DEG: f32 = 30.0;
 const WALL_RAMP_GAP_M: f32 = 2.0;
 /// Halfpipe walls: flat floor this wide between the curves, wall panels this thick, and
 /// this many flat panels per quarter circle.
@@ -36,10 +43,14 @@ const HALFPIPE_PANELS: usize = 8;
 const LANDING_PAD_LENGTH_M: f32 = 20.0;
 const KICK_PLATE_LENGTH_M: f32 = 4.0;
 const LINE_LENGTH_M: f32 = 0.5;
+/// Checkpoint and finish lines are wider than the lane, so a car can't drive around
+/// them on a track up to this wide, in m.
+const LINE_WIDTH_M: f32 = 20.0;
 const MARKING_THICKNESS_M: f32 = 0.02;
 
 /// What a shape is for, so the renderer can colour it (SPEC §11.4: plain colours).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Surface {
     /// The ground at y = 0.
     Floor,
@@ -57,8 +68,10 @@ pub enum Surface {
     Finish,
 }
 
-/// A shape's geometry in its own frame.
-#[derive(Debug, Clone, PartialEq)]
+/// A shape's geometry in its own frame. As JSON: `{"box": {"half_extents_m": …}}` or
+/// `{"hull": {"points_m": …}}`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ShapeGeometry {
     /// A box with these half-sizes, in m.
     Box {
@@ -73,7 +86,7 @@ pub enum ShapeGeometry {
 }
 
 /// One shape of the course, placed in the world.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CourseShape {
     /// The piece it belongs to (index into `CourseSpec::pieces`); None for the floor.
     pub piece: Option<usize>,
@@ -164,9 +177,7 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             length,
             width,
             angle_deg,
-        } => {
-            vec![at(*pos, *yaw).wedge(Surface::Ramp, 0.0, 0.0, *length, *width, *angle_deg)]
-        }
+        } => at(*pos, *yaw).ramp(Surface::Ramp, 0.0, 0.0, *length, *width, *angle_deg),
         PieceSpec::Kicker {
             pos,
             yaw,
@@ -175,12 +186,12 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             angle_deg,
             side,
         } => {
-            // Left is −Z (SPEC §4): the kicker sits beside the lane's centre line.
-            let offset_z = match side {
-                Side::Left => -width / 2.0,
-                Side::Right => width / 2.0,
+            // Left is −Z (SPEC §4): the kicker rises away from the lane's centre line.
+            let outer_z = match side {
+                Side::Left => -width,
+                Side::Right => *width,
             };
-            vec![at(*pos, *yaw).wedge(Surface::Ramp, 0.0, offset_z, *length, *width, *angle_deg)]
+            at(*pos, *yaw).kicker(*length, outer_z, *angle_deg)
         }
         PieceSpec::Gap { .. } => Vec::new(),
         PieceSpec::CarRow {
@@ -203,7 +214,7 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             height,
         } => bumps(at(*pos, *yaw), *count, *height),
         PieceSpec::KickPlate { pos, yaw, .. } => {
-            vec![at(*pos, *yaw).marking(Surface::KickPlate, KICK_PLATE_LENGTH_M)]
+            vec![at(*pos, *yaw).marking(Surface::KickPlate, KICK_PLATE_LENGTH_M, LANE_WIDTH_M)]
         }
         PieceSpec::Wall {
             pos,
@@ -212,13 +223,13 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             with_ramp,
         } => wall(at(*pos, *yaw), *height, *with_ramp),
         PieceSpec::LandingPad { pos, yaw } => {
-            vec![at(*pos, *yaw).marking(Surface::LandingPad, LANDING_PAD_LENGTH_M)]
+            vec![at(*pos, *yaw).marking(Surface::LandingPad, LANDING_PAD_LENGTH_M, LANE_WIDTH_M)]
         }
         PieceSpec::Checkpoint { pos, yaw } => {
-            vec![at(*pos, *yaw).marking(Surface::Checkpoint, LINE_LENGTH_M)]
+            vec![at(*pos, *yaw).marking(Surface::Checkpoint, LINE_LENGTH_M, LINE_WIDTH_M)]
         }
         PieceSpec::Finish { pos, yaw } => {
-            vec![at(*pos, *yaw).marking(Surface::Finish, LINE_LENGTH_M)]
+            vec![at(*pos, *yaw).marking(Surface::Finish, LINE_LENGTH_M, LINE_WIDTH_M)]
         }
     }
 }
@@ -240,21 +251,25 @@ fn car_row(frame: PieceFrame, count: u32, height: f32) -> Vec<CourseShape> {
     shapes
 }
 
-/// Low triangular bumps across the lane, one every `BUMP_SPACING_M`.
+/// Gentle humps across the lane, one every `BUMP_SPACING_M`. Each is
+/// `BUMP_LENGTH_M` long, so its faces are shallow enough that the wheels lift the car
+/// before the chassis nose (0.14 m above the ground) reaches the hump.
 fn bumps(frame: PieceFrame, count: u32, height: f32) -> Vec<CourseShape> {
-    (0..count)
-        .map(|bump| {
-            let start_x = bump as f32 * BUMP_SPACING_M;
-            let half_width = LANE_WIDTH_M / 2.0;
-            let mut points = Vec::new();
-            for z in [-half_width, half_width] {
-                points.push([start_x, 0.0, z]);
-                points.push([start_x + BUMP_LENGTH_M / 2.0, height, z]);
-                points.push([start_x + BUMP_LENGTH_M, 0.0, z]);
-            }
-            frame.hull(Surface::Obstacle, points)
-        })
-        .collect()
+    let half_width = LANE_WIDTH_M / 2.0;
+    let mut shapes = Vec::new();
+    for bump in 0..count {
+        let start_x = bump as f32 * BUMP_SPACING_M;
+        let mut points = Vec::new();
+        for z in [-half_width, half_width] {
+            points.push([start_x, -HULL_BASE_DEPTH_M, z]);
+            points.push([start_x, 0.0, z]);
+            points.push([start_x + BUMP_LENGTH_M / 2.0, height, z]);
+            points.push([start_x + BUMP_LENGTH_M, 0.0, z]);
+            points.push([start_x + BUMP_LENGTH_M, -HULL_BASE_DEPTH_M, z]);
+        }
+        shapes.push(frame.hull(Surface::Obstacle, points));
+    }
+    shapes
 }
 
 /// A wall across the lane, with an optional jump ramp ending just before it.
@@ -263,7 +278,7 @@ fn wall(frame: PieceFrame, height: f32, with_ramp: bool) -> Vec<CourseShape> {
     let mut shapes = vec![frame.local_box(Surface::Obstacle, [half[0], half[1], 0.0], half, 0.0)];
     if with_ramp {
         let start_x = -WALL_RAMP_GAP_M - WALL_RAMP_LENGTH_M;
-        shapes.push(frame.wedge(
+        shapes.extend(frame.ramp(
             Surface::Ramp,
             start_x,
             0.0,
@@ -310,6 +325,33 @@ fn halfpipe(frame: PieceFrame, radius: f32, length: f32) -> Vec<CourseShape> {
     shapes
 }
 
+/// The four corners of one side (at `z`) of a ramp segment: its top edge from
+/// (`x0`, `h0`) to (`x1`, `h1`) and its base `HULL_BASE_DEPTH_M` below the floor.
+fn segment_side(x0: f32, h0: f32, x1: f32, h1: f32, z: f32) -> [[f32; 3]; 4] {
+    [
+        [x0, -HULL_BASE_DEPTH_M, z],
+        [x0, h0, z],
+        [x1, -HULL_BASE_DEPTH_M, z],
+        [x1, h1, z],
+    ]
+}
+
+/// A ramp's side profile as (distance along, height) points, in m: `RAMP_SEGMENTS`
+/// straight segments, each steeper than the last by the same step, ending at
+/// `lip_angle_deg`. So a fast car meets no sharp kink (a straight wedge's foot crashed
+/// the car above about 25 m/s), and the ramp ends lower than `length · tan(angle)`.
+fn ramp_profile(length: f32, lip_angle_deg: f32) -> Vec<(f32, f32)> {
+    let segment_length_m = length / RAMP_SEGMENTS as f32;
+    let mut profile = vec![(0.0, 0.0)];
+    let mut height_m = 0.0;
+    for segment in 1..=RAMP_SEGMENTS {
+        let slope_deg = lip_angle_deg * segment as f32 / RAMP_SEGMENTS as f32;
+        height_m += segment_length_m * libm::tanf(slope_deg.to_radians());
+        profile.push((segment as f32 * segment_length_m, height_m));
+    }
+    profile
+}
+
 /// A point on a halfpipe wall's quarter circle, `angle_rad` up from its lowest point,
 /// as (z, y) in m; the circle's centre is `radius` above (`centre_z`, 0).
 fn arc_point(centre_z: f32, side: f32, radius: f32, angle_rad: f32) -> (f32, f32) {
@@ -334,30 +376,63 @@ impl PieceFrame {
         }
     }
 
-    /// A wedge starting `start_x` along the piece, centred `offset_z` across it, rising
-    /// along +X to `length · tan(angle)`, with a sheer back.
-    fn wedge(
+    /// A ramp starting `start_x` along the piece, centred `offset_z` across it, `length`
+    /// long and `width` wide, curving up along +X from flat to `lip_angle_deg` at its
+    /// sheer back (see `ramp_profile`): one convex piece per profile segment.
+    fn ramp(
         &self,
         surface: Surface,
         start_x: f32,
         offset_z: f32,
         length: f32,
         width: f32,
-        angle_deg: f32,
-    ) -> CourseShape {
-        let top_m = length * libm::tanf(angle_deg.to_radians());
-        let mut points = Vec::new();
-        for z in [offset_z - width / 2.0, offset_z + width / 2.0] {
-            points.push([start_x, 0.0, z]);
-            points.push([start_x + length, 0.0, z]);
-            points.push([start_x + length, top_m, z]);
-        }
-        self.hull(surface, points)
+        lip_angle_deg: f32,
+    ) -> Vec<CourseShape> {
+        let near_z = offset_z - width / 2.0;
+        let far_z = offset_z + width / 2.0;
+        self.profile_hulls(surface, length, lip_angle_deg, |x0, h0, x1, h1| {
+            let mut points = Vec::new();
+            for z in [near_z, far_z] {
+                points.extend(segment_side(start_x + x0, h0, start_x + x1, h1, z));
+            }
+            points
+        })
     }
 
-    /// A flat non-solid marking across the lane, `length` long from the piece start.
-    fn marking(&self, surface: Surface, length: f32) -> CourseShape {
-        let half = [length / 2.0, MARKING_THICKNESS_M / 2.0, LANE_WIDTH_M / 2.0];
+    /// A kicker: a ramp beside the lane's centre line (z = 0) out to `outer_z`, whose
+    /// top also slopes across, from 0 at the centre line to the full ramp height at
+    /// `outer_z`. So the wheels on that side ride up and the car rolls, with no wall
+    /// under the car for the chassis to jam against.
+    fn kicker(&self, length: f32, outer_z: f32, lip_angle_deg: f32) -> Vec<CourseShape> {
+        self.profile_hulls(Surface::Ramp, length, lip_angle_deg, |x0, h0, x1, h1| {
+            let mut points = segment_side(x0, 0.0, x1, 0.0, 0.0).to_vec();
+            points.extend(segment_side(x0, h0, x1, h1, outer_z));
+            points
+        })
+    }
+
+    /// One convex hull per segment of a ramp profile; `segment_points` gives a
+    /// segment's corners from its start (x0, h0) and end (x1, h1), in m.
+    fn profile_hulls(
+        &self,
+        surface: Surface,
+        length: f32,
+        lip_angle_deg: f32,
+        segment_points: impl Fn(f32, f32, f32, f32) -> Vec<[f32; 3]>,
+    ) -> Vec<CourseShape> {
+        let profile = ramp_profile(length, lip_angle_deg);
+        let mut shapes = Vec::new();
+        for pair in profile.windows(2) {
+            let [(x0, h0), (x1, h1)] = [pair[0], pair[1]];
+            shapes.push(self.hull(surface, segment_points(x0, h0, x1, h1)));
+        }
+        shapes
+    }
+
+    /// A flat non-solid marking centred on the lane, `length` long from the piece start
+    /// and `width` across, in m.
+    fn marking(&self, surface: Surface, length: f32, width: f32) -> CourseShape {
+        let half = [length / 2.0, MARKING_THICKNESS_M / 2.0, width / 2.0];
         let mut shape = self.local_box(surface, [half[0], half[1], 0.0], half, 0.0);
         shape.solid = false;
         shape

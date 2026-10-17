@@ -49,6 +49,15 @@ fn world_points(shape: &CourseShape) -> Vec<[f32; 3]> {
     points
 }
 
+/// Every hull corner of these shapes, in world coordinates.
+fn all_world_points(shapes: &[CourseShape]) -> Vec<[f32; 3]> {
+    let mut points = Vec::new();
+    for shape in shapes {
+        points.extend(world_points(shape));
+    }
+    points
+}
+
 /// The point with the largest y.
 fn highest_point(points: &[[f32; 3]]) -> [f32; 3] {
     let mut highest = points[0];
@@ -176,20 +185,52 @@ fn a_gap_cuts_the_floor_in_two() {
 }
 
 #[test]
-fn a_ramp_rises_along_its_heading_to_length_times_tan_angle() {
+fn a_ramp_curves_up_along_its_heading_to_its_lip_angle() {
     let shapes = piece_shapes(
-        r#"{"type": "ramp", "pos": [40, 0, 0], "length": 10, "width": 4, "angle_deg": 45}"#,
+        r#"{"type": "ramp", "pos": [40, 0, 0], "length": 12, "width": 4, "angle_deg": 45}"#,
     );
 
-    let points = world_points(&shapes[0]);
+    let points = all_world_points(&shapes);
+    let last_segment = world_points(&shapes[shapes.len() - 1]);
 
     let top = highest_point(&points);
-    assert!((top[1] - 10.0).abs() < 1e-3, "top height {}", top[1]);
     assert!(
-        (top[0] - 50.0).abs() < 1e-3,
+        (top[0] - 52.0).abs() < 1e-3,
         "the high end should be at the far end, x = {}",
         top[0]
     );
+    // Curved, so lower than a straight 45° wedge (12 m) but well off the ground.
+    assert!(top[1] > 4.0 && top[1] < 12.0, "top height {}", top[1]);
+    // The lip (the last 2 m segment) leaves at the full 45°: it rises as much as it runs.
+    let lip_start = highest_point(
+        &last_segment
+            .iter()
+            .copied()
+            .filter(|p| p[0] < 51.0)
+            .collect::<Vec<_>>(),
+    );
+    let lip_rise_m = top[1] - lip_start[1];
+    assert!(
+        (lip_rise_m - 2.0).abs() < 1e-3,
+        "lip rises {lip_rise_m} m over 2 m"
+    );
+}
+
+#[test]
+fn a_fast_car_drives_up_a_steep_ramp_without_crashing_at_its_foot() {
+    // A straight 22° wedge crashed the car at its foot above about 25 m/s.
+    let mut world = course_world(&course_with(
+        r#"{"type": "ramp", "pos": [30, 0, 0], "length": 12, "width": 8, "angle_deg": 22}"#,
+    ));
+    world
+        .place_car([20.0, 0.7, 0.0], LEVEL, [45.0, 0.0, 0.0], [0.0; 3])
+        .unwrap();
+
+    let events = run_and_collect(&mut world, 0.6);
+
+    assert!(!world.is_crashed(), "events: {events:?}");
+    let x_m = world.chassis_pose().position_m[0];
+    assert!(x_m > 40.0, "car only reached x = {x_m}");
 }
 
 #[test]
@@ -199,7 +240,7 @@ fn a_ramp_turned_90_degrees_runs_towards_minus_z() {
         r#"{"type": "ramp", "pos": [40, 0, 0], "yaw": 90, "length": 10, "width": 4, "angle_deg": 30}"#,
     );
 
-    let points = world_points(&shapes[0]);
+    let points = all_world_points(&shapes);
 
     let top = highest_point(&points);
     assert!(
@@ -212,12 +253,36 @@ fn a_ramp_turned_90_degrees_runs_towards_minus_z() {
 }
 
 #[test]
+fn a_kicker_rolls_a_fast_car_without_crashing_it() {
+    // A kicker whose inner side was a wall under the car jammed or crashed the chassis.
+    let mut world = course_world(&course_with(
+        r#"{"type": "kicker", "pos": [30, 0, 0], "length": 8, "width": 2, "angle_deg": 15, "side": "left"}"#,
+    ));
+    world
+        .place_car([20.0, 0.7, 0.0], LEVEL, [30.0, 0.0, 0.0], [0.0; 3])
+        .unwrap();
+
+    let mut peak_tilt_rad: f32 = 0.0;
+    for _ in 0..60 {
+        run_and_collect(&mut world, 1.0 / 60.0);
+        peak_tilt_rad = peak_tilt_rad.max(world.tilt_rad());
+    }
+
+    assert!(!world.is_crashed());
+    assert!(
+        peak_tilt_rad.to_degrees() > 20.0,
+        "peak tilt {}°",
+        peak_tilt_rad.to_degrees()
+    );
+}
+
+#[test]
 fn a_left_kicker_sits_on_the_left_minus_z_side() {
     let shapes = piece_shapes(
         r#"{"type": "kicker", "pos": [40, 0, 0], "length": 6, "width": 3, "angle_deg": 20, "side": "left"}"#,
     );
 
-    for point in world_points(&shapes[0]) {
+    for point in all_world_points(&shapes) {
         assert!(
             point[2] <= 1e-3,
             "kicker point {point:?} is right of the centre line"
@@ -247,11 +312,9 @@ fn markings_are_not_solid_and_obstacles_are() {
         piece_shapes(r#"{"type": "wall", "pos": [40, 0, 0], "height": 3, "with_ramp": true}"#);
 
     assert!(!pad[0].solid);
-    assert_eq!(
-        wall.len(),
-        2,
-        "a wall with a ramp is the wall plus its ramp"
-    );
+    // A wall with a ramp is one wall box plus the ramp's segments.
+    assert_eq!(count_surface(&wall, Surface::Obstacle), 1);
+    assert!(count_surface(&wall, Surface::Ramp) > 1);
     assert!(wall.iter().all(|shape| shape.solid));
 }
 

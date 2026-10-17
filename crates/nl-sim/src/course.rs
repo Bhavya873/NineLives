@@ -78,7 +78,8 @@ pub enum Side {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PieceSpec {
-    /// A wedge rising along +X to `length · tan(angle)`, with a sheer drop at its end.
+    /// A ramp curving up along +X from flat to `angle_deg` at its lip, with a sheer drop
+    /// at its end.
     Ramp {
         /// Start point on the ground, in m.
         pos: [f32; 3],

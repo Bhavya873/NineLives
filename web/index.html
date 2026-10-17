@@ -125,6 +125,29 @@
         text-align: right;
         white-space: pre-line;
       }
+      #results {
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 260px;
+        padding: 18px 26px;
+        font-size: 20px;
+        text-align: center;
+        background: rgb(0 0 0 / 70%);
+      }
+      #results h2 {
+        margin: 0 0 10px;
+        font-size: 30px;
+      }
+      #results-lines {
+        white-space: pre-line;
+        line-height: 1.5;
+      }
+      #results p {
+        margin: 12px 0 0;
+        font-size: 14px;
+        opacity: 0.8;
+      }
       #hud-toast {
         left: 50%;
         top: 35%;
@@ -148,10 +171,16 @@
     <div id="hud-nozzles" class="hud"></div>
     <div id="hud-stats" class="hud"></div>
     <div id="hud-toast" class="hud" hidden></div>
+    <div id="results" class="hud" hidden>
+      <h2>Finished</h2>
+      <div id="results-lines"></div>
+      <p>Enter race again · F free drive</p>
+    </div>
     <button id="chaos-button" type="button" title="A random knock (C)">Chaos</button>
     <div id="hud-help" class="hud">
       W/S or ↑/↓ drive · A/D or ←/→ steer · Space hop · Shift boost · M mode · T controller · C
-      chaos · X drop test · R respawn · <a href="./viewer.html">training viewer</a><br />
+      chaos · X drop test · R respawn · Enter Gauntlet · F free drive ·
+      <a href="./viewer.html">training viewer</a><br />
       The tank slowly refills while the car is on its wheels (a game rule, not real physics).
     </div>
     <script type="module" src="/src/main.ts"></script>

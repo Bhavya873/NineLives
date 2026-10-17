@@ -2,12 +2,14 @@
 // keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
 // Each piece lives in its own folder: input/, render/, hud/; the loop is in game-loop.ts.
 import controllersToml from '../../configs/controllers.toml?raw';
+import gauntletJson from '../../courses/gauntlet.json?raw';
 import modesToml from '../../configs/modes.toml?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
 import { prefersReducedMotion, requireElement } from './dom.ts';
+import { createCourseSession, showCourse, showResultsWhenFinished } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import { createAirGauge, updateAirGauge } from './hud/air-gauge.ts';
 import { findHud, type HudValues, updateHud } from './hud/hud.ts';
@@ -70,6 +72,11 @@ const hudValues: HudValues = {
   hopCooldownS: 0,
   wheelsTouching: 4,
   outOfAir: false,
+  airUsedKg: 0,
+  checkpointsReached: 0,
+  checkpointCount: 0,
+  finished: false,
+  finishTimeS: 0,
 };
 
 async function start(): Promise<void> {
@@ -110,6 +117,27 @@ async function start(): Promise<void> {
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
+  const course = createCourseSession(view.scene, view.ground, {
+    panel: requireElement('results'),
+    lines: requireElement('results-lines'),
+  });
+  /** Puts the drawn course in step with a fresh run (null: the open arena). */
+  const startCourse = (shapesJson: string | null) => {
+    showCourse(course, shapesJson);
+    stopExplosion(explosion);
+    snapViewToGame(game, frames, view, carPose);
+  };
+  const startGauntlet = () => startCourse(game.load_course(gauntletJson));
+  // Enter starts (or restarts) the Gauntlet; F goes back to free driving in the arena.
+  onKeyPress('Enter', startGauntlet);
+  onKeyPress('NumpadEnter', startGauntlet);
+  onKeyPress('KeyF', () => {
+    game.load_flat_ground();
+    startCourse(null);
+  });
+  if (new URLSearchParams(window.location.search).get('course') === 'gauntlet') {
+    startGauntlet();
+  }
   // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
   onKeyPress('KeyX', () => {
     game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
@@ -134,7 +162,8 @@ async function start(): Promise<void> {
       snapViewToGame(game, frames, view, carPose);
     }
     const toast = toastForEvents(events);
-    if (toast) {
+    // Nothing covers the results screen; what happens after the finish doesn't count.
+    if (toast && !course.resultsShown) {
       showToast(toasts, toast, nowMs);
     }
   };
@@ -156,8 +185,12 @@ async function start(): Promise<void> {
       const frameS = (nowMs - lastRenderMs) / 1000;
       lastRenderMs = nowMs;
       // Events queue up in the sim, so reading them once per frame is enough.
-      reactToEvents(game.drain_events(), nowMs);
+      // The HUD's save and crash counts update as events drain, so drain first; then
+      // put up the results before the events' toasts, so no FINISH toast covers them.
+      const events = game.drain_events();
       fillHudValues(game.hud(), hudValues);
+      showResultsWhenFinished(course, hudValues);
+      reactToEvents(events, nowMs);
 
       // Valve lag already smooths the throttles, so one read per frame is enough.
       const throttles = game.nozzle_throttles();
@@ -186,6 +219,8 @@ async function start(): Promise<void> {
       chassisPose: () => Array.from(game.chassis_pose()),
       simTimeS: () => game.hud()[HudField.TimeS] ?? 0,
       controllerCode: () => game.hud()[HudField.Controller] ?? ControllerCode.Off,
+      courseMeshCount: () => course.view?.children.length ?? 0,
+      checkpointCount: () => game.hud()[HudField.CheckpointCount] ?? 0,
     },
   });
 }
@@ -241,6 +276,11 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.hopCooldownS = values[HudField.HopCooldownS] ?? 0;
   out.wheelsTouching = values[HudField.WheelsTouching] ?? 0;
   out.outOfAir = values[HudField.OutOfAir] === 1;
+  out.airUsedKg = values[HudField.AirUsedKg] ?? 0;
+  out.checkpointsReached = values[HudField.CheckpointsReached] ?? 0;
+  out.checkpointCount = values[HudField.CheckpointCount] ?? 0;
+  out.finished = values[HudField.Finished] === 1;
+  out.finishTimeS = values[HudField.FinishTimeS] ?? 0;
 }
 
 start().catch((error: unknown) => {
