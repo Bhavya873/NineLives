@@ -98,8 +98,14 @@ async function start(): Promise<void> {
     },
   });
 
-  // A small read-only hook so automated tests can see where the car is.
-  Object.assign(window, { ninelivesDebug: { chassisPose: () => Array.from(game.chassis_pose()) } });
+  // A small read-only hook so automated tests can see where the car is and how much
+  // simulated time has passed (slow test machines run fewer ticks per real second).
+  Object.assign(window, {
+    ninelivesDebug: {
+      chassisPose: () => Array.from(game.chassis_pose()),
+      simTimeS: () => game.hud()[HudField.TimeS] ?? 0,
+    },
+  });
 }
 
 /** Reads this tick's events and reports whether one of them is a crash. */
