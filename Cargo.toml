@@ -33,6 +33,9 @@ pyo3 = { version = "0.30.1", features = ["extension-module"] }
 numpy = "0.30"
 # Steps independent training worlds in parallel (Rapier's own `parallel` stays off).
 rayon = "1.12"
+# Pure-Rust maths: the same bits on every platform and in wasm, unlike std's acos,
+# sin, cos, exp and tanh, which call the system maths library (CLAUDE.md rule 2).
+libm = "0.2.16"
 # Exact pin: the wasm-bindgen CLI must match this version (CI reads it from Cargo.lock).
 wasm-bindgen = "=0.2.129"
 

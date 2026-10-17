@@ -390,16 +390,16 @@ fn sample_drop(config: &DropConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
     let height_m = draw(rng, config.height_m);
     let heading = Rotation::from_rotation_y(rng.random_range(0.0..std::f32::consts::TAU));
     let tilt_axis_rad = rng.random_range(0.0..std::f32::consts::TAU);
-    let tilt_axis = Vector::new(tilt_axis_rad.cos(), 0.0, tilt_axis_rad.sin());
+    let tilt_axis = Vector::new(libm::cosf(tilt_axis_rad), 0.0, libm::sinf(tilt_axis_rad));
     let tilt_rad = rng.random_range(0.0..=config.max_tilt_deg.to_radians());
     let rotation = Rotation::from_axis_angle(tilt_axis, tilt_rad) * heading;
     let spin = random_direction(rng) * rng.random_range(0.0..=config.max_spin_rad_s);
     let direction_rad = rng.random_range(0.0..std::f32::consts::TAU);
     let horizontal_m_s = draw(rng, config.horizontal_speed_m_s);
     let velocity = Vector::new(
-        horizontal_m_s * direction_rad.cos(),
+        horizontal_m_s * libm::cosf(direction_rad),
         draw(rng, config.vertical_speed_m_s),
-        horizontal_m_s * direction_rad.sin(),
+        horizontal_m_s * libm::sinf(direction_rad),
     );
     checkpoint(Vector::new(0.0, height_m, 0.0), rotation, velocity, spin)
 }
@@ -422,9 +422,9 @@ fn sample_tip_over(config: &TipOverConfig, rng: &mut ChaCha8Rng) -> Checkpoint {
     let direction_rad = rng.random_range(0.0..std::f32::consts::TAU);
     let speed_m_s = rng.random_range(0.0..=config.max_speed_m_s);
     let velocity = Vector::new(
-        speed_m_s * direction_rad.cos(),
+        speed_m_s * libm::cosf(direction_rad),
         0.0,
-        speed_m_s * direction_rad.sin(),
+        speed_m_s * libm::sinf(direction_rad),
     );
     checkpoint(Vector::ZERO, rotation, velocity, Vector::ZERO)
 }

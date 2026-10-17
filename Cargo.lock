@@ -349,6 +349,7 @@ dependencies = [
 name = "nl-policy"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "nl-sim",
  "serde",
  "serde_json",
@@ -375,6 +376,7 @@ dependencies = [
 name = "nl-sim"
 version = "0.1.0"
 dependencies = [
+ "libm",
  "postcard",
  "rand",
  "rand_chacha",
