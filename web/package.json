@@ -15,7 +15,8 @@
     "preview": "vite preview",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:wasm": "node --test tests-node/*.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

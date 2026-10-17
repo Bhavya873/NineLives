@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::conventions::{PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
 use crate::vehicle_config::{SteeringConfig, VehicleConfig};
+use crate::world::Pose;
 
 /// Index of the front-left wheel. The front wheels (0 and 1) steer.
 const FRONT_LEFT_WHEEL: usize = 0;
@@ -153,6 +154,23 @@ impl Car {
     pub fn up_alignment(&self, physics: &PhysicsWorld) -> f32 {
         let body = &physics.bodies[self.chassis];
         (body.rotation() * Vector::Y).dot(Vector::Y)
+    }
+
+    /// Where each wheel is drawn, in wheel order FL, FR, RL, RR.
+    ///
+    /// A wheel's centre sits at the end of its suspension. Its rotation is the
+    /// chassis rotation, then the steering angle about the body's up axis, then the
+    /// roll about the axle (+Z). Rolling forward spins a wheel about -Z, so the roll
+    /// angle is negated.
+    pub fn wheel_poses(&self, physics: &PhysicsWorld) -> [Pose; WHEEL_COUNT] {
+        let chassis_rotation = *physics.bodies[self.chassis].rotation();
+        let mut poses = [Pose::new(Vector::ZERO, Rotation::IDENTITY); WHEEL_COUNT];
+        for (index, wheel) in self.wheels.wheels().iter().enumerate() {
+            let steer = Rotation::from_rotation_y(wheel.steering);
+            let roll = Rotation::from_rotation_z(-wheel.rotation);
+            poses[index] = Pose::new(wheel.center(), chassis_rotation * steer * roll);
+        }
+        poses
     }
 
     /// Current front-wheel angle. Positive turns left.
