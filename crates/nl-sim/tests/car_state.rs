@@ -6,16 +6,8 @@
 
 mod common;
 
-use common::{LEVEL, arcade, new_world, new_world_in, run_and_collect};
+use common::{LEVEL, RIGHT_SIDE_DOWN, arcade, new_world, new_world_in, run_and_collect};
 use nl_sim::car_state::MAX_HEIGHT_M;
-
-/// Rolled +90° about the body's forward axis (+X): the right side (+Z) faces down.
-const ROLLED_RIGHT_SIDE_DOWN: [f32; 4] = [
-    std::f32::consts::FRAC_1_SQRT_2,
-    0.0,
-    0.0,
-    std::f32::consts::FRAC_1_SQRT_2,
-];
 
 fn assert_close(actual: [f32; 3], expected: [f32; 3]) {
     for axis in 0..3 {
@@ -33,20 +25,20 @@ fn a_level_car_feels_gravity_straight_down_its_own_minus_y() {
     let state = world.car_state();
 
     assert_close(state.gravity_dir_body, [0.0, -1.0, 0.0]);
-    assert!((state.up_alignment - 1.0).abs() < 1e-4);
+    assert!((state.up_alignment() - 1.0).abs() < 1e-4);
 }
 
 #[test]
 fn rolling_plus_90_degrees_about_forward_puts_gravity_on_the_right_plus_z() {
     let mut world = new_world();
     world
-        .place_car([0.0, 10.0, 0.0], ROLLED_RIGHT_SIDE_DOWN, [0.0; 3], [0.0; 3])
+        .place_car([0.0, 10.0, 0.0], RIGHT_SIDE_DOWN, [0.0; 3], [0.0; 3])
         .unwrap();
 
     let state = world.car_state();
 
     assert_close(state.gravity_dir_body, [0.0, 0.0, 1.0]);
-    assert!(state.up_alignment.abs() < 1e-4);
+    assert!(state.up_alignment().abs() < 1e-4);
 }
 
 #[test]
@@ -55,12 +47,7 @@ fn spinning_about_world_up_on_a_rolled_car_shows_as_minus_body_z() {
     // Rolled right side down, the body's -Z axis points up, so a world-up spin is a
     // spin about body -Z (pitch) in SPEC §4 signs.
     world
-        .place_car(
-            [0.0, 10.0, 0.0],
-            ROLLED_RIGHT_SIDE_DOWN,
-            [0.0; 3],
-            [0.0, 2.0, 0.0],
-        )
+        .place_car([0.0, 10.0, 0.0], RIGHT_SIDE_DOWN, [0.0; 3], [0.0, 2.0, 0.0])
         .unwrap();
 
     let state = world.car_state();
@@ -90,12 +77,10 @@ fn a_settled_car_has_all_wheels_down_and_arcade_doubles_thrust() {
 
     let state = world.car_state();
 
-    assert_eq!(state.wheels_down, 4);
-    assert!(
-        (state.thrust_scale - 2.0).abs() < 1e-6,
-        "{}",
-        state.thrust_scale
-    );
+    assert_eq!(state.wheels_down(), 4);
+    assert!(state.on_wheels());
+    assert_eq!(state.mode_thrust_scale, 2.0);
+    assert_eq!(state.thrust_multiplier(), 2.0);
 }
 
 #[test]
@@ -117,4 +102,22 @@ fn the_car_model_has_positive_mass_and_inertia_and_lift_pushes_up() {
         lift[1] > 0.0 && lift[0] == 0.0 && lift[2] == 0.0,
         "{lift:?}"
     );
+}
+
+#[test]
+fn a_falling_car_reports_its_fall_speed_in_any_attitude() {
+    let mut world = new_world();
+    world
+        .place_car(
+            [0.0, 10.0, 0.0],
+            RIGHT_SIDE_DOWN,
+            [0.0, -6.0, 0.0],
+            [0.0; 3],
+        )
+        .unwrap();
+
+    let state = world.car_state();
+
+    assert!((state.falling_speed_m_s() - 6.0).abs() < 1e-4);
+    assert_close(state.linear_velocity_body_m_s, [0.0, 0.0, 6.0]);
 }

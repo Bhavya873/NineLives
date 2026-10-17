@@ -328,7 +328,7 @@ pub trait Controller {
 }
 ```
 
-Until `ObsSpec` exists (M4–M5) `act` takes only `ctx`, which carries the driver's `InputFrame`; PD adds `obs`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
+Until `ObsSpec` exists (M5) `act` takes only `ctx`: the driver's `InputFrame` and the car's `CarState` (the physical quantities the observation packs). M5 adds `obs` for the AI. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
 2. **Manual** (debug only): keys map to individual nozzles at throttle 1.

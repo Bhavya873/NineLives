@@ -2,17 +2,16 @@
 //! a fast fall just before landing, and roll back onto the wheels when lying on the
 //! ground. It decides a wanted force and torque, then the allocation picks throttles.
 
-use nl_sim::car_state::{CarModel, CarState};
+use nl_sim::car_state::{CarModel, CarState, WRENCH_SIZE, Wrench};
 use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT};
 
-use crate::allocation::{Allocator, WRENCH_SIZE};
+use crate::allocation::Allocator;
 use crate::config::{ControllersConfig, PdConfig};
 use crate::{ControlCtx, Controller};
 
-/// Wheels on the ground at which the car counts as driving, so PD stays off (saves air).
-const DRIVING_WHEELS: usize = 3;
-/// Nearly upside down: the tilt error's direction is undefined, so pick a roll.
-const NEARLY_INVERTED_UP_Y: f32 = -0.95;
+/// Below this size the tilt error has no reliable direction (the car is almost exactly
+/// upside down), so PD picks a roll instead.
+const MIN_TILT_ERROR: f32 = 0.1;
 
 /// The PD controller with its allocation, for one car.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,14 +37,15 @@ impl Pd {
     }
 
     /// The force and torque PD wants now, in the body frame:
-    /// [force x, y, z, torque x, y, z]. All zero while the car is driving.
-    pub fn wanted_wrench(&self, state: &CarState) -> [f32; WRENCH_SIZE] {
-        if state.wheels_down >= DRIVING_WHEELS {
+    /// [force x, y, z, torque x, y, z]. All zero while the car drives on its wheels,
+    /// to save air.
+    pub fn wanted_wrench(&self, state: &CarState) -> Wrench {
+        if state.on_wheels() {
             return [0.0; WRENCH_SIZE];
         }
         let mut torque = self.attitude_torque(state);
         let lying_on_ground = state.height_m < self.config.on_ground_height_m
-            && state.up_alignment < self.config.upright_alignment;
+            && state.up_alignment() < self.config.upright_alignment;
         if lying_on_ground {
             // SPEC §8: roll torque only, to flip back onto the wheels.
             torque[1] = 0.0;
@@ -64,8 +64,9 @@ impl Pd {
         let up_wanted = [-gx, -gy, -gz];
         // (0, 1, 0) × (x, y, z) = (z, 0, −x).
         let mut error = [up_wanted[2], 0.0, -up_wanted[0]];
-        if up_wanted[1] < NEARLY_INVERTED_UP_Y && error[0].abs() < 0.1 && error[2].abs() < 0.1 {
-            // Upside down, the cross product vanishes; roll over the shorter way.
+        let upside_down = up_wanted[1] < 0.0;
+        if upside_down && error[0].abs() < MIN_TILT_ERROR && error[2].abs() < MIN_TILT_ERROR {
+            // The cross product vanishes; pick a roll direction (either works).
             error = [if up_wanted[2] >= 0.0 { 1.0 } else { -1.0 }, 0.0, 0.0];
         }
         let spin = state.angular_velocity_body_rad_s;
@@ -81,9 +82,9 @@ impl Pd {
     /// F = m·(g + kv·(v_down − target)); otherwise nothing, to save air. Returned in
     /// the body frame (the push is straight up in the world).
     fn braking_force_body(&self, state: &CarState) -> [f32; 3] {
-        let falling_m_s = -state.linear_velocity_world_m_s[1];
-        let brake = state.wheels_down == 0
-            && state.up_alignment > self.config.upright_alignment
+        let falling_m_s = state.falling_speed_m_s();
+        let brake = state.wheels_down() == 0
+            && state.up_alignment() > self.config.upright_alignment
             && state.height_m < self.config.brake_height_m
             && falling_m_s > self.config.brake_speed_m_s;
         if !brake {
@@ -108,7 +109,7 @@ impl Controller for Pd {
             self.throttles = [0.0; NOZZLE_COUNT];
         } else {
             self.allocator
-                .solve(wrench, ctx.state.thrust_scale, &mut self.throttles);
+                .solve(wrench, ctx.state.thrust_multiplier(), &mut self.throttles);
         }
         self.throttles
     }

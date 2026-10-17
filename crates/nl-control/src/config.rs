@@ -46,6 +46,9 @@ pub enum ControllersConfigError {
 
     #[error("controllers.toml: `{field}` must be a positive number, but it is {value}")]
     NotPositive { field: &'static str, value: f32 },
+
+    #[error("controllers.toml: `{field}` must be between 0 and 1, but it is {value}")]
+    NotFraction { field: &'static str, value: f32 },
 }
 
 impl ControllersConfig {
@@ -78,6 +81,12 @@ impl ControllersConfig {
                 return Err(ControllersConfigError::NotPositive { field, value });
             }
         }
+        // An alignment is the cosine of a tilt, so it must be a fraction.
+        if pd.upright_alignment > 1.0 {
+            let field = "pd.upright_alignment";
+            let value = pd.upright_alignment;
+            return Err(ControllersConfigError::NotFraction { field, value });
+        }
         Ok(())
     }
 }
@@ -103,5 +112,15 @@ mod tests {
             error.to_string(),
             "controllers.toml: `pd.kd` must be a positive number, but it is -4"
         );
+    }
+
+    #[test]
+    fn an_upright_alignment_above_1_is_refused() {
+        let broken =
+            DEFAULT_CONTROLLERS_TOML.replace("upright_alignment = 0.7", "upright_alignment = 1.5");
+
+        let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
+
+        assert!(error.to_string().contains("between 0 and 1"), "{error}");
     }
 }

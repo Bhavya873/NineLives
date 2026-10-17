@@ -6,20 +6,13 @@
 
 mod common;
 
-use common::{LEVEL, new_world, run_and_collect};
+use common::{LEVEL, RIGHT_SIDE_DOWN, new_world, run_and_collect};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::input::{BUTTON_CHAOS, InputFrame};
 use rapier3d::prelude::Vector;
 
 /// Rotation quaternions (x, y, z, w).
 const UPSIDE_DOWN: [f32; 4] = [1.0, 0.0, 0.0, 0.0];
-/// Rolled 90° about the forward axis: lying on its side.
-const ON_ITS_SIDE: [f32; 4] = [
-    std::f32::consts::FRAC_1_SQRT_2,
-    0.0,
-    0.0,
-    std::f32::consts::FRAC_1_SQRT_2,
-];
 
 fn crash_causes(events: &[SimEvent]) -> Vec<CrashCause> {
     let mut causes = Vec::new();
@@ -69,7 +62,7 @@ fn hitting_the_ground_side_first_at_8_m_s_is_a_hard_impact() {
     let mut world = new_world();
     // On its side the body's half-width (1.0 m) faces down; start 0.2 m above contact.
     world
-        .place_car([0.0, 1.2, 0.0], ON_ITS_SIDE, [0.0, -8.0, 0.0], [0.0; 3])
+        .place_car([0.0, 1.2, 0.0], RIGHT_SIDE_DOWN, [0.0, -8.0, 0.0], [0.0; 3])
         .unwrap();
 
     let events = run_and_collect(&mut world, 1.0);

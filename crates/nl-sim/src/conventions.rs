@@ -12,6 +12,11 @@ pub const PHYSICS_HZ: u32 = 120;
 /// Length of one physics step, in seconds.
 pub const PHYSICS_DT_S: f32 = 1.0 / PHYSICS_HZ as f32;
 
+/// Wheels that must touch for the car to count as driving on its wheels: Hop needs this
+/// many (SPEC §7.8) and PD stays off (SPEC §8). The tank refill has its own setting,
+/// `refill_min_wheels` in modes.toml.
+pub const ON_WHEELS_MIN_WHEELS: usize = 3;
+
 /// The controller runs once every this many physics steps (60 Hz). SPEC §4.
 pub const PHYSICS_STEPS_PER_CONTROL_STEP: u32 = 2;
 

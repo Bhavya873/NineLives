@@ -3,10 +3,8 @@
 //! problem: minimise |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1, solved by projected gradient
 //! descent, warm-started from the previous answer.
 
+use nl_sim::car_state::{FORCE_ROWS, WRENCH_SIZE, Wrench};
 use nl_sim::conventions::NOZZLE_COUNT;
-
-/// Rows of the wrench: force x, y, z then torque x, y, z (body frame).
-pub const WRENCH_SIZE: usize = 6;
 
 /// How the allocation trades accuracy against effort (`[allocation]` in controllers.toml).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
@@ -31,20 +29,17 @@ pub struct Allocator {
     row_weights: [f32; WRENCH_SIZE],
     regularisation: f32,
     iterations: u32,
-    /// 1 / L, the gradient step: L = 2(|WB|²_F + λ) bounds the gradient's Lipschitz constant.
+    /// 1 / L, the gradient step, with L bounding the gradient's Lipschitz constant.
     step: f32,
 }
 
 impl Allocator {
     /// Builds the problem from each nozzle's full-throttle wrench (the columns of `B`).
-    pub fn new(
-        nozzle_wrenches: &[[f32; WRENCH_SIZE]; NOZZLE_COUNT],
-        config: &AllocationConfig,
-    ) -> Allocator {
+    pub fn new(nozzle_wrenches: &[Wrench; NOZZLE_COUNT], config: &AllocationConfig) -> Allocator {
         let mut row_weights = [0.0; WRENCH_SIZE];
         for (row, weight) in row_weights.iter_mut().enumerate() {
             let strongest = strongest_in_row(nozzle_wrenches, row);
-            let base = if row < 3 {
+            let base = if row < FORCE_ROWS {
                 config.force_weight
             } else {
                 config.torque_weight
@@ -56,12 +51,10 @@ impl Allocator {
             };
         }
         let mut weighted_b = [[0.0; NOZZLE_COUNT]; WRENCH_SIZE];
-        let mut frobenius_sq = 0.0;
         for (row, weight) in row_weights.iter().enumerate() {
             for nozzle in 0..NOZZLE_COUNT {
                 let value = weight * nozzle_wrenches[nozzle][row];
                 weighted_b[row][nozzle] = value;
-                frobenius_sq += value * value;
             }
         }
         Allocator {
@@ -69,18 +62,13 @@ impl Allocator {
             row_weights,
             regularisation: config.regularisation,
             iterations: config.iterations,
-            step: 1.0 / (2.0 * (frobenius_sq + config.regularisation)),
+            step: 1.0 / (2.0 * (largest_eigenvalue_bound(&weighted_b) + config.regularisation)),
         }
     }
 
     /// Improves `throttles` (each 0..1, updated in place) toward producing `wrench`
     /// when every nozzle's push is multiplied by `thrust_scale`.
-    pub fn solve(
-        &self,
-        wrench: [f32; WRENCH_SIZE],
-        thrust_scale: f32,
-        throttles: &mut [f32; NOZZLE_COUNT],
-    ) {
+    pub fn solve(&self, wrench: Wrench, thrust_scale: f32, throttles: &mut [f32; NOZZLE_COUNT]) {
         // Weaker thrust means a bigger throttle for the same push: aim at wrench / scale.
         let scale = if thrust_scale > 0.0 {
             thrust_scale
@@ -127,8 +115,27 @@ impl Allocator {
     }
 }
 
+/// An upper bound on the largest eigenvalue of (WB)(WB)ᵀ: its largest absolute row sum
+/// (Gershgorin). Much tighter than |WB|²_F for this car, so 30 steps get close to the
+/// answer even from all valves shut.
+fn largest_eigenvalue_bound(weighted_b: &[[f32; NOZZLE_COUNT]; WRENCH_SIZE]) -> f32 {
+    let mut largest = 0.0_f32;
+    for row in weighted_b {
+        let mut row_sum = 0.0;
+        for other_row in weighted_b {
+            let mut dot = 0.0;
+            for (a, b) in row.iter().zip(other_row) {
+                dot += a * b;
+            }
+            row_sum += f32::abs(dot);
+        }
+        largest = largest.max(row_sum);
+    }
+    largest
+}
+
 /// The largest |value| any nozzle has in one wrench row.
-fn strongest_in_row(nozzle_wrenches: &[[f32; WRENCH_SIZE]; NOZZLE_COUNT], row: usize) -> f32 {
+fn strongest_in_row(nozzle_wrenches: &[Wrench; NOZZLE_COUNT], row: usize) -> f32 {
     let mut strongest: f32 = 0.0;
     for wrench in nozzle_wrenches {
         strongest = strongest.max(wrench[row].abs());

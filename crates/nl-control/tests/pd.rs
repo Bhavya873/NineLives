@@ -15,7 +15,8 @@ use nl_sim::modes::{DEFAULT_MODES_TOML, ModesConfig};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
-/// Rolled +90° about forward: lying on its right side.
+/// Rolled +90° about forward: lying on its right side (nl-sim's test fixtures are not
+/// reachable from this crate, so this one constant is repeated).
 const ON_ITS_RIGHT_SIDE: [f32; 4] = [
     std::f32::consts::FRAC_1_SQRT_2,
     0.0,
@@ -51,7 +52,7 @@ fn produced_wrench(model: &CarModel, throttles: &[f32; NOZZLE_COUNT]) -> [f32; 6
 /// Runs the world for `seconds` with `controller` at 60 Hz; returns every event.
 fn run_with(world: &mut World, controller: &mut dyn Controller, seconds: f32) -> Vec<SimEvent> {
     let mut events = Vec::new();
-    for _ in 0..(seconds * PHYSICS_HZ as f32) as usize {
+    for _ in 0..(seconds * PHYSICS_HZ as f32).round() as usize {
         if world.is_control_step() {
             let ctx = ControlCtx {
                 input: InputFrame::default(),
@@ -94,6 +95,21 @@ fn the_allocation_lifts_with_the_four_lift_nozzles_and_stays_in_bounds() {
 }
 
 #[test]
+fn one_control_step_from_all_valves_shut_already_gives_most_of_a_braking_push() {
+    // Braking starts from shut valves (PD is off until the car leaves the ground),
+    // and the brake window lasts only a few control steps.
+    let model = car_model();
+    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
+    let brake_n = 1.5 * model.mass_kg * 9.81;
+    let mut throttles = [0.0; NOZZLE_COUNT];
+
+    allocator.solve([0.0, brake_n, 0.0, 0.0, 0.0, 0.0], 1.0, &mut throttles);
+
+    let lift = produced_wrench(&model, &throttles)[1];
+    assert!(lift > 0.9 * brake_n, "{lift} N of {brake_n} N");
+}
+
+#[test]
 fn a_push_no_nozzle_can_make_leaves_every_valve_shut() {
     let model = car_model();
     let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
@@ -111,8 +127,7 @@ fn a_car_lying_on_its_right_side_gets_a_negative_roll_torque_to_come_back() {
     // Right side (+Z) down: gravity points along body +Z.
     let state = CarState {
         gravity_dir_body: [0.0, 0.0, 1.0],
-        wheels_down: 0,
-        up_alignment: 0.0,
+        wheel_contact: [false; 4],
         height_m: 6.0,
         ..CarState::default()
     };
@@ -127,7 +142,7 @@ fn pd_damps_a_spin_with_an_opposing_torque() {
     let pd = Pd::new(&car_model(), &controllers());
     let state = CarState {
         angular_velocity_body_rad_s: [0.0, 3.0, 0.0],
-        wheels_down: 0,
+        wheel_contact: [false; 4],
         height_m: 6.0,
         ..CarState::default()
     };
@@ -140,9 +155,10 @@ fn pd_damps_a_spin_with_an_opposing_torque() {
 #[test]
 fn pd_brakes_a_fast_low_upright_fall_and_ignores_a_slow_one() {
     let pd = Pd::new(&car_model(), &controllers());
+    // Level, so the body's -Y is world down.
     let falling = |speed_m_s: f32| CarState {
-        linear_velocity_world_m_s: [0.0, -speed_m_s, 0.0],
-        wheels_down: 0,
+        linear_velocity_body_m_s: [0.0, -speed_m_s, 0.0],
+        wheel_contact: [false; 4],
         height_m: 2.0,
         ..CarState::default()
     };
@@ -160,31 +176,29 @@ fn pd_leaves_the_thrusters_off_while_the_car_drives() {
     assert_eq!(throttles, [0.0; NOZZLE_COUNT]);
 }
 
+/// Drops the car on its right side from 8 m under `controller`; true if it is saved
+/// without crashing within 5 s.
+fn survives_side_drop_from_8_m(controller: &mut dyn Controller) -> bool {
+    let mut world = new_world();
+    world
+        .place_car([0.0, 8.0, 0.0], ON_ITS_RIGHT_SIDE, [0.0; 3], [0.0; 3])
+        .unwrap();
+
+    let events = run_with(&mut world, controller, 5.0);
+
+    let saved = events
+        .iter()
+        .any(|event| matches!(event, SimEvent::Save { .. }));
+    let crashed = events
+        .iter()
+        .any(|event| matches!(event, SimEvent::Crash { .. }));
+    saved && !crashed
+}
+
 #[test]
 fn pd_saves_a_car_dropped_on_its_side_from_8_m_and_off_does_not() {
-    let mut saved_by = Vec::new();
-    let mut controllers_under_test: [(&str, Box<dyn Controller>); 2] = [
-        ("pd", Box::new(Pd::new(&car_model(), &controllers()))),
-        ("off", Box::new(Off)),
-    ];
-    for (name, controller) in controllers_under_test.iter_mut() {
-        let mut world = new_world();
-        world
-            .place_car([0.0, 8.0, 0.0], ON_ITS_RIGHT_SIDE, [0.0; 3], [0.0; 3])
-            .unwrap();
+    let mut pd = Pd::new(&car_model(), &controllers());
 
-        let events = run_with(&mut world, controller.as_mut(), 5.0);
-
-        let saved = events
-            .iter()
-            .any(|event| matches!(event, SimEvent::Save { .. }));
-        let crashed = events
-            .iter()
-            .any(|event| matches!(event, SimEvent::Crash { .. }));
-        if saved && !crashed {
-            saved_by.push(*name);
-        }
-    }
-
-    assert_eq!(saved_by, vec!["pd"]);
+    assert!(survives_side_drop_from_8_m(&mut pd), "PD should save it");
+    assert!(!survives_side_drop_from_8_m(&mut Off), "Off should not");
 }
