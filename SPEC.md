@@ -583,13 +583,13 @@ class Game {
 ## 13. Milestones and acceptance criteria
 
 **M0 — Scaffold**
-- [ ] Workspace, crates, Python package and Vite app exist and build; CI runs all three jobs green with placeholder tests.
-- [ ] `docs/DECISIONS.md` and `docs/EXPERIMENTS.md` exist.
+- [x] Workspace, crates, Python package and Vite app exist and build; CI runs all three jobs green with placeholder tests.
+- [x] `docs/DECISIONS.md` and `docs/EXPERIMENTS.md` exist.
 
 **M1 — Drivable car (native)**
-- [ ] `nl-sim` builds a world from `vehicle.toml` and a flat course; the raycast vehicle drives, steers and brakes.
-- [ ] Headless example `cargo run -p nl-sim --example drive` prints a 10 s trajectory.
-- [ ] Determinism and snapshot/restore tests pass.
+- [x] `nl-sim` builds a world from `vehicle.toml` and a flat course; the raycast vehicle drives, steers and brakes.
+- [x] Headless example `cargo run -p nl-sim --example drive` prints a 10 s trajectory.
+- [x] Determinism and snapshot/restore tests pass.
 
 **M2 — Browser viewer**
 - [ ] `nl-wasm` exposes `Game`; the web app renders the car and ground and drives with the keyboard at 60 fps.

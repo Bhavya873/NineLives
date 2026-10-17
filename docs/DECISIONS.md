@@ -15,3 +15,5 @@ One line per decision: date, decision, reason. Newest at the bottom. Bigger deci
 | 2026-10-17 | Deploy the game as a static site on Railway. The repo goes public once there's a working deliverable. | Owner choice. |
 | 2026-10-17 | Code style targets readability by a junior developer: units in names, doc comments on every public item, comments cite SPEC sections. Replaces "comments only where the code cannot explain itself". | Owner request. See CLAUDE.md § Style. |
 | 2026-10-17 | One small PR per feature from `claude/<feature>` branches. The owner is PR author and reviewer; commits are authored as the owner with a Claude co-author trailer. | Owner request. |
+| 2026-10-17 | Tyre grip `friction_slip` 1.2 (was 2.5) and brake impulse 40 N·s (was 300). | Rapier limits grip to friction_slip × wheel load, so 2.5 gave about 2.5 g cornering and 300 N·s about 8 g braking. Now about 1.2 g and 1.1 g. |
+| 2026-10-17 | Snapshots use postcard with a leading format version; the golden trace uses a frozen copy of vehicle.toml. | Old snapshots are refused instead of misread; tuning the car does not break the determinism check. |

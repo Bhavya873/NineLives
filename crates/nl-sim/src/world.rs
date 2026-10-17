@@ -1,0 +1,175 @@
+//! The simulated world: the ground, the car, and the fixed physics step.
+//!
+//! `World::step` advances exactly one physics step of `PHYSICS_DT_S` (1/120 s).
+//! M1 has only flat ground and driving; thrusters, the air tank and events join
+//! the step in M3, following the order in SPEC §7.1.
+//!
+//! `snapshot` and `restore` save and load the whole world as bytes. They power the
+//! game's "reset to checkpoint", training checkpoints and the determinism tests.
+
+use rapier3d::prelude::*;
+use serde::{Deserialize, Serialize};
+
+use crate::car::Car;
+use crate::conventions::{PHYSICS_DT_S, PHYSICS_HZ, WHEEL_COUNT, gravity_vector};
+use crate::input::InputFrame;
+use crate::vehicle_config::VehicleConfig;
+
+/// Ground friction for flat-ground worlds when nothing else is chosen (SPEC §7.2).
+/// It only matters when the car's body scrapes the ground.
+pub const DEFAULT_GROUND_FRICTION: f32 = 1.0;
+
+/// Half-size of the flat ground box, in metres. Big enough that M1 tests never
+/// drive off it. Course pieces replace this in M7.
+const FLAT_GROUND_HALF_EXTENTS_M: [f32; 3] = [2000.0, 0.5, 2000.0];
+
+/// Where the car starts on flat ground: centre of mass a little above its resting
+/// height (about 0.6 m) so it settles onto its wheels.
+const FLAT_GROUND_START_HEIGHT_M: f32 = 0.7;
+
+/// The car's position and orientation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChassisPose {
+    /// Centre of mass in world coordinates.
+    pub position_m: [f32; 3],
+    /// Orientation as a quaternion (x, y, z, w), the order three.js uses.
+    pub rotation_xyzw: [f32; 4],
+}
+
+/// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
+/// they contain changes shape, so old snapshots are refused instead of misread.
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+
+/// Why a snapshot could not be made or loaded.
+#[derive(Debug, thiserror::Error)]
+pub enum SnapshotError {
+    #[error("world snapshot could not be encoded or decoded: {0}")]
+    Encoding(#[from] postcard::Error),
+
+    #[error("world snapshot has format version {found}, but this build reads version {expected}")]
+    WrongVersion { found: u32, expected: u32 },
+
+    #[error("world snapshot has {extra_bytes} unexpected bytes after the end")]
+    TrailingBytes { extra_bytes: usize },
+}
+
+/// A world with flat ground and one car.
+#[derive(Serialize, Deserialize)]
+pub struct World {
+    physics: PhysicsWorld,
+    car: Car,
+    step_count: u64,
+}
+
+impl World {
+    /// Builds flat ground and puts the car at the origin, facing world +X.
+    ///
+    /// `ground_friction` applies when the car's body scrapes the ground. Tyre grip
+    /// comes from `wheels.friction_slip` in the vehicle config instead, because
+    /// Rapier's raycast wheels do not read collider friction.
+    pub fn new_on_flat_ground(vehicle_config: &VehicleConfig, ground_friction: f32) -> World {
+        let mut physics = PhysicsWorld::new();
+        physics.gravity = gravity_vector();
+        physics.integration_parameters.dt = PHYSICS_DT_S;
+        physics.insert_collider(build_flat_ground(ground_friction), None);
+
+        let start_m = Vector::new(0.0, FLAT_GROUND_START_HEIGHT_M, 0.0);
+        let car = Car::spawn(&mut physics, vehicle_config, start_m, 0.0);
+        // Fill the scene-query tree now; otherwise the wheel rays on the very first
+        // step would find nothing, because Rapier only refreshes it inside a step.
+        physics.detect_collisions(&(), &());
+
+        World {
+            physics,
+            car,
+            step_count: 0,
+        }
+    }
+
+    /// Advances the world by one physics step (1/120 s).
+    pub fn step(&mut self, input: InputFrame) {
+        self.car.prepare_physics_step(&mut self.physics, input);
+        self.physics.step();
+        self.step_count += 1;
+    }
+
+    /// Saves the complete state of the world as bytes: the format version, then the world.
+    pub fn snapshot(&self) -> Result<Vec<u8>, SnapshotError> {
+        Ok(postcard::to_allocvec(&(SNAPSHOT_FORMAT_VERSION, self))?)
+    }
+
+    /// Replaces this world with one saved by `snapshot`. Stepping the restored world
+    /// with the same inputs gives bit-identical results to the original.
+    /// On any error this world is left unchanged.
+    pub fn restore(&mut self, snapshot: &[u8]) -> Result<(), SnapshotError> {
+        let (version, after_version): (u32, &[u8]) = postcard::take_from_bytes(snapshot)?;
+        if version != SNAPSHOT_FORMAT_VERSION {
+            return Err(SnapshotError::WrongVersion {
+                found: version,
+                expected: SNAPSHOT_FORMAT_VERSION,
+            });
+        }
+        let (world, leftover): (World, &[u8]) = postcard::take_from_bytes(after_version)?;
+        if !leftover.is_empty() {
+            return Err(SnapshotError::TrailingBytes {
+                extra_bytes: leftover.len(),
+            });
+        }
+        *self = world;
+        Ok(())
+    }
+
+    /// Number of physics steps taken since the world was built.
+    pub fn step_count(&self) -> u64 {
+        self.step_count
+    }
+
+    /// Simulated time since the world was built.
+    pub fn time_s(&self) -> f64 {
+        // Divide by the exact rate; PHYSICS_DT_S is a rounded f32.
+        self.step_count as f64 / PHYSICS_HZ as f64
+    }
+
+    /// The car's current position and orientation.
+    pub fn chassis_pose(&self) -> ChassisPose {
+        let body = &self.physics.bodies[self.car.chassis];
+        let rotation = body.rotation();
+        ChassisPose {
+            position_m: body.translation().to_array(),
+            rotation_xyzw: [rotation.x, rotation.y, rotation.z, rotation.w],
+        }
+    }
+
+    /// The car's velocity in world coordinates.
+    pub fn linear_velocity_m_s(&self) -> [f32; 3] {
+        self.physics.bodies[self.car.chassis].linvel().to_array()
+    }
+
+    /// The car's angular velocity in world coordinates.
+    pub fn angular_velocity_rad_s(&self) -> [f32; 3] {
+        self.physics.bodies[self.car.chassis].angvel().to_array()
+    }
+
+    /// Speed along the car's nose direction. Negative when rolling backwards.
+    pub fn forward_speed_m_s(&self) -> f32 {
+        self.car.forward_speed_m_s(&self.physics)
+    }
+
+    /// Which wheels touch the ground, in wheel order FL, FR, RL, RR.
+    pub fn wheels_touching(&self) -> [bool; WHEEL_COUNT] {
+        self.car.wheels_touching(&self.physics)
+    }
+
+    /// Current front-wheel angle. Positive turns left.
+    pub fn steering_angle_rad(&self) -> f32 {
+        self.car.steering_angle_rad()
+    }
+}
+
+/// A large flat box whose top surface is at y = 0.
+fn build_flat_ground(friction: f32) -> ColliderBuilder {
+    let [half_x, half_y, half_z] = FLAT_GROUND_HALF_EXTENTS_M;
+    ColliderBuilder::cuboid(half_x, half_y, half_z)
+        .translation(Vector::new(0.0, -half_y, 0.0))
+        .friction(friction)
+}
