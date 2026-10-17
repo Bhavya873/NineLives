@@ -5,10 +5,13 @@
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
+use common::new_world;
 use nl_sim::conventions::{NOZZLE_COUNT, NOZZLE_NAMES, PHYSICS_HZ};
 use nl_sim::thrusters::nozzle_force_and_torque_at_full_throttle;
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
-use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
+use nl_sim::world::World;
 
 /// SPEC §7.4 torque table in kN·m as (roll X, yaw Y, pitch Z), in nozzle order.
 const EXPECTED_TORQUE_KN_M: [[f32; 3]; NOZZLE_COUNT] = [
@@ -26,6 +29,15 @@ const EXPECTED_TORQUE_KN_M: [[f32; 3]; NOZZLE_COUNT] = [
 
 fn config() -> VehicleConfig {
     VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap()
+}
+
+/// A world with the car 10 m up, level and still, so the wheels do not interfere.
+fn airborne_world() -> World {
+    let mut world = new_world();
+    world
+        .place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3])
+        .unwrap();
+    world
 }
 
 #[test]
@@ -64,11 +76,7 @@ fn every_nozzle_torque_matches_the_spec_table() {
 
 #[test]
 fn firing_front_left_lift_raises_the_left_front_corner() {
-    // In the air, so the wheels do not interfere: 10 m up, level, still.
-    let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
-    world
-        .place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3])
-        .unwrap();
+    let mut world = airborne_world();
     let mut throttles = [0.0; NOZZLE_COUNT];
     throttles[0] = 1.0; // L_FL
 
@@ -86,10 +94,7 @@ fn firing_front_left_lift_raises_the_left_front_corner() {
 
 #[test]
 fn boost_nozzles_push_the_car_forward() {
-    let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
-    world
-        .place_car([0.0, 10.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0; 3], [0.0; 3])
-        .unwrap();
+    let mut world = airborne_world();
     let mut throttles = [0.0; NOZZLE_COUNT];
     throttles[8] = 1.0; // B_L
     throttles[9] = 1.0; // B_R
@@ -109,7 +114,7 @@ fn boost_nozzles_push_the_car_forward() {
 
 #[test]
 fn placing_the_car_closes_the_valves_from_the_last_run() {
-    let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
+    let mut world = new_world();
     world.set_controller_throttles([1.0; NOZZLE_COUNT]);
     for _ in 0..30 {
         world.step(Default::default());
@@ -125,7 +130,7 @@ fn placing_the_car_closes_the_valves_from_the_last_run() {
 
 #[test]
 fn a_zero_rotation_is_refused() {
-    let mut world = World::new_on_flat_ground(&config(), DEFAULT_GROUND_FRICTION);
+    let mut world = new_world();
 
     let result = world.place_car([0.0, 10.0, 0.0], [0.0; 4], [0.0; 3], [0.0; 3]);
 

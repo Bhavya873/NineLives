@@ -111,9 +111,8 @@ impl World {
 
     /// Advances the world by one physics step (1/120 s).
     pub fn step(&mut self, input: InputFrame) {
-        let commanded_throttles = self.controller_throttles;
         self.car
-            .prepare_physics_step(&mut self.physics, input, commanded_throttles);
+            .prepare_physics_step(&mut self.physics, input, self.controller_throttles);
         self.physics.step();
         self.step_count += 1;
     }

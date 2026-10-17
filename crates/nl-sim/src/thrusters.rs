@@ -73,8 +73,7 @@ pub fn apply_nozzle_forces(
         if throttle <= 0.0 {
             continue;
         }
-        let force_body_n =
-            nozzle_direction(nozzle) * (throttle * nozzle.max_force_n * thrust_scale);
+        let force_body_n = full_throttle_force_body_n(nozzle) * (throttle * thrust_scale);
         // Rotate the push and its point from the body frame into the world frame.
         let force_world_n = pose.rotation * force_body_n;
         let point_world_m = pose * Vector::from_array(nozzle.position_m);
@@ -86,13 +85,14 @@ pub fn apply_nozzle_forces(
 /// mode, in the body frame. Torque is `r × F` about the centre of mass.
 /// Used by the sign tests and, in M4, by the PD controller's allocation.
 pub fn nozzle_force_and_torque_at_full_throttle(nozzle: &NozzleConfig) -> (Vector, Vector) {
-    let force_n = nozzle_direction(nozzle) * nozzle.max_force_n;
+    let force_n = full_throttle_force_body_n(nozzle);
     let torque_n_m = Vector::from_array(nozzle.position_m).cross(force_n);
     (force_n, torque_n_m)
 }
 
-fn nozzle_direction(nozzle: &NozzleConfig) -> Vector {
-    Vector::from_array(nozzle.direction)
+/// One nozzle's push at full throttle in Realistic mode, in the body frame.
+fn full_throttle_force_body_n(nozzle: &NozzleConfig) -> Vector {
+    Vector::from_array(nozzle.direction) * nozzle.max_force_n
 }
 
 #[cfg(test)]
