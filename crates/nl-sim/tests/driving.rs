@@ -92,6 +92,59 @@ fn steering_left_turns_the_nose_left() {
 }
 
 #[test]
+fn wheels_sit_at_the_corners_below_the_body() {
+    let mut world = new_world();
+    run(&mut world, InputFrame::default(), 1.0);
+
+    let wheels = world.wheel_poses();
+
+    // Order is FL, FR, RL, RR; front is +X, left is -Z; wheel centres are one radius
+    // (0.34 m) above the flat ground at y = 0.
+    let [front_left, front_right, rear_left, rear_right] = wheels.map(|pose| pose.position_m);
+    assert!(front_left[0] > 1.0 && front_left[2] < -0.5);
+    assert!(front_right[0] > 1.0 && front_right[2] > 0.5);
+    assert!(rear_left[0] < -1.0 && rear_left[2] < -0.5);
+    assert!(rear_right[0] < -1.0 && rear_right[2] > 0.5);
+    for wheel in wheels {
+        assert!(
+            (wheel.position_m[1] - 0.34).abs() < 0.03,
+            "wheel y {}",
+            wheel.position_m[1]
+        );
+    }
+}
+
+#[test]
+fn wheels_move_with_the_body_at_speed() {
+    let mut world = new_world();
+    run(&mut world, throttle(127), 3.0);
+
+    let body_x_m = world.chassis_pose().position_m[0];
+    let front_left_x_m = world.wheel_poses()[0].position_m[0];
+
+    // The front-left mount is 1.3 m ahead of the centre of mass, also at 25+ m/s.
+    assert!(
+        (front_left_x_m - body_x_m - 1.3).abs() < 0.05,
+        "wheel is {} m ahead of the body",
+        front_left_x_m - body_x_m
+    );
+}
+
+#[test]
+fn wheels_are_at_their_mounts_before_the_first_step() {
+    let world = new_world();
+
+    let body_y_m = world.chassis_pose().position_m[1];
+    let wheel_y_m = world.wheel_poses()[0].position_m[1];
+
+    // Not at the origin: below the body by up to the rest length (0.3 m).
+    assert!(
+        wheel_y_m < body_y_m && wheel_y_m > body_y_m - 0.35,
+        "wheel y {wheel_y_m}"
+    );
+}
+
+#[test]
 fn steering_is_rate_limited() {
     let mut world = new_world();
 

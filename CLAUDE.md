@@ -61,6 +61,8 @@ python -m ninelives.charts
 # Web
 cd web && npm install
 npm run wasm        # builds crates/nl-wasm into web/src/wasm (release: + wasm-opt)
+npm run test:wasm   # Node tests: wasm golden trace + Game API
+node scripts/measure-tick.mjs   # after npm run wasm:release: ms per tick
 npm run dev         # local game
 npm run lint && npm run build
 npx playwright test

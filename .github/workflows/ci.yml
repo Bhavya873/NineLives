@@ -75,6 +75,8 @@ jobs:
         run: npm run lint
       - name: Build wasm
         run: npm run wasm
+      - name: Wasm tests (golden trace and Game API)
+        run: npm run test:wasm
       - name: Build
         run: npm run build
       - name: Cache the Playwright browser

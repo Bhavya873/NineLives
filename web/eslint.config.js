@@ -8,9 +8,9 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     // Build scripts run in Node, not the browser.
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'tests-node/**/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly' },
+      globals: { process: 'readonly', console: 'readonly', URL: 'readonly' },
     },
   },
 );

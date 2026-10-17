@@ -1,14 +1,14 @@
 // Entry point for the web game.
-// M2 replaces this placeholder with the renderer, input and game loop. For now
-// it loads the wasm module and shows its build info, to prove the build works.
-import initWasm, { build_info } from './wasm/nl_wasm.js';
+// The next PR replaces this placeholder with the renderer, input and game loop. For
+// now it loads the wasm module and shows the build name, to prove the build works.
+import initWasm, { Game } from './wasm/nl_wasm.js';
 
 async function start(): Promise<void> {
   await initWasm();
 
   const buildInfoElement = document.getElementById('build-info');
   if (buildInfoElement) {
-    buildInfoElement.textContent = build_info();
+    buildInfoElement.textContent = `${Game.build_hash()} · physics ${Math.round(1 / Game.physics_dt_s())} Hz`;
   }
 }
 

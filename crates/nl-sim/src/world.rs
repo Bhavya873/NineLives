@@ -27,13 +27,23 @@ const FLAT_GROUND_HALF_EXTENTS_M: [f32; 3] = [2000.0, 0.5, 2000.0];
 /// height (about 0.6 m) so it settles onto its wheels.
 const FLAT_GROUND_START_HEIGHT_M: f32 = 0.7;
 
-/// The car's position and orientation.
+/// Where something is and which way it faces, in world coordinates.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ChassisPose {
-    /// Centre of mass in world coordinates.
+pub struct Pose {
+    /// Centre position.
     pub position_m: [f32; 3],
     /// Orientation as a quaternion (x, y, z, w), the order three.js uses.
     pub rotation_xyzw: [f32; 4],
+}
+
+impl Pose {
+    /// Builds a pose from Rapier's position vector and rotation quaternion.
+    pub fn new(position_m: Vector, rotation: Rotation) -> Pose {
+        Pose {
+            position_m: position_m.to_array(),
+            rotation_xyzw: [rotation.x, rotation.y, rotation.z, rotation.w],
+        }
+    }
 }
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
@@ -130,14 +140,16 @@ impl World {
         self.step_count as f64 / PHYSICS_HZ as f64
     }
 
-    /// The car's current position and orientation.
-    pub fn chassis_pose(&self) -> ChassisPose {
+    /// The car's current position and orientation (its centre of mass).
+    pub fn chassis_pose(&self) -> Pose {
         let body = &self.physics.bodies[self.car.chassis];
-        let rotation = body.rotation();
-        ChassisPose {
-            position_m: body.translation().to_array(),
-            rotation_xyzw: [rotation.x, rotation.y, rotation.z, rotation.w],
-        }
+        Pose::new(body.translation(), *body.rotation())
+    }
+
+    /// Where each wheel is drawn, in wheel order FL, FR, RL, RR. Includes steering
+    /// and how far each wheel has rolled, so the renderer can spin them.
+    pub fn wheel_poses(&self) -> [Pose; WHEEL_COUNT] {
+        self.car.wheel_poses(&self.physics)
     }
 
     /// The car's velocity in world coordinates.
