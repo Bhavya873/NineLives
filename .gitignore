@@ -1,0 +1,25 @@
+# Rust
+target/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Web
+node_modules/
+web/dist/
+web/src/wasm/
+web/test-results/
+web/playwright-report/
+
+# Training checkpoints live on ckpt/<run-id> branches, never on main
+runs/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
