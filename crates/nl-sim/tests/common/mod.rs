@@ -39,6 +39,14 @@ pub fn new_world() -> World {
 /// No rotation: the car upright, facing world +X (quaternion x, y, z, w).
 pub const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+/// Rolled +90° about the forward axis (+X): lying on its right side (+Z down).
+pub const RIGHT_SIDE_DOWN: [f32; 4] = [
+    std::f32::consts::FRAC_1_SQRT_2,
+    0.0,
+    0.0,
+    std::f32::consts::FRAC_1_SQRT_2,
+];
+
 /// An input frame with only these buttons pressed.
 pub fn buttons(buttons: u16) -> InputFrame {
     InputFrame {

@@ -38,6 +38,7 @@ mod tests {
                 buttons,
                 ..InputFrame::default()
             },
+            ..ControlCtx::default()
         }
     }
 

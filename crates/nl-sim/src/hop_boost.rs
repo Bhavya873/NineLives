@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::conventions::NOZZLE_COUNT;
+use crate::conventions::{NOZZLE_COUNT, ON_WHEELS_MIN_WHEELS};
 use crate::modes::ModeParams;
 use crate::thrusters::safe_throttle;
 
@@ -14,8 +14,6 @@ use crate::thrusters::safe_throttle;
 const LIFT_NOZZLES: [usize; 4] = [0, 1, 2, 3];
 /// Indices of the two boost nozzles (B_L, B_R).
 const BOOST_NOZZLES: [usize; 2] = [8, 9];
-/// Wheels that must touch the ground to Hop (SPEC §7.8).
-const HOP_MIN_WHEELS: usize = 3;
 
 /// Why the driver cannot Hop right now. The HUD shows it (SPEC §7.8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,7 +66,7 @@ impl HopBoost {
         air_kg: f32,
         mode: &ModeParams,
     ) -> Option<HopBlockedReason> {
-        if wheels_touching < HOP_MIN_WHEELS {
+        if wheels_touching < ON_WHEELS_MIN_WHEELS {
             return Some(HopBlockedReason::NotOnGround);
         }
         if self.hop_cooldown_left_s > 0.0 {

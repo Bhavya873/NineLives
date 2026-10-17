@@ -5,6 +5,7 @@
 //! the browser (through `nl-wasm`) both call into it.
 
 pub mod car;
+pub mod car_state;
 pub mod chaos;
 pub mod checkpoint;
 pub mod contacts;

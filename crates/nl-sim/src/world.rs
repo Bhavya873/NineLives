@@ -14,6 +14,7 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::car::Car;
+use crate::car_state::{CarModel, CarState, height_above_ground_m, read_car_model};
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
 use crate::contacts::{MotionBeforeStep, read_body_contacts};
@@ -206,7 +207,7 @@ impl World {
         let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
         let commanded = combine_throttles(feed_forward, self.controller_throttles);
         // 5–8. Valve lag, tank gate, nozzle forces, wheels.
-        let thrust_multiplier = self.mode.thrust_scale * self.tank.thrust_gate(&self.mode);
+        let thrust_multiplier = self.thrust_multiplier();
         let thrust_n =
             self.car
                 .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
@@ -385,6 +386,37 @@ impl World {
         touching.iter().filter(|wheel_down| **wheel_down).count()
     }
 
+    /// What a controller sees of the car now (SPEC §8, §9.2).
+    pub fn car_state(&self) -> CarState {
+        CarState {
+            gravity_dir_body: self.in_body_frame(Vector::new(0.0, -1.0, 0.0)),
+            angular_velocity_body_rad_s: self.angular_velocity_body_rad_s(),
+            linear_velocity_body_m_s: self
+                .in_body_frame(self.physics.bodies[self.car.chassis].linvel()),
+            height_m: height_above_ground_m(&self.physics, &self.car),
+            wheel_contact: self.wheels_touching(),
+            mode_thrust_scale: self.mode.thrust_scale,
+            tank_gate: self.tank.thrust_gate(&self.mode),
+        }
+    }
+
+    /// What every nozzle's push is multiplied by now: the mode's scale times the tank
+    /// gate (SPEC §7.5, §7.7). `car_state` reports the two parts separately.
+    fn thrust_multiplier(&self) -> f32 {
+        self.mode.thrust_scale * self.tank.thrust_gate(&self.mode)
+    }
+
+    /// A world-frame vector as seen from the car's body frame (SPEC §4 axes).
+    fn in_body_frame(&self, world_vector: Vector) -> [f32; 3] {
+        let body = &self.physics.bodies[self.car.chassis];
+        (body.rotation().inverse() * world_vector).to_array()
+    }
+
+    /// The car's mass, inertia and what each nozzle can push (for PD's allocation).
+    pub fn car_model(&self) -> CarModel {
+        read_car_model(&self.physics, &self.car)
+    }
+
     /// True when the next `step` starts a control step: controllers run at 60 Hz, once
     /// every `PHYSICS_STEPS_PER_CONTROL_STEP` physics steps (SPEC §7.1). Every runner
     /// (game, eval, training) asks this rather than counting steps itself.
@@ -542,9 +574,7 @@ impl World {
     /// The car's angular velocity in its own body frame: [roll rate about +X,
     /// yaw rate about +Y, pitch rate about +Z] (SPEC §4 signs).
     pub fn angular_velocity_body_rad_s(&self) -> [f32; 3] {
-        let body = &self.physics.bodies[self.car.chassis];
-        let world_rate = body.angvel();
-        (body.rotation().inverse() * world_rate).to_array()
+        self.in_body_frame(self.physics.bodies[self.car.chassis].angvel())
     }
 
     /// Speed along the car's nose direction. Negative when rolling backwards.

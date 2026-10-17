@@ -1,0 +1,27 @@
+# Controller settings (SPEC §8). Numbers marked (start) in the SPEC: tune freely and log
+# the change in docs/EXPERIMENTS.md.
+
+[pd]
+# Attitude: desired torque = inertia × (kp × error − kd × spin).
+kp = 8.0
+kd = 4.0
+# Vertical braking: only when airborne, roughly upright (up alignment above
+# upright_alignment), lower than brake_height_m and falling faster than brake_speed_m_s.
+# Then aim to fall at target_descent_m_s, with gain kv.
+upright_alignment = 0.7
+brake_height_m = 3.0
+brake_speed_m_s = 4.0
+target_descent_m_s = 1.5
+kv = 2.0
+# Below this height, not upright and falling slower than lying_max_fall_speed_m_s, the
+# car is lying on the ground: roll torque only, to flip back onto its wheels.
+on_ground_height_m = 1.2
+lying_max_fall_speed_m_s = 1.0
+
+[allocation]
+# Solve min |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1 by projected gradient (SPEC §8).
+# Weights act on rows scaled to 1 at the strongest nozzle; torque matters more.
+force_weight = 1.0
+torque_weight = 3.0
+regularisation = 0.001
+iterations = 30

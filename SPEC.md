@@ -328,7 +328,7 @@ pub trait Controller {
 }
 ```
 
-Until `ObsSpec` exists (M4–M5) `act` takes only `ctx`, which carries the driver's `InputFrame`; PD adds `obs`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
+Until `ObsSpec` exists (M5) `act` takes only `ctx`: the driver's `InputFrame` and the car's `CarState` (the physical quantities the observation packs). M5 adds `obs` for the AI. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
 2. **Manual** (debug only): keys map to individual nozzles at throttle 1.
@@ -337,6 +337,7 @@ Until `ObsSpec` exists (M4–M5) `act` takes only `ctx`, which carries the drive
    - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if height < 3 m and downward speed > 4 m/s, command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. Otherwise `F_y = 0` (saves air).
    - **Allocation:** solve `min ‖W(B·u − w)‖² + λ‖u‖²` subject to `0 ≤ u ≤ 1`, with `w = [0, F_y, 0, τx, τy, τz]` and `B` the 6×10 matrix scaled by max force. Use projected gradient descent (30 iterations, step `1/L`) or a small active-set NNLS. Torque weights are higher than force weights.
    - **On the ground and inverted:** use roll torque only, to flip back.
+   - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m` and not upright; when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
 4. **Ai:** loads `models/policy.json`, normalizes the observation, runs the MLP forward pass, and maps the action from [−1, 1] to [0, 1]. The policy is deterministic (mean action).
 
 The PD controller is required before RL. It proves the problem is controllable and is the baseline the AI must be compared against.
@@ -599,7 +600,7 @@ class Game {
 - [x] Determinism and snapshot/restore tests pass.
 
 **M2 — Browser viewer**
-- [ ] `nl-wasm` exposes `Game`; the web app renders the car and ground and drives with the keyboard at 60 fps.
+- [x] `nl-wasm` exposes `Game`; the web app renders the car and ground and drives with the keyboard at 60 fps.
 - [x] Chase camera, the fixed-step loop and interpolation work. Golden trace matches on wasm.
 
 **M3 — Thrusters, tank, modes, events**
