@@ -100,7 +100,7 @@ function eventGroups(values) {
   return groups;
 }
 
-test('a hop reports airborne, upset and save events', () => {
+test('a hop reports airborne, upset, hard landing and save events', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
   game.drain_events();
@@ -113,6 +113,8 @@ test('a hop reports airborne, upset and save events', () => {
     EventKind.AirborneStart,
     EventKind.UpsetStart,
     EventKind.AirborneEnd,
+    // A full Hop from a standstill lands hard enough to bottom out the springs.
+    EventKind.HardLanding,
     EventKind.Save,
   ]);
   assert.equal(game.is_crashed(), false);

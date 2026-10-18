@@ -207,7 +207,12 @@ impl Car {
     /// (at the end of its travel), in wheel order FL, FR, RL, RR (SPEC §9.2 rows 14–17).
     /// Like `wheels_touching`, it comes from the last wheel rays.
     pub fn suspension_compressions(&self, physics: &PhysicsWorld) -> [f32; WHEEL_COUNT] {
-        let touching = self.wheels_touching(physics);
+        self.compressions_of(self.wheels_touching(physics))
+    }
+
+    /// `suspension_compressions` for wheels already known to be `touching` (from
+    /// `wheels_touching` this step), so the caller need not check contact twice.
+    pub(crate) fn compressions_of(&self, touching: [bool; WHEEL_COUNT]) -> [f32; WHEEL_COUNT] {
         let mut compressions = [0.0; WHEEL_COUNT];
         for (index, wheel) in self.wheels.wheels().iter().enumerate() {
             if !touching[index] {

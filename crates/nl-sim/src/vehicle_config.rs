@@ -152,6 +152,16 @@ pub struct EventConfig {
     pub out_of_bounds_y_m: f32,
     /// After a crash the wreck stays frozen this long, then the car respawns.
     pub respawn_delay_s: f32,
+    /// A touchdown is a hard landing when any wheel's suspension compression (0..1)
+    /// reaches this (PLAN §3.3)...
+    pub hard_landing_compression: f32,
+    /// ...within this long after the first wheel touches, in s.
+    pub hard_landing_window_s: f32,
+    /// Speed kept is the forward speed this long after touchdown ÷ the take-off speed, in s.
+    pub speed_kept_delay_s: f32,
+    /// Speed kept is only measured when the car took off from its wheels faster than
+    /// this, in m/s, so a drop from rest is not judged on it.
+    pub speed_kept_min_take_off_m_s: f32,
 }
 
 /// The size of a Chaos knock (SPEC §7.12). See `[chaos]`.
@@ -347,6 +357,16 @@ impl EventConfig {
         must_not_be_negative("events.stuck_s", self.stuck_s)?;
         must_be_finite("events.out_of_bounds_y_m", self.out_of_bounds_y_m)?;
         must_not_be_negative("events.respawn_delay_s", self.respawn_delay_s)?;
+        must_be_positive(
+            "events.hard_landing_compression",
+            self.hard_landing_compression,
+        )?;
+        must_be_positive("events.hard_landing_window_s", self.hard_landing_window_s)?;
+        must_not_be_negative("events.speed_kept_delay_s", self.speed_kept_delay_s)?;
+        must_be_positive(
+            "events.speed_kept_min_take_off_m_s",
+            self.speed_kept_min_take_off_m_s,
+        )?;
         if self.save_tilt_deg >= self.upset_tilt_deg {
             let save = self.save_tilt_deg;
             let upset = self.upset_tilt_deg;

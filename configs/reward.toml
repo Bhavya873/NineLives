@@ -22,6 +22,15 @@ smoothness = 0.002
 save = 1.0
 # Crash event (ends the episode): weight × −crash_penalty.
 crash = 1.0
+# Landing quality (PLAN §3.3). Hard landing: weight × −1 per HardLanding event (a wheel
+# bottomed out at touchdown, vehicle.toml [events]).
+hard_landing = 1.0
+# Unsettled: weight × −1 per step after the episode's first touchdown while the car is
+# not settled (scenarios.toml [episode] settle_*).
+unsettled = 0.01
+# Air left: weight × (share of the tank left), once, on the step the episode succeeds,
+# only with a limited tank (unlimited air has nothing to save).
+air_left = 1.0
 
 [shape]
 # |ω|² above this is not charged more (rad²/s²).
@@ -29,10 +38,14 @@ spin_cap_rad2_s2 = 50.0
 # Airtime shorter than this is free (a hop or a short drop).
 airborne_grace_s = 0.5
 # Save = save_base + save_quality × q, with
-# q = clamp01(1 − |ω| / save_spin_scale) × clamp01(1 − fall speed / save_fall_scale),
-# with |ω| and the fall speed taken just before the wheels touched down.
+# q = clamp01(1 − |ω| / save_spin_scale) × clamp01(1 − fall speed / save_fall_scale)
+#   × clamp01(1 − heading error / save_heading_scale) × clamp01(speed kept),
+# with |ω| and the fall speed taken just before the wheels touched down, the heading
+# error between the nose at touchdown and at take-off, and speed kept as in
+# vehicle.toml [events] (a factor of 1 when not measured).
 save_base = 2.0
 save_quality = 3.0
 save_spin_scale_rad_s = 4.0
 save_fall_scale_m_s = 6.0
+save_heading_scale_deg = 45.0
 crash_penalty = 10.0

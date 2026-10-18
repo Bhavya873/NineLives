@@ -93,6 +93,11 @@ fn the_summary_counts_rates_and_air_per_save() {
         touchdown_spin_rad_s: Some(1.0),
         touchdown_fall_m_s: Some(2.0),
         duration_s: 1.0,
+        hard_landings: u32::from(!success),
+        landing_heading_error_deg: Some(10.0),
+        speed_kept: None,
+        settle_time_s: success.then_some(0.8),
+        air_left_kg: Some(200.0),
     };
 
     let summary = summarise(&[episode(true, 1, 30.0), episode(false, 0, 10.0)]);
@@ -103,6 +108,11 @@ fn the_summary_counts_rates_and_air_per_save() {
     // Only air spent in saved upsets counts, not the 200 kg used overall.
     assert_eq!(summary.air_per_save_kg, Some(40.0));
     assert_eq!(summary.touchdown_fall_median_m_s, Some(2.0));
+    assert_eq!(summary.hard_landing_rate, 0.5);
+    assert_eq!(summary.landing_heading_error_median_deg, Some(10.0));
+    assert_eq!(summary.speed_kept_median, None);
+    assert_eq!(summary.settle_time_median_s, Some(0.8));
+    assert_eq!(summary.air_left_at_success_median_kg, Some(200.0));
 }
 
 #[test]

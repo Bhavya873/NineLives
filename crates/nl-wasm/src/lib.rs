@@ -177,6 +177,9 @@ pub enum EventKind {
     Finished = 8,
     /// Followed by: the kick plate's piece index in the course file.
     Kicked = 9,
+    /// A wheel bottomed out at touchdown (not a crash). Followed by: the largest
+    /// suspension compression (0..1), the fall speed just before touchdown in m/s.
+    HardLanding = 10,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -525,6 +528,15 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
         ],
         SimEvent::Finished { time_s } => [kind_code(EventKind::Finished), time_s, 0.0, 0.0],
         SimEvent::Kicked { piece } => [kind_code(EventKind::Kicked), piece as f32, 0.0, 0.0],
+        SimEvent::HardLanding {
+            compression,
+            fall_m_s,
+        } => [
+            kind_code(EventKind::HardLanding),
+            compression,
+            fall_m_s,
+            0.0,
+        ],
     }
 }
 

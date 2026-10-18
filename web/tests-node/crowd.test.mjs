@@ -28,7 +28,8 @@ test('each car ends exactly as the native eval of its seed does', () => {
   const landed = Array.from(crowd.outcomes()).map((code) => code === CrowdOutcome.Landed);
   assert.deepEqual(
     landed,
-    committed.map((row) => row.success),
+    // Landed: a success, or a time-out after a save (a crash ends the episode).
+    committed.map((row) => row.success || (row.saves > 0 && row.crash_cause === null)),
   );
 });
 

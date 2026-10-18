@@ -17,6 +17,8 @@ fn resting() -> StepSummary {
         spin_rad_s: 0.0,
         landing_spin_rad_s: 0.0,
         landing_fall_m_s: 0.0,
+        landing_heading_error_rad: None,
+        landing_speed_kept: None,
         air_used_kg: 0.0,
         tank_capacity_kg: 260.0,
         unlimited_air: false,
@@ -25,6 +27,10 @@ fn resting() -> StepSummary {
         airborne_s: 0.0,
         saved: false,
         crashed: false,
+        hard_landings: 0,
+        unsettled: false,
+        succeeded: false,
+        air_left_fraction: 1.0,
     }
 }
 
@@ -139,6 +145,85 @@ fn a_still_soft_landing_save_pays_five_and_a_rough_one_pays_two() {
 
     assert!((reward_terms(&soft, &config()).save - 5.0).abs() < 1e-6);
     assert!((reward_terms(&rough, &config()).save - 2.0).abs() < 1e-6);
+}
+
+#[test]
+fn a_save_landing_turned_90_degrees_earns_less_than_one_landing_straight() {
+    let straight = StepSummary {
+        saved: true,
+        landing_heading_error_rad: Some(0.0),
+        ..resting()
+    };
+    let turned = StepSummary {
+        saved: true,
+        landing_heading_error_rad: Some(90_f32.to_radians()),
+        ..resting()
+    };
+
+    let straight_save = reward_terms(&straight, &config()).save;
+    let turned_save = reward_terms(&turned, &config()).save;
+
+    // q has a clamp01(1 − error / 45°) factor: 1 straight, 0 at 90°.
+    assert!((straight_save - 5.0).abs() < 1e-6);
+    assert!((turned_save - 2.0).abs() < 1e-6);
+}
+
+#[test]
+fn a_save_that_kept_half_its_speed_earns_half_the_quality_bonus() {
+    let step = StepSummary {
+        saved: true,
+        landing_speed_kept: Some(0.5),
+        ..resting()
+    };
+
+    // 2 + 3 × 0.5.
+    assert!((reward_terms(&step, &config()).save - 3.5).abs() < 1e-6);
+}
+
+#[test]
+fn each_hard_landing_costs_its_weight() {
+    let step = StepSummary {
+        hard_landings: 2,
+        ..resting()
+    };
+
+    assert!((reward_terms(&step, &config()).hard_landing + 2.0).abs() < 1e-6);
+}
+
+#[test]
+fn being_unsettled_after_touchdown_costs_a_little_every_step() {
+    let step = StepSummary {
+        unsettled: true,
+        ..resting()
+    };
+
+    assert!((reward_terms(&step, &config()).unsettled + 0.01).abs() < 1e-6);
+}
+
+#[test]
+fn air_left_pays_only_on_the_success_step() {
+    let resting_with_air = StepSummary {
+        air_left_fraction: 0.8,
+        ..resting()
+    };
+    let succeeded = StepSummary {
+        succeeded: true,
+        ..resting_with_air
+    };
+
+    assert_eq!(reward_terms(&resting_with_air, &config()).air_left, 0.0);
+    assert!((reward_terms(&succeeded, &config()).air_left - 0.8).abs() < 1e-6);
+}
+
+#[test]
+fn unlimited_air_pays_no_air_left_bonus() {
+    let step = StepSummary {
+        succeeded: true,
+        unlimited_air: true,
+        ..resting()
+    };
+
+    assert_eq!(reward_terms(&step, &config()).air_left, 0.0);
 }
 
 #[test]

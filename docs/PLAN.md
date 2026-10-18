@@ -64,6 +64,8 @@ A "save" today only means the car ends still, upright and on four wheels. For a 
 
 The events, rules and terms live only in `nl-sim` (golden rule 1). Python and the browser read them from there.
 
+**Implemented 2026-10-17** (branch `claude/m7-landing-quality`): all five rows, in `nl_sim::landing`, `events`, `episode`, `reward` and `training`, with numbers in `vehicle.toml [events]`, `scenarios.toml [episode]` and `reward.toml`. The heading reference is the last take-off from the wheels; a landing after a start in the air (Stage A) or a tip-over (Stage B) has no heading error and no heading factor. A Stage D "course direction" reference and the Stage C/D "error < 30°" success rule are left to the stage work, which can read `Episode::last_save_quality()`. Speed kept needs a take-off from the wheels above 3 m/s instead of a stage check. See DECISIONS and EXPERIMENTS.
+
 ---
 
 ## 4. Milestones
