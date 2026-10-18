@@ -72,8 +72,8 @@ pub struct EpisodeResult {
     /// From the first touchdown until the car was settled for good, in s; None if it
     /// never touched down, was not settled at the end, or crashed.
     pub settle_time_s: Option<f32>,
-    /// Air left in the tank at the end, in kg (the full tank with unlimited air).
-    pub air_left_kg: f32,
+    /// Air left in the tank at the end, in kg; None with unlimited air.
+    pub air_left_kg: Option<f32>,
 }
 
 /// The numbers an episode gathers while it runs.
@@ -121,6 +121,8 @@ pub struct Episode {
     /// What the valves are being told now (the commanded throttles, `latency` control
     /// steps late).
     applied_throttles: [f32; NOZZLE_COUNT],
+    /// Settled needs a spin below this, in rad/s: the save rule's `save_max_spin_rad_s`.
+    settle_max_spin_rad_s: f32,
     /// Sensor noise on what controllers see (all zero: none), and its generator.
     obs_noise: ObsNoise,
     noise_rng: ChaCha8Rng,
@@ -156,6 +158,7 @@ impl Episode {
             delayed_throttles: VecDeque::from(delayed_throttles),
             commanded_throttles: [0.0; NOZZLE_COUNT],
             applied_throttles: [0.0; NOZZLE_COUNT],
+            settle_max_spin_rad_s: variation.vehicle.events.save_max_spin_rad_s,
             obs_noise: variation.obs_noise,
             noise_rng: noise_rng(seed),
         })
@@ -290,7 +293,7 @@ impl Episode {
                 .last_save_quality
                 .and_then(|quality| quality.speed_kept),
             settle_time_s: self.settle_time_s(),
-            air_left_kg: self.world.air_kg(),
+            air_left_kg: (!self.world.mode().unlimited_air).then(|| self.world.air_kg()),
         }
     }
 
@@ -315,13 +318,13 @@ impl Episode {
         }
     }
 
-    /// PLAN §3.3: starts or breaks the run of being settled: four wheels down, slow
-    /// spin and little sideways speed.
+    /// PLAN §3.3: starts or breaks the run of being settled: four wheels down, spin
+    /// below the save rule's limit and little sideways speed.
     fn track_settled(&mut self) {
         let rules = &self.rules;
         let side_speed_m_s = self.state.linear_velocity_body_m_s[2].abs();
         let settled = self.state.wheels_down() == WHEEL_COUNT
-            && self.state.spin_rad_s() < rules.settle_max_spin_rad_s
+            && self.state.spin_rad_s() < self.settle_max_spin_rad_s
             && side_speed_m_s < rules.settle_max_side_speed_m_s;
         let now_s = self.world.time_s() as f32;
         self.tally.settled_since_s = start_or_break_run(self.tally.settled_since_s, settled, now_s);

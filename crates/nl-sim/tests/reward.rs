@@ -216,6 +216,17 @@ fn air_left_pays_only_on_the_success_step() {
 }
 
 #[test]
+fn unlimited_air_pays_no_air_left_bonus() {
+    let step = StepSummary {
+        succeeded: true,
+        unlimited_air: true,
+        ..resting()
+    };
+
+    assert_eq!(reward_terms(&step, &config()).air_left, 0.0);
+}
+
+#[test]
 fn a_crash_costs_ten() {
     let step = StepSummary {
         crashed: true,

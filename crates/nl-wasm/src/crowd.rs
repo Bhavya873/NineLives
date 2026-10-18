@@ -25,7 +25,10 @@ use crate::{FLOATS_PER_POSE, flatten_poses};
 pub enum CrowdOutcome {
     /// Still in the air or settling.
     Running = 0,
-    /// Landed and held all four wheels down (SPEC §9.5).
+    /// The episode ended with the car back on its wheels: it succeeded (SPEC §9.5), or
+    /// it ran out of time after a save without crashing. The second case keeps the
+    /// viewer honest about landings for policies that still blow air while parked,
+    /// which the quiet-throttle success rule does not count as a success.
     Landed = 1,
     /// Crashed.
     Crashed = 2,
@@ -125,6 +128,7 @@ impl Crowd {
                 EpisodeStatus::Running => CrowdOutcome::Running,
                 EpisodeStatus::Succeeded => CrowdOutcome::Landed,
                 EpisodeStatus::Crashed(_) => CrowdOutcome::Crashed,
+                EpisodeStatus::TimedOut if episode.saves() > 0 => CrowdOutcome::Landed,
                 EpisodeStatus::TimedOut => CrowdOutcome::TimedOut,
             };
             codes.push(outcome as u8);

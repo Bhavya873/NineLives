@@ -34,7 +34,8 @@ pub struct RewardWeights {
     pub hard_landing: f32,
     /// Cost per step while unsettled after the first touchdown (PLAN §3.3).
     pub unsettled: f32,
-    /// Multiplies the share of the tank left, paid once on success (PLAN §3.3).
+    /// Multiplies the share of the tank left, paid once on success with a limited tank
+    /// (PLAN §3.3).
     pub air_left: f32,
 }
 
@@ -185,7 +186,8 @@ pub struct StepSummary {
     pub unsettled: bool,
     /// The episode succeeded on this step (SPEC §9.5).
     pub succeeded: bool,
-    /// Share of the tank left at the end of the step, 0..1 (1 with unlimited air).
+    /// Share of the tank left at the end of the step, 0..1 (not read with unlimited air,
+    /// where there is no tank to save).
     pub air_left_fraction: f32,
 }
 
@@ -286,7 +288,7 @@ pub fn reward_terms(step: &StepSummary, config: &RewardConfig) -> RewardTerms {
         crash,
         hard_landing: -w.hard_landing * step.hard_landings as f32,
         unsettled: if step.unsettled { -w.unsettled } else { 0.0 },
-        air_left: if step.succeeded {
+        air_left: if step.succeeded && !step.unlimited_air {
             w.air_left * step.air_left_fraction.clamp(0.0, 1.0)
         } else {
             0.0

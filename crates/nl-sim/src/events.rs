@@ -125,8 +125,13 @@ pub struct EventTracker {
     crashed: bool,
     /// Wheels down on the step before, to spot a touchdown.
     previous_wheels_down: usize,
-    /// The latest take-off (AirborneStart), which landings are judged against.
+    /// The latest take-off (AirborneStart), which landings are judged against. Cleared
+    /// once all four wheels are down again, so a later upset (say, tipped by a bump) is
+    /// not judged against an old jump.
     take_off: Option<TakeOff>,
+    /// False until the first step after a reset, when there is no "step before" to
+    /// compare wheel contact with: a car placed on its wheels has not touched down.
+    stepped_since_reset: bool,
     /// Time left to look for a bottomed-out wheel after the latest touchdown, in s;
     /// 0 when not looking.
     hard_landing_watch_s: f32,
@@ -166,7 +171,13 @@ impl EventTracker {
         self.update_airborne(inputs, dt_s, events);
         self.update_hard_landing(inputs, config, dt_s, events);
         self.update_upset_and_save(inputs, config, dt_s, events);
+        if inputs.wheels_down == WHEEL_COUNT {
+            // Any landing has been judged by now (the upset's landing is set on the
+            // first touchdown), so the take-off has done its job.
+            self.take_off = None;
+        }
         self.previous_wheels_down = inputs.wheels_down;
+        self.stepped_since_reset = true;
     }
 
     /// The first crash rule that applies this step, if any (SPEC §7.9).
@@ -199,15 +210,10 @@ impl EventTracker {
         self.airborne_s > 0.0
     }
 
-    /// The latest take-off, which the next landing's heading and speed are judged
-    /// against (PLAN §3.3).
-    pub fn take_off(&self) -> Option<TakeOff> {
-        self.take_off
-    }
-
-    /// True on the step the first wheel touches after none did.
+    /// True on the step the first wheel touches after none did (never on the first
+    /// step after a reset, which has no step before).
     fn touched_down(&self, inputs: &EventInputs) -> bool {
-        self.previous_wheels_down == 0 && inputs.wheels_down > 0
+        self.stepped_since_reset && self.previous_wheels_down == 0 && inputs.wheels_down > 0
     }
 
     /// Airborne starts when no wheel touches, and ends when any wheel touches again.
@@ -291,27 +297,24 @@ impl EventTracker {
             && inputs.tilt_rad < config.save_tilt_deg.to_radians()
             && inputs.spin_rad_s < config.save_max_spin_rad_s;
         let all_wheels_back = inputs.wheels_down == WHEEL_COUNT;
-        if upset.landing.is_none() && (touched_down || all_wheels_back) {
-            let motion = inputs.motion_before_step;
-            let landing = Landing::at_touchdown(motion, take_off, inputs.nose_world, config);
-            upset.landing = Some(landing);
-        } else if let Some(landing) = upset.landing.as_mut() {
-            landing.update(inputs.forward_speed_m_s, config, dt_s);
+        if touched_down || all_wheels_back {
+            upset.landing.get_or_insert_with(|| {
+                let motion = inputs.motion_before_step;
+                Landing::at_touchdown(motion, take_off, inputs.nose_world, config)
+            });
         }
+        // Still in the air (or never back on a wheel): nothing to judge or save yet.
+        // A save needs all four wheels down, which sets the landing above.
+        let Some(landing) = upset.landing.as_mut() else {
+            return;
+        };
+        landing.update(inputs.forward_speed_m_s, config, dt_s);
         upset.save_held_s = if back_on_wheels {
             upset.save_held_s + dt_s
         } else {
             0.0
         };
         if upset.save_held_s >= config.save_hold_s {
-            let mut landing = upset.landing.unwrap_or_else(|| {
-                Landing::at_touchdown(
-                    inputs.motion_before_step,
-                    take_off,
-                    inputs.nose_world,
-                    config,
-                )
-            });
             events.push(SimEvent::Save {
                 duration_s: upset.elapsed_s,
                 air_used_kg: inputs.air_used_kg - upset.air_used_at_start_kg,
@@ -539,6 +542,58 @@ mod tests {
             _ => None,
         });
         assert_eq!(quality.unwrap().speed_kept, Some(0.5));
+    }
+
+    #[test]
+    fn a_tip_over_long_after_a_jump_is_not_judged_against_the_old_take_off() {
+        let mut tracker = EventTracker::default();
+        let driving = EventInputs {
+            forward_speed_m_s: 20.0,
+            ..upright_on_wheels()
+        };
+        let in_the_air = EventInputs {
+            wheels_down: 0,
+            ..driving
+        };
+        // After the jump the car drives on, turns a quarter turn, then a bump tips it.
+        let turned = EventInputs {
+            nose_world: [0.0, 0.0, 1.0],
+            ..driving
+        };
+        let tipped = EventInputs {
+            wheels_down: 2,
+            tilt_rad: 70_f32.to_radians(),
+            ..turned
+        };
+
+        feed(&mut tracker, driving, 0.5);
+        feed(&mut tracker, in_the_air, 0.5);
+        feed(&mut tracker, driving, 2.0);
+        feed(&mut tracker, turned, 1.0);
+        feed(&mut tracker, tipped, 0.3);
+        let events = feed(&mut tracker, turned, 1.0);
+
+        let quality = events.iter().find_map(|event| match event {
+            SimEvent::Save { quality, .. } => Some(*quality),
+            _ => None,
+        });
+        assert_eq!(quality.unwrap().heading_error_rad, None);
+        assert_eq!(quality.unwrap().speed_kept, None);
+    }
+
+    #[test]
+    fn the_first_step_after_a_reset_on_the_wheels_is_not_a_touchdown() {
+        let mut tracker = EventTracker::default();
+        let springs_bottomed = EventInputs {
+            max_suspension_compression: 1.0,
+            ..upright_on_wheels()
+        };
+        feed(&mut tracker, upright_on_wheels(), 0.5);
+        tracker.reset();
+
+        let events = feed(&mut tracker, springs_bottomed, 0.1);
+
+        assert_eq!(hard_landings(&events), 0);
     }
 
     #[test]

@@ -97,7 +97,7 @@ impl LandingSamples {
         self.speeds_kept.extend(result.speed_kept);
         self.settle_times_s.extend(result.settle_time_s);
         if result.success {
-            self.air_left_at_success_kg.push(result.air_left_kg);
+            self.air_left_at_success_kg.extend(result.air_left_kg);
         }
     }
 }

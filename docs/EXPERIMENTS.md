@@ -35,20 +35,20 @@ Notes:
 
 `python -m ninelives.eval` (episodes run in Rust), 1000 episodes per row, seeds 0–999, same policy (`models/policy.json`, stage-a-004) and configs as above plus the PLAN §3.3 rules: success now also needs the commanded throttle sum < 0.05 for the last 0.5 s of the 1.0 s hold. No training was run. Before = the committed results above.
 
-| Controller | Stage | Mode | DR | Success before → after | Save | Crash | Hard-landing rate | Settle time median (s) | Air left at success median (kg) |
+| Controller | Stage | Mode | DR | Success before → after | Save | Crash | Hard-landing rate | Settle time median (s) | Air left at success median (kg, limited tank only) |
 |---|---|---|---|---|---|---|---|---|---|
 | off | A | realistic | no | 6.6% → 6.6% | 6.5% | 90.5% | 0.0% | 0.74 | 260.0 |
 | off | B | realistic | no | 14.6% → 14.6% | 14.6% | 8.6% | 0.0% | 1.45 | 260.0 |
 | pd | A | realistic | no | 58.0% → 58.0% | 57.9% | 41.7% | 0.2% | 0.20 | 227.4 |
-| pd | A | arcade | no | 60.6% → 60.6% | 60.5% | 39.1% | 0.2% | 0.18 | 260.0 |
-| pd | A | realistic | yes | 57.2% → 57.2% | 57.1% | 42.5% | 0.2% | 0.23 | 223.6 |
+| pd | A | arcade | no | 60.6% → 60.6% | 60.5% | 39.1% | 0.2% | 0.18 | – |
+| pd | A | realistic | yes | 57.2% → 57.2% | 57.1% | 42.5% | 0.2% | 0.23 | 208.5 |
 | pd | B | realistic | no | 100.0% → 100.0% | 100.0% | 0.0% | 0.0% | 1.48 | 229.7 |
-| pd | B | arcade | no | 100.0% → 100.0% | 100.0% | 0.0% | 0.0% | 1.48 | 260.0 |
+| pd | B | arcade | no | 100.0% → 100.0% | 100.0% | 0.0% | 0.0% | 1.48 | – |
 | ai | A | realistic | no | **74.2% → 0.0%** | 74.1% | 25.7% | 2.1% | 0.08 | – |
-| ai | A | arcade | no | **84.5% → 3.2%** | 84.4% | 15.5% | 1.7% | 0.11 | 260.0 |
-| ai | A | realistic | yes | **78.8% → 0.3%** | 78.6% | 21.2% | 0.8% | 0.09 | 202.0 |
+| ai | A | arcade | no | **84.5% → 3.2%** | 84.4% | 15.5% | 1.7% | 0.11 | – |
+| ai | A | realistic | yes | **78.8% → 0.3%** | 78.6% | 21.2% | 0.8% | 0.09 | – |
 
-(Off rows are identical in Arcade. Heading error and speed kept are empty on Stage A/B: both are judged only after a take-off from the wheels, which drops and tip-overs don't have. The one exception is a single AI Realistic episode that bounced off its wheels before its save.)
+(Off rows are identical in Arcade, except that air left is empty there: Arcade has unlimited air, and so do 40% of DR episodes. Heading error and speed kept are empty on Stage A/B: both are judged only after a take-off from the wheels, which drops and tip-overs don't have. The one exception is a single AI Realistic episode that bounced off its wheels before its save.)
 
 Notes:
 - **The AI's drop is the known idle-thrust defect, not a regression in flying:** its save and crash rates are unchanged, but it keeps a throttle sum of 0.2–0.4 while parked, so the episodes now time out instead of succeeding. The next training run (with the new success rule and reward terms) has to learn to close the valves. Off and PD close their valves at rest, so their numbers are unchanged.

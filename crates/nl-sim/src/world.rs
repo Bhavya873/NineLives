@@ -78,7 +78,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 11;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 12;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -278,7 +278,8 @@ impl World {
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
         self.physics.step();
-        let wheels_down_after = self.wheels_touching_count();
+        let touching_after = self.wheels_touching();
+        let wheels_down_after = count_true(touching_after);
         // 10. The tank: pay for this step's thrust, then refill if on the ground.
         let exhaust_m_s = self.car.exhaust_speed_m_s();
         self.tank
@@ -289,7 +290,7 @@ impl World {
         // the step of a crash still counts. Kick impulses act from the next step.
         self.update_triggers();
         // 12. Events (SPEC §7.9).
-        self.update_events(&motion_before, wheels_down_after);
+        self.update_events(&motion_before, touching_after);
     }
 
     /// Gives the car a random Chaos knock (SPEC §7.12).
@@ -333,7 +334,8 @@ impl World {
     }
 
     /// Feeds this step's state to the event rules and keeps any new events.
-    fn update_events(&mut self, motion_before: &MotionBeforeStep, wheels_down: usize) {
+    /// `touching` is which wheels touch after this step's physics step.
+    fn update_events(&mut self, motion_before: &MotionBeforeStep, touching: [bool; WHEEL_COUNT]) {
         let contacts = read_body_contacts(
             &self.physics,
             self.car.body_collider,
@@ -341,8 +343,10 @@ impl World {
             motion_before,
         );
         let body = &self.physics.bodies[self.car.chassis];
+        let nose = body.rotation() * Vector::X;
+        let compressions = self.car.compressions_of(touching);
         let inputs = EventInputs {
-            wheels_down,
+            wheels_down: count_true(touching),
             tilt_rad: self.tilt_rad(),
             spin_rad_s: body.angvel().length(),
             motion_before_step: Touchdown {
@@ -353,9 +357,9 @@ impl World {
             height_m: body.translation().y,
             impact_speed_m_s: contacts.impact_speed_m_s,
             roof_touching: contacts.roof_touching,
-            nose_world: (body.rotation() * Vector::X).to_array(),
-            forward_speed_m_s: self.car.forward_speed_m_s(&self.physics),
-            max_suspension_compression: largest(self.suspension_compressions()),
+            nose_world: nose.to_array(),
+            forward_speed_m_s: nose.dot(body.linvel()),
+            max_suspension_compression: largest(compressions),
             outside_course: self
                 .course_bounds
                 .is_some_and(|bounds| !bounds.contains(body.center_of_mass().to_array())),
@@ -554,8 +558,7 @@ impl World {
 
     /// How many wheels touch the ground (0..4).
     pub fn wheels_touching_count(&self) -> usize {
-        let touching = self.wheels_touching();
-        touching.iter().filter(|wheel_down| **wheel_down).count()
+        count_true(self.wheels_touching())
     }
 
     /// What a controller sees of the car now (SPEC §8, §9.2).
@@ -786,6 +789,11 @@ impl World {
     pub fn steering_angle_rad(&self) -> f32 {
         self.car.steering_angle_rad()
     }
+}
+
+/// How many wheels are marked true.
+fn count_true(wheels: [bool; WHEEL_COUNT]) -> usize {
+    wheels.iter().filter(|wheel_down| **wheel_down).count()
 }
 
 /// The largest of the wheels' values.

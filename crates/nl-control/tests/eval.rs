@@ -97,7 +97,7 @@ fn the_summary_counts_rates_and_air_per_save() {
         landing_heading_error_deg: Some(10.0),
         speed_kept: None,
         settle_time_s: success.then_some(0.8),
-        air_left_kg: 200.0,
+        air_left_kg: Some(200.0),
     };
 
     let summary = summarise(&[episode(true, 1, 30.0), episode(false, 0, 10.0)]);
