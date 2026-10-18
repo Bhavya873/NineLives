@@ -501,7 +501,9 @@ mod tests {
             ..upright_on_wheels()
         };
 
-        let mut events = feed(&mut tracker, in_the_air, 0.5);
+        // Take off from the wheels: only then is there a heading to keep.
+        let mut events = feed(&mut tracker, upright_on_wheels(), 0.2);
+        events.extend(feed(&mut tracker, in_the_air, 0.5));
         events.extend(feed(&mut tracker, landed_turned, 1.0));
 
         let quality = events.iter().find_map(|event| match event {

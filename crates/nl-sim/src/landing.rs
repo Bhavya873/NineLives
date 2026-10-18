@@ -39,7 +39,7 @@ impl TakeOff {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct LandingQuality {
     /// Angle between the flattened nose at touchdown and at take-off, 0..π rad; None if
-    /// either had no clear heading or there was no take-off.
+    /// either had no clear heading or the car did not take off from its wheels.
     pub heading_error_rad: Option<f32>,
     /// Forward speed `speed_kept_delay_s` after touchdown ÷ forward speed at take-off;
     /// None unless the car took off from its wheels faster than
@@ -70,7 +70,12 @@ impl Landing {
         nose_world: [f32; 3],
         config: &EventConfig,
     ) -> Landing {
-        let take_off_heading = take_off.and_then(|take_off| take_off.heading_xz);
+        // Only a take-off from the wheels has a heading to keep (PLAN §3.3: the heading
+        // at take-off, Stage C/D). A drop that starts in the air in a random attitude
+        // has none, and judging it would push one particular way of righting the car.
+        let take_off_heading = take_off
+            .filter(|take_off| take_off.forward_speed_m_s.is_some())
+            .and_then(|take_off| take_off.heading_xz);
         let heading_now = flat_heading(nose_world);
         let heading_error_rad = match (take_off_heading, heading_now) {
             (Some(before), Some(now)) => Some(heading_error_rad(before, now)),
@@ -153,7 +158,7 @@ mod tests {
 
     #[test]
     fn landing_turned_a_quarter_turn_has_a_90_degree_heading_error() {
-        let take_off = TakeOff::new([1.0, 0.0, 0.0], None);
+        let take_off = TakeOff::new([1.0, 0.0, 0.0], Some(10.0));
 
         let landing = Landing::at_touchdown(STILL, Some(take_off), [0.0, 0.0, -1.0], &config());
 
@@ -163,11 +168,20 @@ mod tests {
 
     #[test]
     fn heading_ignores_pitch_so_a_nose_down_landing_facing_ahead_has_no_error() {
-        let take_off = TakeOff::new([1.0, 0.0, 0.0], None);
+        let take_off = TakeOff::new([1.0, 0.0, 0.0], Some(10.0));
 
         let landing = Landing::at_touchdown(STILL, Some(take_off), [0.7, -0.7, 0.0], &config());
 
         assert!(landing.quality.heading_error_rad.unwrap().abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_drop_that_starts_in_the_air_has_no_heading_to_keep() {
+        let in_the_air = TakeOff::new([1.0, 0.0, 0.0], None);
+
+        let landing = Landing::at_touchdown(STILL, Some(in_the_air), [0.0, 0.0, -1.0], &config());
+
+        assert_eq!(landing.quality.heading_error_rad, None);
     }
 
     #[test]
