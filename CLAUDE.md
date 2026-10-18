@@ -12,6 +12,17 @@ A browser driving game where an AI fires a car's 10 cold-gas thrusters automatic
 - `docs/PLAN.md` holds the agreed build plan, review gates and training approach. Stop for the owner's review after M4 and after M7.
 - If the spec is wrong or unclear, pick the simplest option that fits the spec's intent, implement it, update `SPEC.md`, and add one line to `docs/DECISIONS.md` (date, decision, reason). Ask the owner only when a choice is hard to reverse.
 
+## Finding your way: the graphify map
+- `graphify-out/graph.json` is a map of the code (files, symbols, calls, imports), built locally by graphify from the tree-sitter AST, with no LLM. Query it before grepping:
+  - `graphify explain "<symbol>"` lists a node's connections. Use `path::symbol` when a name is ambiguous, e.g. `crates/nl-sim/src/episode.rs::Episode`.
+  - `graphify query "<question>"` returns the relevant subgraph.
+  - `graphify path "A" "B"` shows how two things connect.
+- Rebuild after code changes with `graphify update .` (a few seconds, no API cost). `graphify-out/` is gitignored, and `.graphifyignore` keeps out agent worktrees and generated data.
+- The CLI lives at `~/.local/share/graphify-venv/bin/graphify` (installed with `pip install graphifyy` in that venv).
+
+## Defining a task: grill me
+- Before starting a milestone PR or any change with open design choices, use the `grill-me` skill (mattpocock/skills) to settle the task with the owner, one question at a time. Then write the agreed plan down (PR description or `docs/PLAN.md`) before coding.
+
 ## Golden rules
 1. **Physics lives only in `crates/nl-sim`.** Thruster forces, the air tank, events, observations and rewards are never re-implemented in Python or TypeScript. Python and the browser call into Rust.
 2. **Determinism.** Rapier runs with `enhanced-determinism`. Use only seeded `ChaCha8Rng`; no system time, `thread_rng` or `HashMap` iteration in sim logic. The golden-trace test must pass on native and wasm.
