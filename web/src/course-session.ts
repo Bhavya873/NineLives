@@ -5,7 +5,7 @@ import type { Group, Mesh, Scene } from 'three';
 
 import type { HudValues } from './hud/hud.ts';
 import { hideResults, type ResultsScreen, showResults } from './hud/results.ts';
-import { buildCourseView, disposeCourseView } from './render/course-view.ts';
+import { swapCourseView } from './render/course-view.ts';
 
 /** The drawn course and the results screen. */
 export interface CourseSession {
@@ -32,17 +32,7 @@ export function createCourseSession(
  * null, and hides any results from the last run.
  */
 export function showCourse(session: CourseSession, shapesJson: string | null): void {
-  if (session.view) {
-    session.scene.remove(session.view);
-    disposeCourseView(session.view);
-    session.view = null;
-  }
-  if (shapesJson !== null) {
-    session.view = buildCourseView(shapesJson);
-    session.scene.add(session.view);
-  }
-  // A course brings its own floor, with holes where the gaps are.
-  session.ground.visible = shapesJson === null;
+  session.view = swapCourseView(session.scene, session.ground, session.view, shapesJson);
   hideResults(session.results);
   session.resultsShown = false;
 }

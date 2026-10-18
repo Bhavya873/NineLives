@@ -49,3 +49,36 @@ test('a policy for another observation layout is refused', () => {
 
   assert.throws(() => new Crowd(JSON.stringify(stale), 'realistic', 0n, 2), /obs_schema_hash/);
 });
+
+/** The text of the repo's obstacle arena, courses/arena.json. */
+const arenaJson = readFileSync(new URL('../../courses/arena.json', import.meta.url), 'utf8');
+
+test('a crowd on the obstacle arena returns its shapes and every drop ends', () => {
+  const crowd = Crowd.on_course(policyJson, 'realistic', 0n, 16, arenaJson);
+
+  const shapes = JSON.parse(crowd.course_shapes());
+  runToEnd(crowd);
+
+  const surfaces = new Set(shapes.map((shape) => shape.surface));
+  assert.ok(surfaces.has('floor') && surfaces.has('ramp') && surfaces.has('obstacle'));
+  const outcomes = Array.from(crowd.outcomes());
+  assert.ok(outcomes.every((code) => code !== CrowdOutcome.Running));
+  assert.ok(outcomes.includes(CrowdOutcome.Landed), 'no car landed');
+  assert.equal(JSON.parse(crowd.results_json()).length, 16);
+});
+
+test('a crowd on flat ground has no course shapes', () => {
+  const crowd = new Crowd(policyJson, 'realistic', 0n, 2);
+
+  assert.equal(crowd.course_shapes(), undefined);
+});
+
+test('a bad course is refused with the piece named', () => {
+  const broken = JSON.parse(arenaJson);
+  delete broken.pieces[1].length;
+
+  assert.throws(
+    () => Crowd.on_course(policyJson, 'realistic', 0n, 2, JSON.stringify(broken)),
+    /piece 1 'ramp'/,
+  );
+});
