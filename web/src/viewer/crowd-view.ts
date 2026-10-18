@@ -1,6 +1,8 @@
-// Draws the training viewer's crowd (SPEC §11.6): one translucent car per drop, laid out
-// on a grid so the cars do not overlap. The sim runs every car at the arena centre; the
-// grid offset is for drawing only. Cars that crash fade out; cars that land stay solid.
+// Draws the training viewer's crowd (SPEC §11.6): one translucent car per drop. On the
+// flat arena the cars are laid out on a grid so they do not overlap: the sim runs every
+// car at the arena centre, and the grid offset is for drawing only. On the obstacle arena
+// they share one course, so they are drawn where they really are. Cars that crash fade
+// out; cars that land stay solid.
 // Every car shares the same geometry and one of two shared translucent material sets.
 import { Group, type Material, Mesh, type Scene, Vector3 } from 'three';
 
@@ -35,7 +37,12 @@ interface GhostCar {
 /** The whole drawn crowd. */
 export interface CrowdView {
   cars: GhostCar[];
+  /** True to spread the cars on the grid; false to draw them at their true positions. */
+  spreadOnGrid: boolean;
 }
+
+/** No offset, for cars drawn at their true positions. */
+const NO_OFFSET = new Vector3();
 
 /** Reused each frame so placing cars allocates nothing. */
 const pose = newBlendedPose();
@@ -60,12 +67,12 @@ export function createCrowdView(scene: Scene, count: number, wheelCount: number)
     scene.add(body, ...wheels);
     cars.push({ body, wheels, parts, gridOffset, crashed: false });
   }
-  return { cars };
+  return { cars, spreadOnGrid: true };
 }
 
-/** Moves every car to its latest sim pose (plus its grid offset) and fades the ones that
- * crashed. `chassis` has one pose per car, `wheels` one per wheel, `outcomes` one code
- * per car. */
+/** Moves every car to its latest sim pose (plus its grid offset when spread on the grid)
+ * and fades the ones that crashed. `chassis` has one pose per car, `wheels` one per
+ * wheel, `outcomes` one code per car. */
 export function updateCrowdView(
   view: CrowdView,
   chassis: Float32Array,
@@ -73,9 +80,10 @@ export function updateCrowdView(
   outcomes: Uint8Array,
 ): void {
   view.cars.forEach((car, index) => {
-    placeGroup(car.body, chassis, index, car.gridOffset);
+    const offset = view.spreadOnGrid ? car.gridOffset : NO_OFFSET;
+    placeGroup(car.body, chassis, index, offset);
     car.wheels.forEach((wheel, wheelIndex) => {
-      placeGroup(wheel, wheels, index * car.wheels.length + wheelIndex, car.gridOffset);
+      placeGroup(wheel, wheels, index * car.wheels.length + wheelIndex, offset);
     });
     const crashed = outcomes[index] === OUTCOME_CRASHED;
     if (crashed !== car.crashed) {

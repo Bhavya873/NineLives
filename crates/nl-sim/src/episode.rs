@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
+use crate::course::CourseSpec;
 use crate::events::{CrashCause, SimEvent};
 use crate::input::InputFrame;
 use crate::obs::{Observation, PREV_ACTION_INDEX, observe};
@@ -107,12 +108,43 @@ impl Episode {
         stage: Stage,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
-        let mut world = World::new_on_flat_ground(
+        let world = World::new_on_flat_ground(
             &variation.vehicle,
             variation.mode,
             variation.ground_friction,
             seed,
         );
+        Episode::begin(world, variation, scenarios, stage, seed)
+    }
+
+    /// Like `start`, but on `course` (SPEC §7.11) instead of flat ground: the course's
+    /// floor, pieces and bounds, with the car placed for `stage` from `seed`.
+    pub fn start_on_course(
+        variation: &EpisodeVariation,
+        scenarios: &ScenariosConfig,
+        stage: Stage,
+        course: &CourseSpec,
+        seed: u64,
+    ) -> Result<Episode, PlaceCarError> {
+        let world = World::new_on_course(
+            &variation.vehicle,
+            variation.mode,
+            course,
+            variation.ground_friction,
+            seed,
+        );
+        Episode::begin(world, variation, scenarios, stage, seed)
+    }
+
+    /// Places the car in `world` for `stage` from `seed` and wraps it in a fresh episode.
+    /// The scenario's start replaces a course's own start pose.
+    fn begin(
+        mut world: World,
+        variation: &EpisodeVariation,
+        scenarios: &ScenariosConfig,
+        stage: Stage,
+        seed: u64,
+    ) -> Result<Episode, PlaceCarError> {
         start_episode(&mut world, stage, scenarios, seed)?;
         let rules = scenarios.episode;
         let delayed_throttles = vec![[0.0; NOZZLE_COUNT]; variation.latency_control_steps];

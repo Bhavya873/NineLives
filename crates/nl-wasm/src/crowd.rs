@@ -2,7 +2,9 @@
 //! one policy (one checkpoint), for the browser to draw side by side. Each car is a full
 //! `nl_sim::episode::Episode` stepped by `nl_control::eval::step_episode`, so landings,
 //! crashes and time limits follow the same rules as training and eval; the policy is
-//! parsed once and shared by every car's `Ai`.
+//! parsed once and shared by every car's `Ai`. The drops happen on flat ground or, from
+//! M7, on a course such as the obstacle arena (`courses/arena.json`), whose shapes the
+//! viewer draws.
 
 use std::sync::Arc;
 
@@ -10,6 +12,8 @@ use nl_control::Ai;
 use nl_control::eval::step_episode;
 use nl_policy::Policy;
 use nl_sim::conventions::{NOZZLE_COUNT, WHEEL_COUNT};
+use nl_sim::course::CourseSpec;
+use nl_sim::course_build::build_course_shapes;
 use nl_sim::episode::{Episode, EpisodeStatus};
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModesConfig};
 use nl_sim::randomization::EpisodeVariation;
@@ -41,13 +45,15 @@ pub struct Crowd {
     pilots: Vec<Ai>,
     /// Each car's throttles, held between control steps (SPEC §7.1).
     throttles: Vec<[f32; NOZZLE_COUNT]>,
+    /// The course's shapes as JSON for the renderer; None on flat ground.
+    course_shapes_json: Option<String>,
 }
 
 #[wasm_bindgen]
 impl Crowd {
     /// `count` cars, car `i` dropped from Stage A seed `first_seed + i` (full difficulty,
-    /// no randomization) in `mode` ("realistic" or "arcade"), all flown by the policy in
-    /// `policy_json` (a checkpoint file or models/policy.json).
+    /// no randomization) in `mode` ("realistic" or "arcade") on flat ground, all flown by
+    /// the policy in `policy_json` (a checkpoint file or models/policy.json).
     #[wasm_bindgen(constructor)]
     pub fn new(
         policy_json: &str,
@@ -55,27 +61,27 @@ impl Crowd {
         first_seed: u64,
         count: u32,
     ) -> Result<Crowd, JsError> {
-        let policy = Arc::new(Policy::from_json(policy_json)?);
-        let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML)?;
-        let mode = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?
-            .by_name(mode)
-            .ok_or_else(|| JsError::new("Crowd: mode must be realistic or arcade"))?;
-        let scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?;
-        let plain = EpisodeVariation::none(&vehicle, mode);
-        let mut episodes = Vec::new();
-        for offset in 0..u64::from(count) {
-            let seed = first_seed
-                .checked_add(offset)
-                .ok_or_else(|| JsError::new("Crowd: first_seed is too large"))?;
-            episodes.push(Episode::start(&plain, &scenarios, Stage::A, seed)?);
-        }
-        let pilots = vec![Ai::new(policy); episodes.len()];
-        let throttles = vec![[0.0; NOZZLE_COUNT]; episodes.len()];
-        Ok(Crowd {
-            episodes,
-            pilots,
-            throttles,
-        })
+        Crowd::build(policy_json, mode, first_seed, count, None)
+    }
+
+    /// Like the constructor, but every car drops onto the course in `course_json` (the
+    /// text of a `courses/*.json` file, SPEC §7.11), all sharing one copy of it. Throws,
+    /// naming the piece and field, if the course is invalid.
+    pub fn on_course(
+        policy_json: &str,
+        mode: &str,
+        first_seed: u64,
+        count: u32,
+        course_json: &str,
+    ) -> Result<Crowd, JsError> {
+        let course = CourseSpec::from_json_str(course_json)?;
+        Crowd::build(policy_json, mode, first_seed, count, Some(&course))
+    }
+
+    /// The course's shapes as JSON for the renderer (the same list `Game.load_course`
+    /// returns), or undefined for a crowd on flat ground.
+    pub fn course_shapes(&self) -> Option<String> {
+        self.course_shapes_json.clone()
     }
 
     /// How many cars there are.
@@ -139,5 +145,49 @@ impl Crowd {
             rows.push(episode.result());
         }
         Ok(serde_json::to_string(&rows)?)
+    }
+}
+
+impl Crowd {
+    /// The cars of `new` and `on_course`: on `course` if given, else on flat ground.
+    fn build(
+        policy_json: &str,
+        mode: &str,
+        first_seed: u64,
+        count: u32,
+        course: Option<&CourseSpec>,
+    ) -> Result<Crowd, JsError> {
+        let policy = Arc::new(Policy::from_json(policy_json)?);
+        let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML)?;
+        let mode = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?
+            .by_name(mode)
+            .ok_or_else(|| JsError::new("Crowd: mode must be realistic or arcade"))?;
+        let scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?;
+        let plain = EpisodeVariation::none(&vehicle, mode);
+        let mut episodes = Vec::new();
+        for offset in 0..u64::from(count) {
+            let seed = first_seed
+                .checked_add(offset)
+                .ok_or_else(|| JsError::new("Crowd: first_seed is too large"))?;
+            let episode = match course {
+                Some(course) => {
+                    Episode::start_on_course(&plain, &scenarios, Stage::A, course, seed)?
+                }
+                None => Episode::start(&plain, &scenarios, Stage::A, seed)?,
+            };
+            episodes.push(episode);
+        }
+        let course_shapes_json = match course {
+            Some(course) => Some(serde_json::to_string(&build_course_shapes(course))?),
+            None => None,
+        };
+        let pilots = vec![Ai::new(policy); episodes.len()];
+        let throttles = vec![[0.0; NOZZLE_COUNT]; episodes.len()];
+        Ok(Crowd {
+            episodes,
+            pilots,
+            throttles,
+            course_shapes_json,
+        })
     }
 }
