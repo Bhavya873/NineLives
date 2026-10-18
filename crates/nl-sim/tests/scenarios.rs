@@ -105,5 +105,24 @@ fn a_negative_maximum_is_refused_with_its_field_name() {
 fn stage_names_read_either_case() {
     assert_eq!(Stage::from_name("a"), Some(Stage::A));
     assert_eq!(Stage::from_name("B"), Some(Stage::B));
-    assert_eq!(Stage::from_name("C"), None);
+    assert_eq!(Stage::from_name("c"), Some(Stage::C));
+    assert_eq!(Stage::from_name("E"), Some(Stage::E));
+    assert_eq!(Stage::from_name("F"), None);
+}
+
+#[test]
+fn a_driver_bot_turn_limit_of_zero_or_less_is_refused() {
+    for bad in ["0.0", "-6.0"] {
+        let text = DEFAULT_SCENARIOS_TOML.replace(
+            "max_turn_accel_m_s2 = 6.0",
+            &format!("max_turn_accel_m_s2 = {bad}"),
+        );
+
+        let error = ScenariosConfig::from_toml_str(&text).unwrap_err();
+
+        assert!(
+            error.to_string().contains("driver_bot.max_turn_accel_m_s2"),
+            "{error}"
+        );
+    }
 }

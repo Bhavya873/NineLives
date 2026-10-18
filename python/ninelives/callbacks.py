@@ -16,8 +16,9 @@ from ninelives.train_config import TrainConfig
 
 
 class CurriculumCallback(BaseCallback):
-    """Feeds every finished episode to the curriculum, moves the envs up a level when
-    it says so, and logs episode outcomes to TensorBoard each rollout."""
+    """Feeds every finished episode to the curriculum, sends the envs the new stage mix
+    when a stage moves up a level or unlocks, and logs outcomes per stage to TensorBoard
+    each rollout."""
 
     def __init__(self, state: RunState) -> None:
         super().__init__()
@@ -31,26 +32,30 @@ class CurriculumCallback(BaseCallback):
                 continue
             self.episodes.append(episode)
             if self.state.curriculum.record(episode):
-                self.apply_level()
+                self.apply_mix()
         return True
 
     def _on_rollout_end(self) -> None:
         curriculum = self.state.curriculum
-        self.logger.record("curriculum/level", curriculum.level)
-        self.logger.record("curriculum/success_rate", curriculum.success_rate())
+        self.logger.record("curriculum/unlocked", curriculum.unlocked)
+        for stage in curriculum.unlocked_stages():
+            self.logger.record(f"curriculum/{stage}/level", curriculum.levels[stage])
+            self.logger.record(f"curriculum/{stage}/success_rate", curriculum.success_rate(stage))
         if self.episodes:
             success, crash = success_and_crash_rates(self.episodes)
             self.logger.record("episode/success", success)
             self.logger.record("episode/crash", crash)
             self.logger.record("episode/saves", mean_of(self.episodes, "saves"))
             self.logger.record("episode/air_used_kg", mean_of(self.episodes, "air_used_kg"))
+            for stage, rows in rows_by_stage(self.episodes).items():
+                self.logger.record(f"episode/{stage}/success", success_and_crash_rates(rows)[0])
         self.episodes = []
 
-    def apply_level(self) -> None:
-        """Sends the curriculum's stage and level to every env's next episode."""
-        curriculum = self.state.curriculum
-        self.training_env.env_method("set_stage_and_level", curriculum.stage, curriculum.level)
-        print(f"curriculum: stage {curriculum.stage} level {curriculum.level}")
+    def apply_mix(self) -> None:
+        """Sends the curriculum's unlocked stages, weights and levels to every env."""
+        mix = self.state.curriculum.mix()
+        self.training_env.env_method("set_stage_mix", mix)
+        print(f"curriculum: {mix}")
 
 
 class RunCheckpointCallback(BaseCallback):
@@ -81,28 +86,44 @@ class RunCheckpointCallback(BaseCallback):
         self.record_progress(self.num_timesteps)
         numbered = self.run_dir / "checkpoints" / str(self.num_timesteps)
         save_checkpoint(numbered, self.model, normalizer)
-        success = self.evaluate(normalizer)
+        stages = self.state.curriculum.unlocked_stages()
+        if self.state.best_eval_stages != stages:
+            # A new stage joined: scores over different stage sets don't compare, so the
+            # first checkpoint on the new set becomes its best.
+            self.state.best_eval_stages = stages
+            self.state.best_eval_success = -1.0
+        success = self.evaluate(normalizer, stages)
         if success > self.state.best_eval_success:
             self.state.best_eval_success = success
             save_checkpoint(self.run_dir / "best", self.model, normalizer, self.state)
         save_checkpoint(self.run_dir / "latest", self.model, normalizer, self.state)
 
-    def evaluate(self, normalizer: VecNormalize) -> float:
-        """Success rate on the fixed eval seeds at the hardest level; also logged."""
+    def evaluate(self, normalizer: VecNormalize, stages: list[str]) -> float:
+        """Success rate over the episodes of `stages` (the unlocked ones), each on the
+        fixed eval seeds at its hardest level; also logged per stage."""
         config = self.config
-        rows = evaluate_fixed_seeds(
-            self.model,
-            normalizer,
-            episodes=config.eval_episodes,
-            first_seed=config.eval_seed,
-            mode=config.mode,
-            stage=config.stage,
-            level=self.state.curriculum.level_count - 1,
-        )
-        success, crash = success_and_crash_rates(rows)
+        curriculum = self.state.curriculum
+        all_rows = []
+        for stage in stages:
+            rows = evaluate_fixed_seeds(
+                self.model,
+                normalizer,
+                episodes=config.eval_episodes,
+                first_seed=config.eval_seed,
+                mode=config.mode,
+                stage=stage,
+                level=curriculum.level_counts[stage] - 1,
+            )
+            self.logger.record(f"eval/{stage}/success_rate", success_and_crash_rates(rows)[0])
+            all_rows.extend(rows)
+        success, crash = success_and_crash_rates(all_rows)
         self.logger.record("eval/success_rate", success)
         self.logger.record("eval/crash_rate", crash)
-        print(f"{self.num_timesteps} steps: eval success {success:.3f}, crash {crash:.3f}")
+        covered = ", ".join(stages)
+        print(
+            f"{self.num_timesteps} steps: eval success {success:.3f}, crash {crash:.3f} "
+            f"(stages {covered})"
+        )
         return success
 
     def record_progress(self, steps: int) -> None:
@@ -119,6 +140,14 @@ class TimeLimitCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         return self.deadline is None or time.monotonic() < self.deadline
+
+
+def rows_by_stage(episodes: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Episode rows grouped by their stage."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for episode in episodes:
+        groups.setdefault(episode["stage"], []).append(episode)
+    return groups
 
 
 def mean_of(episodes: list[dict[str, Any]], key: str) -> float:

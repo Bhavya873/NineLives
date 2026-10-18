@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "about": "Procedural course pieces for Stage D (SPEC §7.11). Ranges are [low, high], drawn evenly. Lengths in m, angles in degrees, impulses in N·s and N·m·s. run_out_m is flat floor kept after a piece (the landing zone) before the next checkpoint. Kept to what the driver bot with PD finishes (98 of 100 seeds): curved ramps up to 18° and 8-10 m wide, kickers 3.5-4.5 m wide so an off-centre car still gets both wheels on, gentle bumps, gaps the car clears at 10 m/s. Walls are off (weight 0): their 30° ramp throws a car going over 20 m/s about 10 m up, and PD crashes most of those landings.",
+  "start_height_m": 0.7,
+  "track_half_width_m": 10.0,
+  "bounds_margin_m": 30.0,
+  "piece_count": [4, 8],
+  "straight_m": [20.0, 40.0],
+  "jump_run_up_m": 33.0,
+  "pieces": [
+    { "kind": "ramp", "weight": 1.0, "length_m": [10.0, 14.0], "width_m": [8.0, 10.0], "angle_deg": [10.0, 18.0], "run_out_m": 40.0 },
+    { "kind": "ramp_gap", "weight": 1.0, "length_m": [10.0, 12.0], "width_m": [8.0, 10.0], "angle_deg": [15.0, 18.0], "gap_m": [3.0, 6.0], "run_out_m": 40.0 },
+    { "kind": "kicker", "weight": 1.0, "length_m": [6.0, 8.0], "width_m": [3.5, 4.5], "angle_deg": [10.0, 15.0], "run_out_m": 20.0 },
+    { "kind": "bumps", "weight": 1.0, "count": [2, 5], "height_m": [0.2, 0.4], "run_out_m": 10.0 },
+    { "kind": "kick_plate", "weight": 1.0, "impulse_up_n_s": [2000.0, 4000.0], "impulse_side_n_s": [1000.0, 3000.0], "angular_roll_n_m_s": [1000.0, 2500.0], "run_out_m": 20.0 },
+    { "kind": "halfpipe", "weight": 0.5, "radius_m": [5.0, 7.0], "length_m": [15.0, 25.0], "run_out_m": 10.0 },
+    { "kind": "wall", "weight": 0.0, "height_m": [1.5, 3.0], "run_out_m": 60.0 }
+  ]
+}

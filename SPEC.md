@@ -317,6 +317,7 @@ Course JSON, schema version 1:
 - **Wasm and web** (M7): `Game.load_course(json)` starts a fresh run on a course and returns its shapes as JSON for the renderer; `Game.load_flat_ground()` goes back to the arena. HUD fields 16–19 hold checkpoints reached and total, finished, and finish time. In the game, Enter starts the Gauntlet, F returns to free driving, and `?course=gauntlet` opens straight into it. The results screen shows time, saves, lives used and air used.
 - **Gauntlet** (the demo course), in order: start straight → kicker → gap → car row (Hop) → halfpipe (flip back) → bumps + kick plates → big ramp to a landing pad → wall with ramp → finish. A checkpoint after each section.
 - **Procedural generator** (training): 4–8 pieces sampled from `pieces.json` with random parameters inside safe ranges, joined by straights of 20–40 m.
+- **Generator notes** (`nl-sim/src/course_gen.rs`, `configs/pieces.json`, M7): courses run straight along +X on a 20 m track (bounds z ±10), start at rest at the origin. Each piece is a straight (at least 33 m before a jump: ramp, ramp + gap, wall), the piece, then its flat run-out (the landing zone); a checkpoint follows every run-out but the last, where the finish goes. Piece kinds: `ramp`, `ramp_gap` (a gap right after the lip, short enough to clear at 10 m/s), `kicker` (3.5–4.5 m wide, random side), `bumps`, `kick_plate` (up, sideways and a matching roll), `halfpipe`, `wall` (weight 0 for now: its 30° ramp throws a car going over 20 m/s about 10 m up). No car rows: Stage C practises those. Draws use ChaCha8 stream 4 of the episode seed; every course passes the checks above (a test writes 300 to JSON and reads them back). The ranges are kept to what the driver bot with PD finishes (98 of 100 seeds).
 
 ### 7.12 Disturbances
 - `kick_plate` in courses.
@@ -412,8 +413,10 @@ The save quality also has two landing factors (PLAN §3.3): `q = clamp(1 − ‖
 There is no survival bonus *(req)*. Being alive must not pay, or the policy learns to hover (9.11).
 
 ### 9.5 Episode end
-- **Terminated:** crash; or success (Stage A/B: all four wheels down for 1.0 s unbroken **and** the controller's throttle sum < 0.05 for the last 0.5 s, unbroken — a clean landing counts even if no upset, and so no Save event, happened; idle thrust while parked is not a finished episode; Stage C: a save after the hop). Implemented once in `nl_sim::episode::Episode`; thresholds in `scenarios.toml [episode]`.
-- **Settled** (PLAN §3.3): four wheels down, |ω| below the save rule's 1.5 rad/s (`events.save_max_spin_rad_s`) and sideways speed < 1 m/s. **Settle time** runs from the first touchdown to the start of the settled run the episode ends in (none on a crash). `Episode::last_save_quality()` exposes the latest save's heading error for stage rules (Stage C/D: error < 30°).
+- **Terminated:** crash; or success. Stage A/B: all four wheels down for 1.0 s unbroken **and** the controller's throttle sum < 0.05 for the last 0.5 s, unbroken — a clean landing counts even if no upset, and so no Save event, happened; idle thrust while parked is not a finished episode. Stage C: a save after the hop, with no touch of the car row. Stage D: crossing the finish line. Stage C and D also need every judged landing's heading error below `episode.max_landing_heading_error_deg` (30°, PLAN §3.3): a save whose landing turned further fails the episode at once (`EpisodeStatus::BadLanding`). Stage E: the base stage's success after every knock, and on A or C four wheels down for 1.0 s with quiet throttles after the last knock. Implemented once in `nl_sim::episode::Episode`, which also applies the driver bot's input and the knocks inside its step; thresholds in `scenarios.toml [episode]`.
+- **Settled** (PLAN §3.3): four wheels down, |ω| below the save rule's 1.5 rad/s (`events.save_max_spin_rad_s`) and sideways speed < 1 m/s. **Settle time** runs from the first touchdown to the start of the settled run the episode ends in (none on a crash). `Episode::last_save_quality()` exposes the latest save's heading error, which the Stage C/D rule reads.
+- **Touching the row** (Stage C): the body or roof touching anything while the car's centre is within the row's footprint grown by the car's half-size (less 0.2 m). Wheel contact doesn't count: the suspension rays reach below the wheels, so a hop clearing the roofs by a few tenths of a metre would read as a hit. A hit ends the episode at once as `EpisodeStatus::HitObstacle` (terminated, not a crash, no crash penalty).
+- Tracks and target speeds are sized by the time limit of the stage actually running (Stage E's 45 s when E builds on C or D).
 - **Truncated:** time limit (A/B 8 s, C 15 s, D/E 45 s).
 
 ### 9.6 Scenario stages
@@ -431,6 +434,9 @@ Curriculum for A: θmax goes 30° → 180° and ωmax 0 → 6 rad/s, in 5 levels
 - Pure-pursuit steering on the course centerline: lookahead `6 + 0.3·v` m; P control on speed toward a target U(10, 30) m/s.
 - Steering noise: an OU process (σ = 0.1). There is a 5% chance per second of a random steering jerk of ±0.5 for 0.3 s.
 - Presses Hop at `hop_hint` pieces with ±0.15 s timing noise. Never uses Manual thrusters.
+- Implementation notes (`nl-sim/src/driver_bot.rs`, `[driver_bot]` in scenarios.toml): the centre line is the course start's heading (courses are straight). The pursuit's turn is capped so it pulls at most `max_turn_accel_m_s2` (6 m/s²) sideways, and the wobble (σ) and jerks (±0.5) are fractions of that grip-safe turn, so they are the same size at any speed; uncapped, the bot spun the car whenever it landed off the line. In the air it centres the steering. Hop is timed from a 1-D hop prediction (`hop_profile.rs`, which errs about 0.3 m low) so the wheels are highest over the row's middle, and is re-tapped until a Hop starts. Stage C holds its start speed; on Stage D the target is raised to at least the course length ÷ (0.75 × time limit). Randomness: ChaCha8 stream 5 (target speed 7) of the episode seed.
+- **Stage C notes** (`driving_stages.rs`): the track is flat, straight and 20 m wide. A row (50%) is placed so a Hop pressed at the drawn time U(1, 3) s is highest over its middle, and keeps only as many cars as that hop clears at the start speed (wheels 0.1 m above the roofs for the row plus the car's length plus 1 m); if none fit, the episode has no row. Without a row the bot presses Hop at the drawn time.
+- **Stage E notes:** the base stage (A, C, D, weights `[stage_e] base_stage_weights`) and 1–3 knock times U(0.5, 6) s come from ChaCha8 stream 6; a knock is the Chaos button on that physics step.
 
 ### 9.8 Domain randomization (per episode) *(start)*
 | Parameter | Range |
@@ -453,6 +459,7 @@ Implementation notes (`nl-sim/src/randomization.rs`): the ranges live in `[rando
 - Track the success rate over the last 500 episodes per stage. When it exceeds 85%, advance that stage's level or unlock the next stage.
 - Once unlocked, sample stages with weights A 0.25, B 0.15, C 0.2, D 0.3, E 0.1, so earlier skills are not forgotten.
 - Log the stage, level and success rates to TensorBoard.
+- Implementation notes: `BatchedSim.set_stage_mix([(stage, weight, level), …])`; each episode picks its stage by weight from its own seed (ChaCha8 stream 8), so the same seed always runs the same stage. The training YAML lists `stages` in unlock order and `curriculum.stage_weights`; the Python curriculum (`ninelives/curriculum.py`) keeps one 500-episode window per stage at its level, raises the level above 85%, and unlocks the next stage when the newest one passes at its last level. Every stage needs a weight above 0 (a zero-weight stage would unlock but never run, and block the stages after it). "Best" is the eval success over the episodes of the stages unlocked at that checkpoint, each at its hardest level; the log line names them, and when a new stage unlocks the best score restarts (scores over different stage sets don't compare). `pieces.json` reaches `BatchedSim` with the TOMLs (`pieces_json` in the config JSON; the built-in copy if absent), so a run's saved `configs/` are what it trained on.
 
 ### 9.10 PPO starting hyperparameters (`configs/train/base.yaml`) *(start)*
 - `n_envs` 64, `n_steps` 512 (32,768 samples per update), `batch_size` 4096, `n_epochs` 10.
@@ -489,7 +496,7 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 
 ## 10. Evaluation
 
-- The Rust runner (M4, no Python): `cargo run --release -p nl-control --example eval -- --controller {off,pd} --stage {A,B} --mode {realistic,arcade} --episodes 1000 --seed 0`. Both runners step `nl_sim::episode::Episode`, so success, crash and time limit mean the same thing.
+- The Rust runner (M4, no Python): `cargo run --release -p nl-control --example eval -- --controller {off,pd} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`. Both runners step `nl_sim::episode::Episode`, so success, crash and time limit mean the same thing.
 - `python -m ninelives.eval --controller {off,pd,ai} --stage {A,B,C,D,E} --mode {realistic,arcade} --episodes 1000 --seed 0`. It runs the episodes in Rust (`ninelives_sim.run_eval`, the same `run_episode` and summary as the Rust runner), so the two runners give identical rows; the Rust runner also takes `--controller ai --policy <file>`.
 - A fixed seed list makes runs reproducible. Domain randomization is off by default in eval (`--dr` turns it on).
 - **Outputs:** `results/eval_<controller>_<stage>_<mode>.json` (no date: a rerun overwrites the file and git shows the change; the M5 Python eval adds a `.csv`), with per-episode rows (success, saves, crashes, cause, air used, peak tilt, touchdown |ω|, touchdown v_down, hard landings, landing heading error of the latest save, speed kept, settle time, air left — null with unlimited air).
@@ -643,7 +650,7 @@ class Game {
 - [x] The training viewer (§11.6) replays the exported checkpoints with a crowd of cars on Stage A drops.
 
 **M7 — Hop, course, driver bot, full curriculum**
-- [ ] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
+- [x] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
 - [ ] Stages B–E trained; the policy is re-exported; eval on all stages and both modes.
 - [x] The Gauntlet is playable start to finish with checkpoints and the results screen.
 - [x] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.

@@ -6,7 +6,7 @@ use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::Observation;
 use nl_sim::reward::RewardTerms;
 use nl_sim::scenarios::Stage;
-use nl_sim::training::{FinishedEpisode, TrainingConfig, TrainingEnv};
+use nl_sim::training::{FinishedEpisode, StageChoice, TrainingConfig, TrainingEnv};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -84,6 +84,11 @@ impl EnvSlot {
     /// The stage and curriculum level for the episodes this slot starts next.
     pub fn set_stage_and_level(&mut self, stage: Stage, level: u32) {
         self.env.set_stage_and_level(stage, level);
+    }
+
+    /// The stages (weights and levels) this slot's next episodes pick from.
+    pub fn set_stage_mix(&mut self, mix: Vec<StageChoice>) -> Result<(), String> {
+        self.env.set_stage_mix(mix)
     }
 }
 

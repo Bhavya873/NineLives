@@ -8,6 +8,8 @@ Every training run or training chunk gets a row. Watch a replay before writing t
 | 2026-10-17 | stage-a-002 | base.yaml at 50M steps; reward + ground thrust −0.02 × Σu while ≥ 3 wheels touch | 0 | 50.0M | 29.2 min | A: best eval 63.0% at 42M; level 4 only at ~31M | Idle thrust fixed (throttle sum on the ground 0.1–0.3, was ~1.5), but learning stalled at level 0 for 13M steps: timeouts with the car down and still firing, never completing the 4-wheel hold. Charging from 3 wheels taxes the thrust that settles the last wheel. New failures: upside-down crashes after long flights that empty the tank. Narrowed to all four wheels at weight 0.01 for stage-a-003. Policy not kept. |
 | 2026-10-17 | stage-a-003 | base.yaml at 50M; ground thrust −0.01 × Σu only while all 4 wheels touch | 0 | 50.0M | 29.9 min | A: best eval 61.5%; level 4 only at ~47M | **Reward hack:** the 10M checkpoint lands, then holds L_RL at 0.6 for the rest of the episode to keep one wheel up. Three wheels down means no ground-thrust charge, and a timeout costs nothing (SB3 bootstraps truncation). A charge that depends on contact state teaches the policy to dodge the state, not to close the valves. Term removed; air made 4× dearer everywhere instead (stage-a-004). Policy not kept. |
 | 2026-10-17 | **stage-a-004** | base.yaml at 50M (randomization on); air weights 4× (limited 8.0, unlimited 0.008) | 0 | 50.0M | 29.0 min | A: best eval 71.0% at 48M (exported); level 4 at ~7M | **Kept → `models/policy.json`.** Watched 20 episodes: 0.8–2.0 s of flight then a firm landing, no hovering, no lifted wheel; throttle sum at rest 0.2–0.4 (run 001: ~1.5), about what the 5 kg/s ground refill replaces in Realistic. Air per save ≈ PD's. Crashes are hard body impacts in the first second from steep, low starts. Fixed-seed eval below. |
+| 2026-10-17 | m7-smoke-001 | base.yaml (stages A–E, weights A .25 B .15 C .2 D .3 E .1) at 100k steps; curriculum window 50, bar 0.3; checkpoint every 50k, 20 eval episodes per stage | 0 | 131k | 11 s | all stages ≈ 0% (untrained); stayed at A level 0 | Smoke test of the M7 multi-stage harness only: trains, evaluates all five stages, saves `latest/`. No unlock: an untrained policy never passes 30%. Not kept. |
+| 2026-10-17 | m7-smoke-002 | as m7-smoke-001 but bar −1 (every full window passes) | 0 | 131k | 9 s | eval mean 1% (untrained) | Exercises the curriculum: A rose through levels 1–4, then B, C, D and E unlocked in order and the mix reached all five stages (Rust picks each episode's stage). Not kept. |
 
 ## M5 evals: Off vs PD vs AI on Stage A
 
@@ -80,3 +82,20 @@ Notes:
 - **Stage B needed one tuning step.** With the SPEC's plain PD on the ground, PD succeeded only 22% of the time (most episodes timed out lying on the side, burning air the whole time). Tipping a 1.8 t car over its side edge needs ~18 kN·m, more than I·kp·error gives. A `ground_roll_gain` multiplier on the roll torque while lying on the ground (`configs/controllers.toml`) fixed it: Stage B success by gain (100 episodes): 1 → 22%, 3 → 70%, **5 → 100%**, 8 → 100%. Stage A was unaffected (65–67% on that smaller sample). Committed at 5.
 - **Earlier numbers in this section's history are not comparable.** Code review found that the first runs (PD 75.5% / 69.4% on Stage A Realistic) tilted the car about a random 3-D axis (so real tilts were often far smaller than drawn), started some tilted cars inside the ground, needed a Save event to succeed (so clean landings failed), recorded touchdowns only on wheel landings, and charged failed episodes' air to "air per save". All fixed; the table above is the baseline.
 
+
+### 2026-10-17 — M7: PD with the driver bot on Stages C, D and E
+
+`cargo run --release -p nl-control --example eval -- --controller pd --stage {C,D,E} --mode realistic --episodes 100 --seed 0` (no randomization; files not committed, the full eval matrix comes with the M7 training run).
+
+| Controller | Stage | Mode | Success | Crash |
+|---|---|---|---|---|
+| pd | C | realistic | 100% | 0% |
+| pd | C | arcade | 100% | 0% |
+| pd | D | realistic | 98% | 1% |
+| pd | D | arcade | 98% | 1% |
+| pd | E | realistic | 82% | 17% |
+| pd | E | arcade | 79% | 20% |
+
+Notes:
+- Stage D needed three bot and course fixes to get here from 75%: the bot centres its steering in the air (it landed with the wheels turned and swerved); its pursuit turn is capped at 6 m/s² sideways, with the wobble and jerks scaled to that grip-safe turn (uncapped, it spun the car whenever it landed off the line; capped but with the wobble in raw steer units, the wobble overpowered the pursuit and the car drifted off the 20 m track: 33%); kickers are 3.5–4.5 m wide (at 2 m an off-centre car put its body on the slope) and ramps 8–10 m wide. Walls are off (weight 0): 8 of the last 11 failures were hard landings 50 m past a wall at 20–30 m/s.
+- Measured after rebasing onto the landing-quality rules (quiet-throttle success for A/B, HardLanding, settle time) and with the Stage C/D landing heading limit of 30°: PD's median landing heading error is 0.3° on C and 0.05° on D, so the limit costs PD nothing; it is there for the AI. Stage E's failures are mostly base-A drops, where PD loses about 40% anyway.

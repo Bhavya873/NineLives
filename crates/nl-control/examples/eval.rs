@@ -1,5 +1,5 @@
 //! The Rust eval runner's command line (SPEC §10). Runs Off, PD or the AI policy through
-//! seeded episodes of Stage A or B and writes `results/eval_<controller>_<stage>_<mode>.json`.
+//! seeded episodes of any stage (A to E) and writes `results/eval_<controller>_<stage>_<mode>.json`.
 //!
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML)?;
     let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?;
     let scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?;
-    let stage = Stage::from_name(&args.stage).ok_or("--stage must be A or B")?;
+    let stage = Stage::from_name(&args.stage).ok_or("--stage must be A, B, C, D or E")?;
     let mode = modes
         .by_name(&args.mode)
         .ok_or("--mode must be realistic or arcade")?;

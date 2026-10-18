@@ -1,7 +1,8 @@
 """Builds the JSON that configures `ninelives_sim.BatchedSim`.
 
-The Rust module never reads files: this reads the repo's `configs/*.toml` and passes
-their text, plus the mode and stage to run (see crates/nl-py/src/config.rs).
+The Rust module never reads files: this reads the repo's `configs/*.toml` and
+`configs/pieces.json` and passes their text, plus the mode and stage to run (see
+crates/nl-py/src/config.rs).
 """
 
 import json
@@ -26,6 +27,7 @@ def load_sim_config(mode: str = "realistic", stage: str = "A", randomize: bool =
         "scenarios_toml": (CONFIGS_DIR / "scenarios.toml").read_text(),
         "reward_toml": (CONFIGS_DIR / "reward.toml").read_text(),
         "controllers_toml": (CONFIGS_DIR / "controllers.toml").read_text(),
+        "pieces_json": (CONFIGS_DIR / "pieces.json").read_text(),
         "mode": mode,
         "stage": stage,
         "randomize": randomize,

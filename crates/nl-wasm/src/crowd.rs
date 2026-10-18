@@ -133,7 +133,11 @@ impl Crowd {
             let outcome = match episode.status() {
                 EpisodeStatus::Running => CrowdOutcome::Running,
                 EpisodeStatus::Succeeded => CrowdOutcome::Landed,
-                EpisodeStatus::Crashed(_) => CrowdOutcome::Crashed,
+                // Stage A crowds never meet these driving-stage failures; they read as
+                // crashes.
+                EpisodeStatus::Crashed(_)
+                | EpisodeStatus::HitObstacle
+                | EpisodeStatus::BadLanding => CrowdOutcome::Crashed,
                 EpisodeStatus::TimedOut if episode.saves() > 0 => CrowdOutcome::Landed,
                 EpisodeStatus::TimedOut => CrowdOutcome::TimedOut,
             };

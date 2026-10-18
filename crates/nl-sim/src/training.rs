@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::car_state::Touchdown;
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
+use crate::driving_stages::{pick_weighted, stream_rng};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
 use crate::modes::ModeParams;
 use crate::obs::Observation;
@@ -16,6 +17,21 @@ use crate::reward::{RewardConfig, RewardTerms, StepSummary, reward_terms};
 use crate::scenarios::{ScenariosConfig, Stage};
 use crate::vehicle_config::VehicleConfig;
 use crate::world::PlaceCarError;
+
+/// The ChaCha8 stream of the episode seed that picks the episode's stage from the mix.
+const STAGE_PICK_RNG_STREAM: u64 = 8;
+
+/// One stage in the training mix (SPEC §9.9): how often it comes up and at which
+/// curriculum level.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StageChoice {
+    /// The stage.
+    pub stage: Stage,
+    /// Its relative chance (zero or more).
+    pub weight: f32,
+    /// Its curriculum level.
+    pub level: u32,
+}
 
 /// Everything a training environment is built from.
 #[derive(Debug, Clone)]
@@ -75,9 +91,8 @@ struct StepEvents {
 /// A running training environment. Call `reset` before the first `step`.
 pub struct TrainingEnv {
     config: TrainingConfig,
-    /// The stage and level the next `reset` starts.
-    next_stage: Stage,
-    next_level: u32,
+    /// The stages (with levels and weights) the next `reset` picks from.
+    mix: Vec<StageChoice>,
     /// The stage and level the running episode was started with.
     stage: Stage,
     level: u32,
@@ -94,8 +109,11 @@ impl TrainingEnv {
     pub fn new(config: TrainingConfig, stage: Stage) -> TrainingEnv {
         TrainingEnv {
             config,
-            next_stage: stage,
-            next_level: 0,
+            mix: vec![StageChoice {
+                stage,
+                weight: 1.0,
+                level: 0,
+            }],
             stage,
             level: 0,
             episode: None,
@@ -108,15 +126,45 @@ impl TrainingEnv {
     /// Chooses the stage and curriculum level for the episodes that start after this
     /// (the running episode keeps the ones it started with).
     pub fn set_stage_and_level(&mut self, stage: Stage, level: u32) {
-        self.next_stage = stage;
-        self.next_level = level;
+        self.mix = vec![StageChoice {
+            stage,
+            weight: 1.0,
+            level,
+        }];
+    }
+
+    /// Chooses the stages the episodes that start after this pick from: each episode
+    /// draws one by weight from its own seed (SPEC §9.9), so the same seed always gets
+    /// the same stage. Refuses an empty mix or weights that are negative or all zero.
+    pub fn set_stage_mix(&mut self, mix: Vec<StageChoice>) -> Result<(), String> {
+        let total: f32 = mix.iter().map(|choice| choice.weight).sum();
+        let all_valid = mix.iter().all(|c| c.weight.is_finite() && c.weight >= 0.0);
+        if mix.is_empty() || !all_valid || total <= 0.0 {
+            return Err(
+                "stage mix: give at least one stage, with weights of zero or more and not all zero"
+                    .to_string(),
+            );
+        }
+        self.mix = mix;
+        Ok(())
+    }
+
+    /// The stage and level of the episode with `seed`.
+    fn pick_stage(&self, seed: u64) -> (Stage, u32) {
+        if let [only] = self.mix.as_slice() {
+            return (only.stage, only.level);
+        }
+        let weights: Vec<f32> = self.mix.iter().map(|choice| choice.weight).collect();
+        let mut rng = stream_rng(seed, STAGE_PICK_RNG_STREAM);
+        let choice = pick_weighted(&self.mix, &weights, &mut rng);
+        (choice.stage, choice.level)
     }
 
     /// Starts a new episode from `seed` and returns its first observation. On an
     /// error there is no running episode until the next successful `reset`.
     pub fn reset(&mut self, seed: u64) -> Result<Observation, PlaceCarError> {
         self.episode = None;
-        let (stage, level) = (self.next_stage, self.next_level);
+        let (stage, level) = self.pick_stage(seed);
         let mut episode = self.start_episode(stage, level, seed)?;
         let observation = episode.observe();
         self.episode = Some(episode);
@@ -164,7 +212,13 @@ impl TrainingEnv {
         let outcome = StepOutcome {
             observation: episode.observe(),
             terms: reward_terms(&summary, &self.config.reward),
-            terminated: crashed || status == EpisodeStatus::Succeeded,
+            terminated: crashed
+                || matches!(
+                    status,
+                    EpisodeStatus::Succeeded
+                        | EpisodeStatus::HitObstacle
+                        | EpisodeStatus::BadLanding
+                ),
             truncated: status == EpisodeStatus::TimedOut,
             finished: self.finished(&episode, status),
         };

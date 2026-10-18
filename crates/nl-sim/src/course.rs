@@ -33,7 +33,7 @@ const MAX_RAMP_ANGLE_DEG: f32 = 60.0;
 const MAX_BOUNDS_M: f32 = 5000.0;
 
 /// The course's `start`: where the car begins.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StartSpec {
     /// Centre-of-mass position, in m.
@@ -66,7 +66,7 @@ impl BoundsSpec {
 }
 
 /// Which side of the lane a kicker sits on (left is −Z, SPEC §4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Side {
     /// The −Z side.
@@ -78,7 +78,7 @@ pub enum Side {
 /// One course piece (SPEC §7.11). Positions are the piece's start point on the ground,
 /// in m; `yaw` turns the piece about +Y, in degrees; a piece runs along its local +X.
 /// Optional sizes fall back to the defaults in `course_build`.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PieceSpec {
     /// A ramp curving up along +X from flat to `angle_deg` at its lip, with a sheer drop
@@ -241,6 +241,16 @@ pub enum CourseError {
     },
 }
 
+/// The file's top level as written by `CourseSpec::to_json`.
+#[derive(Serialize)]
+struct CourseFileOut<'a> {
+    version: u32,
+    name: &'a str,
+    start: &'a StartSpec,
+    bounds: &'a BoundsSpec,
+    pieces: &'a [PieceSpec],
+}
+
 /// The top level of the file, with pieces left as raw JSON so each one can be read on
 /// its own and its errors can name it.
 #[derive(Deserialize)]
@@ -256,6 +266,19 @@ struct CourseFile {
 }
 
 impl CourseSpec {
+    /// The course as course-file JSON (schema version 1), e.g. to hand a generated
+    /// course to the renderer; `from_json_str` reads it back unchanged.
+    pub fn to_json(&self) -> Result<String, CourseError> {
+        let file = CourseFileOut {
+            version: COURSE_SCHEMA_VERSION,
+            name: &self.name,
+            start: &self.start,
+            bounds: &self.bounds,
+            pieces: &self.pieces,
+        };
+        Ok(serde_json::to_string(&file)?)
+    }
+
     /// Reads and checks the text of a course file.
     pub fn from_json_str(text: &str) -> Result<CourseSpec, CourseError> {
         // Check the version before the strict field rules, so a newer file is refused

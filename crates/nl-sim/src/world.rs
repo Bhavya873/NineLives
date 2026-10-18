@@ -101,6 +101,10 @@ pub enum PlaceCarError {
 
     #[error("place_car: the rotation quaternion has zero length; use [0, 0, 0, 1] for no rotation")]
     ZeroRotation,
+
+    /// A driving stage could not build its course (a broken pieces.json).
+    #[error("episode course: {0}")]
+    BadCourse(String),
 }
 
 /// A world with flat ground or a course, and one car.

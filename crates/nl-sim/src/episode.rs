@@ -5,7 +5,8 @@
 //! the episode's domain randomization (SPEC §9.8): the varied car and world, actuation
 //! latency and observation noise, so training and eval randomize the same way. It also
 //! measures landing quality (PLAN §3.3): hard landings, heading error, speed kept,
-//! settle time and air left.
+//! settle time and air left. On the driving stages (C, D, E) the driver bot's input and
+//! the Chaos knocks are applied inside `step`, so every runner drives them the same way.
 
 use std::collections::VecDeque;
 
@@ -15,12 +16,14 @@ use serde::Serialize;
 use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
 use crate::course::CourseSpec;
+use crate::driver_bot::{BotView, DriverBot};
 use crate::events::{CrashCause, SimEvent};
-use crate::input::InputFrame;
+use crate::input::{BUTTON_CHAOS, InputFrame};
 use crate::landing::LandingQuality;
 use crate::obs::{Observation, PREV_ACTION_INDEX, observe};
 use crate::randomization::{EpisodeVariation, ObsNoise, add_state_noise, noise_rng};
-use crate::scenarios::{EpisodeConfig, ScenariosConfig, Stage, start_episode};
+use crate::scenarios::{EpisodeConfig, ScenariosConfig, Stage};
+use crate::stage_start::{Goal, StagePlan, StageStart, begin_stage};
 use crate::world::{PlaceCarError, World};
 
 /// Where an episode stands after a step.
@@ -28,11 +31,19 @@ use crate::world::{PlaceCarError, World};
 pub enum EpisodeStatus {
     /// Still going.
     Running,
-    /// All four wheels down for `success_hold_s` and the throttles quiet for
-    /// `success_quiet_hold_s`, both unbroken, with no crash (SPEC §9.5).
+    /// The stage's goal was met with no crash (SPEC §9.5): A/B four wheels down for
+    /// `success_hold_s` with quiet throttles for `success_quiet_hold_s`; C a save after
+    /// the hop; D the finish line.
     Succeeded,
     /// The car crashed; this ends the episode.
     Crashed(CrashCause),
+    /// Stage C: the car's body touched the car row it had to hop over, so success is
+    /// out of reach; this ends the episode.
+    HitObstacle,
+    /// Stage C or D: a landing turned the car `max_landing_heading_error_deg` or more
+    /// from its take-off heading (PLAN §3.3), so success is out of reach; this ends
+    /// the episode.
+    BadLanding,
     /// The time limit ran out first.
     TimedOut,
 }
@@ -42,8 +53,7 @@ pub enum EpisodeStatus {
 pub struct EpisodeResult {
     /// The seed the episode was started from.
     pub seed: u64,
-    /// All four wheels down for `success_hold_s` and quiet throttles for
-    /// `success_quiet_hold_s`, both unbroken, with no crash.
+    /// The stage's goal was met with no crash (see `EpisodeStatus::Succeeded`).
     pub success: bool,
     /// Save events seen (a recovery from an upset, SPEC §7.9).
     pub saves: u32,
@@ -100,6 +110,16 @@ struct Tally {
     wheels_down_since_s: Option<f32>,
     /// The landing of the latest save (what the reward's save quality judges).
     last_save_landing: Option<Touchdown>,
+    /// A Hop has started (Stage C counts only saves after it).
+    hop_started: bool,
+    /// Save events after the Hop started.
+    saves_after_hop: u32,
+    /// The car's body touched a car row (Stage C).
+    obstacle_hit: bool,
+    /// A judged landing turned too far from its take-off heading (Stage C/D).
+    bad_landing: bool,
+    /// Chaos knocks applied so far (Stage E).
+    knocks_done: usize,
 }
 
 /// A running episode: the world plus the numbers gathered so far.
@@ -114,6 +134,8 @@ pub struct Episode {
     /// Anything (wheels, body or roof) touched the ground on the latest step.
     touching: bool,
     tally: Tally,
+    /// What success means, the driver, the knocks and the rows not to touch.
+    stage: StageStart,
     /// Throttles on their way to the valves, one per control step of latency.
     delayed_throttles: VecDeque<[f32; NOZZLE_COUNT]>,
     /// What the controller asked for on the latest control step (the observation's
@@ -130,21 +152,27 @@ pub struct Episode {
 }
 
 impl Episode {
-    /// A fresh flat-ground world for `variation` (use `EpisodeVariation::none` for no
-    /// randomization) with the car placed for `stage` from `seed`.
+    /// A fresh world for `variation` (use `EpisodeVariation::none` for no randomization)
+    /// with the car placed for `stage` from `seed`: flat ground for Stages A and B, the
+    /// Stage C hop track, or a generated Stage D course (Stage E: its base stage's).
     pub fn start(
         variation: &EpisodeVariation,
         scenarios: &ScenariosConfig,
         stage: Stage,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
+        let plan = StagePlan::draw(variation, scenarios, stage, seed);
+        if let Some(course) = plan.course(scenarios, seed)? {
+            let world = Episode::world_on_course(variation, &course, seed);
+            return Episode::begin(world, variation, scenarios, &plan, Some(&course), seed);
+        }
         let world = World::new_on_flat_ground(
             &variation.vehicle,
             variation.mode,
             variation.ground_friction,
             seed,
         );
-        Episode::begin(world, variation, scenarios, stage, seed)
+        Episode::begin(world, variation, scenarios, &plan, None, seed)
     }
 
     /// Like `start`, but on `course` (SPEC §7.11) instead of flat ground: the course's
@@ -156,37 +184,46 @@ impl Episode {
         course: &CourseSpec,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
-        let world = World::new_on_course(
+        let plan = StagePlan::draw(variation, scenarios, stage, seed);
+        let world = Episode::world_on_course(variation, course, seed);
+        Episode::begin(world, variation, scenarios, &plan, Some(course), seed)
+    }
+
+    /// A fresh world on `course` for `variation`.
+    fn world_on_course(variation: &EpisodeVariation, course: &CourseSpec, seed: u64) -> World {
+        World::new_on_course(
             &variation.vehicle,
             variation.mode,
             course,
             variation.ground_friction,
             seed,
-        );
-        Episode::begin(world, variation, scenarios, stage, seed)
+        )
     }
 
-    /// Places the car in `world` for `stage` from `seed` and wraps it in a fresh episode.
-    /// The scenario's start replaces a course's own start pose.
+    /// Places the car for `plan` in `world` (built on `course`, None for flat ground)
+    /// and wraps it in a fresh episode. Stages A and B replace a course's own start pose
+    /// with the scenario's start; C and D start on the course's start line.
     fn begin(
         mut world: World,
         variation: &EpisodeVariation,
         scenarios: &ScenariosConfig,
-        stage: Stage,
+        plan: &StagePlan,
+        course: Option<&CourseSpec>,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
-        start_episode(&mut world, stage, scenarios, seed)?;
-        let rules = scenarios.episode;
+        let stage_start = begin_stage(&mut world, variation, scenarios, plan, course, seed)?;
         let delayed_throttles = vec![[0.0; NOZZLE_COUNT]; variation.latency_control_steps];
+        let limit_s = plan.time_limit_s();
         Ok(Episode {
             state: world.car_state(),
             touching: false,
             world,
-            rules,
+            rules: scenarios.episode,
             seed,
-            limit_steps: (rules.time_limit_s * PHYSICS_HZ as f32).round() as u64,
+            limit_steps: (limit_s * PHYSICS_HZ as f32).round() as u64,
             steps: 0,
             tally: Tally::default(),
+            stage: stage_start,
             delayed_throttles: VecDeque::from(delayed_throttles),
             commanded_throttles: [0.0; NOZZLE_COUNT],
             applied_throttles: [0.0; NOZZLE_COUNT],
@@ -240,8 +277,7 @@ impl Episode {
     }
 
     /// How well the latest save's landing kept the take-off heading and speed (PLAN
-    /// §3.3); None before the first save. A stage's success rule can read the heading
-    /// error here.
+    /// §3.3); None before the first save. The Stage C/D rule reads the heading error.
     pub fn last_save_quality(&self) -> Option<LandingQuality> {
         self.tally.last_save_quality
     }
@@ -257,9 +293,20 @@ impl Episode {
         self.touching
     }
 
+    /// The driver bot, if this episode has one (Stages C, D and E on C or D).
+    pub fn driver(&self) -> Option<&DriverBot> {
+        self.stage.driver.as_ref()
+    }
+
+    /// True once the car's body has touched a car row (Stage C).
+    pub fn obstacle_hit(&self) -> bool {
+        self.tally.obstacle_hit
+    }
+
     /// One physics step with the controller's latest throttles (0..1, nozzle order).
     /// On a control step they join the latency queue (SPEC §9.8), and the valves get the
-    /// ones from `latency` control steps ago. Does nothing once the episode has ended.
+    /// ones from `latency` control steps ago. The driver bot (if any) drives and any
+    /// Chaos knock due now is applied. Does nothing once the episode has ended.
     pub fn step(&mut self, throttles: [f32; NOZZLE_COUNT]) -> EpisodeStatus {
         if self.status() != EpisodeStatus::Running {
             return self.status();
@@ -272,8 +319,9 @@ impl Episode {
             }
         }
         let before = self.state;
+        let input = self.driver_input();
         self.world.set_controller_throttles(self.applied_throttles);
-        self.world.step(InputFrame::default());
+        self.world.step(input);
         self.steps += 1;
         self.state = self.world.car_state();
         self.tally.peak_tilt_rad = self.tally.peak_tilt_rad.max(self.world.tilt_rad());
@@ -281,18 +329,25 @@ impl Episode {
         self.track_wheels_down();
         self.track_settled();
         self.track_quiet_throttles();
+        self.track_hop_and_obstacles();
         for event in self.world.drain_events() {
             self.record(event);
         }
         self.status()
     }
 
-    /// SPEC §9.5: a crash ends the episode, and so does success.
+    /// SPEC §9.5: a crash ends the episode, and so do success and a broken stage rule.
     pub fn status(&self) -> EpisodeStatus {
         if let Some(cause) = self.tally.crash_cause {
             return EpisodeStatus::Crashed(cause);
         }
-        if self.held_on_wheels_long_enough() && self.quiet_long_enough() {
+        if self.tally.obstacle_hit {
+            return EpisodeStatus::HitObstacle;
+        }
+        if self.tally.bad_landing {
+            return EpisodeStatus::BadLanding;
+        }
+        if self.goal_met() {
             return EpisodeStatus::Succeeded;
         }
         if self.steps >= self.limit_steps {
@@ -326,6 +381,38 @@ impl Episode {
                 .and_then(|quality| quality.speed_kept),
             settle_time_s: self.settle_time_s(),
             air_left_kg: (!self.world.mode().unlimited_air).then(|| self.world.air_kg()),
+        }
+    }
+
+    /// This step's driver input: the bot's (or none), plus the Chaos button on a knock
+    /// step. A knock restarts the four-wheels-down hold, so success after knocks means
+    /// the car settled after the last one.
+    fn driver_input(&mut self) -> InputFrame {
+        let mut input = match self.stage.driver.as_mut() {
+            Some(bot) => bot.input(&BotView::of(&self.world)),
+            None => InputFrame::default(),
+        };
+        let next_knock = self.stage.knock_steps.get(self.tally.knocks_done);
+        if next_knock == Some(&self.steps) {
+            input.buttons |= BUTTON_CHAOS;
+            self.tally.knocks_done += 1;
+            self.tally.wheels_down_since_s = None;
+        }
+        input
+    }
+
+    /// SPEC §9.5 success for this stage (Stage E: only after every knock).
+    fn goal_met(&self) -> bool {
+        if self.tally.knocks_done < self.stage.knock_steps.len() {
+            return false;
+        }
+        let parked = self.held_on_wheels_long_enough() && self.quiet_long_enough();
+        match self.stage.goal {
+            Goal::HoldOnWheels => parked,
+            Goal::SaveAfterHop => {
+                self.tally.saves_after_hop > 0 && (parked || !self.stage.hold_after_knocks)
+            }
+            Goal::ReachFinish => self.world.is_finished(),
         }
     }
 
@@ -382,6 +469,43 @@ impl Episode {
         self.tally.wheels_down_since_s = start_or_break_run(since_s, all_down, now_s);
     }
 
+    /// Notes when a Hop starts, and whether the car touches a car row: the body or
+    /// roof touching while the car is over a row means it hit the row. Wheel contact
+    /// does not count: the suspension rays reach below the wheels, so a hop clearing
+    /// the roofs by a few tenths of a metre would otherwise count as a hit.
+    fn track_hop_and_obstacles(&mut self) {
+        if self.world.hop_boost().hop_active() {
+            self.tally.hop_started = true;
+        }
+        if self.stage.obstacles.is_empty() || !self.world.chassis_touching() {
+            return;
+        }
+        let position_m = self.world.chassis_pose().position_m;
+        let over_a_row = self
+            .stage
+            .obstacles
+            .iter()
+            .any(|zone| zone.contains(position_m));
+        if over_a_row {
+            self.tally.obstacle_hit = true;
+        }
+    }
+
+    /// PLAN §3.3 on Stages C and D: a judged landing (a Save with a heading error) that
+    /// turned the car `max_landing_heading_error_deg` or more fails the episode.
+    fn judge_landing_heading(&mut self, quality: &LandingQuality) {
+        if self.stage.goal == Goal::HoldOnWheels {
+            return;
+        }
+        let limit_rad = self.rules.max_landing_heading_error_deg.to_radians();
+        let too_far = quality
+            .heading_error_rad
+            .is_some_and(|error_rad| error_rad >= limit_rad);
+        if too_far {
+            self.tally.bad_landing = true;
+        }
+    }
+
     /// Adds one event to the tally.
     fn record(&mut self, event: SimEvent) {
         match event {
@@ -395,6 +519,10 @@ impl Episode {
                 self.tally.air_used_in_saves_kg += air_used_kg;
                 self.tally.last_save_landing = Some(landing);
                 self.tally.last_save_quality = Some(quality);
+                if self.tally.hop_started {
+                    self.tally.saves_after_hop += 1;
+                }
+                self.judge_landing_heading(&quality);
             }
             SimEvent::HardLanding { .. } => self.tally.hard_landings += 1,
             SimEvent::Crash { cause } => self.tally.crash_cause = Some(cause),
