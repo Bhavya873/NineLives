@@ -2,7 +2,7 @@
   "version": 1,
   "name": "Obstacle arena",
   "start": { "pos": [0, 0.7, 0], "yaw": 0 },
-  "bounds": { "min": [-400, -20, -400], "max": [400, 60, 400] },
+  "bounds": { "min": [-800, -20, -800], "max": [800, 60, 800] },
   "pieces": [
     { "type": "landing_pad", "pos": [-10, 0, 0] },
     { "type": "ramp", "pos": [11, 0, 0], "yaw": 0, "length": 10, "width": 6, "angle_deg": 15 },

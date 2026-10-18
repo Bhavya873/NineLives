@@ -109,7 +109,32 @@ fn no_viewer_drop_starts_inside_or_against_an_obstacle() {
                 shape.piece
             );
         }
-        assert!(episode.world().lowest_chassis_point_m() > 0.0);
+    }
+}
+
+#[test]
+fn no_viewer_drop_meets_an_obstacle_in_its_first_quarter_second() {
+    // With nothing in its way, a drop on the arena follows the same path as the same drop
+    // on flat ground; an obstacle at or near the start would bend it.
+    let plain = EpisodeVariation::none(&vehicle(), realistic());
+    for seed in VIEWER_SEEDS {
+        let mut on_arena = start_drop(seed);
+        let mut on_flat = Episode::start(&plain, &scenarios(), Stage::A, seed).unwrap();
+
+        for _ in 0..30 {
+            on_arena.step([0.0; NOZZLE_COUNT]);
+            on_flat.step([0.0; NOZZLE_COUNT]);
+        }
+
+        let arena_m = on_arena.world().chassis_pose().position_m;
+        let flat_m = on_flat.world().chassis_pose().position_m;
+        for axis in 0..3 {
+            let gap_m = (arena_m[axis] - flat_m[axis]).abs();
+            assert!(
+                gap_m < 1e-3,
+                "seed {seed}: paths differ by {gap_m} m on axis {axis}"
+            );
+        }
     }
 }
 

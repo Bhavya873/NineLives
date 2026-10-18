@@ -27,20 +27,24 @@ const FIRST_SEED = 0n;
 /** How long the final picture stays before the next checkpoint starts, in seconds. */
 const PAUSE_BETWEEN_S = 2.5;
 
+/** A checkpoint to show, and the arena to fly it in. */
+interface Request {
+  index: number;
+  arena: ArenaKind;
+}
+
 /** Where the viewer is: which checkpoint, its crowd, and when it finished. */
 interface ViewerState {
   run: RunEntry;
-  /** The arena asked for (the next crowd is built there). */
+  /** The arena the current crowd flies in (set only once that crowd exists). */
   arena: ArenaKind;
-  /** The arena the current crowd flies in. */
-  crowdArena: ArenaKind;
   checkpoint: number;
   crowd: Crowd | null;
   running: boolean;
-  /** A checkpoint file is being fetched; nothing advances until it arrives. */
-  loading: boolean;
-  /** A checkpoint asked for while another was loading (the newest request wins). */
-  queued: number | null;
+  /** The request whose checkpoint file is being fetched; nothing advances meanwhile. */
+  loading: Request | null;
+  /** A request made while another was loading (the newest wins). */
+  queued: Request | null;
   /** Why the last checkpoint could not be shown, if it could not. */
   error: string | null;
   finishedAtMs: number | null;
@@ -60,26 +64,25 @@ async function start(): Promise<void> {
   const state: ViewerState = {
     run,
     arena: firstArena,
-    crowdArena: firstArena,
     checkpoint: 0,
     crowd: null,
     running: false,
-    loading: false,
+    loading: null,
     queued: null,
     error: null,
     finishedAtMs: null,
   };
-  await showCheckpoint(state, 0);
+  await showCheckpoint(state, { index: 0, arena: firstArena });
   // Wheels per car, read from the sim rather than assumed.
   const wheelPoses = state.crowd ? (state.crowd as Crowd).wheel_poses().length : 0;
   const wheelCount = wheelPoses / (CROWD_SIZE * FLOATS_PER_POSE);
   const view = createCrowdView(arena.scene, CROWD_SIZE, wheelCount);
   window.addEventListener('keydown', (event) => {
     if (event.code === 'ArrowRight' || event.code === 'KeyN') {
-      void showCheckpoint(state, state.checkpoint + 1);
+      stepCheckpoint(state, 1);
     }
     if (event.code === 'ArrowLeft' || event.code === 'KeyP') {
-      void showCheckpoint(state, state.checkpoint - 1);
+      stepCheckpoint(state, -1);
     }
     if (event.code === 'KeyO') {
       switchArena(state);
@@ -98,11 +101,11 @@ async function start(): Promise<void> {
       if (!crowd) {
         return;
       }
-      if (arenaView.kind !== state.crowdArena) {
+      if (arenaView.kind !== state.arena) {
         // Read the shapes only when the arena changes: each call copies them out of wasm.
-        showArena(arenaView, state.crowdArena, crowd.course_shapes());
-        view.spreadOnGrid = state.crowdArena === 'flat';
-        setText(toggle, `Switch to the ${arenaLabel(otherArena(state.crowdArena)).toLowerCase()}`);
+        showArena(arenaView, state.arena, crowd.course_shapes());
+        view.spreadOnGrid = state.arena === 'flat';
+        setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
       }
       const outcomes = crowd.outcomes();
       updateCrowdView(view, crowd.chassis_poses(), crowd.wheel_poses(), outcomes);
@@ -117,59 +120,71 @@ async function start(): Promise<void> {
       checkpoint: () => state.checkpoint,
       checkpointCount: () => state.run.checkpoints.length,
       landed: () => count(state.crowd?.outcomes(), CrowdOutcome.Landed),
-      arena: () => state.crowdArena,
+      arena: () => state.arena,
       courseShapeCount: () => arenaView.shapeCount,
     },
   });
 }
 
-/** Starts checkpoint `index` (wrapping round) on the same drops. */
-async function showCheckpoint(state: ViewerState, index: number): Promise<void> {
+/** The newest request: the one queued, else the one loading, else what is shown. */
+function latestRequest(state: ViewerState): Request {
+  return state.queued ?? state.loading ?? { index: state.checkpoint, arena: state.arena };
+}
+
+/** Moves `step` checkpoints on from the newest request, in that request's arena. */
+function stepCheckpoint(state: ViewerState, step: number): void {
+  const latest = latestRequest(state);
+  void showCheckpoint(state, { index: latest.index + step, arena: latest.arena });
+}
+
+/** Replays the newest requested checkpoint in the other arena. */
+function switchArena(state: ViewerState): void {
+  const latest = latestRequest(state);
+  void showCheckpoint(state, { index: latest.index, arena: otherArena(latest.arena) });
+}
+
+/** Starts checkpoint `request.index` (wrapping round) on the same drops in
+ * `request.arena`. The arena and the URL change only once the new crowd exists, so a
+ * failed load leaves everything as it was. */
+async function showCheckpoint(state: ViewerState, request: Request): Promise<void> {
   if (state.loading) {
     // Remember the newest request; it runs as soon as the current load ends.
-    state.queued = index;
+    state.queued = request;
     return;
   }
   const total = state.run.checkpoints.length;
-  const wrapped = ((index % total) + total) % total;
+  const wrapped = ((request.index % total) + total) % total;
   const entry = state.run.checkpoints[wrapped];
   if (!entry) {
     return;
   }
-  state.loading = true;
+  state.loading = { index: wrapped, arena: request.arena };
   try {
     const policyJson = await loadCheckpoint(state.run, entry);
     // Build the new crowd first, so a bad file never leaves a freed crowd behind.
-    const arenaKind = state.arena;
-    const crowd = newCrowd(arenaKind, policyJson, FIRST_SEED, CROWD_SIZE);
+    const crowd = newCrowd(request.arena, policyJson, FIRST_SEED, CROWD_SIZE);
     state.crowd?.free();
     state.crowd = crowd;
-    state.crowdArena = arenaKind;
+    state.arena = request.arena;
     state.checkpoint = wrapped;
     state.running = true;
     state.finishedAtMs = null;
     state.error = null;
+    // Keep the URL in step so a reload stays in this arena.
+    const search = searchWithArena(window.location.search, request.arena);
+    window.history.replaceState(null, '', `${window.location.pathname}${search}`);
   } catch (error) {
     // Keep showing the last crowd; auto-advance retries after the usual pause.
     state.error = `Checkpoint ${wrapped + 1}: ${String(error)}`;
     state.finishedAtMs = performance.now();
   } finally {
-    state.loading = false;
+    state.loading = null;
   }
   const queued = state.queued;
   state.queued = null;
   if (queued !== null) {
     await showCheckpoint(state, queued);
   }
-}
-
-/** Replays the current checkpoint in the other arena, and keeps the URL in step so a
- * reload stays there. */
-function switchArena(state: ViewerState): void {
-  state.arena = otherArena(state.arena);
-  const search = searchWithArena(window.location.search, state.arena);
-  window.history.replaceState(null, '', `${window.location.pathname}${search}`);
-  void showCheckpoint(state, state.checkpoint);
 }
 
 /** Once every drop has ended, waits a moment, then moves to the next checkpoint. */
@@ -181,7 +196,7 @@ function advanceWhenDone(state: ViewerState): void {
   if (state.finishedAtMs === null) {
     state.finishedAtMs = nowMs;
   } else if (nowMs - state.finishedAtMs > PAUSE_BETWEEN_S * 1000) {
-    void showCheckpoint(state, state.checkpoint + 1);
+    stepCheckpoint(state, 1);
   }
 }
 
@@ -194,7 +209,7 @@ function statusText(state: ViewerState, outcomes: Uint8Array): string {
   const millions = ((entry?.steps ?? 0) / 1e6).toFixed(1);
   const total = state.run.checkpoints.length;
   return [
-    arenaLabel(state.crowdArena),
+    arenaLabel(state.arena),
     `run ${state.run.run_id}`,
     `checkpoint ${state.checkpoint + 1} of ${total}`,
     `${millions}M steps`,

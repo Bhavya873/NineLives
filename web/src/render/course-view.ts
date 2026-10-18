@@ -9,7 +9,9 @@ import {
   Material,
   Mesh,
   MeshStandardMaterial,
+  type Object3D,
   PlaneGeometry,
+  type Scene,
   Vector3,
 } from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
@@ -71,6 +73,30 @@ function sharedMaterial(
     materials.set(key, material);
   }
   return material;
+}
+
+/**
+ * Replaces the course drawn in `scene`: removes and frees `current` (if any) and draws
+ * the course in `shapesJson` (none for null). The arena's endless `ground` shows only
+ * while no course is up, since a course brings its own floor with holes at its gaps.
+ * Returns the new course group, or null.
+ */
+export function swapCourseView(
+  scene: Scene,
+  ground: Object3D,
+  current: Group | null,
+  shapesJson: string | null,
+): Group | null {
+  if (current) {
+    scene.remove(current);
+    disposeCourseView(current);
+  }
+  const next = shapesJson === null ? null : buildCourseView(shapesJson);
+  if (next) {
+    scene.add(next);
+  }
+  ground.visible = next === null;
+  return next;
 }
 
 /** Frees the GPU memory of a course built by `buildCourseView` (disposing a shared

@@ -4,7 +4,7 @@
 // on a course. Also aims the camera so the whole crowd is in view.
 import type { Group, Mesh, PerspectiveCamera, Scene } from 'three';
 
-import { buildCourseView, disposeCourseView } from '../render/course-view.ts';
+import { swapCourseView } from '../render/course-view.ts';
 import type { ArenaKind } from './arena-choice.ts';
 
 /** Camera spots, in m: high and far back for the flat arena's 64-car grid (about 100 m
@@ -41,18 +41,8 @@ export function showArena(view: ArenaView, kind: ArenaKind, shapesJson: string |
   if (view.kind === kind) {
     return;
   }
-  if (view.course) {
-    view.scene.remove(view.course);
-    disposeCourseView(view.course);
-    view.course = null;
-  }
-  view.shapeCount = 0;
-  if (shapesJson !== undefined) {
-    view.course = buildCourseView(shapesJson);
-    view.shapeCount = view.course.children.length;
-    view.scene.add(view.course);
-  }
-  view.ground.visible = view.course === null;
+  view.course = swapCourseView(view.scene, view.ground, view.course, shapesJson ?? null);
+  view.shapeCount = view.course?.children.length ?? 0;
   view.camera.position.set(...CAMERA_SPOT_M[kind]);
   view.camera.lookAt(...CAMERA_TARGET_M);
   view.kind = kind;
