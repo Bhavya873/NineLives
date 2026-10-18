@@ -31,6 +31,30 @@ Notes:
 - **Known limit, follow-up for M7:** at rest the policy still blows a throttle sum of 0.2–0.4. In Realistic that roughly matches the 5 kg/s ground refill, so the tank stops refilling after a save; with unlimited air it keeps a faint push going. The cause is the episode rule: success ends the episode 1 s after landing, so behaviour on the ground is barely trained. Training past success (a longer still hold, or not ending at success) is the deeper fix; it changes SPEC §9.5, so it waits for the M7 curriculum work.
 - Throughput: about 28k env-steps/s end to end with 64 envs (PLAN §5.2 estimated 5–20k); a 50M-step run takes about 29 min.
 
+## M7 landing-quality rules: eval only, no training (2026-10-17)
+
+`python -m ninelives.eval` (episodes run in Rust), 1000 episodes per row, seeds 0–999, same policy (`models/policy.json`, stage-a-004) and configs as above plus the PLAN §3.3 rules: success now also needs the commanded throttle sum < 0.05 for the last 0.5 s of the 1.0 s hold. No training was run. Before = the committed results above.
+
+| Controller | Stage | Mode | DR | Success before → after | Save | Crash | Hard-landing rate | Heading error median (°) | Settle time median (s) | Air left at success median (kg) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| off | A | realistic | no | 6.6% → 6.6% | 6.5% | 90.5% | 0.0% | 58.0 | 0.74 | 260.0 |
+| off | B | realistic | no | 14.6% → 14.6% | 14.6% | 8.6% | 0.0% | 0.9 | 1.45 | 260.0 |
+| pd | A | realistic | no | 58.0% → 58.0% | 57.9% | 41.7% | 0.2% | 26.3 | 0.20 | 227.4 |
+| pd | A | arcade | no | 60.6% → 60.6% | 60.5% | 39.1% | 0.2% | 24.8 | 0.18 | 260.0 |
+| pd | A | realistic | yes | 57.2% → 57.2% | 57.1% | 42.5% | 0.2% | 26.8 | 0.23 | 223.6 |
+| pd | B | realistic | no | 100.0% → 100.0% | 100.0% | 0.0% | 0.0% | 1.3 | 1.48 | 229.7 |
+| pd | B | arcade | no | 100.0% → 100.0% | 100.0% | 0.0% | 0.0% | 1.3 | 1.48 | 260.0 |
+| ai | A | realistic | no | **74.2% → 0.0%** | 74.1% | 25.7% | 2.1% | 61.7 | 0.08 | – |
+| ai | A | arcade | no | **84.5% → 3.2%** | 84.4% | 15.5% | 1.7% | 65.1 | 0.11 | 260.0 |
+| ai | A | realistic | yes | **78.8% → 0.3%** | 78.6% | 21.2% | 0.8% | 61.0 | 0.09 | 202.0 |
+
+(Off rows are identical in Arcade. Speed kept is "–" everywhere: Stage A/B never take off from the wheels.)
+
+Notes:
+- **The AI's drop is the known idle-thrust defect, not a regression in flying:** its save and crash rates are unchanged, but it keeps a throttle sum of 0.2–0.4 while parked, so the episodes now time out instead of succeeding. The next training run (with the new success rule and reward terms) has to learn to close the valves. Off and PD close their valves at rest, so their numbers are unchanged.
+- The heading error is large on Stage A (Off 58°, PD 26°, AI 62° median) because drops start in random attitudes and spins; with the new q factor, Stage A saves now pay more for keeping the start heading (e.g. righting by roll rather than a pitch flip). Watch for this in the next run; `save_heading_scale_deg` is in reward.toml.
+- Hard landings are rare on Stage A (≤ 2%): most landings that would bottom out a spring hit the body first and crash.
+
 ## Baseline evals (no training)
 
 Rust eval runner (`cargo run --release -p nl-control --example eval`), 1000 episodes per row, seeds 0–999, no domain randomization, `configs/*.toml` as committed. Full per-episode rows in `results/eval_<controller>_<stage>_<mode>.json`. Success = all four wheels down for 1.0 s unbroken, with no crash (SPEC §9.5); episodes cut at 8 s. Touchdown = the first step anything (wheels, body or roof) touches the ground. Air per save = air used during saved upsets ÷ saves.
