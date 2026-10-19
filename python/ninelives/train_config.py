@@ -76,7 +76,7 @@ def load_train_config(path: Path) -> TrainConfig:
             clip_obs=float(raw["normalize"]["clip_obs"]),
             curriculum_window=int(raw["curriculum"]["window"]),
             curriculum_advance_at=float(raw["curriculum"]["advance_at"]),
-            curriculum_promote_on=str(raw["curriculum"].get("promote_on", "training")),
+            curriculum_promote_on=str(raw["curriculum"].get("promote_on", "eval")),
             checkpoint_every_steps=int(raw["checkpoint"]["every_steps"]),
             eval_episodes=int(raw["checkpoint"]["eval_episodes"]),
             eval_seed=int(raw["checkpoint"]["eval_seed"]),

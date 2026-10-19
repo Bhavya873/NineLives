@@ -114,7 +114,7 @@ class RunCheckpointCallback(BaseCallback):
             if not curriculum.needs_eval_to_advance(stage):
                 continue
             level = curriculum.levels[stage]
-            rows = self.eval_rows(normalizer, stage, level)
+            rows = self.eval_rows(normalizer, stage, level, self.promotion_seed())
             success = success_and_crash_rates(rows)[0]
             self.logger.record(f"curriculum/{stage}/eval_success", success)
             print(f"{self.num_timesteps} steps: {stage} level {level} eval success {success:.3f}")
@@ -122,13 +122,23 @@ class RunCheckpointCallback(BaseCallback):
         if changed:
             send_mix(self.training_env, self.state)
 
-    def eval_rows(self, normalizer: VecNormalize, stage: str, level: int) -> list[dict[str, Any]]:
-        """`stage` at `level` on the fixed eval seeds, acting deterministically."""
+    def promotion_seed(self) -> int:
+        """First seed of this checkpoint's promotion eval: a fresh block per checkpoint,
+        past the best-checkpoint seeds, so a stage is never promoted for fitting one
+        fixed sample of drops."""
+        checkpoint = self.num_timesteps // self.config.checkpoint_every_steps
+        return self.config.eval_seed + (checkpoint + 1) * self.config.eval_episodes
+
+    def eval_rows(
+        self, normalizer: VecNormalize, stage: str, level: int, first_seed: int | None = None
+    ) -> list[dict[str, Any]]:
+        """`stage` at `level` on fixed seeds from `first_seed` (default: the
+        best-checkpoint eval seeds), acting deterministically."""
         return evaluate_fixed_seeds(
             self.model,
             normalizer,
             episodes=self.config.eval_episodes,
-            first_seed=self.config.eval_seed,
+            first_seed=self.config.eval_seed if first_seed is None else first_seed,
             mode=self.config.mode,
             stage=stage,
             level=level,

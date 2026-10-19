@@ -284,3 +284,14 @@ def test_an_unknown_promote_on_is_refused_before_training(tmp_path):
 
     with pytest.raises(ValueError, match="promote_on"):
         run(tmp_path, path)
+
+
+def test_a_config_without_promote_on_promotes_on_eval(tmp_path):
+    from ninelives.train_config import load_train_config
+
+    config = yaml.safe_load(small_config(tmp_path, 1024).read_text())
+    config["curriculum"].pop("promote_on")
+    path = tmp_path / "old.yaml"
+    path.write_text(yaml.safe_dump(config))
+
+    assert load_train_config(path).curriculum_promote_on == "eval"

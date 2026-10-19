@@ -28,6 +28,12 @@ PYTHONPATH=python .venv/bin/python -m ninelives.train \
 - `--max-minutes N` saves and stops after N minutes of wall time. Without it the run goes to `total_steps` in the config.
 - Ctrl-C also saves `runs/<run-id>/latest/` before exiting.
 - Starting a run id that already exists is refused, so a run is never overwritten by accident.
+- `--total-steps N` overrides the config's `total_steps` (the M7 full run: `--total-steps 150_000_000`).
+
+### Settings that matter under the quiet-throttle success rule
+- `curriculum.promote_on: eval` (the default) promotes a stage from a deterministic eval at each checkpoint, on fresh seeds each time. `training` judges the window of training episodes instead, and their exploration noise alone breaks the quiet rule, so it never promotes.
+- `ppo.initial_action_bias: -1` and `ppo.log_std_init: 0` start each throttle's mean at the edge of zero: the deterministic policy idles at 0 while samples still fire.
+- `reward.toml` `success` pays once per success, which is what rewards a quiet landing (EXPERIMENTS m7-full-002).
 
 ## Resume
 

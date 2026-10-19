@@ -103,7 +103,7 @@ Notes:
 
 ### 2026-10-18/19 — M7: full A→E training runs (m7-full-001…003)
 
-`python -m ninelives.train --config configs/train/m7-full.yaml --run-id m7-full-00N`: seed 0, 150M steps planned, all five stages via the curriculum, domain randomization on, 64 envs, ~26k steps/s (150M ≈ 95 min plus evals). Plan agreed with the owner (docs/PLAN.md §3.4): up to 3 runs, then review gate 2.
+`python -m ninelives.train --config configs/train/base.yaml --total-steps 150_000_000 --run-id m7-full-00N` (the runs used `configs/train/m7-full.yaml`, base.yaml with 150M steps, since replaced by the `--total-steps` flag): seed 0, 150M steps planned, all five stages via the curriculum, domain randomization on, 64 envs, ~26k steps/s (150M ≈ 95 min plus evals). Plan agreed with the owner (docs/PLAN.md §3.4): up to 3 runs, then review gate 2.
 
 | Run | Code | Steps | Wall | Curriculum reached | Stage A full difficulty, eval (Realistic, 200 seeds) | Outcome |
 |---|---|---|---|---|---|---|
