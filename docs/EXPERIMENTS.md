@@ -118,3 +118,35 @@ Smoke runs on the way (3–6M steps, not logged separately): an initial action b
 Notes:
 - The binding constraint is now **crashes**, not quietness: 45–60% of full-difficulty drops end in hard impacts or upside-down landings. M5's stage-a-004 crashed far less. Candidates: the new HardLanding and unsettled costs making the policy hesitant to brake late; less time at full difficulty (stuck at level 3, never level 4); a curriculum bar (85%) far above what even PD reaches at full difficulty (58%).
 - The 85% promotion bar suits easy levels, but at the upper Stage A levels it blocks every later stage. Options for the next run are in the PR: a lower or per-level bar, unlocking B–E on time or on beating PD, or warm-starting from stage-a-004's braking skill.
+
+
+### 2026-10-19 — M7 gate-2 round: cost ablation and warm-started run (m7-full-004)
+
+Owner's gate-2 choices: warm start from `stage-a-004`, per-level bars [0.85, 0.85, 0.75, 0.65], unlock on matching PD or every 15M steps, a cost ablation, one full run, the bar unchanged. **Seed hygiene:** training uses random sim seeds; validation (promotion, fresh seeds each checkpoint, and best-checkpoint choice) uses seeds ≥ 1,000,000; the test seeds 0–999 were used once, for the final eval below.
+
+**Ablation** (20M steps each, warm start, run in parallel, validation seeds):
+
+| Run | Reward change | Validation success / crash at 20M |
+|---|---|---|
+| abl-base | none | 0.0% / 14.7% |
+| abl-nohard | `hard_landing: 0` | 0.0% / 16.0% |
+| abl-nocosts | `hard_landing: 0`, `unsettled: 0` | **81.3%** / 15.0% |
+
+The unsettled cost kept the policy from ever settling quietly (it landed safely and timed out). The hard-landing cost made no difference, so it stays (agreed rule: drop a cost only if that cuts crashes by ≥ 5 points). `reward.toml` sets `unsettled = 0.0`.
+
+**m7-full-004:** `python -m ninelives.train --config configs/train/base.yaml --total-steps 150_000_000 --init-from runs/stage-a-004/best --run-id m7-full-004` at commit a6164e7, seed 0, 150M steps, about 2 h (21.5k steps/s). B unlocked on time at 15M, then C, D and E. Stage A reached level 4. Validation success over A–E rose from 66% (45M) to 75.4% (best, 147M); crash fell from 29% to 20%.
+
+**Final test eval** (seeds 0–999, 1000 episodes each, best checkpoint; AI files kept aside since the bar was not met):
+
+| Stage | Realistic AI / PD | Arcade AI / PD |
+|---|---|---|
+| A | **66.3%** / 58.0% | **78.9%** / 60.6% |
+| A (randomized) | **59.7%** / 57.2% | – |
+| B | 100% / 100% | 99.9% / 100% |
+| C | 100% / 100% | 99.8% / 100% |
+| D | 64.7% / **97.3%** | 91.2% / **97.3%** |
+| E | 56.9% / **83.1%** | 75.1% / **80.4%** |
+
+- **Generalization:** test success averages 77.6% (A–E, Realistic) against 75.4% on validation, so there is no sign of overfitting to the validation seeds.
+- **Against the bar:** not met. The AI beats PD on drops (Stage A, all three conditions), ties on B and C, and loses on procedural courses (D: 33% crashes in Realistic) and knocks (E). D and E only joined the mix after ~30–40M steps.
+- PD's Stage A/B files came out byte-identical to the committed ones (determinism holds). PD's C/D/E results are committed as new baselines.
