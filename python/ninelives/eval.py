@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> None:
     """The command line (see the module docstring)."""
     parser = argparse.ArgumentParser(description="Evaluate a controller on fixed seeds.")
     parser.add_argument("--controller", choices=["off", "pd", "ai"], required=True)
-    parser.add_argument("--stage", choices=["A", "B"], default="A")
+    parser.add_argument("--stage", choices=["A", "B", "C", "D", "E"], default="A")
     parser.add_argument("--mode", choices=["realistic", "arcade"], default="realistic")
     parser.add_argument("--episodes", type=positive_int, default=1000)
     parser.add_argument("--seed", type=int, default=0, help="first episode seed")

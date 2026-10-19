@@ -15,7 +15,11 @@ success_quiet_hold_s = 0.5
 # settle_max_side_speed_m_s. Settle time runs from the first touchdown until the car is
 # settled for good; the reward charges each unsettled step after a touchdown.
 settle_max_side_speed_m_s = 1.0
-# Otherwise it is cut off after this long (Stage A and B).
+# Stage C and D (PLAN §3.3): every judged landing (a Save after a take-off from the
+# wheels) must keep the nose within this many degrees of its take-off heading; a worse
+# landing ends the episode as a failure.
+max_landing_heading_error_deg = 30.0
+# Otherwise it is cut off after this long (Stage A and B; C, D and E set their own).
 time_limit_s = 8.0
 # Starts are lifted so the body's lowest corner is at least this high (Stage B: exactly).
 spawn_clearance_m = 0.05
@@ -47,6 +51,65 @@ max_speed_m_s = 2.0
 levels = 5
 first_max_tilt_deg = 30.0
 first_max_spin_rad_s = 0.0
+
+[stage_c]
+# Hop (SPEC §9.6): driving straight on a flat 20 m track; the driver bot holds the start
+# speed and presses Hop. Success is a save after the hop without touching the cars.
+time_limit_s = 15.0
+speed_m_s = [5.0, 25.0]
+# When Hop is pressed (s after the start) when there is no car row.
+hop_time_s = [1.0, 3.0]
+car_row_probability = 0.5
+car_row_count = [1, 3]
+car_row_height_m = [1.2, 1.5]
+# The row is placed so a hop pressed at hop_time_s is highest over its middle, and only
+# as many cars stay as that hop clears: the wheels this high above the roofs, for the
+# row plus the car's own length plus this spare distance (m); no row if it can't clear one.
+# The clearance is driver_bot.hop_clearance_m, so the bot times its press the same way.
+spare_length_m = 1.0
+# Track beyond what the car could cover in the time limit (m).
+run_out_m = 50.0
+
+[stage_d]
+# Course (SPEC §9.6): the bot drives a procedural course (configs/pieces.json) to its
+# finish without crashing.
+time_limit_s = 45.0
+# The bot's target speed is raised to at least course length ÷ (this × time limit), so a
+# long course drawn with a slow target can still be finished.
+time_use_fraction = 0.75
+
+[stage_e]
+# Chaos (SPEC §9.6): Stage A, C or D plus Chaos knocks. Success also needs every knock
+# to have happened, and (on A and C) four wheels down for success_hold_s after the last.
+time_limit_s = 45.0
+# Relative chances of the base stage: [A, C, D].
+base_stage_weights = [1.0, 1.0, 1.0]
+knock_count = [1, 3]
+# When each knock comes (s after the start).
+knock_time_s = [0.5, 6.0]
+
+[driver_bot]
+# SPEC §9.7 (training only). Stage D's target speed; Stage C holds its start speed.
+target_speed_m_s = [10.0, 30.0]
+# Pure-pursuit look-ahead: base + this × speed (m, s).
+lookahead_base_m = 6.0
+lookahead_per_speed_s = 0.3
+# The pursuit's turns pull at most this hard sideways (m/s²), so the bot doesn't spin the
+# car when it lands off the line (the wobble and jerks come on top).
+max_turn_accel_m_s2 = 6.0
+# Throttle per m/s of speed error.
+speed_gain_per_m_s = 0.3
+# Ornstein–Uhlenbeck steering wobble: steady-state size and return rate (per s).
+steer_noise_sigma = 0.1
+steer_noise_return_per_s = 1.0
+# Sudden steering jerks: chance per second, size (steer units) and length (s).
+jerk_chance_per_s = 0.05
+jerk_size = 0.5
+jerk_s = 0.3
+# Hop is pressed up to this early or late (s), timed so the wheels pass this high (m)
+# above a car row marked hop_hint.
+hop_timing_noise_s = 0.15
+hop_clearance_m = 0.1
 
 [randomization]
 # SPEC §9.8: each training episode draws its own car and world from these ranges

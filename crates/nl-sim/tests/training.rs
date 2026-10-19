@@ -11,7 +11,9 @@ use common::{realistic, reward, scenarios, vehicle};
 use nl_sim::episode::{Episode, EpisodeStatus};
 use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
-use nl_sim::training::{StepOutcome, TrainingConfig, TrainingEnv, throttles_from_action};
+use nl_sim::training::{
+    StageChoice, StepOutcome, TrainingConfig, TrainingEnv, throttles_from_action,
+};
 
 /// All valves shut: the policy action −1 on every nozzle.
 const VALVES_SHUT: [f32; 10] = [-1.0; 10];
@@ -220,4 +222,49 @@ fn a_hard_level_drop_pays_the_hard_landing_cost_and_the_air_left_bonus() {
     assert!(last.terminated);
     // Closed valves use no air, so the whole tank is left: weight 1.0 × 1.0.
     assert!((last.terms.air_left - 1.0).abs() < 1e-6);
+}
+
+/// The stage of the episode a reset with `seed` starts, read from its finished row.
+fn stage_of_episode(env: &mut TrainingEnv, seed: u64) -> Stage {
+    env.reset(seed).unwrap();
+    let outcomes = run_to_end(env, VALVES_SHUT);
+    outcomes.last().unwrap().finished.as_ref().unwrap().stage
+}
+
+fn choice(stage: Stage, weight: f32) -> StageChoice {
+    StageChoice {
+        stage,
+        weight,
+        level: 0,
+    }
+}
+
+#[test]
+fn a_stage_mix_picks_each_episodes_stage_by_weight_from_its_seed() {
+    let mut env = TrainingEnv::new(config(), Stage::A);
+    let mix = vec![
+        choice(Stage::A, 1.0),
+        choice(Stage::B, 1.0),
+        choice(Stage::C, 0.0),
+    ];
+    env.set_stage_mix(mix).unwrap();
+
+    let stages: Vec<Stage> = (0..20)
+        .map(|seed| stage_of_episode(&mut env, seed))
+        .collect();
+    let again: Vec<Stage> = (0..20)
+        .map(|seed| stage_of_episode(&mut env, seed))
+        .collect();
+
+    assert_eq!(stages, again, "the seed decides the stage");
+    assert!(stages.contains(&Stage::A) && stages.contains(&Stage::B));
+    assert!(!stages.contains(&Stage::C), "a zero weight never comes up");
+}
+
+#[test]
+fn an_empty_or_weightless_stage_mix_is_refused() {
+    let mut env = TrainingEnv::new(config(), Stage::A);
+
+    assert!(env.set_stage_mix(Vec::new()).is_err());
+    assert!(env.set_stage_mix(vec![choice(Stage::A, 0.0)]).is_err());
 }

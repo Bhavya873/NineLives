@@ -1,9 +1,11 @@
-"""The training curriculum (SPEC §9.9): watch each finished episode's success at the
-current level, and move up a level once the recent success rate is high enough.
+"""The training curriculum (SPEC §9.9): watch each finished episode's success per stage,
+move a stage up a level once its recent success rate is high enough, and unlock the next
+stage once the newest one passes at its last level. Unlocked stages are then sampled by
+weight (in Rust, from each episode's seed), so earlier skills are not forgotten.
 
-Only Stage A has levels in M5. The level count comes from the sim (scenarios.toml), the
-window and bar from the training config; only the progress (`stage`, `level`, recent
-successes) is saved with each checkpoint, so a resumed run carries on where it was.
+Level counts come from the sim (scenarios.toml); the stage order, weights, window and bar
+from the training config. Only the progress (unlocked count, levels, recent successes)
+is saved with each checkpoint, so a resumed run carries on where it was.
 """
 
 from dataclasses import dataclass, field
@@ -12,62 +14,113 @@ from typing import Any
 
 @dataclass
 class Curriculum:
-    """Where training is, and the recent successes at that level."""
+    """Which stages are unlocked, each stage's level, and its recent successes there."""
 
-    stage: str
-    level: int
-    level_count: int
+    stages: list[str]
+    weights: dict[str, float]
+    level_counts: dict[str, int]
     window: int
     advance_at: float
-    recent_successes: list[bool] = field(default_factory=list)
+    unlocked: int = 1
+    levels: dict[str, int] = field(default_factory=dict)
+    recent: dict[str, list[bool]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for stage in self.stages:
+            self.levels.setdefault(stage, 0)
+            self.recent.setdefault(stage, [])
 
     def record(self, episode: dict[str, Any]) -> bool:
         """Counts one finished episode (BatchedSim's episode row). Returns True when this
-        moved the curriculum up a level. Episodes from an older level are ignored."""
-        if episode["stage"] != self.stage or episode["level"] != self.level:
+        changed the mix: a stage moved up a level or the next stage unlocked. Episodes
+        from a locked stage or an older level are ignored."""
+        stage = episode["stage"]
+        if stage not in self.unlocked_stages() or episode["level"] != self.levels[stage]:
             return False
-        self.recent_successes.append(bool(episode["success"]))
-        self.recent_successes = self.recent_successes[-self.window :]
-        if self.is_last_level() or not self.window_is_good():
+        window = self.recent[stage]
+        window.append(bool(episode["success"]))
+        del window[: -self.window]
+        if not self.window_is_good(stage):
             return False
-        self.level += 1
-        self.recent_successes = []
-        return True
+        if not self.is_last_level(stage):
+            self.levels[stage] += 1
+            self.recent[stage] = []
+            return True
+        if stage == self.unlocked_stages()[-1] and self.unlocked < len(self.stages):
+            self.unlocked += 1
+            return True
+        return False
 
-    def success_rate(self) -> float:
-        """Success rate over the recent episodes at this level (0 with none yet)."""
-        if not self.recent_successes:
-            return 0.0
-        return sum(self.recent_successes) / len(self.recent_successes)
+    def unlocked_stages(self) -> list[str]:
+        """The stages training samples from now, in unlock order."""
+        return self.stages[: self.unlocked]
 
-    def window_is_good(self) -> bool:
+    def mix(self) -> list[tuple[str, float, int]]:
+        """`(stage, weight, level)` for every unlocked stage: what BatchedSim samples."""
+        return [
+            (stage, self.weights[stage], self.levels[stage]) for stage in self.unlocked_stages()
+        ]
+
+    def success_rate(self, stage: str) -> float:
+        """`stage`'s success rate over its recent episodes at its level (0 with none)."""
+        window = self.recent[stage]
+        return sum(window) / len(window) if window else 0.0
+
+    def window_is_good(self, stage: str) -> bool:
         """A full window whose success rate passes the bar."""
-        full = len(self.recent_successes) >= self.window
-        return full and self.success_rate() > self.advance_at
+        full = len(self.recent[stage]) >= self.window
+        return full and self.success_rate(stage) > self.advance_at
 
-    def is_last_level(self) -> bool:
+    def is_last_level(self, stage: str) -> bool:
         """True at the stage's hardest level."""
-        return self.level >= self.level_count - 1
+        return self.levels[stage] >= self.level_counts[stage] - 1
 
     def progress(self) -> dict[str, Any]:
-        """What a checkpoint saves: the stage, level and recent successes."""
+        """What a checkpoint saves: the stage order, unlocked count, levels and windows."""
         return {
-            "stage": self.stage,
-            "level": self.level,
-            "recent_successes": self.recent_successes,
+            "stages": self.stages,
+            "unlocked": self.unlocked,
+            "levels": self.levels,
+            "recent": self.recent,
         }
 
     def restore(self, progress: dict[str, Any]) -> None:
         """Carries on from saved `progress` (settings stay as configured now). A level
-        above the configured last level is lowered to it, which also starts its window
-        afresh."""
-        if progress["stage"] != self.stage:
+        above a stage's configured last level is lowered to it, which also starts that
+        stage's window afresh. Progress saved by the single-stage M5 curriculum
+        (`stage`, `level`, `recent_successes`) is read as that stage alone unlocked."""
+        if "stages" not in progress:
+            progress = upgrade_single_stage_progress(progress, self.stages)
+        if progress["stages"] != self.stages:
             raise ValueError(
-                f"checkpoint was training stage {progress['stage']}, but the config says "
-                f"stage {self.stage}; resume with the same stage or start a new run"
+                f"checkpoint was training stages {progress['stages']}, but the config says "
+                f"{self.stages}; resume with the same stages or start a new run"
             )
-        last_level = self.level_count - 1
-        self.level = min(progress["level"], last_level)
-        self.recent_successes = []
-        if progress["level"] == self.level:
-            self.recent_successes = list(progress["recent_successes"])[-self.window :]
+        self.unlocked = min(int(progress["unlocked"]), len(self.stages))
+        for stage in self.stages:
+            saved_level = int(progress["levels"][stage])
+            self.levels[stage] = min(saved_level, self.level_counts[stage] - 1)
+            self.recent[stage] = []
+            if saved_level == self.levels[stage]:
+                self.recent[stage] = list(progress["recent"][stage])[-self.window :]
+
+
+def upgrade_single_stage_progress(progress: dict[str, Any], stages: list[str]) -> dict[str, Any]:
+    """M5 checkpoints saved `{stage, level, recent_successes}` for one stage. That reads
+    as the configured stages with only the first unlocked, if the old stage is it."""
+    if "stage" not in progress:
+        raise ValueError(
+            "checkpoint's curriculum progress has neither `stages` (M7) nor `stage` (M5); "
+            "the state.json is damaged or from another program: start a new run"
+        )
+    if progress["stage"] != stages[0]:
+        raise ValueError(
+            f"checkpoint was training stage {progress['stage']} alone (M5 format), but the "
+            f"config starts with stages {stages}; resume with stages starting at "
+            f"{progress['stage']} or start a new run"
+        )
+    levels = {stage: 0 for stage in stages}
+    recent: dict[str, list[bool]] = {stage: [] for stage in stages}
+    levels[stages[0]] = int(progress["level"])
+    recent[stages[0]] = list(progress["recent_successes"])
+    return {"stages": stages, "unlocked": 1, "levels": levels, "recent": recent}

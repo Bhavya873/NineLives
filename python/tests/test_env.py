@@ -1,6 +1,8 @@
 """Environment tests (SPEC §12, Python): check_env passes, a batch of 4 matches 4 single
 sims, auto-reset hands back the terminal observation, and bad input is refused."""
 
+import json
+
 import numpy as np
 import pytest
 from gymnasium.utils.env_checker import check_env
@@ -108,3 +110,41 @@ def test_seeding_the_vec_env_picks_its_episodes():
 
     assert np.array_equal(first.reset(), second.reset())
     assert not np.array_equal(first.reset(), other.reset())
+
+
+def finished_stages(env: NineLivesVecEnv, steps: int) -> list[str]:
+    """The stages of the episodes that end within `steps` control steps of zero action."""
+    env.reset()
+    stages = []
+    actions = np.zeros((env.num_envs, 10), dtype=np.float32)
+    for _ in range(steps):
+        _, _, dones, infos = env.step(actions)
+        stages.extend(infos[row]["nl_episode"]["stage"] for row in np.flatnonzero(dones))
+    return stages
+
+
+def test_a_stage_mix_runs_every_weighted_stage_and_never_a_zero_weight_one():
+    env = NineLivesVecEnv(n_envs=16, seed=3)
+    env.set_stage_mix([("A", 1.0, 0), ("B", 1.0, 0), ("C", 1.0, 0), ("D", 0.0, 0)])
+
+    stages = finished_stages(env, 1200)
+
+    assert {"A", "B", "C"} <= set(stages)
+    assert "D" not in stages
+
+
+def test_a_bad_stage_mix_is_refused():
+    env = NineLivesVecEnv(n_envs=2)
+
+    with pytest.raises(ValueError, match="stage"):
+        env.set_stage_mix([("Z", 1.0, 0)])
+    with pytest.raises(ValueError, match="weights"):
+        env.set_stage_mix([("A", 0.0, 0)])
+
+
+def test_the_pieces_json_comes_from_the_config_and_a_broken_one_is_refused():
+    config = json.loads(load_sim_config(stage="D"))
+    config["pieces_json"] = config["pieces_json"].replace('"version": 1', '"version": 2')
+
+    with pytest.raises(ValueError, match="pieces.json"):
+        BatchedSim(1, json.dumps(config), 0)

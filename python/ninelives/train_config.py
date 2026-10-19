@@ -8,6 +8,8 @@ import yaml
 
 # Activation names `ppo.activation` may use (train.py maps them to torch layers).
 ACTIVATION_NAMES = ("tanh", "relu")
+# The scenario stages the sim knows (SPEC §9.6).
+STAGE_NAMES = ("A", "B", "C", "D", "E")
 
 
 @dataclass
@@ -33,7 +35,10 @@ class TrainConfig:
 
     seed: int
     mode: str
-    stage: str
+    # Unlock order (SPEC §9.9); training starts with the first.
+    stages: list[str]
+    # How often each unlocked stage comes up.
+    stage_weights: dict[str, float]
     randomize: bool
     total_steps: int
     ppo: PpoSettings
@@ -53,7 +58,11 @@ def load_train_config(path: Path) -> TrainConfig:
         config = TrainConfig(
             seed=int(raw["seed"]),
             mode=str(raw["mode"]),
-            stage=str(raw["stage"]),
+            stages=[str(stage) for stage in raw["stages"]],
+            stage_weights={
+                str(stage): float(weight)
+                for stage, weight in raw["curriculum"]["stage_weights"].items()
+            },
             randomize=strict_bool("randomize", raw["randomize"]),
             total_steps=int(raw["total_steps"]),
             ppo=read_ppo(raw["ppo"]),
@@ -101,6 +110,7 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     """Settings that would only fail later, deep inside a run, fail here instead."""
     if config.ppo.activation not in ACTIVATION_NAMES:
         raise ValueError(f"{path}: ppo.activation must be one of {ACTIVATION_NAMES}")
+    check_stages(path, config)
     counts = {
         "ppo.n_envs": config.ppo.n_envs,
         "curriculum.window": config.curriculum_window,
@@ -110,3 +120,21 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     for name, value in counts.items():
         if value < 1:
             raise ValueError(f"{path}: {name} must be at least 1, not {value}")
+
+
+def check_stages(path: Path, config: TrainConfig) -> None:
+    """At least one known stage, none twice, and a weight above zero for each: a stage
+    with weight 0 would unlock but never run, so its window would never fill and the
+    stages after it would never unlock."""
+    stages = config.stages
+    if not stages or len(set(stages)) != len(stages):
+        raise ValueError(f"{path}: stages must list at least one stage, each once")
+    for stage in stages:
+        if stage not in STAGE_NAMES:
+            raise ValueError(f"{path}: stage {stage!r} is not one of {STAGE_NAMES}")
+        weight = config.stage_weights.get(stage)
+        if weight is None or not weight > 0.0:
+            raise ValueError(
+                f"{path}: curriculum.stage_weights needs a weight above 0 for stage {stage} "
+                "(leave a stage out of `stages` instead of giving it weight 0)"
+            )

@@ -1,8 +1,12 @@
 //! Training and eval scenarios (SPEC §9.5, §9.6): where and how each episode starts.
 //!
 //! Stage A drops the car from the air in a random attitude and spin; Stage B lays it on
-//! its side just above the ground. Every draw comes from a ChaCha8 generator seeded by the
-//! episode's seed, so the same seed always gives the same start (CLAUDE.md rule 2).
+//! its side just above the ground. The driving stages C, D and E are set up in
+//! `driving_stages`; their settings live here with the rest of scenarios.toml. Every draw
+//! comes from a ChaCha8 generator seeded by the episode's seed, so the same seed always
+//! gives the same start (CLAUDE.md rule 2).
+
+use std::sync::Arc;
 
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -11,6 +15,9 @@ use serde::Deserialize;
 
 use crate::chaos::random_direction;
 use crate::checkpoint::Checkpoint;
+use crate::course_gen::{PieceCatalog, PieceCatalogError};
+use crate::driver_bot::DriverBotConfig;
+use crate::driving_stages::{ChaosStageConfig, CourseStageConfig, HopStageConfig};
 use crate::obs::MAX_THRUST_SCALE;
 use crate::randomization::RandomizationConfig;
 use crate::world::{PlaceCarError, Pose, World};
@@ -21,22 +28,33 @@ const SCENARIO_RNG_STREAM: u64 = 1;
 /// The repo's `configs/scenarios.toml`, built in so tests and the eval runner share it.
 pub const DEFAULT_SCENARIOS_TOML: &str = include_str!("../../../configs/scenarios.toml");
 
-/// Which kind of start (SPEC §9.6). Stages C–E arrive with courses in M7. Results and
-/// training info spell it "A" or "B".
+/// Which kind of episode (SPEC §9.6). Results and training info spell it "A" to "E".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Stage {
     /// Drop from the air in a random attitude and spin.
     A,
     /// Lying on its side just above the ground.
     B,
+    /// Driving straight, the bot presses Hop (sometimes over a row of parked cars).
+    C,
+    /// The bot drives a procedural course to its finish.
+    D,
+    /// A, C or D with Chaos knocks at random times.
+    E,
 }
 
 impl Stage {
-    /// "A" or "B" (either case), as on the eval runner's command line.
+    /// Every stage, in curriculum order.
+    pub const ALL: [Stage; 5] = [Stage::A, Stage::B, Stage::C, Stage::D, Stage::E];
+
+    /// "A" to "E" (either case), as on the eval runner's command line.
     pub fn from_name(name: &str) -> Option<Stage> {
         match name {
             "A" | "a" => Some(Stage::A),
             "B" | "b" => Some(Stage::B),
+            "C" | "c" => Some(Stage::C),
+            "D" | "d" => Some(Stage::D),
+            "E" | "e" => Some(Stage::E),
             _ => None,
         }
     }
@@ -48,7 +66,8 @@ impl Stage {
 pub struct EpisodeConfig {
     /// Success is all four wheels down for this long, unbroken, with no crash, in s.
     pub success_hold_s: f32,
-    /// Episodes are cut off after this long, in s.
+    /// Stage A and B episodes are cut off after this long, in s (C, D and E have their
+    /// own limits).
     pub time_limit_s: f32,
     /// Every start is lifted so the body's lowest point is at least this far above the
     /// ground (Stage B: exactly this far), in m, so no start begins inside the ground.
@@ -61,6 +80,10 @@ pub struct EpisodeConfig {
     /// rule's `events.save_max_spin_rad_s` (vehicle.toml), and slides sideways slower
     /// than this, in m/s (PLAN §3.3 settle time).
     pub settle_max_side_speed_m_s: f32,
+    /// Stage C and D success needs every judged landing (a Save after a take-off from
+    /// the wheels) to keep the nose within this of its take-off heading, in degrees
+    /// (PLAN §3.3); a worse one ends the episode as `BadLanding`.
+    pub max_landing_heading_error_deg: f32,
 }
 
 /// Stage A, the drop (`[stage_a]`). Ranges are [low, high].
@@ -103,8 +126,8 @@ pub struct CurriculumAConfig {
     pub first_max_spin_rad_s: f32,
 }
 
-/// Everything in scenarios.toml.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+/// Everything in scenarios.toml, plus the procedural course pieces (pieces.json).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScenariosConfig {
     /// The `[episode]` section.
@@ -115,8 +138,20 @@ pub struct ScenariosConfig {
     pub stage_b: TipOverConfig,
     /// The `[curriculum_a]` section.
     pub curriculum_a: CurriculumAConfig,
+    /// The `[stage_c]` section.
+    pub stage_c: HopStageConfig,
+    /// The `[stage_d]` section.
+    pub stage_d: CourseStageConfig,
+    /// The `[stage_e]` section.
+    pub stage_e: ChaosStageConfig,
+    /// The `[driver_bot]` section (SPEC §9.7).
+    pub driver_bot: DriverBotConfig,
     /// The `[randomization]` section (SPEC §9.8).
     pub randomization: RandomizationConfig,
+    /// The Stage D course pieces (pieces.json), set with `with_pieces_json`; None uses
+    /// the built-in copy. Not part of scenarios.toml.
+    #[serde(skip)]
+    pub pieces: Option<Arc<PieceCatalog>>,
 }
 
 /// Why scenarios.toml could not be used.
@@ -136,8 +171,14 @@ pub enum ScenariosConfigError {
     #[error("scenarios.toml: `{field}` must be a finite number, zero or more, but it is {value}")]
     Negative { field: &'static str, value: f32 },
 
-    #[error("scenarios.toml: `episode.time_limit_s` must be above zero, but it is {0}")]
-    NoTimeLimit(f32),
+    #[error("scenarios.toml: `{field}` must be above zero, but it is {value}")]
+    NotAboveZero { field: &'static str, value: f32 },
+
+    #[error("scenarios.toml: `{field}` must be {rule}")]
+    BadDrivingStage {
+        field: &'static str,
+        rule: &'static str,
+    },
 
     #[error("scenarios.toml: `{field}` must be {rule}, but it is {value}")]
     BadCurriculum {
@@ -161,14 +202,41 @@ impl ScenariosConfig {
         config.check_numbers()?;
         config.check_curriculum()?;
         config.check_randomization()?;
+        config.check_driving_stages()?;
         Ok(config)
+    }
+
+    /// These scenarios with the course pieces read from the text of a pieces.json
+    /// (training passes the repo's file, so a run's saved configs are what it used).
+    pub fn with_pieces_json(mut self, text: &str) -> Result<ScenariosConfig, PieceCatalogError> {
+        self.pieces = Some(Arc::new(PieceCatalog::from_json_str(text)?));
+        Ok(self)
+    }
+
+    /// The course pieces Stage D draws from: the ones set by `with_pieces_json`, or the
+    /// built-in pieces.json.
+    pub fn piece_catalog(&self) -> Result<&PieceCatalog, PlaceCarError> {
+        match &self.pieces {
+            Some(catalog) => Ok(catalog),
+            None => PieceCatalog::built_in().map_err(PlaceCarError::BadCourse),
+        }
     }
 
     /// How many curriculum levels `stage` has (1 for a stage without a curriculum).
     pub fn level_count(&self, stage: Stage) -> u32 {
         match stage {
             Stage::A => self.curriculum_a.levels,
-            Stage::B => 1,
+            Stage::B | Stage::C | Stage::D | Stage::E => 1,
+        }
+    }
+
+    /// How long an episode of `stage` may run, in s (SPEC §9.5).
+    pub fn time_limit_s(&self, stage: Stage) -> f32 {
+        match stage {
+            Stage::A | Stage::B => self.episode.time_limit_s,
+            Stage::C => self.stage_c.time_limit_s,
+            Stage::D => self.stage_d.time_limit_s,
+            Stage::E => self.stage_e.time_limit_s,
         }
     }
 
@@ -178,9 +246,9 @@ impl ScenariosConfig {
         match stage {
             Stage::A => ScenariosConfig {
                 stage_a: self.stage_a_at_level(level),
-                ..*self
+                ..self.clone()
             },
-            Stage::B => *self,
+            Stage::B | Stage::C | Stage::D | Stage::E => self.clone(),
         }
     }
 
@@ -295,6 +363,19 @@ impl ScenariosConfig {
                 self.randomization.ground_friction,
                 false,
             ),
+            ("stage_c.speed_m_s", self.stage_c.speed_m_s, false),
+            ("stage_c.hop_time_s", self.stage_c.hop_time_s, false),
+            (
+                "stage_c.car_row_height_m",
+                self.stage_c.car_row_height_m,
+                false,
+            ),
+            ("stage_e.knock_time_s", self.stage_e.knock_time_s, false),
+            (
+                "driver_bot.target_speed_m_s",
+                self.driver_bot.target_speed_m_s,
+                false,
+            ),
         ];
         for (field, range, may_be_negative) in ranges {
             let [low, high] = range;
@@ -309,6 +390,7 @@ impl ScenariosConfig {
     /// Single numbers: none may be negative (a negative maximum would make an empty
     /// draw range), and the time limit must be above zero.
     fn check_numbers(&self) -> Result<(), ScenariosConfigError> {
+        let bot = &self.driver_bot;
         let numbers = [
             ("episode.success_hold_s", self.episode.success_hold_s),
             ("episode.spawn_clearance_m", self.episode.spawn_clearance_m),
@@ -349,21 +431,89 @@ impl ScenariosConfig {
                 "randomization.noise.height_m",
                 self.randomization.noise.height_m,
             ),
+            ("stage_c.spare_length_m", self.stage_c.spare_length_m),
+            ("stage_c.run_out_m", self.stage_c.run_out_m),
+            (
+                "driver_bot.lookahead_per_speed_s",
+                bot.lookahead_per_speed_s,
+            ),
+            ("driver_bot.speed_gain_per_m_s", bot.speed_gain_per_m_s),
+            ("driver_bot.steer_noise_sigma", bot.steer_noise_sigma),
+            (
+                "driver_bot.steer_noise_return_per_s",
+                bot.steer_noise_return_per_s,
+            ),
+            ("driver_bot.jerk_chance_per_s", bot.jerk_chance_per_s),
+            ("driver_bot.jerk_size", bot.jerk_size),
+            ("driver_bot.jerk_s", bot.jerk_s),
+            ("driver_bot.hop_timing_noise_s", bot.hop_timing_noise_s),
+            ("driver_bot.hop_clearance_m", bot.hop_clearance_m),
         ];
         for (field, value) in numbers {
             if !value.is_finite() || value < 0.0 {
                 return Err(ScenariosConfigError::Negative { field, value });
             }
         }
-        let limit_s = self.episode.time_limit_s;
-        if !limit_s.is_finite() || limit_s <= 0.0 {
-            return Err(ScenariosConfigError::NoTimeLimit(limit_s));
+        let above_zero = [
+            ("episode.time_limit_s", self.episode.time_limit_s),
+            ("stage_c.time_limit_s", self.stage_c.time_limit_s),
+            ("stage_d.time_limit_s", self.stage_d.time_limit_s),
+            ("stage_e.time_limit_s", self.stage_e.time_limit_s),
+            ("stage_d.time_use_fraction", self.stage_d.time_use_fraction),
+            (
+                "episode.max_landing_heading_error_deg",
+                self.episode.max_landing_heading_error_deg,
+            ),
+            (
+                "driver_bot.lookahead_base_m",
+                self.driver_bot.lookahead_base_m,
+            ),
+            // Zero or less would make the bot's turn limit empty (and `clamp` panic).
+            (
+                "driver_bot.max_turn_accel_m_s2",
+                self.driver_bot.max_turn_accel_m_s2,
+            ),
+        ];
+        for (field, value) in above_zero {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(ScenariosConfigError::NotAboveZero { field, value });
+            }
+        }
+        Ok(())
+    }
+
+    /// The Stage C and E counts, probability and weights. The [low, high] ranges and
+    /// single numbers are checked with the others in `check_ranges` and `check_numbers`.
+    fn check_driving_stages(&self) -> Result<(), ScenariosConfigError> {
+        let bad = |field, rule| Err(ScenariosConfigError::BadDrivingStage { field, rule });
+        let [fewest_cars, most_cars] = self.stage_c.car_row_count;
+        if fewest_cars == 0 || fewest_cars > most_cars {
+            return bad("stage_c.car_row_count", "[low, high] with 1 ≤ low ≤ high");
+        }
+        if !(0.0..=1.0).contains(&self.stage_c.car_row_probability) {
+            return bad("stage_c.car_row_probability", "between 0 and 1");
+        }
+        let [fewest_knocks, most_knocks] = self.stage_e.knock_count;
+        if fewest_knocks > most_knocks {
+            return bad("stage_e.knock_count", "[low, high] with low ≤ high");
+        }
+        let weights = self.stage_e.base_stage_weights;
+        let weights_ok = weights.iter().all(|w| w.is_finite() && *w >= 0.0);
+        if !weights_ok || weights.iter().sum::<f32>() <= 0.0 {
+            let rule = "three weights (A, C, D), none negative, not all zero";
+            return bad("stage_e.base_stage_weights", rule);
+        }
+        if self.driver_bot.target_speed_m_s[0] <= 0.0 {
+            let rule = "[low, high] with 0 < low ≤ high";
+            return bad("driver_bot.target_speed_m_s", rule);
         }
         Ok(())
     }
 }
 
-/// Places the car for a new episode of `stage` drawn from `seed`, with a full tank.
+/// Places the car for a new Stage A or B episode drawn from `seed`, with a full tank.
+/// The driving stages C, D and E start through `episode::Episode`, which also builds
+/// their course and driver bot; for them this only refills the tank.
 pub fn start_episode(
     world: &mut World,
     stage: Stage,
@@ -377,6 +527,10 @@ pub fn start_episode(
     let start = match stage {
         Stage::A => sample_drop(&config.stage_a, &mut rng),
         Stage::B => sample_tip_over(&config.stage_b, &mut rng),
+        Stage::C | Stage::D | Stage::E => {
+            world.refill_tank();
+            return Ok(());
+        }
     };
     place(world, &start, 0.0)?;
     // Raise (Stage B: or lower) the car until its lowest corner sits the clearance
@@ -384,8 +538,8 @@ pub fn start_episode(
     let gap_m = world.lowest_chassis_point_m();
     let clearance_m = config.episode.spawn_clearance_m;
     let lift_m = match stage {
-        Stage::A => (clearance_m - gap_m).max(0.0),
         Stage::B => clearance_m - gap_m,
+        _ => (clearance_m - gap_m).max(0.0),
     };
     place(world, &start, lift_m)?;
     world.refill_tank();

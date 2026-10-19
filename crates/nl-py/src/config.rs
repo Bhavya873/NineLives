@@ -9,7 +9,7 @@ use nl_sim::training::TrainingConfig;
 use nl_sim::vehicle_config::VehicleConfig;
 use serde::Deserialize;
 
-/// The fields of the config JSON. Every field is required.
+/// The fields of the config JSON. Every field but `pieces_json` is required.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SimConfigJson {
@@ -19,13 +19,16 @@ struct SimConfigJson {
     reward_toml: String,
     /// "realistic" or "arcade".
     mode: String,
-    /// "A" or "B".
+    /// "A" to "E".
     stage: String,
     /// configs/controllers.toml (PD's gains, for `run_eval`).
     controllers_toml: String,
     /// Domain randomization (SPEC §9.8) for `BatchedSim` episodes and, with `eval --dr`,
     /// for `run_eval`.
     randomize: bool,
+    /// configs/pieces.json (Stage D's course pieces); without it the built-in copy.
+    #[serde(default)]
+    pieces_json: Option<String>,
 }
 
 /// A parsed config: what to build each environment from, and which stage it starts in.
@@ -44,7 +47,13 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         serde_json::from_str(json).map_err(|error| format!("sim config JSON: {error}"))?;
     let vehicle = VehicleConfig::from_toml_str(&fields.vehicle_toml).map_err(as_message)?;
     let modes = ModesConfig::from_toml_str(&fields.modes_toml).map_err(as_message)?;
-    let scenarios = ScenariosConfig::from_toml_str(&fields.scenarios_toml).map_err(as_message)?;
+    let mut scenarios =
+        ScenariosConfig::from_toml_str(&fields.scenarios_toml).map_err(as_message)?;
+    if let Some(pieces_json) = &fields.pieces_json {
+        scenarios = scenarios
+            .with_pieces_json(pieces_json)
+            .map_err(as_message)?;
+    }
     let reward = RewardConfig::from_toml_str(&fields.reward_toml).map_err(as_message)?;
     let mode = modes.by_name(&fields.mode).ok_or_else(|| {
         format!(
@@ -71,7 +80,8 @@ fn as_message(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
-/// "A" or "B" as a `Stage`, or an error that lists the valid names.
+/// "A" to "E" as a `Stage`, or an error that lists the valid names.
 pub fn parse_stage(name: &str) -> Result<Stage, String> {
-    Stage::from_name(name).ok_or_else(|| format!("stage must be \"A\" or \"B\", not {name:?}"))
+    Stage::from_name(name)
+        .ok_or_else(|| format!("stage must be one of \"A\" to \"E\", not {name:?}"))
 }

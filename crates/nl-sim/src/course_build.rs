@@ -15,11 +15,11 @@ const LANE_WIDTH_M: f32 = 16.0;
 /// Floor thickness below y = 0, in m.
 const FLOOR_THICKNESS_M: f32 = 1.0;
 /// SPEC §7.11 car row: each parked car is 4.5 m long, 1.9 m wide, 0.6 m apart.
-const PARKED_CAR_LENGTH_M: f32 = 4.5;
-const PARKED_CAR_WIDTH_M: f32 = 1.9;
-const PARKED_CAR_GAP_M: f32 = 0.6;
+pub const PARKED_CAR_LENGTH_M: f32 = 4.5;
+pub const PARKED_CAR_WIDTH_M: f32 = 1.9;
+pub const PARKED_CAR_GAP_M: f32 = 0.6;
 /// Bumps: one every this many metres, each this long (half up, half down).
-const BUMP_SPACING_M: f32 = 6.0;
+pub const BUMP_SPACING_M: f32 = 6.0;
 const BUMP_LENGTH_M: f32 = 5.0;
 /// Ramp, kicker and bump hulls reach this far below the floor (hidden by it), so even a
 /// nearly flat segment is a solid Rapier can always build a hull from, in m.
@@ -27,12 +27,12 @@ const HULL_BASE_DEPTH_M: f32 = 0.2;
 /// Ramps are built from this many convex segments of rising slope.
 const RAMP_SEGMENTS: usize = 6;
 /// Walls are this thick along the course.
-const WALL_THICKNESS_M: f32 = 1.0;
+pub const WALL_THICKNESS_M: f32 = 1.0;
 /// A wall's jump ramp: this long and steep, ending this far before the wall. At 30°
 /// the curved ramp's lip is about 3.2 m high, above a 3 m wall.
-const WALL_RAMP_LENGTH_M: f32 = 10.0;
+pub const WALL_RAMP_LENGTH_M: f32 = 10.0;
 const WALL_RAMP_ANGLE_DEG: f32 = 30.0;
-const WALL_RAMP_GAP_M: f32 = 2.0;
+pub const WALL_RAMP_GAP_M: f32 = 2.0;
 /// Halfpipe walls: flat floor this wide between the curves, wall panels this thick, and
 /// this many flat panels per quarter circle.
 const HALFPIPE_FLOOR_WIDTH_M: f32 = 4.0;
@@ -41,7 +41,7 @@ const HALFPIPE_PANELS: usize = 8;
 /// Markings: landing pads, kick plates and the checkpoint/finish lines, in m along the
 /// course; drawn this thick above the floor.
 const LANDING_PAD_LENGTH_M: f32 = 20.0;
-const KICK_PLATE_LENGTH_M: f32 = 4.0;
+pub const KICK_PLATE_LENGTH_M: f32 = 4.0;
 const LINE_LENGTH_M: f32 = 0.5;
 /// Checkpoint and finish lines are wider than the lane, so a car can't drive around
 /// them on a track up to this wide, in m.
@@ -98,6 +98,12 @@ pub struct CourseShape {
     pub pose: Pose,
     /// False for markings the car drives over without touching.
     pub solid: bool,
+}
+
+/// How long a row of `count` parked cars is along the course, gaps included, in m.
+pub fn car_row_length_m(count: u32) -> f32 {
+    let count = count as f32;
+    count * PARKED_CAR_LENGTH_M + (count - 1.0).max(0.0) * PARKED_CAR_GAP_M
 }
 
 /// Every shape of a course, floor first.

@@ -3,7 +3,7 @@
 
 seed: 0
 mode: realistic        # base preset; with randomize, only its Hop/Boost settings stay (§9.8)
-stage: A               # SPEC §9.6; M5 trains Stage A only
+stages: [A, B, C, D, E]  # SPEC §9.6, §9.9 unlock order; [A] trains Stage A alone
 randomize: true        # SPEC §9.8 domain randomization (mode, car, latency, noise)
 total_steps: 50_000_000
 
@@ -25,9 +25,11 @@ normalize:
 
 curriculum:
   window: 500          # success rate over the last this many episodes at the level
-  advance_at: 0.85     # move up a level when the success rate passes this
+  advance_at: 0.85     # move up a level, or unlock the next stage, above this
+  # How often each unlocked stage comes up (SPEC §9.9); sampled in Rust per episode.
+  stage_weights: {A: 0.25, B: 0.15, C: 0.2, D: 0.3, E: 0.1}
 
 checkpoint:
   every_steps: 1_000_000
-  eval_episodes: 200   # fixed-seed episodes at the hardest level, to keep the best
+  eval_episodes: 200   # fixed-seed episodes per stage at its hardest level, to keep the best
   eval_seed: 1_000_000 # first eval seed, far from training seeds

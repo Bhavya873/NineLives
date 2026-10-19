@@ -40,11 +40,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def fresh_curriculum(config: TrainConfig, env: NineLivesVecEnv) -> Curriculum:
-    """Level 0 of the run's stage, with the level count the sim reports."""
+    """The run's first stage unlocked at level 0, with the level counts the sim reports."""
     return Curriculum(
-        stage=config.stage,
-        level=0,
-        level_count=env.sim.level_count(config.stage),
+        stages=config.stages,
+        weights=config.stage_weights,
+        level_counts={stage: env.sim.level_count(stage) for stage in config.stages},
         window=config.curriculum_window,
         advance_at=config.curriculum_advance_at,
     )
@@ -108,7 +108,7 @@ def train(argv: list[str] | None = None) -> RunState:
     if not args.resume and (run_dir / "latest").exists():
         raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
     env = NineLivesVecEnv(
-        config.ppo.n_envs, config.seed, config.mode, config.stage, config.randomize
+        config.ppo.n_envs, config.seed, config.mode, config.stages[0], config.randomize
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)
@@ -119,8 +119,8 @@ def train(argv: list[str] | None = None) -> RunState:
         shutil.copytree(CONFIGS_DIR, run_dir / "configs", ignore=shutil.ignore_patterns("train"))
         model, state = new_run(config, env, run_dir)
     # Before learn(): it resets every env, and those first episodes must already run
-    # at the curriculum's level.
-    env.set_stage_and_level(state.curriculum.stage, state.curriculum.level)
+    # the curriculum's stages and levels.
+    env.set_stage_mix(state.curriculum.mix())
     checkpoints = RunCheckpointCallback(state, run_dir, config)
     callbacks = [CurriculumCallback(state), checkpoints, TimeLimitCallback(args.max_minutes)]
     try:

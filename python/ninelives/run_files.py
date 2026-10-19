@@ -8,12 +8,13 @@
       tb/                TensorBoard logs
 
 `runs/` is gitignored and stays on the training machine (ADR-003). state.json holds
-the step count, curriculum progress, best eval success and wall time.
+the step count, curriculum progress, best eval success (and the stages it covered) and
+wall time.
 """
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,8 @@ class RunState:
     curriculum: Curriculum
     best_eval_success: float
     wall_seconds: float
+    # The stages `best_eval_success` was measured over (the unlocked ones then).
+    best_eval_stages: list[str] = field(default_factory=list)
 
 
 def record_progress(
@@ -81,6 +84,7 @@ def load_checkpoint(
         total_steps=saved.get("total_steps", 0),
         curriculum=curriculum,
         best_eval_success=saved["best_eval_success"],
+        best_eval_stages=saved.get("best_eval_stages", []),
         wall_seconds=saved["wall_seconds"],
     )
     return model, normalizer, state
@@ -104,5 +108,6 @@ def state_to_dict(state: RunState) -> dict[str, Any]:
         "total_steps": state.total_steps,
         "curriculum": state.curriculum.progress(),
         "best_eval_success": state.best_eval_success,
+        "best_eval_stages": state.best_eval_stages,
         "wall_seconds": state.wall_seconds,
     }

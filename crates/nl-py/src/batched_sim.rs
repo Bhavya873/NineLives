@@ -6,7 +6,7 @@ use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::reward::RewardTerms;
 use nl_sim::scenarios::ScenariosConfig;
-use nl_sim::training::FinishedEpisode;
+use nl_sim::training::{FinishedEpisode, StageChoice};
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -111,18 +111,38 @@ impl BatchedSim {
         }
     }
 
-    /// How many curriculum levels `stage` ("A" or "B") has; the last is the full stage.
+    /// How many curriculum levels `stage` ("A" to "E") has; the last is the full stage.
     fn level_count(&self, stage: &str) -> PyResult<u32> {
         let stage = parse_stage(stage).map_err(PyValueError::new_err)?;
         Ok(self.scenarios.level_count(stage))
     }
 
-    /// Sets the stage ("A" or "B") and curriculum level for every environment's next
+    /// Sets the stage ("A" to "E") and curriculum level for every environment's next
     /// episode (SPEC §9.9); running episodes finish as they started.
     fn set_stage_and_level(&mut self, stage: &str, level: u32) -> PyResult<()> {
         let stage = parse_stage(stage).map_err(PyValueError::new_err)?;
         for slot in &mut self.slots {
             slot.set_stage_and_level(stage, level);
+        }
+        Ok(())
+    }
+
+    /// Sets the stages every environment's next episodes pick from (SPEC §9.9): a list
+    /// of `(stage, weight, level)`. Each episode draws its stage by weight from its own
+    /// seed in Rust, so a seed always gets the same stage.
+    fn set_stage_mix(&mut self, mix: Vec<(String, f32, u32)>) -> PyResult<()> {
+        let mut choices = Vec::with_capacity(mix.len());
+        for (name, weight, level) in mix {
+            let stage = parse_stage(&name).map_err(PyValueError::new_err)?;
+            choices.push(StageChoice {
+                stage,
+                weight,
+                level,
+            });
+        }
+        for slot in &mut self.slots {
+            slot.set_stage_mix(choices.clone())
+                .map_err(|error| PyValueError::new_err(format!("BatchedSim.{error}")))?;
         }
         Ok(())
     }

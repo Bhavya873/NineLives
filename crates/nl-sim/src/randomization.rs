@@ -198,7 +198,7 @@ fn vary_mode(config: &RandomizationConfig, mode: ModeParams, rng: &mut ChaCha8Rn
 }
 
 /// One draw from the standard normal distribution (Box–Muller).
-fn gaussian(rng: &mut ChaCha8Rng) -> f32 {
+pub(crate) fn gaussian(rng: &mut ChaCha8Rng) -> f32 {
     // 1 − u keeps the logarithm's argument in (0, 1].
     let u1: f32 = 1.0 - rng.random_range(0.0..1.0);
     let u2: f32 = rng.random_range(0.0..1.0);

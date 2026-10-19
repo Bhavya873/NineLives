@@ -320,7 +320,7 @@ impl Car {
 /// The largest steering angle allowed at `speed_m_s`: the low-speed limit when
 /// stopped, sliding linearly down to the high-speed limit at `high_speed_m_s` and
 /// above (SPEC §7.3).
-fn steering_limit_rad(steering: &SteeringConfig, speed_m_s: f32) -> f32 {
+pub(crate) fn steering_limit_rad(steering: &SteeringConfig, speed_m_s: f32) -> f32 {
     let low_rad = steering.max_angle_low_speed_rad;
     let high_rad = steering.max_angle_high_speed_rad;
     let progress = (speed_m_s / steering.high_speed_m_s).clamp(0.0, 1.0);

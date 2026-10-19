@@ -92,6 +92,11 @@ class NineLivesVecEnv(VecEnv):
         """Stage and curriculum level for every env's next episode (SPEC §9.9)."""
         self.sim.set_stage_and_level(stage, level)
 
+    def set_stage_mix(self, mix: list[tuple[str, float, int]]) -> None:
+        """`(stage, weight, level)` choices every env's next episodes pick from; each
+        episode draws its stage by weight from its own seed, in Rust (SPEC §9.9)."""
+        self.sim.set_stage_mix(mix)
+
     # The rest of SB3's VecEnv interface. The envs live in Rust with no Python-side
     # objects, so these act on this one object, for all envs at once.
     def close(self) -> None:
