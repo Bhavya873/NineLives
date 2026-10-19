@@ -37,6 +37,10 @@ pub struct RewardWeights {
     /// Multiplies the share of the tank left, paid once on success with a limited tank
     /// (PLAN §3.3).
     pub air_left: f32,
+    /// Cost per m/s of sideways speed while on the wheels: drivers don't skid sideways,
+    /// and pushing the car off the track was the AI's main Stage D failure (EXPERIMENTS
+    /// m7-full-004).
+    pub sideways: f32,
     /// Paid once on the step an episode succeeds. Without it nothing in training
     /// rewards the quiet-throttle part of success, and the policy idles thrust while
     /// parked (EXPERIMENTS m7-full-002).
@@ -119,7 +123,7 @@ impl RewardConfig {
     }
 
     /// Every number with its name, for the checks above.
-    fn named_numbers(&self) -> [(&'static str, f32); 20] {
+    fn named_numbers(&self) -> [(&'static str, f32); 21] {
         let w = &self.weights;
         let s = &self.shape;
         [
@@ -135,6 +139,7 @@ impl RewardConfig {
             ("weights.unsettled", w.unsettled),
             ("weights.air_left", w.air_left),
             ("weights.success", w.success),
+            ("weights.sideways", w.sideways),
             ("shape.spin_cap_rad2_s2", s.spin_cap_rad2_s2),
             ("shape.airborne_grace_s", s.airborne_grace_s),
             ("shape.save_base", s.save_base),
@@ -194,6 +199,8 @@ pub struct StepSummary {
     /// Share of the tank left at the end of the step, 0..1 (not read with unlimited air,
     /// where there is no tank to save).
     pub air_left_fraction: f32,
+    /// |sideways speed| in the body frame (+Z right) while any wheel touches, else 0, in m/s.
+    pub sideways_speed_on_wheels_m_s: f32,
 }
 
 /// The reward of one step, term by term (each already weighted), so training can log
@@ -222,11 +229,13 @@ pub struct RewardTerms {
     pub air_left: f32,
     /// Bonus for succeeding (≥ 0).
     pub success: f32,
+    /// Cost of sliding sideways on the wheels (≤ 0).
+    pub sideways: f32,
 }
 
 impl RewardTerms {
     /// The term names, in `as_array` order (training logs them under these names).
-    pub const NAMES: [&'static str; 11] = [
+    pub const NAMES: [&'static str; 12] = [
         "tilt",
         "spin",
         "air",
@@ -238,10 +247,11 @@ impl RewardTerms {
         "unsettled",
         "air_left",
         "success",
+        "sideways",
     ];
 
     /// The terms in `NAMES` order.
-    pub fn as_array(&self) -> [f32; 11] {
+    pub fn as_array(&self) -> [f32; 12] {
         [
             self.tilt,
             self.spin,
@@ -254,6 +264,7 @@ impl RewardTerms {
             self.unsettled,
             self.air_left,
             self.success,
+            self.sideways,
         ]
     }
 
@@ -303,6 +314,7 @@ pub fn reward_terms(step: &StepSummary, config: &RewardConfig) -> RewardTerms {
             0.0
         },
         success: if step.succeeded { w.success } else { 0.0 },
+        sideways: -w.sideways * step.sideways_speed_on_wheels_m_s,
     }
 }
 

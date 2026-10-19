@@ -38,6 +38,10 @@ air_left = 1.0
 # a quiet throttle and the hold (SPEC §9.5), so this pays for the quiet landing itself;
 # without it the policy idled thrust while parked (EXPERIMENTS m7-full-002).
 success = 5.0
+# Sideways: weight × −|sideways speed| (m/s, body frame) per step while any wheel touches.
+# Drivers don't skid sideways; the AI pushing the car off the track was its main Stage D
+# failure (EXPERIMENTS m7-full-004). Value from the round-2 ablation.
+sideways = 0.02
 
 [shape]
 # |ω|² above this is not charged more (rad²/s²).

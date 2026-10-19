@@ -31,6 +31,7 @@ fn resting() -> StepSummary {
         unsettled: false,
         succeeded: false,
         air_left_fraction: 1.0,
+        sideways_speed_on_wheels_m_s: 0.0,
     }
 }
 
@@ -291,4 +292,17 @@ fn success_pays_its_bonus_once_on_the_success_step_whatever_the_air() {
     assert_eq!(reward_terms(&resting(), &config()).success, 0.0);
     assert!((reward_terms(&succeeded, &config()).success - config().weights.success).abs() < 1e-6);
     assert!(config().weights.success > 0.0);
+}
+
+#[test]
+fn sliding_sideways_on_the_wheels_costs_its_weight_per_m_s() {
+    let mut config = config();
+    config.weights.sideways = 0.05;
+    let sliding = StepSummary {
+        sideways_speed_on_wheels_m_s: 2.0,
+        ..resting()
+    };
+
+    assert!((reward_terms(&sliding, &config).sideways + 0.1).abs() < 1e-6);
+    assert_eq!(reward_terms(&resting(), &config).sideways, 0.0);
 }

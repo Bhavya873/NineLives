@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 
-use crate::car_state::Touchdown;
+use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::driving_stages::{pick_weighted, stream_rng};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
@@ -278,6 +278,7 @@ impl TrainingEnv {
             unsettled: episode.unsettled_after_touchdown(),
             succeeded: events.succeeded,
             air_left_fraction: episode.world().air_fraction(),
+            sideways_speed_on_wheels_m_s: sideways_speed_on_wheels_m_s(&state),
         }
     }
 
@@ -305,4 +306,12 @@ pub fn throttles_from_action(action: [f32; NOZZLE_COUNT]) -> [f32; NOZZLE_COUNT]
         }
     }
     throttles
+}
+
+/// |sideways speed| (body +Z) while any wheel touches, else 0, in m/s (reward `sideways`).
+fn sideways_speed_on_wheels_m_s(state: &CarState) -> f32 {
+    if state.wheels_down() == 0 {
+        return 0.0;
+    }
+    state.linear_velocity_body_m_s[2].abs()
 }

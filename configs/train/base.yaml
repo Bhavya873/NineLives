@@ -45,7 +45,8 @@ curriculum:
   # rule, so the window never passes (EXPERIMENTS m7-full-001).
   promote_on: eval
   # How often each unlocked stage comes up (SPEC §9.9); sampled in Rust per episode.
-  stage_weights: {A: 0.25, B: 0.15, C: 0.2, D: 0.3, E: 0.1}
+  # B and C already match PD; D and E get the practice (owner's round-2 choice, 2026-10-19).
+  stage_weights: {A: 0.25, B: 0.05, C: 0.1, D: 0.4, E: 0.2}
 
 checkpoint:
   every_steps: 1_000_000
