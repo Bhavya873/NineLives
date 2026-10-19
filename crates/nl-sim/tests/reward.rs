@@ -276,3 +276,16 @@ fn a_zero_save_scale_is_refused_because_it_divides() {
 
     assert!(error.to_string().contains("save_fall_scale_m_s"), "{error}");
 }
+
+#[test]
+fn success_pays_its_bonus_once_on_the_success_step_whatever_the_air() {
+    let succeeded = StepSummary {
+        succeeded: true,
+        unlimited_air: true,
+        ..resting()
+    };
+
+    assert_eq!(reward_terms(&resting(), &config()).success, 0.0);
+    assert!((reward_terms(&succeeded, &config()).success - config().weights.success).abs() < 1e-6);
+    assert!(config().weights.success > 0.0);
+}

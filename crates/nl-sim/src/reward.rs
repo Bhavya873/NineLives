@@ -37,6 +37,10 @@ pub struct RewardWeights {
     /// Multiplies the share of the tank left, paid once on success with a limited tank
     /// (PLAN §3.3).
     pub air_left: f32,
+    /// Paid once on the step an episode succeeds. Without it nothing in training
+    /// rewards the quiet-throttle part of success, and the policy idles thrust while
+    /// parked (EXPERIMENTS m7-full-002).
+    pub success: f32,
 }
 
 /// The constants inside the SPEC §9.4 formulas (`[shape]`).
@@ -115,7 +119,7 @@ impl RewardConfig {
     }
 
     /// Every number with its name, for the checks above.
-    fn named_numbers(&self) -> [(&'static str, f32); 19] {
+    fn named_numbers(&self) -> [(&'static str, f32); 20] {
         let w = &self.weights;
         let s = &self.shape;
         [
@@ -130,6 +134,7 @@ impl RewardConfig {
             ("weights.hard_landing", w.hard_landing),
             ("weights.unsettled", w.unsettled),
             ("weights.air_left", w.air_left),
+            ("weights.success", w.success),
             ("shape.spin_cap_rad2_s2", s.spin_cap_rad2_s2),
             ("shape.airborne_grace_s", s.airborne_grace_s),
             ("shape.save_base", s.save_base),
@@ -215,11 +220,13 @@ pub struct RewardTerms {
     pub unsettled: f32,
     /// Bonus for the air left at success (≥ 0).
     pub air_left: f32,
+    /// Bonus for succeeding (≥ 0).
+    pub success: f32,
 }
 
 impl RewardTerms {
     /// The term names, in `as_array` order (training logs them under these names).
-    pub const NAMES: [&'static str; 10] = [
+    pub const NAMES: [&'static str; 11] = [
         "tilt",
         "spin",
         "air",
@@ -230,10 +237,11 @@ impl RewardTerms {
         "hard_landing",
         "unsettled",
         "air_left",
+        "success",
     ];
 
     /// The terms in `NAMES` order.
-    pub fn as_array(&self) -> [f32; 10] {
+    pub fn as_array(&self) -> [f32; 11] {
         [
             self.tilt,
             self.spin,
@@ -245,6 +253,7 @@ impl RewardTerms {
             self.hard_landing,
             self.unsettled,
             self.air_left,
+            self.success,
         ]
     }
 
@@ -293,6 +302,7 @@ pub fn reward_terms(step: &StepSummary, config: &RewardConfig) -> RewardTerms {
         } else {
             0.0
         },
+        success: if step.succeeded { w.success } else { 0.0 },
     }
 }
 
