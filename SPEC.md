@@ -237,6 +237,7 @@ The 6×10 allocation matrix (force + torque per unit throttle) has rank 6, so ev
 - **Valve lag:** first-order, `u_eff += (u_cmd − u_eff) · (1 − exp(−dt/τ))`, with τ = 0.03 s *(start)*.
 - **Applying forces:** each physics step, reset the chassis forces once, then add drag and call `add_force_at_point` per nozzle with the world-space force and point (rotate both by the chassis pose).
 
+- **Thruster interlock (M7):** while the car is steady on the ground (tilt ≤ 15°, centre of mass ≤ 1 m above the ground, |ω| ≤ 1 rad/s, vertical speed ≤ 1 m/s; `[thrusters.interlock]` in vehicle.toml), the controller's throttles are cut to 0. Hop and Boost feed-forward still fire. No controller can idle thrust while parked or push the car around while driving, and no save is ever cut: a falling, tilted or spinning car isn't steady. `World::thrusters_locked()` reports it.
 ### 7.5 Air tank
 - Mass flow per nozzle: `ṁ = F_actual / v_e`, with `v_e = 600 m/s` (cold-gas air). At full lift (48 kN) that is 80 kg/s.
 - **Realistic:** capacity 260 kg (the reported figure), so full lift lasts about 3.25 s. Refill +5 kg/s while ≥ 3 wheels touch. This refill rate is a gameplay concession; label it so in the UI help text.

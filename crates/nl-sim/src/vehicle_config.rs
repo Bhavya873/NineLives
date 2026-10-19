@@ -122,8 +122,26 @@ pub struct ThrusterConfig {
     pub valve_time_constant_s: f32,
     /// Speed of the cold-gas exhaust; air used = thrust / this speed (SPEC §7.5).
     pub exhaust_speed_m_s: f32,
+    /// When the controller's throttles are cut (`[thrusters.interlock]`).
+    pub interlock: InterlockConfig,
     /// The nozzles, in the fixed `NOZZLE_NAMES` order.
     pub nozzles: [NozzleConfig; NOZZLE_COUNT],
+}
+
+/// The thruster interlock (SPEC §7.4): while the car is steady on the ground, the
+/// controller's throttles are cut (Hop and Boost feed-forward still fire). Steady means
+/// all four limits hold.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterlockConfig {
+    /// Tilt at most this, in degrees.
+    pub max_tilt_deg: f32,
+    /// Centre of mass at most this high above the ground below it, in m.
+    pub max_height_m: f32,
+    /// Spinning at most this fast, in rad/s.
+    pub max_spin_rad_s: f32,
+    /// Moving up or down at most this fast, in m/s, so braking a fall is never cut.
+    pub max_vertical_speed_m_s: f32,
 }
 
 /// When upsets, saves and crashes happen (SPEC §7.9). See `[events]`.
@@ -393,6 +411,14 @@ impl ThrusterConfig {
             self.valve_time_constant_s,
         )?;
         must_be_positive("thrusters.exhaust_speed_m_s", self.exhaust_speed_m_s)?;
+        let lock = &self.interlock;
+        must_be_positive("thrusters.interlock.max_tilt_deg", lock.max_tilt_deg)?;
+        must_be_positive("thrusters.interlock.max_height_m", lock.max_height_m)?;
+        must_be_positive("thrusters.interlock.max_spin_rad_s", lock.max_spin_rad_s)?;
+        must_be_positive(
+            "thrusters.interlock.max_vertical_speed_m_s",
+            lock.max_vertical_speed_m_s,
+        )?;
         for (index, nozzle) in self.nozzles.iter().enumerate() {
             nozzle.check(index)?;
         }

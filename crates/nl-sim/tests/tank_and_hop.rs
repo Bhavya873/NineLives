@@ -210,6 +210,8 @@ fn out_of_air_starts_where_thrust_starts_to_fade_and_never_in_arcade() {
 #[test]
 fn an_empty_tank_shows_no_flames_even_with_the_valves_open() {
     let mut world = new_world();
+    // In the air, where the thruster interlock never cuts the controller.
+    lift_into_the_air(&mut world, 20.0);
     world.set_controller_throttles([1.0; NOZZLE_COUNT]);
     run(&mut world, InputFrame::default(), 0.3);
     assert!(world.flame_fractions()[0] > 0.5);

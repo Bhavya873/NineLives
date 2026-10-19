@@ -38,11 +38,6 @@ air_left = 1.0
 # a quiet throttle and the hold (SPEC §9.5), so this pays for the quiet landing itself;
 # without it the policy idled thrust while parked (EXPERIMENTS m7-full-002).
 success = 5.0
-# Ground thrust: weight × −(throttle sum) per step while steady on the ground (the
-# [shape] steady_* limits: upright, low, not falling, barely turning). The AI's side
-# thrust while driving pushed it off the Stage D track (EXPERIMENTS m7-full-004); braking
-# a fall is never charged. Value from the round-3 ablation.
-ground_thrust = 0.01
 
 [shape]
 # |ω|² above this is not charged more (rad²/s²).
@@ -61,9 +56,3 @@ save_spin_scale_rad_s = 4.0
 save_fall_scale_m_s = 6.0
 save_heading_scale_deg = 45.0
 crash_penalty = 10.0
-# "Steady on the ground" for ground_thrust: tilt ≤ this (deg), centre of mass ≤ this high
-# (m; it rests at ~0.6), spin ≤ this (rad/s), vertical speed ≤ this (m/s).
-steady_max_tilt_deg = 15.0
-steady_max_height_m = 1.0
-steady_max_spin_rad_s = 1.0
-steady_max_vertical_speed_m_s = 1.0

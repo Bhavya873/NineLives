@@ -32,6 +32,8 @@ test('the game starts with the Off controller, which ignores the nozzle keys', (
 test('Manual fires only the nozzle whose key is held', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   game.set_controller('manual');
+  // In the air: on the ground, steady, the thruster interlock cuts every controller.
+  game.drop_test(0n);
 
   tickMany(game, holdingNozzle(4), 30);
 
@@ -89,6 +91,7 @@ test('PD fires nothing while the car sits on its wheels, to save air', () => {
 test('a nozzle tap that lands between two control steps still fires', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   game.set_controller('manual');
+  game.drop_test(0n); // in the air, where the interlock never cuts the controller
   game.tick(new Uint8Array(4)); // control step; the next tick is not one
 
   game.tick(holdingNozzle(4)); // the tap

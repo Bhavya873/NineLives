@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 
-use crate::car_state::{CarState, Touchdown};
+use crate::car_state::Touchdown;
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::driving_stages::{pick_weighted, stream_rng};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
@@ -278,8 +278,6 @@ impl TrainingEnv {
             unsettled: episode.unsettled_after_touchdown(),
             succeeded: events.succeeded,
             air_left_fraction: episode.world().air_fraction(),
-            height_m: state.height_m,
-            vertical_speed_m_s: vertical_speed_m_s(&state),
         }
     }
 
@@ -307,12 +305,4 @@ pub fn throttles_from_action(action: [f32; NOZZLE_COUNT]) -> [f32; NOZZLE_COUNT]
         }
     }
     throttles
-}
-
-/// World vertical speed (positive up), in m/s: the body-frame velocity against the
-/// body-frame direction of gravity (which points down).
-fn vertical_speed_m_s(state: &CarState) -> f32 {
-    let [vx, vy, vz] = state.linear_velocity_body_m_s;
-    let [gx, gy, gz] = state.gravity_dir_body;
-    -(vx * gx + vy * gy + vz * gz)
 }

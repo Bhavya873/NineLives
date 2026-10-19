@@ -273,7 +273,12 @@ impl World {
         }
         // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
         let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
-        let commanded = combine_throttles(feed_forward, self.controller_throttles);
+        let controller = if self.thrusters_locked() {
+            [0.0; NOZZLE_COUNT]
+        } else {
+            self.controller_throttles
+        };
+        let commanded = combine_throttles(feed_forward, controller);
         // 5–8. Valve lag, tank gate, nozzle forces, wheels.
         let thrust_multiplier = self.thrust_multiplier();
         let thrust_n =
@@ -497,6 +502,19 @@ impl World {
     }
 
     /// Angle between the car's up axis and world up: 0 level, π upside down.
+    /// True while the thruster interlock cuts the controller's throttles: the car is
+    /// steady on the ground (`[thrusters.interlock]`: upright, low, not falling, barely
+    /// turning). Hop and Boost feed-forward are never cut.
+    pub fn thrusters_locked(&self) -> bool {
+        let lock = &self.car.config().thrusters.interlock;
+        let body = &self.physics.bodies[self.car.chassis];
+        let steady = self.tilt_rad() <= lock.max_tilt_deg.to_radians()
+            && body.angvel().length() <= lock.max_spin_rad_s
+            && body.linvel().y.abs() <= lock.max_vertical_speed_m_s;
+        // The height needs a ray, so it is checked last, only when the rest already hold.
+        steady && height_above_ground_m(&self.physics, &self.car) <= lock.max_height_m
+    }
+
     pub fn tilt_rad(&self) -> f32 {
         // libm, not std: std's acos is the platform's and differs in the last bit between
         // macOS, Linux and wasm, and the event rules compare this angle (rule 2).

@@ -450,16 +450,14 @@ impl Episode {
     }
 
     /// PLAN §3.3: starts or breaks the run of quiet throttles that success needs: the
-    /// controller's throttles add up to less than `success_quiet_throttle_sum`, not
-    /// counting any below `success_quiet_nozzle_deadband` (near-zero noise isn't idling).
+    /// thruster interlock is holding the controller off (no air can blow, SPEC §7.4), or
+    /// the controller's throttles add up to less than `success_quiet_throttle_sum`.
     fn track_quiet_throttles(&mut self) {
-        let mut throttle_sum = 0.0;
-        for throttle in self.commanded_throttles {
-            if throttle >= self.rules.success_quiet_nozzle_deadband {
-                throttle_sum += throttle;
-            }
-        }
-        let quiet = throttle_sum < self.rules.success_quiet_throttle_sum;
+        let sum = quiet_throttle_sum(
+            &self.commanded_throttles,
+            self.rules.success_quiet_nozzle_deadband,
+        );
+        let quiet = self.world.thrusters_locked() || sum < self.rules.success_quiet_throttle_sum;
         let now_s = self.world.time_s() as f32;
         self.tally.quiet_since_s = start_or_break_run(self.tally.quiet_since_s, quiet, now_s);
     }
@@ -557,4 +555,16 @@ fn start_or_break_run(since_s: Option<f32>, holds: bool, now_s: f32) -> Option<f
         return None;
     }
     Some(since_s.unwrap_or(now_s))
+}
+
+/// The throttle sum the quiet-throttle rule counts: every throttle at or above
+/// `deadband` (near-zero noise isn't idling).
+pub fn quiet_throttle_sum(throttles: &[f32; NOZZLE_COUNT], deadband: f32) -> f32 {
+    let mut sum = 0.0;
+    for throttle in throttles {
+        if *throttle >= deadband {
+            sum += throttle;
+        }
+    }
+    sum
 }
