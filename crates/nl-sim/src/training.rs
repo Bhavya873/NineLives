@@ -278,7 +278,8 @@ impl TrainingEnv {
             unsettled: episode.unsettled_after_touchdown(),
             succeeded: events.succeeded,
             air_left_fraction: episode.world().air_fraction(),
-            sideways_speed_on_wheels_m_s: sideways_speed_on_wheels_m_s(&state),
+            height_m: state.height_m,
+            vertical_speed_m_s: vertical_speed_m_s(&state),
         }
     }
 
@@ -308,10 +309,10 @@ pub fn throttles_from_action(action: [f32; NOZZLE_COUNT]) -> [f32; NOZZLE_COUNT]
     throttles
 }
 
-/// |sideways speed| (body +Z) while any wheel touches, else 0, in m/s (reward `sideways`).
-fn sideways_speed_on_wheels_m_s(state: &CarState) -> f32 {
-    if state.wheels_down() == 0 {
-        return 0.0;
-    }
-    state.linear_velocity_body_m_s[2].abs()
+/// World vertical speed (positive up), in m/s: the body-frame velocity against the
+/// body-frame direction of gravity (which points down).
+fn vertical_speed_m_s(state: &CarState) -> f32 {
+    let [vx, vy, vz] = state.linear_velocity_body_m_s;
+    let [gx, gy, gz] = state.gravity_dir_body;
+    -(vx * gx + vy * gy + vz * gz)
 }

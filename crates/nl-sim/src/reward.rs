@@ -37,10 +37,10 @@ pub struct RewardWeights {
     /// Multiplies the share of the tank left, paid once on success with a limited tank
     /// (PLAN §3.3).
     pub air_left: f32,
-    /// Cost per m/s of sideways speed while on the wheels: drivers don't skid sideways,
-    /// and pushing the car off the track was the AI's main Stage D failure (EXPERIMENTS
-    /// m7-full-004).
-    pub sideways: f32,
+    /// Cost per unit of throttle sum while the car is steady on the ground (upright, low,
+    /// not falling, barely turning): the AI's side thrust while driving pushed it off the
+    /// Stage D track (EXPERIMENTS m7-full-004). Braking a fall is never charged.
+    pub ground_thrust: f32,
     /// Paid once on the step an episode succeeds. Without it nothing in training
     /// rewards the quiet-throttle part of success, and the policy idles thrust while
     /// parked (EXPERIMENTS m7-full-002).
@@ -67,6 +67,14 @@ pub struct RewardShape {
     pub save_heading_scale_deg: f32,
     /// What a crash costs (before its weight).
     pub crash_penalty: f32,
+    /// "Steady on the ground" (reward `ground_thrust`): tilt at most this, in degrees,
+    pub steady_max_tilt_deg: f32,
+    /// centre of mass at most this high above the ground, in m,
+    pub steady_max_height_m: f32,
+    /// spinning at most this fast, in rad/s,
+    pub steady_max_spin_rad_s: f32,
+    /// and moving up or down at most this fast, in m/s, so braking a fall is never charged.
+    pub steady_max_vertical_speed_m_s: f32,
 }
 
 /// Everything in reward.toml.
@@ -123,7 +131,7 @@ impl RewardConfig {
     }
 
     /// Every number with its name, for the checks above.
-    fn named_numbers(&self) -> [(&'static str, f32); 21] {
+    fn named_numbers(&self) -> [(&'static str, f32); 25] {
         let w = &self.weights;
         let s = &self.shape;
         [
@@ -139,7 +147,14 @@ impl RewardConfig {
             ("weights.unsettled", w.unsettled),
             ("weights.air_left", w.air_left),
             ("weights.success", w.success),
-            ("weights.sideways", w.sideways),
+            ("weights.ground_thrust", w.ground_thrust),
+            ("shape.steady_max_tilt_deg", s.steady_max_tilt_deg),
+            ("shape.steady_max_height_m", s.steady_max_height_m),
+            ("shape.steady_max_spin_rad_s", s.steady_max_spin_rad_s),
+            (
+                "shape.steady_max_vertical_speed_m_s",
+                s.steady_max_vertical_speed_m_s,
+            ),
             ("shape.spin_cap_rad2_s2", s.spin_cap_rad2_s2),
             ("shape.airborne_grace_s", s.airborne_grace_s),
             ("shape.save_base", s.save_base),
@@ -199,8 +214,10 @@ pub struct StepSummary {
     /// Share of the tank left at the end of the step, 0..1 (not read with unlimited air,
     /// where there is no tank to save).
     pub air_left_fraction: f32,
-    /// |sideways speed| in the body frame (+Z right) while any wheel touches, else 0, in m/s.
-    pub sideways_speed_on_wheels_m_s: f32,
+    /// Height of the centre of mass above the ground below it, in m.
+    pub height_m: f32,
+    /// World vertical speed (positive up), in m/s.
+    pub vertical_speed_m_s: f32,
 }
 
 /// The reward of one step, term by term (each already weighted), so training can log
@@ -229,8 +246,8 @@ pub struct RewardTerms {
     pub air_left: f32,
     /// Bonus for succeeding (≥ 0).
     pub success: f32,
-    /// Cost of sliding sideways on the wheels (≤ 0).
-    pub sideways: f32,
+    /// Cost of thrust while steady on the ground (≤ 0).
+    pub ground_thrust: f32,
 }
 
 impl RewardTerms {
@@ -247,7 +264,7 @@ impl RewardTerms {
         "unsettled",
         "air_left",
         "success",
-        "sideways",
+        "ground_thrust",
     ];
 
     /// The terms in `NAMES` order.
@@ -264,7 +281,7 @@ impl RewardTerms {
             self.unsettled,
             self.air_left,
             self.success,
-            self.sideways,
+            self.ground_thrust,
         ]
     }
 
@@ -314,8 +331,22 @@ pub fn reward_terms(step: &StepSummary, config: &RewardConfig) -> RewardTerms {
             0.0
         },
         success: if step.succeeded { w.success } else { 0.0 },
-        sideways: -w.sideways * step.sideways_speed_on_wheels_m_s,
+        ground_thrust: if is_steady_on_ground(step, shape) {
+            -w.ground_thrust * step.throttles.iter().sum::<f32>()
+        } else {
+            0.0
+        },
     }
+}
+
+/// Upright, low, not falling and barely turning: the car sits or drives on the ground,
+/// where thrust only pushes it around (reward `ground_thrust`).
+fn is_steady_on_ground(step: &StepSummary, shape: &RewardShape) -> bool {
+    let upright = step.up_alignment >= libm::cosf(shape.steady_max_tilt_deg.to_radians());
+    upright
+        && step.height_m <= shape.steady_max_height_m
+        && step.spin_rad_s <= shape.steady_max_spin_rad_s
+        && step.vertical_speed_m_s.abs() <= shape.steady_max_vertical_speed_m_s
 }
 
 /// SPEC §9.4 air: a share of the tank when air is limited, the throttle sum otherwise.

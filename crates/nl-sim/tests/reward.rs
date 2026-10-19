@@ -31,7 +31,8 @@ fn resting() -> StepSummary {
         unsettled: false,
         succeeded: false,
         air_left_fraction: 1.0,
-        sideways_speed_on_wheels_m_s: 0.0,
+        height_m: 0.6,
+        vertical_speed_m_s: 0.0,
     }
 }
 
@@ -295,14 +296,43 @@ fn success_pays_its_bonus_once_on_the_success_step_whatever_the_air() {
 }
 
 #[test]
-fn sliding_sideways_on_the_wheels_costs_its_weight_per_m_s() {
+fn thrust_while_steady_on_the_ground_costs_its_weight_per_unit_of_throttle() {
     let mut config = config();
-    config.weights.sideways = 0.05;
-    let sliding = StepSummary {
-        sideways_speed_on_wheels_m_s: 2.0,
+    config.weights.ground_thrust = 0.05;
+    let idling = StepSummary {
+        throttles: [0.02; 10],
         ..resting()
     };
 
-    assert!((reward_terms(&sliding, &config).sideways + 0.1).abs() < 1e-6);
-    assert_eq!(reward_terms(&resting(), &config).sideways, 0.0);
+    assert!((reward_terms(&idling, &config).ground_thrust + 0.01).abs() < 1e-6);
+}
+
+#[test]
+fn braking_a_fall_tilting_or_flying_high_is_never_charged_as_ground_thrust() {
+    let mut config = config();
+    config.weights.ground_thrust = 0.05;
+    let firing = StepSummary {
+        throttles: [0.5; 10],
+        ..resting()
+    };
+    let falling = StepSummary {
+        vertical_speed_m_s: -3.0,
+        ..firing
+    };
+    let tilted = StepSummary {
+        up_alignment: 0.8,
+        ..firing
+    };
+    let high = StepSummary {
+        height_m: 3.0,
+        ..firing
+    };
+    let spinning = StepSummary {
+        spin_rad_s: 2.0,
+        ..firing
+    };
+
+    for step in [falling, tilted, high, spinning] {
+        assert_eq!(reward_terms(&step, &config).ground_thrust, 0.0);
+    }
 }
