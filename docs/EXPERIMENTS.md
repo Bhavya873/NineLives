@@ -99,3 +99,22 @@ Notes:
 Notes:
 - Stage D needed three bot and course fixes to get here from 75%: the bot centres its steering in the air (it landed with the wheels turned and swerved); its pursuit turn is capped at 6 m/s² sideways, with the wobble and jerks scaled to that grip-safe turn (uncapped, it spun the car whenever it landed off the line; capped but with the wobble in raw steer units, the wobble overpowered the pursuit and the car drifted off the 20 m track: 33%); kickers are 3.5–4.5 m wide (at 2 m an off-centre car put its body on the slope) and ramps 8–10 m wide. Walls are off (weight 0): 8 of the last 11 failures were hard landings 50 m past a wall at 20–30 m/s.
 - Measured after rebasing onto the landing-quality rules (quiet-throttle success for A/B, HardLanding, settle time) and with the Stage C/D landing heading limit of 30°: PD's median landing heading error is 0.3° on C and 0.05° on D, so the limit costs PD nothing; it is there for the AI. Stage E's failures are mostly base-A drops, where PD loses about 40% anyway.
+
+
+### 2026-10-18/19 — M7: full A→E training runs (m7-full-001…003)
+
+`python -m ninelives.train --config configs/train/m7-full.yaml --run-id m7-full-00N`: seed 0, 150M steps planned, all five stages via the curriculum, domain randomization on, 64 envs, ~26k steps/s (150M ≈ 95 min plus evals). Plan agreed with the owner (docs/PLAN.md §3.4): up to 3 runs, then review gate 2.
+
+| Run | Code | Steps | Wall | Curriculum reached | Stage A full difficulty, eval (Realistic, 200 seeds) | Outcome |
+|---|---|---|---|---|---|---|
+| m7-full-001 | 73a644e | 5M (stopped) | 3 min | A level 0, 0% | – | Training episodes never succeed: PPO's exploration noise keeps the throttle sum above the 0.05 quiet limit, so the window-based curriculum can't move. Deterministically the same policy already landed 34% of level-0 drops quietly. |
+| m7-full-002 | 84e012d | 86M (stopped) | 55 min | A level 3 | peak 52% at 13M → 8% at 85M; crash flat ~47% | Promotion now by deterministic eval, throttles start at the edge of zero. It learned to land, then drifted to idling thrust (throttle sum 0.52 deterministic; action std collapsed to 0.03): 46% of drops landed and timed out. Nothing in training paid for being quiet. |
+| m7-full-003 | badc2cc | 150M | 100 min | A level 3 (never unlocked B) | best 56% at 15M; final 42%, crash 58% | Success bonus (+5) fixed the idling (timeouts ≈ 0; success ≈ 1 − crash). But level 3 eval stayed ~45–56%, under the 85% bar, for 140M steps, so B–E never unlocked. |
+
+Smoke runs on the way (3–6M steps, not logged separately): an initial action bias of −2 sampled almost no firing and never learned to brake (level-0 eval fell from 31% to 5%); a bias of −1 (the edge of zero throttle) reached level 0 at 91% by 2M.
+
+**Against the bar** (beat PD on every stage and mode): **not met.** The best checkpoint (56%) is level with PD on Stage A Realistic (58%), below the M5 policy under the old success rule (74%), and B–E were never trained. `models/policy.json` and the viewer checkpoints are unchanged.
+
+Notes:
+- The binding constraint is now **crashes**, not quietness: 45–60% of full-difficulty drops end in hard impacts or upside-down landings. M5's stage-a-004 crashed far less. Candidates: the new HardLanding and unsettled costs making the policy hesitant to brake late; less time at full difficulty (stuck at level 3, never level 4); a curriculum bar (85%) far above what even PD reaches at full difficulty (58%).
+- The 85% promotion bar suits easy levels, but at the upper Stage A levels it blocks every later stage. Options for the next run are in the PR: a lower or per-level bar, unlocking B–E on time or on beating PD, or warm-starting from stage-a-004's braking skill.

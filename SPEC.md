@@ -407,6 +407,7 @@ Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range 
 | Hard landing (event) | `−1` per `HardLanding` | 1 |
 | Unsettled | `−1` per step after the episode's first touchdown while not settled (9.5) | 0.01 |
 | Air left (success) | share of the tank left, once, on the success step; limited tank only | 1 |
+| Success (event, terminal) | `+1` once, on the step the episode succeeds (9.5); success needs the quiet hold, so this pays for a quiet landing | 5 |
 
 The save quality also has two landing factors (PLAN §3.3): `q = clamp(1 − ‖ω‖/4) · clamp(1 − v_down/6) · clamp(1 − heading_error/45°) · clamp(speed_kept)`; an unknown heading error or speed kept (7.9) counts as 1, so both factors apply only after a take-off from the wheels (drops and tip-overs are unaffected).
 
@@ -460,6 +461,9 @@ Implementation notes (`nl-sim/src/randomization.rs`): the ranges live in `[rando
 - Once unlocked, sample stages with weights A 0.25, B 0.15, C 0.2, D 0.3, E 0.1, so earlier skills are not forgotten.
 - Log the stage, level and success rates to TensorBoard.
 - Implementation notes: `BatchedSim.set_stage_mix([(stage, weight, level), …])`; each episode picks its stage by weight from its own seed (ChaCha8 stream 8), so the same seed always runs the same stage. The training YAML lists `stages` in unlock order and `curriculum.stage_weights`; the Python curriculum (`ninelives/curriculum.py`) keeps one 500-episode window per stage at its level, raises the level above 85%, and unlocks the next stage when the newest one passes at its last level. Every stage needs a weight above 0 (a zero-weight stage would unlock but never run, and block the stages after it). "Best" is the eval success over the episodes of the stages unlocked at that checkpoint, each at its hardest level; the log line names them, and when a new stage unlocks the best score restarts (scores over different stage sets don't compare). `pieces.json` reaches `BatchedSim` with the TOMLs (`pieces_json` in the config JSON; the built-in copy if absent), so a run's saved `configs/` are what it trained on.
+
+- **Promotion by eval (M7):** with `curriculum.promote_on: eval` (the default in `configs/train/base.yaml`), each 1M-step checkpoint promotes a stage whose deterministic eval at its current level (the fixed eval seeds) passes the bar. The training window is only logged, because exploration noise alone breaks the quiet-throttle success rule.
+- **Starting policy:** `ppo.initial_action_bias: -1` and `ppo.log_std_init: 0`, so each throttle's mean starts at the edge of zero.
 
 ### 9.10 PPO starting hyperparameters (`configs/train/base.yaml`) *(start)*
 - `n_envs` 64, `n_steps` 512 (32,768 samples per update), `batch_size` 4096, `n_epochs` 10.
