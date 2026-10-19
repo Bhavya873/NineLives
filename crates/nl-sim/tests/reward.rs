@@ -191,13 +191,16 @@ fn each_hard_landing_costs_its_weight() {
 }
 
 #[test]
-fn being_unsettled_after_touchdown_costs_a_little_every_step() {
+fn being_unsettled_after_touchdown_costs_its_weight_every_step() {
+    // The repo sets this weight to 0 (gate-2 ablation); the rule still works when it isn't.
+    let mut config = config();
+    config.weights.unsettled = 0.01;
     let step = StepSummary {
         unsettled: true,
         ..resting()
     };
 
-    assert!((reward_terms(&step, &config()).unsettled + 0.01).abs() < 1e-6);
+    assert!((reward_terms(&step, &config).unsettled + 0.01).abs() < 1e-6);
 }
 
 #[test]
