@@ -220,3 +220,67 @@ def test_a_quoted_randomize_flag_is_refused_instead_of_meaning_true(tmp_path):
 
     with pytest.raises(ValueError, match="randomize must be true or false"):
         run(tmp_path, path)
+
+
+def test_a_fresh_policy_starts_with_its_thrusters_off():
+    import gymnasium as gym
+    from stable_baselines3 import PPO
+
+    from ninelives.train import start_with_action_bias
+
+    model = PPO("MlpPolicy", gym.make("Pendulum-v1"), device="cpu")
+
+    start_with_action_bias(model, -2.0)
+
+    assert model.policy.action_net.bias.detach().tolist() == [-2.0]
+
+
+def test_the_base_config_starts_each_throttle_at_the_edge_of_zero():
+    from ninelives.train_config import load_train_config
+
+    ppo = load_train_config(CONFIGS_DIR / "train" / "base.yaml").ppo
+
+    assert ppo.initial_action_bias == -1.0
+    assert ppo.log_std_init == 0.0
+
+
+def test_noting_episodes_never_promotes_even_on_a_full_good_window():
+    plan = curriculum()
+
+    for _ in range(20):
+        plan.note(episode(True))
+
+    assert plan.levels["A"] == 0
+    assert plan.success_rate("A") == 1.0
+
+
+def test_a_passing_eval_moves_a_stage_up_and_a_failing_one_does_not():
+    plan = curriculum(advance_at=0.85)
+
+    assert not plan.judge_eval("A", 0.85)
+    assert plan.judge_eval("A", 0.9)
+
+    assert plan.levels["A"] == 1
+
+
+def test_only_stages_whose_pass_would_change_the_mix_need_an_eval():
+    plan = curriculum(levels_a=2)
+
+    assert plan.needs_eval_to_advance("A")  # below its hardest level
+    plan.judge_eval("A", 1.0)
+    assert plan.needs_eval_to_advance("A")  # hardest level, newest stage: unlocks B
+    plan.judge_eval("A", 1.0)
+
+    assert plan.unlocked_stages() == ["A", "B"]
+    assert not plan.needs_eval_to_advance("A")
+    assert plan.needs_eval_to_advance("B")
+
+
+def test_an_unknown_promote_on_is_refused_before_training(tmp_path):
+    config = yaml.safe_load(small_config(tmp_path, 1024).read_text())
+    config["curriculum"]["promote_on"] = "vibes"
+    path = tmp_path / "bad.yaml"
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match="promote_on"):
+        run(tmp_path, path)

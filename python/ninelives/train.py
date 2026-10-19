@@ -50,6 +50,16 @@ def fresh_curriculum(config: TrainConfig, env: NineLivesVecEnv) -> Curriculum:
     )
 
 
+def start_with_action_bias(model: PPO, action_bias: float) -> None:
+    """Sets a fresh policy's action-mean bias. At −1 or below (SB3 clips actions to
+    [−1, 1], and the sim maps −1 to throttle 0) the policy starts with its thrusters off,
+    not at half throttle on every nozzle: under the quiet-throttle success rule (SPEC
+    §9.5) a half-throttle start never succeeds, so the curriculum never moves
+    (docs/EXPERIMENTS.md, m7-full-001)."""
+    with torch.no_grad():
+        model.policy.action_net.bias.fill_(action_bias)
+
+
 def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[PPO, RunState]:
     """A fresh PPO model (SPEC §9.10) and run state at curriculum level 0."""
     normalizer = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=config.clip_obs)
@@ -70,11 +80,13 @@ def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[P
         policy_kwargs={
             "net_arch": {"pi": ppo.net_arch, "vf": ppo.net_arch},
             "activation_fn": ACTIVATIONS[ppo.activation],
+            "log_std_init": ppo.log_std_init,
         },
         tensorboard_log=str(run_dir / "tb"),
         seed=config.seed,
         device="cpu",
     )
+    start_with_action_bias(model, ppo.initial_action_bias)
     curriculum = fresh_curriculum(config, env)
     state = RunState(
         steps=0,
@@ -122,7 +134,12 @@ def train(argv: list[str] | None = None) -> RunState:
     # the curriculum's stages and levels.
     env.set_stage_mix(state.curriculum.mix())
     checkpoints = RunCheckpointCallback(state, run_dir, config)
-    callbacks = [CurriculumCallback(state), checkpoints, TimeLimitCallback(args.max_minutes)]
+    promote_from_training = config.curriculum_promote_on == "training"
+    callbacks = [
+        CurriculumCallback(state, promote_from_training),
+        checkpoints,
+        TimeLimitCallback(args.max_minutes),
+    ]
     try:
         model.learn(
             total_timesteps=max(config.total_steps - state.steps, 0),

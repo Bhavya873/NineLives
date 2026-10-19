@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.vec_env import VecNormalize
+from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 
 from ninelives.rollout import evaluate_fixed_seeds, success_and_crash_rates
 from ninelives.run_files import RunState, record_progress, save_checkpoint
@@ -16,13 +16,15 @@ from ninelives.train_config import TrainConfig
 
 
 class CurriculumCallback(BaseCallback):
-    """Feeds every finished episode to the curriculum, sends the envs the new stage mix
-    when a stage moves up a level or unlocks, and logs outcomes per stage to TensorBoard
-    each rollout."""
+    """Feeds every finished episode to the curriculum, logs outcomes per stage to
+    TensorBoard each rollout and, with `promote_from_training`, promotes stages from the
+    training window and sends the envs the new mix. Otherwise `RunCheckpointCallback`
+    promotes them from its deterministic eval."""
 
-    def __init__(self, state: RunState) -> None:
+    def __init__(self, state: RunState, promote_from_training: bool) -> None:
         super().__init__()
         self.state = state
+        self.promote_from_training = promote_from_training
         self.episodes: list[dict[str, Any]] = []
 
     def _on_step(self) -> bool:
@@ -31,8 +33,10 @@ class CurriculumCallback(BaseCallback):
             if episode is None:
                 continue
             self.episodes.append(episode)
-            if self.state.curriculum.record(episode):
-                self.apply_mix()
+            if not self.promote_from_training:
+                self.state.curriculum.note(episode)
+            elif self.state.curriculum.record(episode):
+                send_mix(self.training_env, self.state)
         return True
 
     def _on_rollout_end(self) -> None:
@@ -51,11 +55,12 @@ class CurriculumCallback(BaseCallback):
                 self.logger.record(f"episode/{stage}/success", success_and_crash_rates(rows)[0])
         self.episodes = []
 
-    def apply_mix(self) -> None:
-        """Sends the curriculum's unlocked stages, weights and levels to every env."""
-        mix = self.state.curriculum.mix()
-        self.training_env.env_method("set_stage_mix", mix)
-        print(f"curriculum: {mix}")
+
+def send_mix(training_env: VecEnv, state: RunState) -> None:
+    """Sends the curriculum's unlocked stages, weights and levels to every env."""
+    mix = state.curriculum.mix()
+    training_env.env_method("set_stage_mix", mix)
+    print(f"curriculum: {mix}")
 
 
 class RunCheckpointCallback(BaseCallback):
@@ -86,6 +91,8 @@ class RunCheckpointCallback(BaseCallback):
         self.record_progress(self.num_timesteps)
         numbered = self.run_dir / "checkpoints" / str(self.num_timesteps)
         save_checkpoint(numbered, self.model, normalizer)
+        if self.config.curriculum_promote_on == "eval":
+            self.promote_from_eval(normalizer)
         stages = self.state.curriculum.unlocked_stages()
         if self.state.best_eval_stages != stages:
             # A new stage joined: scores over different stage sets don't compare, so the
@@ -98,22 +105,42 @@ class RunCheckpointCallback(BaseCallback):
             save_checkpoint(self.run_dir / "best", self.model, normalizer, self.state)
         save_checkpoint(self.run_dir / "latest", self.model, normalizer, self.state)
 
+    def promote_from_eval(self, normalizer: VecNormalize) -> None:
+        """Promotes each stage whose deterministic eval at its current level passes the
+        curriculum bar, and sends the envs the new mix if anything moved."""
+        curriculum = self.state.curriculum
+        changed = False
+        for stage in curriculum.unlocked_stages():
+            if not curriculum.needs_eval_to_advance(stage):
+                continue
+            level = curriculum.levels[stage]
+            rows = self.eval_rows(normalizer, stage, level)
+            success = success_and_crash_rates(rows)[0]
+            self.logger.record(f"curriculum/{stage}/eval_success", success)
+            print(f"{self.num_timesteps} steps: {stage} level {level} eval success {success:.3f}")
+            changed = curriculum.judge_eval(stage, success) or changed
+        if changed:
+            send_mix(self.training_env, self.state)
+
+    def eval_rows(self, normalizer: VecNormalize, stage: str, level: int) -> list[dict[str, Any]]:
+        """`stage` at `level` on the fixed eval seeds, acting deterministically."""
+        return evaluate_fixed_seeds(
+            self.model,
+            normalizer,
+            episodes=self.config.eval_episodes,
+            first_seed=self.config.eval_seed,
+            mode=self.config.mode,
+            stage=stage,
+            level=level,
+        )
+
     def evaluate(self, normalizer: VecNormalize, stages: list[str]) -> float:
         """Success rate over the episodes of `stages` (the unlocked ones), each on the
         fixed eval seeds at its hardest level; also logged per stage."""
-        config = self.config
         curriculum = self.state.curriculum
         all_rows = []
         for stage in stages:
-            rows = evaluate_fixed_seeds(
-                self.model,
-                normalizer,
-                episodes=config.eval_episodes,
-                first_seed=config.eval_seed,
-                mode=config.mode,
-                stage=stage,
-                level=curriculum.level_counts[stage] - 1,
-            )
+            rows = self.eval_rows(normalizer, stage, curriculum.level_counts[stage] - 1)
             self.logger.record(f"eval/{stage}/success_rate", success_and_crash_rates(rows)[0])
             all_rows.extend(rows)
         success, crash = success_and_crash_rates(all_rows)
