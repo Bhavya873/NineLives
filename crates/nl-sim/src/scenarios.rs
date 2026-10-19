@@ -74,6 +74,8 @@ pub struct EpisodeConfig {
     pub spawn_clearance_m: f32,
     /// Success also needs the controller's throttle sum to stay below this (PLAN §3.3)...
     pub success_quiet_throttle_sum: f32,
+    /// ...not counting nozzles whose throttle is below this (near-zero noise isn't idling).
+    pub success_quiet_nozzle_deadband: f32,
     /// ...for this long, unbroken, in s, so idle thrust can't count as a finished episode.
     pub success_quiet_hold_s: f32,
     /// The car is settled when all four wheels are down, it spins slower than the save
@@ -397,6 +399,10 @@ impl ScenariosConfig {
             (
                 "episode.success_quiet_throttle_sum",
                 self.episode.success_quiet_throttle_sum,
+            ),
+            (
+                "episode.success_quiet_nozzle_deadband",
+                self.episode.success_quiet_nozzle_deadband,
             ),
             (
                 "episode.success_quiet_hold_s",

@@ -449,12 +449,15 @@ impl Episode {
         self.tally.settled_since_s = start_or_break_run(self.tally.settled_since_s, settled, now_s);
     }
 
-    /// PLAN §3.3: starts or breaks the run of quiet throttles (the controller's
-    /// throttle sum below `success_quiet_throttle_sum`) that success needs.
+    /// PLAN §3.3: starts or breaks the run of quiet throttles that success needs: the
+    /// controller's throttles add up to less than `success_quiet_throttle_sum`, not
+    /// counting any below `success_quiet_nozzle_deadband` (near-zero noise isn't idling).
     fn track_quiet_throttles(&mut self) {
         let mut throttle_sum = 0.0;
         for throttle in self.commanded_throttles {
-            throttle_sum += throttle;
+            if throttle >= self.rules.success_quiet_nozzle_deadband {
+                throttle_sum += throttle;
+            }
         }
         let quiet = throttle_sum < self.rules.success_quiet_throttle_sum;
         let now_s = self.world.time_s() as f32;

@@ -142,3 +142,31 @@ fn the_quiet_throttle_rule_never_turns_a_crash_into_anything_else() {
     assert!(!result.success);
     assert_eq!(result.settle_time_s, None);
 }
+
+#[test]
+fn near_zero_throttles_under_the_deadband_count_as_quiet() {
+    let mut episode = level_drop(1.0);
+    // Every nozzle at 0.015: a sum of 0.15, but each below the 0.02 deadband.
+    let trickle = [0.015; NOZZLE_COUNT];
+
+    let mut status = EpisodeStatus::Running;
+    while status == EpisodeStatus::Running {
+        status = episode.step(trickle);
+    }
+
+    assert_eq!(status, EpisodeStatus::Succeeded);
+}
+
+#[test]
+fn one_nozzle_really_firing_still_breaks_the_quiet_rule() {
+    let mut episode = level_drop(1.0);
+    let mut one_firing = [0.0; NOZZLE_COUNT];
+    one_firing[5] = 0.06;
+
+    let mut status = EpisodeStatus::Running;
+    while status == EpisodeStatus::Running {
+        status = episode.step(one_firing);
+    }
+
+    assert_eq!(status, EpisodeStatus::TimedOut);
+}
