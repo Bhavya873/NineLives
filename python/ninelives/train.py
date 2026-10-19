@@ -9,6 +9,7 @@ it stops, even on Ctrl-C, so `--resume` loses at most the last rollout.
 """
 
 import argparse
+import pickle
 import shutil
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 from ninelives.callbacks import CurriculumCallback, RunCheckpointCallback, TimeLimitCallback
 from ninelives.curriculum import Curriculum
 from ninelives.env import NineLivesVecEnv
+from ninelives.eval import evaluate
 from ninelives.run_files import RUNS_DIR, RunState, load_checkpoint, save_checkpoint
 from ninelives.sim_config import CONFIGS_DIR
 from ninelives.train_config import TrainConfig, load_train_config
@@ -38,6 +40,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--total-steps", type=int, default=None, help="override the config's total_steps"
     )
+    parser.add_argument(
+        "--init-from",
+        type=Path,
+        default=None,
+        help="checkpoint folder (e.g. runs/stage-a-004/best) whose policy a new run starts from",
+    )
     parser.add_argument("--runs-dir", type=Path, default=RUNS_DIR, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
@@ -50,7 +58,30 @@ def fresh_curriculum(config: TrainConfig, env: NineLivesVecEnv) -> Curriculum:
         level_counts={stage: env.sim.level_count(stage) for stage in config.stages},
         window=config.curriculum_window,
         advance_at=config.curriculum_advance_at,
+        unlock_every_steps=config.curriculum_unlock_every_steps,
     )
+
+
+def pd_baseline(config: TrainConfig) -> dict[str, float]:
+    """PD's success per stage at full difficulty on the validation seeds: the bar the
+    newest stage must match to unlock the next (`curriculum.unlock.beat_pd`)."""
+    rates = {}
+    for stage in config.stages:
+        report = evaluate("pd", stage, config.mode, config.eval_episodes, config.eval_seed)
+        rates[stage] = float(report["summary"]["success_rate"])
+    print(f"PD baseline on the validation seeds: {rates}")
+    return rates
+
+
+def warm_start(model: PPO, normalizer: VecNormalize, checkpoint: Path) -> None:
+    """Starts `model` from the policy in `checkpoint` (same network shape) and its
+    observation statistics, which the policy was trained to read. Reward statistics
+    stay fresh, since the reward may have changed since that run."""
+    old = PPO.load(checkpoint / "model.zip", device="cpu")
+    model.policy.load_state_dict(old.policy.state_dict())
+    with (checkpoint / "vecnormalize.pkl").open("rb") as file:
+        normalizer.obs_rms = pickle.load(file).obs_rms
+    print(f"warm start from {checkpoint}")
 
 
 def start_with_action_bias(model: PPO, action_bias: float) -> None:
@@ -63,8 +94,11 @@ def start_with_action_bias(model: PPO, action_bias: float) -> None:
         model.policy.action_net.bias.fill_(action_bias)
 
 
-def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[PPO, RunState]:
-    """A fresh PPO model (SPEC §9.10) and run state at curriculum level 0."""
+def new_run(
+    config: TrainConfig, env: NineLivesVecEnv, run_dir: Path, init_from: Path | None = None
+) -> tuple[PPO, RunState]:
+    """A new PPO model (SPEC §9.10), fresh or warm-started from `init_from`, and run state
+    at curriculum level 0."""
     normalizer = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=config.clip_obs)
     ppo = config.ppo
     model = PPO(
@@ -89,8 +123,13 @@ def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[P
         seed=config.seed,
         device="cpu",
     )
-    start_with_action_bias(model, ppo.initial_action_bias)
+    if init_from is None:
+        start_with_action_bias(model, ppo.initial_action_bias)
+    else:
+        warm_start(model, normalizer, init_from)
     curriculum = fresh_curriculum(config, env)
+    if config.curriculum_promote_on == "eval" and config.curriculum_unlock_on_pd:
+        curriculum.pd_success = pd_baseline(config)
     state = RunState(
         steps=0,
         total_steps=config.total_steps,
@@ -125,7 +164,12 @@ def train(argv: list[str] | None = None) -> RunState:
     if not args.resume and (run_dir / "latest").exists():
         raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
     env = NineLivesVecEnv(
-        config.ppo.n_envs, config.seed, config.mode, config.stages[0], config.randomize
+        config.ppo.n_envs,
+        config.seed,
+        config.mode,
+        config.stages[0],
+        config.randomize,
+        config.reward_overrides,
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)
@@ -134,7 +178,7 @@ def train(argv: list[str] | None = None) -> RunState:
         shutil.copy(args.config, run_dir / "config.yaml")
         # The TOML configs too: the reward and scenarios are part of what was trained.
         shutil.copytree(CONFIGS_DIR, run_dir / "configs", ignore=shutil.ignore_patterns("train"))
-        model, state = new_run(config, env, run_dir)
+        model, state = new_run(config, env, run_dir, args.init_from)
     # Before learn(): it resets every env, and those first episodes must already run
     # the curriculum's stages and levels.
     env.set_stage_mix(state.curriculum.mix())

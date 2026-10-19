@@ -118,7 +118,8 @@ class RunCheckpointCallback(BaseCallback):
             success = success_and_crash_rates(rows)[0]
             self.logger.record(f"curriculum/{stage}/eval_success", success)
             print(f"{self.num_timesteps} steps: {stage} level {level} eval success {success:.3f}")
-            changed = curriculum.judge_eval(stage, success) or changed
+            changed = curriculum.judge_eval(stage, success, self.num_timesteps) or changed
+        changed = curriculum.unlock_if_due(self.num_timesteps) or changed
         if changed:
             send_mix(self.training_env, self.state)
 

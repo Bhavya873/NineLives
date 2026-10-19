@@ -12,6 +12,10 @@ ACTIVATION_NAMES = ("tanh", "relu")
 STAGE_NAMES = ("A", "B", "C", "D", "E")
 
 
+# The final eval (results/) uses seeds 0–999; training's validation seeds must stay above.
+TEST_SEED_COUNT = 1000
+
+
 @dataclass
 class PpoSettings:
     """SB3 PPO hyperparameters."""
@@ -48,7 +52,14 @@ class TrainConfig:
     ppo: PpoSettings
     clip_obs: float
     curriculum_window: int
-    curriculum_advance_at: float
+    # Bar to move up a level: one value, or one per level (the last repeats).
+    curriculum_advance_at: float | list[float]
+    # Eval mode: unlock the next stage once the newest one matches PD at its hardest level.
+    curriculum_unlock_on_pd: bool
+    # Eval mode: also unlock the next stage after this many steps without one (None: never).
+    curriculum_unlock_every_steps: int | None
+    # Reward weights replaced for this run, e.g. {"hard_landing": 0.0} for an ablation.
+    reward_overrides: dict[str, float]
     # What promotes a stage: "eval" (a deterministic fixed-seed eval at each checkpoint)
     # or "training" (the window of training episodes, which include exploration noise).
     curriculum_promote_on: str
@@ -75,7 +86,17 @@ def load_train_config(path: Path) -> TrainConfig:
             ppo=read_ppo(raw["ppo"]),
             clip_obs=float(raw["normalize"]["clip_obs"]),
             curriculum_window=int(raw["curriculum"]["window"]),
-            curriculum_advance_at=float(raw["curriculum"]["advance_at"]),
+            curriculum_advance_at=read_bar(raw["curriculum"]["advance_at"]),
+            curriculum_unlock_on_pd=strict_bool(
+                "curriculum.unlock.beat_pd",
+                raw["curriculum"].get("unlock", {}).get("beat_pd", False),
+            ),
+            curriculum_unlock_every_steps=optional_int(
+                raw["curriculum"].get("unlock", {}).get("every_steps")
+            ),
+            reward_overrides={
+                str(name): float(value) for name, value in raw.get("reward_overrides", {}).items()
+            },
             curriculum_promote_on=str(raw["curriculum"].get("promote_on", "eval")),
             checkpoint_every_steps=int(raw["checkpoint"]["every_steps"]),
             eval_episodes=int(raw["checkpoint"]["eval_episodes"]),
@@ -85,6 +106,18 @@ def load_train_config(path: Path) -> TrainConfig:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error
     check_ranges(path, config)
     return config
+
+
+def read_bar(value: object) -> float | list[float]:
+    """`curriculum.advance_at`: one number, or a list of one number per level."""
+    if isinstance(value, list):
+        return [float(item) for item in value]
+    return float(value)  # type: ignore[arg-type]
+
+
+def optional_int(value: object) -> int | None:
+    """An integer setting that may be left out (None)."""
+    return None if value is None else int(value)  # type: ignore[call-overload]
 
 
 def strict_bool(name: str, value: object) -> bool:
@@ -122,6 +155,12 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     if config.ppo.activation not in ACTIVATION_NAMES:
         raise ValueError(f"{path}: ppo.activation must be one of {ACTIVATION_NAMES}")
     check_stages(path, config)
+    if config.eval_seed < TEST_SEED_COUNT:
+        raise ValueError(
+            f"{path}: checkpoint.eval_seed must be at least {TEST_SEED_COUNT}: seeds "
+            f"0–{TEST_SEED_COUNT - 1} are the test seeds of the final eval, never used to "
+            "choose checkpoints or promote stages"
+        )
     if config.curriculum_promote_on not in ("eval", "training"):
         raise ValueError(f'{path}: curriculum.promote_on must be "eval" or "training"')
     counts = {

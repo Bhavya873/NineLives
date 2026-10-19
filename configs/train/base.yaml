@@ -31,7 +31,15 @@ normalize:
 
 curriculum:
   window: 500          # success rate over the last this many episodes at the level
-  advance_at: 0.85     # move up a level, or unlock the next stage, above this
+  # Bar to move up a level, per level (the last repeats): strict on the easy Stage A
+  # levels, reachable on the hard ones (PD itself manages 58% at full difficulty).
+  advance_at: [0.85, 0.85, 0.75, 0.65]
+  # Unlocking the next stage (eval mode): once the newest stage matches PD at its hardest
+  # level on the validation seeds, or after every_steps without an unlock, so later stages
+  # are never starved (owner's gate-2 choice, 2026-10-19).
+  unlock:
+    beat_pd: true
+    every_steps: 15_000_000
   # Promote on a deterministic eval at each checkpoint (current level, the eval seeds), not
   # on training episodes: their exploration noise alone breaks the quiet-throttle success
   # rule, so the window never passes (EXPERIMENTS m7-full-001).
