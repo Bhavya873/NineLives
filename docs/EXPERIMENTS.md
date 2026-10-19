@@ -150,3 +150,20 @@ The unsettled cost kept the policy from ever settling quietly (it landed safely 
 - **Generalization:** test success averages 77.6% (A–E, Realistic) against 75.4% on validation, so there is no sign of overfitting to the validation seeds.
 - **Against the bar:** not met. The AI beats PD on drops (Stage A, all three conditions), ties on B and C, and loses on procedural courses (D: 33% crashes in Realistic) and knocks (E). D and E only joined the mix after ~30–40M steps.
 - PD's Stage A/B files came out byte-identical to the committed ones (determinism holds). PD's C/D/E results are committed as new baselines.
+
+
+### 2026-10-19 — M7 rounds 2–4: fixing Stage D's off-track failures (20M-step ablations, validation seeds)
+
+| Run (from m7-full-004 best, D/E-heavy weights) | A | B | C | D (out of bounds) | E |
+|---|---|---|---|---|---|
+| m7-full-004 (start) | 66.3% | 100% | 100% | 63.0% (26%) | 56.0% |
+| sideways 0.02 / 0.1 | – | – | – | 30.7% / 51.3% | 34.7% / 52.3% |
+| ground_thrust 0 (control) | – | – | – | 5.0% (86%) | 15.7% |
+| ground_thrust 0.05 | 0% (68% timeouts) | – | 100% | 76.0% (11%) | 17.7% |
+| ground_thrust 0.2 + deadband | 0% | 0% | 100% | 66.7% (8%) | 17.0% |
+| ground_thrust 0.5 + deadband | 0% | 0% | 100% | 76.0% (11%) | 17.7% |
+
+- A trace showed the AI leaves the Stage D track on the ground, always off the right edge, with its side nozzles firing ~1.0 throttle while the bot drives.
+- Charging sideways speed made it worse. Charging thrust while steady on the ground fixes driving (out of bounds 26% → 8–11%), but every variant breaks drops and tip-overs (A and B go to 0%, timing out).
+- No candidate met the round-4 rule (beat the start on D and E, lose ≤ 3 points on A, B and C). The 100M-step continuation was not run.
+- Next to investigate: why the ground-thrust cost stops A/B landings from succeeding even with the 0.02 deadband (likely a remaining trickle, or the cost firing during the landing itself).
