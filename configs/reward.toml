@@ -31,6 +31,10 @@ unsettled = 0.01
 # Air left: weight × (share of the tank left), once, on the step the episode succeeds,
 # only with a limited tank (unlimited air has nothing to save).
 air_left = 1.0
+# Success: weight, once, on the step the episode succeeds. Success needs four wheels down,
+# a quiet throttle and the hold (SPEC §9.5), so this pays for the quiet landing itself;
+# without it the policy idled thrust while parked (EXPERIMENTS m7-full-002).
+success = 5.0
 
 [shape]
 # |ω|² above this is not charged more (rad²/s²).

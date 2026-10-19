@@ -35,6 +35,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--run-id", required=True, help="folder name under runs/")
     parser.add_argument("--resume", action="store_true", help="continue runs/<id>/latest")
     parser.add_argument("--max-minutes", type=float, default=None, help="stop after this")
+    parser.add_argument(
+        "--total-steps", type=int, default=None, help="override the config's total_steps"
+    )
     parser.add_argument("--runs-dir", type=Path, default=RUNS_DIR, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
@@ -48,6 +51,16 @@ def fresh_curriculum(config: TrainConfig, env: NineLivesVecEnv) -> Curriculum:
         window=config.curriculum_window,
         advance_at=config.curriculum_advance_at,
     )
+
+
+def start_with_action_bias(model: PPO, action_bias: float) -> None:
+    """Sets a fresh policy's action-mean bias. At −1 (SB3 clips actions to [−1, 1], and
+    the sim maps −1 to throttle 0) the deterministic policy starts idling at zero
+    throttle, as the quiet-throttle success rule (SPEC §9.5) needs, rather than at half
+    throttle on every nozzle; sampled actions still fire about half the time, so firing
+    gets explored (docs/EXPERIMENTS.md, m7-full runs)."""
+    with torch.no_grad():
+        model.policy.action_net.bias.fill_(action_bias)
 
 
 def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[PPO, RunState]:
@@ -70,11 +83,13 @@ def new_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tuple[P
         policy_kwargs={
             "net_arch": {"pi": ppo.net_arch, "vf": ppo.net_arch},
             "activation_fn": ACTIVATIONS[ppo.activation],
+            "log_std_init": ppo.log_std_init,
         },
         tensorboard_log=str(run_dir / "tb"),
         seed=config.seed,
         device="cpu",
     )
+    start_with_action_bias(model, ppo.initial_action_bias)
     curriculum = fresh_curriculum(config, env)
     state = RunState(
         steps=0,
@@ -104,6 +119,8 @@ def train(argv: list[str] | None = None) -> RunState:
     """Runs (or resumes) training until total_steps or the time limit; returns the state."""
     args = parse_args(argv)
     config = load_train_config(args.config)
+    if args.total_steps is not None:
+        config.total_steps = args.total_steps
     run_dir = args.runs_dir / args.run_id
     if not args.resume and (run_dir / "latest").exists():
         raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
@@ -122,7 +139,12 @@ def train(argv: list[str] | None = None) -> RunState:
     # the curriculum's stages and levels.
     env.set_stage_mix(state.curriculum.mix())
     checkpoints = RunCheckpointCallback(state, run_dir, config)
-    callbacks = [CurriculumCallback(state), checkpoints, TimeLimitCallback(args.max_minutes)]
+    promote_from_training = config.curriculum_promote_on == "training"
+    callbacks = [
+        CurriculumCallback(state, promote_from_training),
+        checkpoints,
+        TimeLimitCallback(args.max_minutes),
+    ]
     try:
         model.learn(
             total_timesteps=max(config.total_steps - state.steps, 0),
