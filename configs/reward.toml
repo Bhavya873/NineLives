@@ -27,7 +27,10 @@ crash = 1.0
 hard_landing = 1.0
 # Unsettled: weight × −1 per step after the episode's first touchdown while the car is
 # not settled (scenarios.toml [episode] settle_*).
-unsettled = 0.01
+# 0 since the gate-2 ablation (EXPERIMENTS 2026-10-19): with 0.01 the policy landed safely
+# but never settled quietly (0% success at 20M steps vs 81% without it). Settle time stays
+# an eval column.
+unsettled = 0.0
 # Air left: weight × (share of the tank left), once, on the step the episode succeeds,
 # only with a limited tank (unlimited air has nothing to save).
 air_left = 1.0
