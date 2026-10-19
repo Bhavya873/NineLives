@@ -9,6 +9,7 @@ it stops, even on Ctrl-C, so `--resume` loses at most the last rollout.
 """
 
 import argparse
+import json
 import pickle
 import shutil
 from pathlib import Path
@@ -45,6 +46,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="checkpoint folder (e.g. runs/stage-a-004/best) whose policy a new run starts from",
+    )
+    parser.add_argument(
+        "--keep-curriculum",
+        action="store_true",
+        help="with --init-from: also carry over that checkpoint's unlocked stages and levels",
     )
     parser.add_argument("--runs-dir", type=Path, default=RUNS_DIR, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
@@ -95,7 +101,11 @@ def start_with_action_bias(model: PPO, action_bias: float) -> None:
 
 
 def new_run(
-    config: TrainConfig, env: NineLivesVecEnv, run_dir: Path, init_from: Path | None = None
+    config: TrainConfig,
+    env: NineLivesVecEnv,
+    run_dir: Path,
+    init_from: Path | None = None,
+    keep_curriculum: bool = False,
 ) -> tuple[PPO, RunState]:
     """A new PPO model (SPEC §9.10), fresh or warm-started from `init_from`, and run state
     at curriculum level 0."""
@@ -128,6 +138,12 @@ def new_run(
     else:
         warm_start(model, normalizer, init_from)
     curriculum = fresh_curriculum(config, env)
+    if init_from is not None and keep_curriculum:
+        saved = json.loads((init_from / "state.json").read_text())["curriculum"]
+        curriculum.restore(saved)
+        curriculum.last_unlock_step = 0
+        env.env_method("set_stage_mix", curriculum.mix())
+        print(f"curriculum carried over from {init_from}: {curriculum.mix()}")
     if config.curriculum_promote_on == "eval" and config.curriculum_unlock_on_pd:
         curriculum.pd_success = pd_baseline(config)
     state = RunState(
@@ -178,7 +194,7 @@ def train(argv: list[str] | None = None) -> RunState:
         shutil.copy(args.config, run_dir / "config.yaml")
         # The TOML configs too: the reward and scenarios are part of what was trained.
         shutil.copytree(CONFIGS_DIR, run_dir / "configs", ignore=shutil.ignore_patterns("train"))
-        model, state = new_run(config, env, run_dir, args.init_from)
+        model, state = new_run(config, env, run_dir, args.init_from, args.keep_curriculum)
     # Before learn(): it resets every env, and those first episodes must already run
     # the curriculum's stages and levels.
     env.set_stage_mix(state.curriculum.mix())

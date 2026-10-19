@@ -370,3 +370,17 @@ def test_a_warm_started_run_begins_with_the_given_checkpoints_policy(tmp_path):
     started_bias = started.policy.action_net.bias.detach()
     original_bias = original.policy.action_net.bias.detach()
     assert (started_bias - original_bias).abs().max() < 0.05
+
+
+def test_keep_curriculum_carries_over_the_checkpoints_unlocked_stages(tmp_path):
+    run(tmp_path, small_config(tmp_path, 2048))
+    source = tmp_path / "smoke" / "latest"
+    state = json.loads((source / "state.json").read_text())
+    state["curriculum"]["unlocked"] = 2
+    (source / "state.json").write_text(json.dumps(state))
+    config = small_config(tmp_path, 1)
+    args = ["--config", str(config), "--run-id", "warm", "--runs-dir", str(tmp_path)]
+
+    result = train([*args, "--init-from", str(source), "--keep-curriculum"])
+
+    assert result.curriculum.unlocked == 2
