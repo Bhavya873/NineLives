@@ -66,6 +66,13 @@ The events, rules and terms live only in `nl-sim` (golden rule 1). Python and th
 
 **Implemented 2026-10-17** (branch `claude/m7-landing-quality`): all five rows, in `nl_sim::landing`, `events`, `episode`, `reward` and `training`, with numbers in `vehicle.toml [events]`, `scenarios.toml [episode]` and `reward.toml`. The heading reference is the last take-off from the wheels; a landing after a start in the air (Stage A) or a tip-over (Stage B) has no heading error and no heading factor. A Stage D "course direction" reference and the Stage C/D "error < 30°" success rule are left to the stage work, which can read `Episode::last_save_quality()`. Speed kept needs a take-off from the wheels above 3 m/s instead of a stage check. See DECISIONS and EXPERIMENTS.
 
+### 3.4 M7 training run (agreed with the owner, 2026-10-17)
+- Start fresh; the curriculum takes it from Stage A up to E. 150M steps, a checkpoint every 1M, best = mean eval success over the unlocked stages. Domain randomization on.
+- **Must:** beat PD on every stage A–E in both modes, with no idle-thrust or reward hacking visible. **Stretch:** Stage A at 80% Realistic / 95% Arcade.
+- Up to 3 runs, each logged in EXPERIMENTS; then stop for review gate 2 regardless. Walls stay out of generated courses for now.
+- If it passes: re-export `models/policy.json` and the viewer checkpoints, and regenerate all `results/`; clips per stage plus a Gauntlet run in the PR.
+- **Outcome (2026-10-19):** not met after 3 runs (EXPERIMENTS m7-full-001…003). The fixes found are kept; the next run's approach is the owner's call at gate 2.
+
 ---
 
 ## 4. Milestones

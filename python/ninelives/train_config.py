@@ -27,6 +27,10 @@ class PpoSettings:
     ent_coef: float
     net_arch: list[int]
     activation: str
+    # Starting spread of the policy's action noise (SB3 `log_std_init`; 0 means std 1).
+    log_std_init: float
+    # Starting bias of the policy's action mean; −1 or below starts every throttle at 0.
+    initial_action_bias: float
 
 
 @dataclass
@@ -45,6 +49,9 @@ class TrainConfig:
     clip_obs: float
     curriculum_window: int
     curriculum_advance_at: float
+    # What promotes a stage: "eval" (a deterministic fixed-seed eval at each checkpoint)
+    # or "training" (the window of training episodes, which include exploration noise).
+    curriculum_promote_on: str
     checkpoint_every_steps: int
     eval_episodes: int
     eval_seed: int
@@ -69,6 +76,7 @@ def load_train_config(path: Path) -> TrainConfig:
             clip_obs=float(raw["normalize"]["clip_obs"]),
             curriculum_window=int(raw["curriculum"]["window"]),
             curriculum_advance_at=float(raw["curriculum"]["advance_at"]),
+            curriculum_promote_on=str(raw["curriculum"].get("promote_on", "eval")),
             checkpoint_every_steps=int(raw["checkpoint"]["every_steps"]),
             eval_episodes=int(raw["checkpoint"]["eval_episodes"]),
             eval_seed=int(raw["checkpoint"]["eval_seed"]),
@@ -103,6 +111,9 @@ def read_ppo(raw: dict[str, Any]) -> PpoSettings:
         ent_coef=float(raw["ent_coef"]),
         net_arch=[int(width) for width in raw["net_arch"]],
         activation=str(raw["activation"]),
+        # Older run configs lack these; SB3's own defaults keep their behaviour.
+        log_std_init=float(raw.get("log_std_init", 0.0)),
+        initial_action_bias=float(raw.get("initial_action_bias", 0.0)),
     )
 
 
@@ -111,6 +122,8 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     if config.ppo.activation not in ACTIVATION_NAMES:
         raise ValueError(f"{path}: ppo.activation must be one of {ACTIVATION_NAMES}")
     check_stages(path, config)
+    if config.curriculum_promote_on not in ("eval", "training"):
+        raise ValueError(f'{path}: curriculum.promote_on must be "eval" or "training"')
     counts = {
         "ppo.n_envs": config.ppo.n_envs,
         "curriculum.window": config.curriculum_window,
