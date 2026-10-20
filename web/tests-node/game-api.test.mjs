@@ -102,6 +102,8 @@ function eventGroups(values) {
 
 test('a hop reports airborne, upset, hard landing and save events', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+  // Thrusters off, so the bare Hop's own events show (PD would soften the landing).
+  game.set_controller('off');
   tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
   game.drain_events();
 

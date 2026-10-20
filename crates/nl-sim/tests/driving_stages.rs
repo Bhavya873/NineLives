@@ -55,9 +55,14 @@ fn straight(pieces: Vec<PieceSpec>) -> CourseSpec {
     }
 }
 
+/// A Stage C seed whose hop lands on its wheels with the thrusters off. Most seeds
+/// crash without a controller, so this one is picked by hand; re-pick it (and say so
+/// in the PR) when the car's driving numbers change.
+const STAGE_C_LUCKY_SEED: u64 = 14;
+
 #[test]
 fn stage_c_succeeds_on_the_save_after_the_hop() {
-    let mut episode = start(Stage::C, arcade(), 3);
+    let mut episode = start(Stage::C, arcade(), STAGE_C_LUCKY_SEED);
 
     let status = run_to_end(&mut episode);
 
@@ -80,7 +85,7 @@ fn run_with_heading_limit(stage: Stage, seed: u64, limit_deg: f32) -> (EpisodeSt
 #[test]
 fn a_stage_c_landing_that_turns_past_the_limit_fails_the_episode_at_once() {
     // A tiny limit: the hop's landing always turns the nose a little.
-    let (status, episode) = run_with_heading_limit(Stage::C, 3, 0.001);
+    let (status, episode) = run_with_heading_limit(Stage::C, STAGE_C_LUCKY_SEED, 0.001);
 
     let error_deg = episode.result().landing_heading_error_deg.unwrap();
     assert_eq!(status, EpisodeStatus::BadLanding);
@@ -90,7 +95,7 @@ fn a_stage_c_landing_that_turns_past_the_limit_fails_the_episode_at_once() {
 
 #[test]
 fn a_stage_c_landing_within_the_limit_still_succeeds() {
-    let (status, episode) = run_with_heading_limit(Stage::C, 3, 30.0);
+    let (status, episode) = run_with_heading_limit(Stage::C, STAGE_C_LUCKY_SEED, 30.0);
 
     let error_deg = episode.result().landing_heading_error_deg.unwrap();
     assert_eq!(status, EpisodeStatus::Succeeded);

@@ -247,6 +247,72 @@ fn pd_brakes_a_fast_low_upright_fall_and_ignores_a_slow_one() {
     assert_eq!(pd.wanted_wrench(&falling(2.0))[1], 0.0);
 }
 
+/// A level car in the air at `height_m`, falling at `speed_m_s`, in a mode whose thrust
+/// is multiplied by `thrust_scale`.
+fn falling_level(height_m: f32, speed_m_s: f32, thrust_scale: f32) -> CarState {
+    CarState {
+        linear_velocity_body_m_s: [0.0, -speed_m_s, 0.0],
+        wheel_contact: [false; 4],
+        height_m,
+        mode_thrust_scale: thrust_scale,
+        ..CarState::default()
+    }
+}
+
+#[test]
+fn a_fast_fall_brakes_from_high_enough_to_stop_and_a_slow_one_still_waits() {
+    let pd = Pd::new(&car_model(), &controllers());
+
+    // 15 m/s needs about 13 m to stop on Realistic's lift: braking starts well above the
+    // old fixed 3 m, but not from any height.
+    assert!(pd.wanted_wrench(&falling_level(6.0, 15.0, 1.0))[1] > 0.0);
+    assert!(pd.wanted_wrench(&falling_level(12.0, 15.0, 1.0))[1] > 0.0);
+    assert_eq!(pd.wanted_wrench(&falling_level(40.0, 15.0, 1.0))[1], 0.0);
+    // 5 m/s stops within the 3 m floor, so it waits as before.
+    assert_eq!(pd.wanted_wrench(&falling_level(6.0, 5.0, 1.0))[1], 0.0);
+}
+
+#[test]
+fn arcade_thrust_lets_the_same_fall_brake_later() {
+    let pd = Pd::new(&car_model(), &controllers());
+
+    let realistic = pd.wanted_wrench(&falling_level(9.0, 15.0, 1.0));
+    let arcade = pd.wanted_wrench(&falling_level(9.0, 15.0, 2.0));
+
+    assert!(realistic[1] > 0.0);
+    assert_eq!(arcade[1], 0.0);
+}
+
+#[test]
+fn sliding_right_in_the_air_gets_a_push_to_the_left_and_on_wheels_none() {
+    let pd = Pd::new(&car_model(), &controllers());
+    let sliding = |wheel_contact: [bool; 4]| CarState {
+        linear_velocity_body_m_s: [0.0, 0.0, 3.0],
+        wheel_contact,
+        height_m: 3.0,
+        ..CarState::default()
+    };
+
+    assert!(pd.wanted_wrench(&sliding([false; 4]))[2] < 0.0);
+    assert_eq!(pd.wanted_wrench(&sliding([true; 4]))[2], 0.0);
+}
+
+#[test]
+fn a_car_lying_on_its_right_side_is_pushed_towards_its_left_side_which_faces_up() {
+    let pd = Pd::new(&car_model(), &controllers());
+    // Right side (+Z) down on the ground: body −Z points up.
+    let state = CarState {
+        gravity_dir_body: [0.0, 0.0, 1.0],
+        wheel_contact: [false; 4],
+        height_m: 0.5,
+        ..CarState::default()
+    };
+
+    let wrench = pd.wanted_wrench(&state);
+
+    assert!(wrench[2] < 0.0, "side push {wrench:?}");
+}
+
 #[test]
 fn pd_leaves_the_thrusters_off_while_the_car_drives() {
     let mut pd = Pd::new(&car_model(), &controllers());

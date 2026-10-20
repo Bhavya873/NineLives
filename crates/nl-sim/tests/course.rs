@@ -36,10 +36,11 @@ fn piece_shapes(piece_json: &str) -> Vec<CourseShape> {
         .collect()
 }
 
-/// A hull's corner points in world coordinates.
+/// A hull's or mesh's corner points in world coordinates.
 fn world_points(shape: &CourseShape) -> Vec<[f32; 3]> {
-    let ShapeGeometry::Hull { points_m } = &shape.geometry else {
-        panic!("expected a hull, got {:?}", shape.geometry);
+    let points_m = match &shape.geometry {
+        ShapeGeometry::Hull { points_m } | ShapeGeometry::Mesh { points_m, .. } => points_m,
+        ShapeGeometry::Box { .. } => panic!("expected a hull or mesh, got a box"),
     };
     let pose = shape.pose.to_rapier();
     let mut points = Vec::new();
@@ -49,7 +50,7 @@ fn world_points(shape: &CourseShape) -> Vec<[f32; 3]> {
     points
 }
 
-/// Every hull corner of these shapes, in world coordinates.
+/// Every hull or mesh corner of these shapes, in world coordinates.
 fn all_world_points(shapes: &[CourseShape]) -> Vec<[f32; 3]> {
     let mut points = Vec::new();
     for shape in shapes {
@@ -312,9 +313,9 @@ fn markings_are_not_solid_and_obstacles_are() {
         piece_shapes(r#"{"type": "wall", "pos": [40, 0, 0], "height": 3, "with_ramp": true}"#);
 
     assert!(!pad[0].solid);
-    // A wall with a ramp is one wall box plus the ramp's segments.
+    // A wall with a ramp is one wall box plus the ramp's smooth mesh.
     assert_eq!(count_surface(&wall, Surface::Obstacle), 1);
-    assert!(count_surface(&wall, Surface::Ramp) > 1);
+    assert_eq!(count_surface(&wall, Surface::Ramp), 1);
     assert!(wall.iter().all(|shape| shape.solid));
 }
 

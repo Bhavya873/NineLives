@@ -3,6 +3,7 @@
 //! same `nl_sim::episode::Episode`, so the numbers can be compared.
 
 use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::course::CourseSpec;
 use nl_sim::episode::{Episode, EpisodeResult, EpisodeStatus};
 use nl_sim::input::InputFrame;
 use nl_sim::randomization::EpisodeVariation;
@@ -55,11 +56,30 @@ pub fn run_episode(
     controller: &mut dyn Controller,
     seed: u64,
 ) -> Result<EpisodeResult, PlaceCarError> {
-    let mut episode = Episode::start(variation, scenarios, stage, seed)?;
+    let episode = Episode::start(variation, scenarios, stage, seed)?;
+    Ok(fly_episode(episode, controller, seed))
+}
+
+/// Like `run_episode`, but on `course` (e.g. the game's playground) instead of flat
+/// ground, through `Episode::start_on_course`.
+pub fn run_episode_on_course(
+    variation: &EpisodeVariation,
+    scenarios: &ScenariosConfig,
+    stage: Stage,
+    course: &CourseSpec,
+    controller: &mut dyn Controller,
+    seed: u64,
+) -> Result<EpisodeResult, PlaceCarError> {
+    let episode = Episode::start_on_course(variation, scenarios, stage, course, seed)?;
+    Ok(fly_episode(episode, controller, seed))
+}
+
+/// Runs `episode` to its end with `controller` (reset for `seed` first).
+fn fly_episode(mut episode: Episode, controller: &mut dyn Controller, seed: u64) -> EpisodeResult {
     controller.reset(seed);
     let mut throttles = [0.0; NOZZLE_COUNT];
     while step_episode(&mut episode, controller, &mut throttles) == EpisodeStatus::Running {}
-    Ok(episode.result())
+    episode.result()
 }
 
 /// One physics step of `episode`, with `controller` acting at 60 Hz (SPEC §7.1) on what

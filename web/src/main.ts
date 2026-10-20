@@ -4,6 +4,7 @@
 import controllersToml from '../../configs/controllers.toml?raw';
 import gauntletJson from '../../courses/gauntlet.json?raw';
 import modesToml from '../../configs/modes.toml?raw';
+import playgroundJson from '../../courses/playground.json?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
@@ -128,15 +129,24 @@ async function start(): Promise<void> {
     snapViewToGame(game, frames, view, carPose);
   };
   const startGauntlet = () => startCourse(game.load_course(gauntletJson));
-  // Enter starts (or restarts) the Gauntlet; F goes back to free driving in the arena.
+  const params = new URLSearchParams(window.location.search);
+  // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
+  const startFreeDrive = () => {
+    if (params.get('world') === 'flat') {
+      game.load_flat_ground();
+      startCourse(null);
+    } else {
+      startCourse(game.load_course(playgroundJson));
+    }
+  };
+  // Enter starts (or restarts) the Gauntlet; F goes back to free driving.
   onKeyPress('Enter', startGauntlet);
   onKeyPress('NumpadEnter', startGauntlet);
-  onKeyPress('KeyF', () => {
-    game.load_flat_ground();
-    startCourse(null);
-  });
-  if (new URLSearchParams(window.location.search).get('course') === 'gauntlet') {
+  onKeyPress('KeyF', startFreeDrive);
+  if (params.get('course') === 'gauntlet') {
     startGauntlet();
+  } else {
+    startFreeDrive();
   }
   // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
   onKeyPress('KeyX', () => {

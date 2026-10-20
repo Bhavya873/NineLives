@@ -6,8 +6,8 @@
 
 mod common;
 
-use common::new_world;
-use nl_sim::conventions::PHYSICS_HZ;
+use common::{new_world, vehicle};
+use nl_sim::conventions::{PHYSICS_DT_S, PHYSICS_HZ};
 use nl_sim::input::InputFrame;
 use nl_sim::world::World;
 
@@ -18,6 +18,27 @@ fn run(world: &mut World, input: InputFrame, seconds: f32) {
     for _ in 0..steps {
         world.step(input);
     }
+}
+
+/// Full throttle in a straight line until the forward speed reaches `target_m_s`.
+fn accelerate_to(world: &mut World, target_m_s: f32) {
+    let mut steps = 0;
+    while world.forward_speed_m_s() < target_m_s && steps < 30 * STEPS_PER_SECOND {
+        world.step(throttle(127));
+        steps += 1;
+    }
+}
+
+/// Full brake until the car is nearly stopped; returns the distance travelled in metres.
+/// Holding the brake longer would start reversing.
+fn brake_to_a_stop_m(world: &mut World) -> f32 {
+    let start_x_m = world.chassis_pose().position_m[0];
+    let mut steps = 0;
+    while world.forward_speed_m_s() > 0.5 && steps < 10 * STEPS_PER_SECOND {
+        world.step(throttle(-127));
+        steps += 1;
+    }
+    world.chassis_pose().position_m[0] - start_x_m
 }
 
 fn throttle(amount: i8) -> InputFrame {
@@ -56,10 +77,10 @@ fn full_throttle_drives_forward_along_world_x() {
     let speed_m_s = world.forward_speed_m_s();
     let position_m = world.chassis_pose().position_m;
     assert!(
-        speed_m_s > 20.0,
+        speed_m_s > 15.0,
         "speed after 3 s of full throttle: {speed_m_s} m/s"
     );
-    assert!(position_m[0] > 25.0, "x after 3 s: {} m", position_m[0]);
+    assert!(position_m[0] > 20.0, "x after 3 s: {} m", position_m[0]);
     assert!(
         position_m[2].abs() < 0.5,
         "drifted sideways to z = {} m",
@@ -71,10 +92,30 @@ fn full_throttle_drives_forward_along_world_x() {
 fn speed_stays_under_the_limit() {
     let mut world = new_world();
 
-    run(&mut world, throttle(127), 15.0);
+    run(&mut world, throttle(127), 20.0);
 
     let speed_m_s = world.forward_speed_m_s();
-    assert!(speed_m_s < 46.0, "speed after 15 s: {speed_m_s} m/s");
+    let limit_m_s = vehicle().drive.max_speed_m_s;
+    assert!(
+        speed_m_s < limit_m_s + 1.0,
+        "speed after 20 s: {speed_m_s} m/s, limit {limit_m_s} m/s"
+    );
+}
+
+#[test]
+fn zero_to_100_km_h_takes_about_four_seconds() {
+    let mut world = new_world();
+    run(&mut world, InputFrame::default(), 1.0);
+    let start_s = world.time_s();
+
+    accelerate_to(&mut world, 100.0 / 3.6);
+
+    // The tuned feel (DECISIONS 2026-10-19): brisk, but not a rocket.
+    let elapsed_s = world.time_s() - start_s;
+    assert!(
+        (3.5..5.0).contains(&elapsed_s),
+        "0-100 km/h took {elapsed_s} s"
+    );
 }
 
 #[test]
@@ -122,7 +163,7 @@ fn wheels_move_with_the_body_at_speed() {
     let body_x_m = world.chassis_pose().position_m[0];
     let front_left_x_m = world.wheel_poses()[0].position_m[0];
 
-    // The front-left mount is 1.3 m ahead of the centre of mass, also at 25+ m/s.
+    // The front-left mount is 1.3 m ahead of the centre of mass, also at 20 m/s.
     assert!(
         (front_left_x_m - body_x_m - 1.3).abs() < 0.05,
         "wheel is {} m ahead of the body",
@@ -150,30 +191,25 @@ fn steering_is_rate_limited() {
 
     world.step(throttle_and_steer(0, 127));
 
-    // 2 rad/s × 1/120 s = 0.0167 rad after one step, not the full 0.5 rad.
+    // At most max_rate × 1/120 s after one step, not the full low-speed limit.
     let angle_rad = world.steering_angle_rad();
+    let one_step_rad = vehicle().steering.max_rate_rad_s * PHYSICS_DT_S;
     assert!(
-        angle_rad > 0.0 && angle_rad < 0.02,
+        angle_rad > 0.0 && angle_rad <= one_step_rad + 1e-6,
         "angle after one step: {angle_rad} rad"
     );
+    assert!(angle_rad < vehicle().steering.max_angle_low_speed_rad);
 }
 
 #[test]
 fn braking_from_20_m_s_stops_the_car_in_a_plausible_distance() {
     let mut world = new_world();
-    run(&mut world, throttle(127), 2.0);
-    let start_x_m = world.chassis_pose().position_m[0];
+    accelerate_to(&mut world, 20.0);
     let start_speed_m_s = world.forward_speed_m_s();
 
-    // Brake until stopped. Holding the brake longer would start reversing.
-    let mut braking_steps = 0;
-    while world.forward_speed_m_s() > 0.5 && braking_steps < 10 * STEPS_PER_SECOND {
-        world.step(throttle(-127));
-        braking_steps += 1;
-    }
+    let stopping_distance_m = brake_to_a_stop_m(&mut world);
 
     // About 1 g of braking: v² / (2 · 9.81) ≈ 20 m from 20 m/s.
-    let stopping_distance_m = world.chassis_pose().position_m[0] - start_x_m;
     assert!(
         stopping_distance_m > 15.0 && stopping_distance_m < 40.0,
         "stopped in {stopping_distance_m} m from {start_speed_m_s} m/s"
@@ -181,9 +217,49 @@ fn braking_from_20_m_s_stops_the_car_in_a_plausible_distance() {
 }
 
 #[test]
+fn braking_from_100_km_h_stops_within_45_m() {
+    let mut world = new_world();
+    accelerate_to(&mut world, 100.0 / 3.6);
+
+    let stopping_distance_m = brake_to_a_stop_m(&mut world);
+
+    assert!(
+        stopping_distance_m < 45.0,
+        "stopped in {stopping_distance_m} m from 100 km/h"
+    );
+}
+
+#[test]
+fn full_lock_at_30_m_s_neither_spins_nor_rolls_the_car() {
+    let mut world = new_world();
+    accelerate_to(&mut world, 30.0);
+    let mut max_tilt_rad: f32 = 0.0;
+    let mut max_yaw_rate_rad_s: f32 = 0.0;
+
+    // Hold full left lock for 4 s with half throttle.
+    for _ in 0..4 * STEPS_PER_SECOND {
+        world.step(throttle_and_steer(64, 127));
+        max_tilt_rad = max_tilt_rad.max(world.tilt_rad());
+        max_yaw_rate_rad_s = max_yaw_rate_rad_s.max(world.angular_velocity_rad_s()[1].abs());
+    }
+
+    // A grip-limited circle at ~30 m/s and ~1.3 g turns at about 0.4 rad/s; a spin
+    // shows up as a much faster yaw rate, a roll as a large tilt.
+    assert!(
+        max_tilt_rad < 30f32.to_radians(),
+        "tilted {max_tilt_rad} rad"
+    );
+    assert!(
+        max_yaw_rate_rad_s < 1.0,
+        "yaw rate reached {max_yaw_rate_rad_s} rad/s"
+    );
+    assert!(world.wheels_touching_count() == 4);
+}
+
+#[test]
 fn letting_go_of_the_throttle_coasts_to_a_slow_stop() {
     let mut world = new_world();
-    run(&mut world, throttle(127), 2.0);
+    accelerate_to(&mut world, 20.0);
 
     run(&mut world, InputFrame::default(), 3.0);
 

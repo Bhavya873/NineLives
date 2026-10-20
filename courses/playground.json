@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "name": "Playground",
+  "start": { "pos": [0, 0.7, 0], "yaw": 0 },
+  "bounds": { "min": [-800, -20, -800], "max": [800, 60, 800] },
+  "pieces": [
+    { "type": "landing_pad", "pos": [-10, 0, 0] },
+
+    { "type": "ramp", "pos": [60, 0, 0], "length": 12, "width": 8, "angle_deg": 18 },
+    { "type": "landing_pad", "pos": [95, 0, 0] },
+    { "type": "ramp", "pos": [135, 0, 0], "length": 10, "width": 8, "angle_deg": 15 },
+    { "type": "car_row", "pos": [150, 0, 0], "count": 5, "height": 1.4, "hop_hint": true },
+    { "type": "kicker", "pos": [200, 0, 0], "length": 8, "width": 2, "angle_deg": 15, "side": "left" },
+    { "type": "bumps", "pos": [230, 0, 0], "count": 4, "height": 0.4 },
+    { "type": "kick_plate", "pos": [265, 0, 0], "impulse": [0, 4000, 3000], "angular": [2500, 0, 0] },
+    { "type": "kick_plate", "pos": [273, 0, 0], "impulse": [0, 4000, -3000], "angular": [-2500, 0, 0] },
+    { "type": "ramp", "pos": [310, 0, 0], "length": 15, "width": 8, "angle_deg": 22 },
+    { "type": "landing_pad", "pos": [345, 0, 0] },
+    { "type": "wall", "pos": [420, 0, 0], "height": 3, "with_ramp": true },
+
+    { "type": "halfpipe", "pos": [-40, 0, 80], "yaw": -90, "radius": 5, "length": 40 },
+    { "type": "halfpipe", "pos": [0, 0, 80], "yaw": -90, "radius": 6, "length": 40 },
+    { "type": "halfpipe", "pos": [40, 0, 80], "yaw": -90, "radius": 8, "length": 40 },
+    { "type": "kicker", "pos": [-70, 0, 140], "yaw": -90, "length": 8, "width": 2, "angle_deg": 15, "side": "left" },
+    { "type": "kicker", "pos": [70, 0, 140], "yaw": -90, "length": 8, "width": 2, "angle_deg": 15, "side": "right" },
+    { "type": "wall", "pos": [-25, 0, 150], "yaw": -90, "height": 2, "with_ramp": true },
+    { "type": "wall", "pos": [25, 0, 150], "yaw": -90, "height": 2.5, "with_ramp": true },
+    { "type": "halfpipe", "pos": [0, 0, 190], "yaw": -90, "radius": 7, "length": 60 },
+
+    { "type": "ramp", "pos": [-60, 0, -30], "yaw": 180, "length": 10, "width": 8, "angle_deg": 15 },
+    { "type": "landing_pad", "pos": [-95, 0, -30], "yaw": 180 },
+    { "type": "ramp", "pos": [-60, 0, 0], "yaw": 180, "length": 15, "width": 8, "angle_deg": 22 },
+    { "type": "landing_pad", "pos": [-105, 0, 0], "yaw": 180 },
+    { "type": "ramp", "pos": [-60, 0, 30], "yaw": 180, "length": 15, "width": 8, "angle_deg": 28 },
+    { "type": "landing_pad", "pos": [-115, 0, 30], "yaw": 180 },
+    { "type": "ramp", "pos": [-160, 0, -30], "yaw": 180, "length": 10, "width": 8, "angle_deg": 15 },
+    { "type": "car_row", "pos": [-175, 0, -30], "yaw": 180, "count": 3, "height": 1.0, "hop_hint": true },
+    { "type": "ramp", "pos": [-160, 0, 0], "yaw": 180, "length": 10, "width": 8, "angle_deg": 15 },
+    { "type": "car_row", "pos": [-175, 0, 0], "yaw": 180, "count": 5, "height": 1.4, "hop_hint": true },
+    { "type": "ramp", "pos": [-160, 0, 30], "yaw": 180, "length": 12, "width": 8, "angle_deg": 18 },
+    { "type": "car_row", "pos": [-177, 0, 30], "yaw": 180, "count": 2, "height": 2.0, "hop_hint": true },
+
+    { "type": "bumps", "pos": [-30, 0, -60], "yaw": 90, "count": 6, "height": 0.4 },
+    { "type": "bumps", "pos": [0, 0, -60], "yaw": 90, "count": 4, "height": 0.5 },
+    { "type": "bumps", "pos": [30, 0, -60], "yaw": 90, "count": 8, "height": 0.3 },
+    { "type": "kick_plate", "pos": [0, 0, -120], "yaw": 90, "impulse": [3000, 4000, 0], "angular": [0, 0, 2500] },
+    { "type": "kick_plate", "pos": [0, 0, -128], "yaw": 90, "impulse": [-3000, 4000, 0], "angular": [0, 0, -2500] },
+    { "type": "car_row", "pos": [-60, 0, -150], "yaw": 90, "count": 1, "height": 2.0 },
+    { "type": "car_row", "pos": [60, 0, -150], "yaw": 90, "count": 1, "height": 2.0 },
+    { "type": "wall", "pos": [-30, 0, -190], "yaw": 90, "height": 1.2 },
+    { "type": "wall", "pos": [30, 0, -190], "yaw": 90, "height": 1.2 },
+
+    { "type": "ramp", "pos": [64, 0, 64], "yaw": -45, "length": 10, "width": 6, "angle_deg": 15 },
+    { "type": "ramp", "pos": [-64, 0, 64], "yaw": -135, "length": 10, "width": 6, "angle_deg": 18 },
+    { "type": "ramp", "pos": [-64, 0, -64], "yaw": 135, "length": 10, "width": 6, "angle_deg": 15 },
+    { "type": "ramp", "pos": [64, 0, -64], "yaw": 45, "length": 10, "width": 6, "angle_deg": 18 }
+  ]
+}

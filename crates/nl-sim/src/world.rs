@@ -20,13 +20,13 @@ use crate::car_state::{
 };
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
-use crate::contacts::{MotionBeforeStep, is_touching, read_body_contacts};
+use crate::contacts::{MotionBeforeStep, is_touching, is_touching_tagged, read_body_contacts};
 use crate::conventions::{
     NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
     gravity_vector,
 };
 use crate::course::{BoundsSpec, CourseSpec};
-use crate::course_build::{build_course_shapes, shape_collider};
+use crate::course_build::{OBSTACLE_USER_DATA, build_course_shapes, shape_collider};
 use crate::course_triggers::{CourseTriggers, TriggerAction};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
@@ -78,7 +78,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 12;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 14;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -469,6 +469,12 @@ impl World {
             let extra = self.pending_events.len() - MAX_PENDING_EVENTS;
             self.pending_events.drain(..extra);
         }
+    }
+
+    /// True if the body or roof box touches an obstacle (a car row, bump or wall).
+    pub fn chassis_touching_obstacle(&self) -> bool {
+        is_touching_tagged(&self.physics, self.car.body_collider, OBSTACLE_USER_DATA)
+            || is_touching_tagged(&self.physics, self.car.roof_collider, OBSTACLE_USER_DATA)
     }
 
     /// True if the body or roof box touches anything now (wheels are rays, not boxes).

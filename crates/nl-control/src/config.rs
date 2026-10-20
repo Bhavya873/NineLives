@@ -18,8 +18,17 @@ pub struct PdConfig {
     pub kd: f32,
     /// Braking only happens while the car's up axis points at least this far up.
     pub upright_alignment: f32,
-    /// Braking only happens below this height.
+    /// Braking always starts by this height (the floor of the stopping-distance rule).
     pub brake_height_m: f32,
+    /// Braking starts this many times the stopping distance up, so a fast fall gets
+    /// thrust early enough to slow down (owner's free-play feedback: hard landings).
+    pub brake_safety: f32,
+    /// The share of full lift the stopping distance counts on (the rest is headroom for
+    /// attitude torque), 0..1.
+    pub brake_usable_fraction: f32,
+    /// Extra height added to the stopping distance: the centre of mass rides this far
+    /// above the ground on landing, plus slack, in m.
+    pub brake_margin_m: f32,
     /// ... and when falling faster than this.
     pub brake_speed_m_s: f32,
     /// The fall speed braking aims for.
@@ -34,6 +43,12 @@ pub struct PdConfig {
     /// Lying on the ground, the roll torque is multiplied by this: tipping the car over
     /// its side edge needs much more than turning it in the air.
     pub ground_roll_gain: f32,
+    /// Lying on its side, the side boosters push the car up with this share of its weight
+    /// (along whichever side axis points up), helping the roll torque flip it.
+    pub ground_side_push: f32,
+    /// In the air, sideways sliding is damped with this gain (1/s), so the side boosters
+    /// straighten the car's path before touchdown.
+    pub kv_lateral: f32,
 }
 
 /// Everything in controllers.toml.
@@ -73,12 +88,17 @@ impl ControllersConfig {
             ("pd.kd", pd.kd),
             ("pd.upright_alignment", pd.upright_alignment),
             ("pd.brake_height_m", pd.brake_height_m),
+            ("pd.brake_safety", pd.brake_safety),
+            ("pd.brake_usable_fraction", pd.brake_usable_fraction),
+            ("pd.brake_margin_m", pd.brake_margin_m),
             ("pd.brake_speed_m_s", pd.brake_speed_m_s),
             ("pd.target_descent_m_s", pd.target_descent_m_s),
             ("pd.kv", pd.kv),
             ("pd.on_ground_height_m", pd.on_ground_height_m),
             ("pd.lying_max_fall_speed_m_s", pd.lying_max_fall_speed_m_s),
             ("pd.ground_roll_gain", pd.ground_roll_gain),
+            ("pd.ground_side_push", pd.ground_side_push),
+            ("pd.kv_lateral", pd.kv_lateral),
             ("allocation.force_weight", allocation.force_weight),
             ("allocation.torque_weight", allocation.torque_weight),
             ("allocation.regularisation", allocation.regularisation),
@@ -89,11 +109,17 @@ impl ControllersConfig {
                 return Err(ControllersConfigError::NotPositive { field, value });
             }
         }
-        // An alignment is the cosine of a tilt, so it must be a fraction.
-        if pd.upright_alignment > 1.0 {
-            let field = "pd.upright_alignment";
-            let value = pd.upright_alignment;
-            return Err(ControllersConfigError::NotFraction { field, value });
+        // An alignment is the cosine of a tilt and the others are shares, so each must be
+        // a fraction.
+        let fractions = [
+            ("pd.upright_alignment", pd.upright_alignment),
+            ("pd.brake_usable_fraction", pd.brake_usable_fraction),
+            ("pd.ground_side_push", pd.ground_side_push),
+        ];
+        for (field, value) in fractions {
+            if value > 1.0 {
+                return Err(ControllersConfigError::NotFraction { field, value });
+            }
         }
         Ok(())
     }

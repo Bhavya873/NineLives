@@ -190,12 +190,12 @@ Pin the latest stable versions at scaffold time and record them in lockfiles (`C
 | Parameter | Value |
 |---|---|
 | Dry mass | 1800 kg *(start)* |
-| Chassis collider | cuboid, half-extents (2.1, 0.45, 1.0) m, plus a thin roof cuboid on top so the roof contact can be detected separately |
+| Chassis collider | cuboid, half-extents (2.1, 0.45, 1.0) m, with its bottom front and rear edges chamfered (0.6 m long, 0.3 m high: about 27° approach and departure angles, `chassis.underside_chamfer_m`) so the nose rides up halfpipe walls instead of digging in; plus a thin roof cuboid on top so the roof contact can be detected separately |
 | Inertia | set explicitly ≈ (850, 3250, 2900) kg·m² for (roll X, yaw Y, pitch Z) *(start)*; a real car is not a uniform box |
 | Wheels | `DynamicRayCastVehicleController`, 4 suspension mounts at (±1.3, 0.0, ±0.85), direction −Y, axle ±Z, radius 0.34 m, rest length 0.3 m, max travel 0.2 m *(start)*. This gives a centre of mass ≈ 0.6 m above the ground and ≈ 0.15 m ground clearance at rest |
 | Suspension | stiffness, compression and relaxation damping, max force: tune for stable landings from 2 m drops |
-| Drive | AWD; engine force up to 6 kN per wheel *(start)*; speed cap 45 m/s |
-| Steering | max 0.5 rad at low speed, scaled down to 0.15 rad at 40 m/s; rate-limited |
+| Drive | AWD; engine force up to 3 kN per wheel *(start)*, about 0–100 km/h in 4.2 s; speed cap 55 m/s |
+| Steering | max 0.5 rad at low speed, scaled down to 0.25 rad at 50 m/s; rate-limited to 3 rad/s |
 | Brakes | brake impulse per wheel *(start: tune)*; handbrake not needed |
 | Wheel contact | from each wheel's `raycast_info()`. Count a wheel as touching only if its ray hits **and** the car is upright enough (up·world_up > 0) so upward rays on an inverted car never count as contact. |
 
@@ -240,7 +240,7 @@ The 6×10 allocation matrix (force + torque per unit throttle) has rank 6, so ev
 - **Thruster interlock (M7):** while the car is steady on the ground (tilt ≤ 15°, centre of mass ≤ 1 m above the ground, |ω| ≤ 1 rad/s, vertical speed ≤ 1 m/s; `[thrusters.interlock]` in vehicle.toml), the controller's throttles are cut to 0. Hop and Boost feed-forward still fire. No controller can idle thrust while parked or push the car around while driving, and no save is ever cut: a falling, tilted or spinning car isn't steady. `World::thrusters_locked()` reports it.
 ### 7.5 Air tank
 - Mass flow per nozzle: `ṁ = F_actual / v_e`, with `v_e = 600 m/s` (cold-gas air). At full lift (48 kN) that is 80 kg/s.
-- **Realistic:** capacity 260 kg (the reported figure), so full lift lasts about 3.25 s. Refill +5 kg/s while ≥ 3 wheels touch. This refill rate is a gameplay concession; label it so in the UI help text.
+- **Realistic:** capacity 260 kg (the reported figure), so full lift lasts about 3.25 s. Refill +20 kg/s while ≥ 3 wheels touch and no thruster has fired for 0.5 s (`refill_delay_s`); empty to full in about 13 s. This refill rate is a gameplay concession; label it so in the UI help text.
 - **Empty tank:** thrust scales to 0 smoothly over the last 2% of air, so nothing pops.
 - **Pressure falloff** *(v2, flag)*: `F_max · (0.5 + 0.5 · fill)`.
 - **Arcade:** unlimited air. Still track "air used" for stats.
@@ -249,7 +249,7 @@ The 6×10 allocation matrix (force + torque per unit throttle) has rank 6, so ev
 | Parameter | Realistic | Arcade |
 |---|---|---|
 | Thrust scale (× table 7.4) | 1.0 | 2.0 |
-| Tank | 260 kg, refill 5 kg/s | unlimited |
+| Tank | 260 kg, refill 20 kg/s after 0.5 s idle | unlimited |
 | Hop feed-forward | 0.75 on L_* for 0.40 s | 0.75 on L_* for 0.35 s |
 | Hop apex, flat ground, controller Off (computed) | ≈ 1.7 m | ≈ 7.5 m |
 | Hop air cost | ≈ 24 kg | n/a |
@@ -257,7 +257,7 @@ The 6×10 allocation matrix (force + torque per unit throttle) has rank 6, so ev
 | Boost extra acceleration | ≈ 0.9 g | ≈ 1.8 g |
 | Hop cooldown | 1.5 s | 0.8 s |
 
-Mode parameters are a struct `ModeParams { thrust_scale, unlimited_air, tank_capacity_kg, refill_kg_s, hop_ff, hop_s, hop_cooldown_s }`. Training samples it continuously (9.8), so a single policy serves both modes.
+Mode parameters are a struct `ModeParams { thrust_scale, unlimited_air, tank_capacity_kg, refill_kg_s, refill_delay_s, hop_ff, hop_s, hop_cooldown_s }`. Training samples it continuously (9.8), so a single policy serves both modes.
 
 ### 7.7 Throttle pipeline *(req)*
 ```
@@ -312,10 +312,10 @@ Course JSON, schema version 1:
 - The course runs along world **+X**. A piece's local +X is its run direction and `yaw` rotates it about +Y, the same convention as the car, so `yaw: 0` everywhere means a straight course.
 - `car_row` boxes are 4.5 m long, 1.9 m wide and `height` tall, with 0.6 m gaps between them.
 - Piece types: `ramp`, `kicker` (a one-sided ramp that rolls the car), `gap`, `car_row` (static boxes; `hop_hint` tells the driver bot to Hop), `halfpipe`, `bumps`, `kick_plate` (applies impulses in N·s and N·m·s on contact, once per pass), `wall`, `landing_pad`, `checkpoint`, `finish`.
-- **Geometry** (`nl-sim/src/course_build.rs`, M7): Ramps, kickers and wall ramps curve up from flat to `angle_deg` at the lip in 6 convex segments of rising slope, so their height is below `length · tan(angle)`; a straight wedge's sharp foot crashed fast cars. `yaw` is in degrees and defaults to 0. The floor is the bounds' footprint with its top at y = 0; a `gap` cuts it across its whole width from `pos.x` to `pos.x + length` (gaps run along world X). Car-row boxes stand nose to tail along local +X. Pieces without a width use a 16 m lane. `bumps` are gentle humps 5 m long, one every 6 m, so the wheels lift the car before the chassis nose (0.14 m clearance) reaches them. A `kicker` runs from the lane's centre line out to `width` on its side, and its top slopes down to zero at the centre line, so only that side's wheels climb and no wall sits under the car. A `wall` is 1 m thick; `with_ramp` adds a 10 m, 30° curved ramp (lip about 3.2 m) ending 2 m before it. Ramp, kicker and bump hulls reach 0.2 m below the floor, so even a nearly flat segment builds a solid collider. A `halfpipe` is a U-channel along +X: a 4 m flat floor between two quarter circles of `radius`, each made of 8 flat panels. `landing_pad` (20 m), `kick_plate` (4 m), `checkpoint` and `finish` (0.5 m long, 20 m wide so a car can't drive around them) are flat markings the car drives through, not colliders. Leaving the bounds box with the centre of mass is an `OutOfBounds` crash.
+- **Geometry** (`nl-sim/src/course_build.rs`, M7): Ramps, kickers and wall ramps curve up from flat to `angle_deg` at the lip in 6 straight segments of rising slope, built as one closed trimesh per piece with Rapier's internal-edge fix (separate convex segments stopped the car dead on their seams), so their height is below `length · tan(angle)`; a straight wedge's sharp foot crashed fast cars. `yaw` is in degrees and defaults to 0. The floor is the bounds' footprint with its top at y = 0; a `gap` cuts it across its whole width from `pos.x` to `pos.x + length` (gaps run along world X). Car-row boxes stand nose to tail along local +X. Pieces without a width use a 16 m lane. `bumps` are gentle humps 5 m long, one every 6 m, so the wheels lift the car before the chassis nose (0.14 m clearance) reaches them. A `kicker` runs from the lane's centre line out to `width` on its side, and its top slopes down to zero at the centre line, so only that side's wheels climb and no wall sits under the car. A `wall` is 1 m thick; `with_ramp` adds a 10 m, 30° curved ramp (lip about 3.2 m) ending 2 m before it. Ramp, kicker and bump hulls reach 0.2 m below the floor, so even a nearly flat segment builds a solid collider. A `halfpipe` is a U-channel along +X: a 4 m flat floor between two quarter circles of `radius`, each wall one 0.3 m thick trimesh of 16 facets. Obstacle colliders (car rows, bumps, walls) carry `OBSTACLE_USER_DATA`; a Stage C/D obstacle hit needs the chassis to touch one inside a row's zone. `landing_pad` (20 m), `kick_plate` (4 m), `checkpoint` and `finish` (0.5 m long, 20 m wide so a car can't drive around them) are flat markings the car drives through, not colliders. Leaving the bounds box with the centre of mass is an `OutOfBounds` crash.
 - **Triggers** (`nl-sim/src/course_triggers.rs`, M7): each checkpoint, finish line and kick plate is a box standing on its marking, tested against the path of the car's centre of mass since the last physics step, so a fast car can't step over a 0.5 m line. Lines reach 30 m up, so jumping over one counts; kick plates reach 1.5 m. A trigger fires once, then re-arms only when the car leaves its footprint, so a car thrown up by a plate that lands back on it isn't kicked again. Teleports (respawn, place) re-arm every trigger. Kick impulses are in the world frame. Lines must sit on flat floor, because the respawn is level and 0.7 m above the line. Checkpoints count in file order, and a car can skip ahead but never go back. Reaching one moves the respawn point onto the line: upright, facing the line's yaw, at rest. Keeping the speed made a crash just past a checkpoint repeat forever. The finish counts once. Events: `CheckpointReached { number }`, `Finished { time_s }`, `Kicked { piece }` (wasm `EventKind` 7, 8, 9).
 - **Checks** (`nl-sim/src/course.rs`): version 1 only; at most 200 pieces; every number finite; sizes 0.1–500 m; `count` 1–20; `angle_deg` in [1, 60); bounds min < max and within ±5 km; the start and every piece `pos` inside the bounds; unknown fields and types are refused. Errors name the piece and field. `courses/gauntlet.json` is the source of truth for the Gauntlet; the JSON above is an example. `courses/arena.json` is the training viewer's obstacle arena (§11.6): four ramps facing outward, rows and single blocks, two bump strips and four low walls in a ring 11–46 m from the origin, around a clear drop zone (a landing pad marking) where Stage A drops start; bounds ±800 m, beyond the fog's 700 m end, so the floor's edge never shows. `Episode::start_on_course` places a scenario's car on a course in place of the course's own start.
-- **Wasm and web** (M7): `Game.load_course(json)` starts a fresh run on a course and returns its shapes as JSON for the renderer; `Game.load_flat_ground()` goes back to the arena. HUD fields 16–19 hold checkpoints reached and total, finished, and finish time. In the game, Enter starts the Gauntlet, F returns to free driving, and `?course=gauntlet` opens straight into it. The results screen shows time, saves, lives used and air used.
+- **Wasm and web** (M7): `Game.load_course(json)` starts a fresh run on a course and returns its shapes as JSON for the renderer; `Game.load_flat_ground()` goes back to the arena. HUD fields 16–19 hold checkpoints reached and total, finished, and finish time. In the game, Enter starts the Gauntlet, F returns to free driving, and `?course=gauntlet` opens straight into it. Free driving happens in the **playground** (`courses/playground.json`), an open world built only from piece types the AI trains on: a jump boulevard along +X (ramps to landing pads, a car row to Hop, a kicker, bumps, kick plates, a wall jump), a skate park along +Z (four halfpipes of radius 5–8 m, kickers, wall jumps), a jump field along −X (ramps of 15°, 22° and 28° to landing pads, car rows of 1–2 m behind ramps), a bumps and kick-plate strip along −Z, and four free-roam ramps on the diagonals, around a clear spawn (no piece within about 55 m) with open floor between the zones; every piece stays over 300 m inside the ±800 m bounds. `?world=flat` keeps the empty arena. The Rust eval runner takes `--course <json>` (`eval::run_episode_on_course`) to run any stage on a course. The results screen shows time, saves, lives used and air used.
 - **Gauntlet** (the demo course), in order: start straight → kicker → gap → car row (Hop) → halfpipe (flip back) → bumps + kick plates → big ramp to a landing pad → wall with ramp → finish. A checkpoint after each section.
 - **Procedural generator** (training): 4–8 pieces sampled from `pieces.json` with random parameters inside safe ranges, joined by straights of 20–40 m.
 - **Generator notes** (`nl-sim/src/course_gen.rs`, `configs/pieces.json`, M7): courses run straight along +X on a 20 m track (bounds z ±10), start at rest at the origin. Each piece is a straight (at least 33 m before a jump: ramp, ramp + gap, wall), the piece, then its flat run-out (the landing zone); a checkpoint follows every run-out but the last, where the finish goes. Piece kinds: `ramp`, `ramp_gap` (a gap right after the lip, short enough to clear at 10 m/s), `kicker` (3.5–4.5 m wide, random side), `bumps`, `kick_plate` (up, sideways and a matching roll), `halfpipe`, `wall` (weight 0 for now: its 30° ramp throws a car going over 20 m/s about 10 m up). No car rows: Stage C practises those. Draws use ChaCha8 stream 4 of the episode seed; every course passes the checks above (a test writes 300 to JSON and reads them back). The ranges are kept to what the driver bot with PD finishes (98 of 100 seeds).
@@ -338,12 +338,13 @@ pub trait Controller {
 `act` takes only `ctx`: the driver's `InputFrame`, the car's `CarState` (the physical quantities the observation packs) and, from M5, the `observation` built from them (§9.2), which the AI reads. Every runner builds it with `ControlCtx::for_world`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
-2. **Manual** (debug only): keys map to individual nozzles at throttle 1.
+2. **Manual** (debug only, not in the T cycle): keys map to individual nozzles at throttle 1.
 3. **Pd** (baseline):
    - **Attitude:** the desired up direction in the body frame is `up_des = −g_dir_body`; the error axis is `e = (0,1,0) × up_des`; the desired torque is `τ = I · (kp·e − kd·ω)`, with kp = 8 and kd = 4 *(start)*.
-   - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if height < 3 m and downward speed > 4 m/s, command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. Otherwise `F_y = 0` (saves air).
+   - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if downward speed > 4 m/s and height < max(3 m, 1.3 × the stopping distance + 1 m), command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. The stopping distance is (v_down² − 1.5²) / (2a), with a = 0.8 × full lift × the mode's thrust scale / m − g, so a fast fall brakes early enough to stop (a fixed 3 m start landed 10–15 m/s falls hard). Otherwise `F_y = 0` (saves air).
+   - **Sideways, airborne and roughly upright:** `F_z = −m · kv_lateral · v_z` (body frame), kv_lateral = 1.5, so the side boosters cancel a slide before touchdown.
    - **Allocation:** solve `min ‖W(B·u − w)‖² + λ‖u‖²` subject to `0 ≤ u ≤ 1`, with `w = [0, F_y, 0, τx, τy, τz]` and `B` the 6×10 matrix scaled by max force. Use projected gradient descent (30 iterations, step `1/L`) or a small active-set NNLS. Torque weights are higher than force weights.
-   - **On the ground and inverted:** use roll torque only, to flip back.
+   - **On the ground and tipped over:** roll torque to flip back, plus a side-booster push along whichever body side axis points up, `ground_side_push` (0.4) × the car's weight.
    - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m`, not upright and nearly still, and there the roll torque is multiplied by `ground_roll_gain` (tipping the car over its side edge needs far more torque than turning it in the air); when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
 4. **Ai:** loads `models/policy.json`, normalizes the observation, runs the MLP forward pass, and maps the action from [−1, 1] to [0, 1]. The policy is deterministic (mean action).
 
@@ -555,9 +556,9 @@ class Game {
 | C | Chaos (random knock) |
 | X | Drop test: throw the car into a random Stage A start (§9.6), to watch the controller save it |
 | M | toggle Realistic / Arcade |
-| T | cycle controller: Off → Manual in M3; Off → PD → Manual in M4; Off → PD → AI → Manual from M5 (Manual stays reachable for debugging) |
+| T | cycle controller: Off → PD → AI (AI once its policy has loaded). The game starts with PD. Manual is not in the cycle; it stays reachable for debugging only through `set_controller("manual")` |
 | G | toggle ghost |
-| 1–0 | fire nozzles 0–9 (only when the controller is Manual) |
+| 1–0 | fire nozzles 0–9 (only when the controller is Manual, set through the API) |
 | Esc | pause / menu |
 
 ### 11.4 Visuals

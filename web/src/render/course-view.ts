@@ -5,6 +5,7 @@ import {
   BoxGeometry,
   BufferGeometry,
   DoubleSide,
+  Float32BufferAttribute,
   Group,
   Material,
   Mesh,
@@ -25,7 +26,10 @@ type Surface =
 /** One shape as the wasm `Game.load_course` JSON gives it. */
 interface CourseShape {
   surface: Surface;
-  geometry: { box: { half_extents_m: number[] } } | { hull: { points_m: number[][] } };
+  geometry:
+    | { box: { half_extents_m: number[] } }
+    | { hull: { points_m: number[][] } }
+    | { mesh: { points_m: number[][]; triangles: number[][] } };
   pose: { position_m: number[]; rotation_xyzw: number[] };
   solid: boolean;
 }
@@ -125,14 +129,31 @@ function buildShapeMesh(shape: CourseShape, materials: Map<string, Material>): M
   return mesh;
 }
 
-/** A box or a convex hull, in the shape's own frame. */
+/** A box, a convex hull or a triangle mesh, in the shape's own frame. */
 function buildGeometry(shape: CourseShape): BufferGeometry {
   if ('box' in shape.geometry) {
     const [hx = 0, hy = 0, hz = 0] = shape.geometry.box.half_extents_m;
     return new BoxGeometry(2 * hx, 2 * hy, 2 * hz);
   }
+  if ('mesh' in shape.geometry) {
+    return buildMeshGeometry(shape.geometry.mesh.points_m, shape.geometry.mesh.triangles);
+  }
   const points = shape.geometry.hull.points_m.map(([x = 0, y = 0, z = 0]) => new Vector3(x, y, z));
   return new ConvexGeometry(points);
+}
+
+/**
+ * A curved piece's closed mesh (ramps, kickers, halfpipe walls): the sim's triangles,
+ * counter-clockwise from outside, with flat per-face normals for the low-poly look.
+ */
+function buildMeshGeometry(points: number[][], triangles: number[][]): BufferGeometry {
+  const indexed = new BufferGeometry();
+  indexed.setAttribute('position', new Float32BufferAttribute(points.flat(), 3));
+  indexed.setIndex(triangles.flat());
+  const geometry = indexed.toNonIndexed();
+  indexed.dispose();
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 /** The checkered floor for floor boxes, a plain flat-shaded colour for the rest. */

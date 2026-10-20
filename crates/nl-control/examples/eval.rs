@@ -4,14 +4,17 @@
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0
 //! (`--controller ai` reads `--policy`, default models/policy.json; `--dr` turns on
-//! domain randomization, SPEC §9.8, and adds `_dr` to the file name)
+//! domain randomization, SPEC §9.8, and adds `_dr` to the file name; `--course <json>`
+//! runs the episodes on that course, e.g. courses/playground.json, and adds its file
+//! stem, e.g. `_playground`)
 
 use std::error::Error;
 
 use nl_control::ControllerKind;
 use nl_control::build_controller;
 use nl_control::config::DEFAULT_CONTROLLERS_TOML;
-use nl_control::eval::{run_episode, summarise};
+use nl_control::eval::{run_episode, run_episode_on_course, summarise};
+use nl_sim::course::CourseSpec;
 use nl_sim::episode::EpisodeResult;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
 use nl_sim::randomization::EpisodeVariation;
@@ -27,6 +30,8 @@ struct Args {
     seed: u64,
     policy: String,
     randomize: bool,
+    /// A course JSON file to run the episodes on; None: flat ground.
+    course: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -41,6 +46,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut controller = build_named_controller(&args, &vehicle, mode)?;
     let randomization = args.randomize.then_some(&scenarios.randomization);
+    let course = match &args.course {
+        Some(path) => Some(CourseSpec::from_json_str(&std::fs::read_to_string(path)?)?),
+        None => None,
+    };
     let mut results: Vec<EpisodeResult> = Vec::new();
     for episode in 0..args.episodes {
         let seed = args
@@ -48,7 +57,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .checked_add(episode)
             .ok_or("--seed is too large")?;
         let variation = EpisodeVariation::for_seed(randomization, &vehicle, mode, seed);
-        let result = run_episode(&variation, &scenarios, stage, &mut controller, seed)?;
+        let result = match &course {
+            Some(course) => {
+                run_episode_on_course(&variation, &scenarios, stage, course, &mut controller, seed)?
+            }
+            None => run_episode(&variation, &scenarios, stage, &mut controller, seed)?,
+        };
         results.push(result);
     }
     write_report(&args, &results)
@@ -64,11 +78,21 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
         "mode": args.mode,
         "first_seed": args.seed,
         "randomized": args.randomize,
+        "course": args.course,
         "summary": summary,
         "episodes": results,
     });
     std::fs::create_dir_all("results")?;
-    let suffix = if args.randomize { "_dr" } else { "" };
+    let mut suffix = String::new();
+    if let Some(path) = &args.course {
+        let stem = std::path::Path::new(path)
+            .file_stem()
+            .and_then(|stem| stem.to_str());
+        suffix = format!("_{}", stem.unwrap_or("course"));
+    }
+    if args.randomize {
+        suffix.push_str("_dr");
+    }
     let path = format!(
         "results/eval_{}_{}_{}{suffix}.json",
         args.controller, stage_name, args.mode
@@ -114,6 +138,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
         seed: 0,
         policy: "models/policy.json".to_string(),
         randomize: false,
+        course: None,
     };
     let mut words = std::env::args().skip(1);
     while let Some(name) = words.next() {
@@ -130,6 +155,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
             "--episodes" => args.episodes = whole_number(name, value)?,
             "--seed" => args.seed = whole_number(name, value)?,
             "--policy" => args.policy = value.clone(),
+            "--course" => args.course = Some(value.clone()),
             other => return Err(format!("unknown option {other}").into()),
         }
     }

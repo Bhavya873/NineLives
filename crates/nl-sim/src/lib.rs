@@ -13,6 +13,7 @@ pub mod conventions;
 pub mod course;
 pub mod course_build;
 pub mod course_gen;
+pub mod course_mesh;
 pub mod course_triggers;
 pub mod driver_bot;
 pub mod driving_stages;
