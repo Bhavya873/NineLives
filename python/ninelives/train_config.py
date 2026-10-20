@@ -38,6 +38,21 @@ class PpoSettings:
 
 
 @dataclass
+class ResidualSettings:
+    """Residual control (M7 approach 2): each throttle is the base controller's plus
+    `scale` × the policy's action, clamped to [0, 1], all in Rust."""
+
+    # The controller the policy nudges; only "pd".
+    base: str
+    # Throttle per unit of action: an action in [−1, 1] moves a throttle by up to ±scale.
+    scale: float
+
+    def as_sim_json(self) -> dict[str, object]:
+        """The `residual` entry of the sim config JSON (crates/nl-py/src/config.rs)."""
+        return {"base": self.base, "scale": self.scale}
+
+
+@dataclass
 class TrainConfig:
     """One training run's settings."""
 
@@ -66,6 +81,10 @@ class TrainConfig:
     checkpoint_every_steps: int
     eval_episodes: int
     eval_seed: int
+    # Residual control around PD; None trains the policy's action as the throttle.
+    residual: ResidualSettings | None = None
+    # Start with every stage unlocked at its hardest level (no curriculum to climb).
+    curriculum_start_at_hardest: bool = False
 
 
 def load_train_config(path: Path) -> TrainConfig:
@@ -101,11 +120,25 @@ def load_train_config(path: Path) -> TrainConfig:
             checkpoint_every_steps=int(raw["checkpoint"]["every_steps"]),
             eval_episodes=int(raw["checkpoint"]["eval_episodes"]),
             eval_seed=int(raw["checkpoint"]["eval_seed"]),
+            residual=read_residual(raw.get("residual")),
+            curriculum_start_at_hardest=strict_bool(
+                "curriculum.start_at_hardest", raw["curriculum"].get("start_at_hardest", False)
+            ),
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error
     check_ranges(path, config)
     return config
+
+
+def read_residual(raw: dict[str, Any] | None) -> ResidualSettings | None:
+    """The optional `residual` section: `{base: pd, scale: 0.5}`."""
+    if raw is None:
+        return None
+    unknown = set(raw) - set(ResidualSettings.__dataclass_fields__)
+    if unknown:
+        raise ValueError(f"unknown residual settings {sorted(unknown)}")
+    return ResidualSettings(base=str(raw["base"]), scale=float(raw["scale"]))
 
 
 def read_bar(value: object) -> float | list[float]:
@@ -161,6 +194,7 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
             f"0–{TEST_SEED_COUNT - 1} are the test seeds of the final eval, never used to "
             "choose checkpoints or promote stages"
         )
+    check_residual(path, config)
     if config.curriculum_promote_on not in ("eval", "training"):
         raise ValueError(f'{path}: curriculum.promote_on must be "eval" or "training"')
     counts = {
@@ -172,6 +206,23 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     for name, value in counts.items():
         if value < 1:
             raise ValueError(f"{path}: {name} must be at least 1, not {value}")
+
+
+def check_residual(path: Path, config: TrainConfig) -> None:
+    """A residual run nudges PD, so its policy must start at a zero action: the action
+    head starts zeroed, and an action bias would be silently ignored."""
+    residual = config.residual
+    if residual is None:
+        return
+    if residual.base != "pd":
+        raise ValueError(f'{path}: residual.base must be "pd", not {residual.base!r}')
+    if not residual.scale > 0.0:
+        raise ValueError(f"{path}: residual.scale must be above 0, not {residual.scale}")
+    if config.ppo.initial_action_bias != 0.0:
+        raise ValueError(
+            f"{path}: with residual control set ppo.initial_action_bias to 0 (a zero action "
+            "is exactly PD); a bias of −1 would start by pulling every throttle down"
+        )
 
 
 def check_stages(path: Path, config: TrainConfig) -> None:

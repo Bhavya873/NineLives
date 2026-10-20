@@ -19,7 +19,12 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.utils import LinearSchedule
 from stable_baselines3.common.vec_env import VecNormalize
 
-from ninelives.callbacks import CurriculumCallback, RunCheckpointCallback, TimeLimitCallback
+from ninelives.callbacks import (
+    CurriculumCallback,
+    RunCheckpointCallback,
+    TimeLimitCallback,
+    residual_json,
+)
 from ninelives.curriculum import Curriculum
 from ninelives.env import NineLivesVecEnv
 from ninelives.eval import evaluate
@@ -57,8 +62,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def fresh_curriculum(config: TrainConfig, env: NineLivesVecEnv) -> Curriculum:
-    """The run's first stage unlocked at level 0, with the level counts the sim reports."""
-    return Curriculum(
+    """The run's first stage unlocked at level 0, with the level counts the sim reports;
+    with `curriculum.start_at_hardest`, every stage unlocked at its hardest level."""
+    curriculum = Curriculum(
         stages=config.stages,
         weights=config.stage_weights,
         level_counts={stage: env.sim.level_count(stage) for stage in config.stages},
@@ -66,6 +72,11 @@ def fresh_curriculum(config: TrainConfig, env: NineLivesVecEnv) -> Curriculum:
         advance_at=config.curriculum_advance_at,
         unlock_every_steps=config.curriculum_unlock_every_steps,
     )
+    if config.curriculum_start_at_hardest:
+        curriculum.unlocked = len(config.stages)
+        for stage in config.stages:
+            curriculum.levels[stage] = curriculum.level_counts[stage] - 1
+    return curriculum
 
 
 def pd_baseline(config: TrainConfig) -> dict[str, float]:
@@ -98,6 +109,15 @@ def start_with_action_bias(model: PPO, action_bias: float) -> None:
     gets explored (docs/EXPERIMENTS.md, m7-full runs)."""
     with torch.no_grad():
         model.policy.action_net.bias.fill_(action_bias)
+
+
+def start_at_zero_action(model: PPO) -> None:
+    """Zeroes a fresh policy's action head (weights and bias), so every action mean is
+    exactly 0 whatever the observation: a residual run starts as pure PD. Gradients still
+    reach the zeroed weights, so the head learns from the first update."""
+    with torch.no_grad():
+        model.policy.action_net.weight.zero_()
+        model.policy.action_net.bias.zero_()
 
 
 def new_run(
@@ -133,7 +153,9 @@ def new_run(
         seed=config.seed,
         device="cpu",
     )
-    if init_from is None:
+    if init_from is None and config.residual is not None:
+        start_at_zero_action(model)
+    elif init_from is None:
         start_with_action_bias(model, ppo.initial_action_bias)
     else:
         warm_start(model, normalizer, init_from)
@@ -186,6 +208,7 @@ def train(argv: list[str] | None = None) -> RunState:
         config.stages[0],
         config.randomize,
         config.reward_overrides,
+        residual_json(config),
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)

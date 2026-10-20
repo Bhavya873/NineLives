@@ -3,6 +3,7 @@
 Training uses it to keep the best checkpoint (SPEC §9.10): every episode starts from a
 known seed, and the policy acts deterministically on observations normalized with the
 run's VecNormalize statistics. Each result is BatchedSim's episode row (SPEC §10 fields).
+A residual run's policy is scored the way it trained: as PD plus its residual.
 """
 
 from typing import Any
@@ -24,9 +25,12 @@ def evaluate_fixed_seeds(
     mode: str,
     stage: str,
     level: int,
+    residual: dict[str, object] | None = None,
 ) -> list[dict[str, Any]]:
-    """One episode per seed first_seed, first_seed + 1, …; their rows in seed order."""
-    sim = BatchedSim(episodes, load_sim_config(mode, stage), first_seed)
+    """One episode per seed first_seed, first_seed + 1, …; their rows in seed order.
+    `residual` is the run's `ResidualSettings.as_sim_json()` (None: no residual)."""
+    config = load_sim_config(mode, stage, residual=residual)
+    sim = BatchedSim(episodes, config, first_seed)
     sim.set_stage_and_level(stage, level)
     observations = sim.reset(np.arange(first_seed, first_seed + episodes, dtype=np.uint64))
     rows: list[dict[str, Any] | None] = [None] * episodes

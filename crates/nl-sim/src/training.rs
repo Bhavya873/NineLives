@@ -6,12 +6,12 @@
 
 use serde::Serialize;
 
-use crate::car_state::Touchdown;
+use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::driving_stages::{pick_weighted, stream_rng};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
 use crate::modes::ModeParams;
-use crate::obs::Observation;
+use crate::obs::{OBS_DIM, Observation};
 use crate::randomization::EpisodeVariation;
 use crate::reward::{RewardConfig, RewardTerms, StepSummary, reward_terms};
 use crate::scenarios::{ScenariosConfig, Stage};
@@ -97,6 +97,10 @@ pub struct TrainingEnv {
     stage: Stage,
     level: u32,
     episode: Option<Episode>,
+    /// What a controller saw with the latest observation: the same noisy car state and
+    /// observation (`Episode::controller_view`), so a base controller such as PD can act
+    /// on exactly what the policy acted on (residual control).
+    view: (CarState, Observation),
     /// The throttles of the last control step (for the smoothness cost).
     previous_throttles: [f32; NOZZLE_COUNT],
     /// How long nothing (wheels, body or roof) has touched anything, in s.
@@ -117,6 +121,7 @@ impl TrainingEnv {
             stage,
             level: 0,
             episode: None,
+            view: (CarState::default(), [0.0; OBS_DIM]),
             previous_throttles: [0.0; NOZZLE_COUNT],
             flying_s: 0.0,
             control_steps: 0,
@@ -166,7 +171,8 @@ impl TrainingEnv {
         self.episode = None;
         let (stage, level) = self.pick_stage(seed);
         let mut episode = self.start_episode(stage, level, seed)?;
-        let observation = episode.observe();
+        self.view = episode.controller_view();
+        let observation = self.view.1;
         self.episode = Some(episode);
         self.stage = stage;
         self.level = level;
@@ -179,7 +185,18 @@ impl TrainingEnv {
     /// One control step with the policy's `action` (each in −1..1, SPEC §9.3). Returns
     /// None before the first `reset` or after the episode ended (call `reset` again).
     pub fn step(&mut self, action: [f32; NOZZLE_COUNT]) -> Option<StepOutcome> {
-        let throttles = throttles_from_action(action);
+        self.step_throttles(throttles_from_action(action))
+    }
+
+    /// The noisy car state and the observation a controller saw at the latest `reset`
+    /// or `step` (the observation is the one that call returned).
+    pub fn controller_view(&self) -> (CarState, Observation) {
+        self.view
+    }
+
+    /// One control step with `throttles` (each in 0..1) given directly, e.g. PD's
+    /// throttles plus a policy's residual. Returns None like `step`.
+    pub fn step_throttles(&mut self, throttles: [f32; NOZZLE_COUNT]) -> Option<StepOutcome> {
         let mut episode = self.episode.take()?;
         if episode.status() != EpisodeStatus::Running {
             self.episode = Some(episode);
@@ -209,8 +226,9 @@ impl TrainingEnv {
         let air_used_kg = episode.world().air_used_kg() - air_before_kg;
         let summary = self.summarise(&episode, throttles, air_used_kg, step_events);
         self.previous_throttles = throttles;
+        self.view = episode.controller_view();
         let outcome = StepOutcome {
-            observation: episode.observe(),
+            observation: self.view.1,
             terms: reward_terms(&summary, &self.config.reward),
             terminated: crashed
                 || matches!(

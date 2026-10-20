@@ -19,10 +19,13 @@ def load_sim_config(
     stage: str = "A",
     randomize: bool = False,
     reward_overrides: dict[str, float] | None = None,
+    residual: dict[str, object] | None = None,
 ) -> str:
     """The sim config JSON for `mode` ("realistic" or "arcade") and `stage`; `randomize`
     turns on SPEC §9.8 domain randomization for BatchedSim episodes (training only);
-    `reward_overrides` replaces `[weights]` values of reward.toml (e.g. for an ablation)."""
+    `reward_overrides` replaces `[weights]` values of reward.toml (e.g. for an ablation);
+    `residual` (`{"base": "pd", "scale": …}`) makes BatchedSim add the action to PD's
+    throttles (`ResidualSettings.as_sim_json`)."""
     if not CONFIGS_DIR.is_dir():
         raise FileNotFoundError(
             f"configs folder not found at {CONFIGS_DIR}: install ninelives from the repo "
@@ -41,6 +44,8 @@ def load_sim_config(
         "stage": stage,
         "randomize": randomize,
     }
+    if residual is not None:
+        config["residual"] = residual
     return json.dumps(config)
 
 

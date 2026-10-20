@@ -19,6 +19,7 @@ pub mod eval;
 mod manual;
 mod off;
 mod pd;
+mod residual;
 
 pub use ai::Ai;
 pub use controller_kind::{
@@ -28,6 +29,7 @@ pub use controller_kind::{
 pub use manual::Manual;
 pub use off::Off;
 pub use pd::Pd;
+pub use residual::{ResidualPd, add_residual};
 
 /// What a controller may look at on a control step (SPEC §8).
 #[derive(Debug, Clone, Copy, PartialEq)]

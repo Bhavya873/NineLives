@@ -143,6 +143,7 @@ class RunCheckpointCallback(BaseCallback):
             mode=self.config.mode,
             stage=stage,
             level=level,
+            residual=residual_json(self.config),
         )
 
     def evaluate(self, normalizer: VecNormalize, stages: list[str]) -> float:
@@ -167,6 +168,11 @@ class RunCheckpointCallback(BaseCallback):
     def record_progress(self, steps: int) -> None:
         """Records `steps` and this run's total wall time in the shared state."""
         record_progress(self.state, steps, self.wall_seconds_before, self.started_at)
+
+
+def residual_json(config: TrainConfig) -> dict[str, object] | None:
+    """The run's residual setting as the sim config wants it (None without one)."""
+    return None if config.residual is None else config.residual.as_sim_json()
 
 
 class TimeLimitCallback(BaseCallback):
