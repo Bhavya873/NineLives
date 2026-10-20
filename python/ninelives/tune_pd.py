@@ -33,8 +33,10 @@ TUNING_CELLS = [
     for randomize in (False, True)
 ]
 FIRST_TUNING_SEED = 2_000_000
-# Up alignment is a cosine: a threshold of 1 or more would never count as upright.
-MAX_UPRIGHT_ALIGNMENT = 0.99
+# Gains controllers.toml requires to be fractions (an up alignment is a cosine; the others
+# are shares of lift or weight), capped just below 1.
+FRACTION_GAINS = ("upright_alignment", "brake_usable_fraction", "ground_side_push")
+MAX_FRACTION = 0.99
 
 
 def pd_gains(controllers_toml: str) -> dict[str, float]:
@@ -58,7 +60,9 @@ def scaled_gains(base: dict[str, float], log_factors: list[float]) -> dict[str, 
     gains = {}
     for (name, value), log_factor in zip(base.items(), log_factors, strict=True):
         gains[name] = value * math.exp(log_factor)
-    gains["upright_alignment"] = min(gains["upright_alignment"], MAX_UPRIGHT_ALIGNMENT)
+    for name in FRACTION_GAINS:
+        if name in gains:
+            gains[name] = min(gains[name], MAX_FRACTION)
     return gains
 
 
