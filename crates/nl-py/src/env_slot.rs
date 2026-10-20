@@ -3,7 +3,7 @@
 //! observation and starts the next episode straight away). With residual control the
 //! slot also runs PD and adds the action to PD's throttles. Plain Rust, no Python types.
 
-use nl_control::{ControlCtx, ResidualPd};
+use nl_control::{ControlCtx, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::input::InputFrame;
 use nl_sim::obs::Observation;
@@ -77,8 +77,9 @@ impl EnvSlot {
             .map_err(|error| format!("episode seed {seed}: {error}"))
     }
 
-    /// One control step; an episode that ends here is replaced by a fresh one.
-    pub fn step(&mut self, action: [f32; NOZZLE_COUNT]) -> Result<SlotStep, String> {
+    /// One control step; an episode that ends here is replaced by a fresh one. The last
+    /// action is the residual gate, unused without gated residual control.
+    pub fn step(&mut self, action: [f32; RESIDUAL_ACTION_COUNT]) -> Result<SlotStep, String> {
         let outcome = self
             .step_env(action)
             .ok_or("BatchedSim: call reset() before step()")?;
@@ -100,9 +101,11 @@ impl EnvSlot {
     /// Steps the environment with `action`: as the throttles (SPEC §9.3), or with
     /// residual control as a nudge to what PD makes of the same noisy view the policy
     /// acted on.
-    fn step_env(&mut self, action: [f32; NOZZLE_COUNT]) -> Option<StepOutcome> {
+    fn step_env(&mut self, action: [f32; RESIDUAL_ACTION_COUNT]) -> Option<StepOutcome> {
         let Some(residual) = &mut self.residual else {
-            return self.env.step(action);
+            let mut throttle_actions = [0.0; NOZZLE_COUNT];
+            throttle_actions.copy_from_slice(&action[..NOZZLE_COUNT]);
+            return self.env.step(throttle_actions);
         };
         let (state, observation) = self.env.controller_view();
         let ctx = ControlCtx {

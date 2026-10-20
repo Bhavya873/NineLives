@@ -29,7 +29,9 @@ pub use controller_kind::{
 pub use manual::Manual;
 pub use off::Off;
 pub use pd::Pd;
-pub use residual::{ResidualPd, add_residual};
+pub use residual::{
+    RESIDUAL_ACTION_COUNT, ResidualPd, ResidualSettings, add_residual, gate_opening,
+};
 
 /// What a controller may look at on a control step (SPEC §8).
 #[derive(Debug, Clone, Copy, PartialEq)]

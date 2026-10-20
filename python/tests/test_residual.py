@@ -15,14 +15,21 @@ from ninelives.train_config import ResidualSettings, load_train_config
 from ninelives_sim import BatchedSim, run_eval
 
 PD_RESIDUAL = {"base": "pd", "scale": 0.5}
+GATED_RESIDUAL = {"base": "pd", "scale": 0.5, "force_scaled": True, "gated": True}
 
 
-def run_zero_residual(stage: str, first_seed: int, episodes: int) -> list[dict]:
+def run_zero_residual(
+    stage: str,
+    first_seed: int,
+    episodes: int,
+    residual: dict[str, object] = PD_RESIDUAL,
+    mode: str = "realistic",
+) -> list[dict]:
     """Episode rows of a residual BatchedSim whose policy always answers 0."""
-    sim = BatchedSim(episodes, load_sim_config("realistic", stage, residual=PD_RESIDUAL), 0)
+    sim = BatchedSim(episodes, load_sim_config(mode, stage, residual=residual), 0)
     sim.reset(np.arange(first_seed, first_seed + episodes, dtype=np.uint64))
     rows: list[dict | None] = [None] * episodes
-    zeros = np.zeros((episodes, 10), dtype=np.float32)
+    zeros = np.zeros((episodes, sim.action_size()), dtype=np.float32)
     while None in rows:
         _, _, _, _, info = sim.step(zeros)
         for row in np.flatnonzero(info["done"]):
@@ -31,18 +38,33 @@ def run_zero_residual(stage: str, first_seed: int, episodes: int) -> list[dict]:
     return rows
 
 
-@pytest.mark.parametrize("stage", ["B", "D"])
-def test_a_zero_residual_action_flies_exactly_like_pd(stage):
+@pytest.mark.parametrize(
+    ("stage", "mode", "residual"),
+    [
+        ("B", "realistic", PD_RESIDUAL),
+        ("D", "realistic", PD_RESIDUAL),
+        ("D", "arcade", GATED_RESIDUAL),
+    ],
+)
+def test_a_zero_residual_action_flies_exactly_like_pd(stage, mode, residual):
     episodes, first_seed = 6, 2_000_000
-    config = load_sim_config("realistic", stage)
+    config = load_sim_config(mode, stage)
     report = json.loads(run_eval("pd", config, episodes, first_seed))
 
-    rows = run_zero_residual(stage, first_seed, episodes)
+    rows = run_zero_residual(stage, first_seed, episodes, residual, mode)
 
     for pd_row, residual_row in zip(report["episodes"], rows, strict=True):
         assert residual_row["success"] == pd_row["success"]
         assert residual_row["crash_cause"] == pd_row["crash_cause"]
         assert residual_row["air_used_kg"] == pytest.approx(pd_row["air_used_kg"])
+
+
+def test_a_gated_residual_sim_takes_one_action_per_nozzle_plus_the_gate():
+    plain = BatchedSim(1, load_sim_config("realistic", "A", residual=PD_RESIDUAL), 0)
+    gated = BatchedSim(1, load_sim_config("realistic", "A", residual=GATED_RESIDUAL), 0)
+
+    assert plain.action_size() == 10
+    assert gated.action_size() == 11
 
 
 def test_a_residual_base_other_than_pd_is_refused_by_the_sim():
@@ -80,6 +102,14 @@ def test_the_residual_setting_is_read_from_the_training_yaml(tmp_path):
 
     assert config.residual == ResidualSettings(base="pd", scale=0.5)
     assert config.curriculum_start_at_hardest is True
+
+
+def test_force_scaling_and_the_gate_are_read_from_the_training_yaml(tmp_path):
+    ppo = yaml.safe_load((CONFIGS_DIR / "train" / "base.yaml").read_text())["ppo"]
+    ppo["initial_action_bias"] = 0.0
+    config = load_train_config(write_config(tmp_path, residual=GATED_RESIDUAL, ppo=ppo))
+
+    assert config.residual == ResidualSettings(base="pd", scale=0.5, force_scaled=True, gated=True)
 
 
 def test_a_config_without_residual_trains_the_action_as_the_throttle(tmp_path):

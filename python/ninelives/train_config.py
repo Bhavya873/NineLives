@@ -46,10 +46,19 @@ class ResidualSettings:
     base: str
     # Throttle per unit of action: an action in [−1, 1] moves a throttle by up to ±scale.
     scale: float
+    # Divide each nudge by the mode's thrust scale, as PD's allocation does (round 6).
+    force_scaled: bool = False
+    # An 11th action gates every nudge by (a + 1) / 2 (round 6).
+    gated: bool = False
 
     def as_sim_json(self) -> dict[str, object]:
         """The `residual` entry of the sim config JSON (crates/nl-py/src/config.rs)."""
-        return {"base": self.base, "scale": self.scale}
+        return {
+            "base": self.base,
+            "scale": self.scale,
+            "force_scaled": self.force_scaled,
+            "gated": self.gated,
+        }
 
 
 @dataclass
@@ -132,13 +141,19 @@ def load_train_config(path: Path) -> TrainConfig:
 
 
 def read_residual(raw: dict[str, Any] | None) -> ResidualSettings | None:
-    """The optional `residual` section: `{base: pd, scale: 0.5}`."""
+    """The optional `residual` section: `{base: pd, scale: 0.5}`, optionally with
+    `force_scaled` and `gated` (both default false)."""
     if raw is None:
         return None
     unknown = set(raw) - set(ResidualSettings.__dataclass_fields__)
     if unknown:
         raise ValueError(f"unknown residual settings {sorted(unknown)}")
-    return ResidualSettings(base=str(raw["base"]), scale=float(raw["scale"]))
+    return ResidualSettings(
+        base=str(raw["base"]),
+        scale=float(raw["scale"]),
+        force_scaled=strict_bool("residual.force_scaled", raw.get("force_scaled", False)),
+        gated=strict_bool("residual.gated", raw.get("gated", False)),
+    )
 
 
 def read_bar(value: object) -> float | list[float]:

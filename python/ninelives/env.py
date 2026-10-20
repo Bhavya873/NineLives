@@ -31,9 +31,10 @@ def observation_space() -> gym.spaces.Box:
     return gym.spaces.Box(low=low, high=high, dtype=np.float32)
 
 
-def action_space() -> gym.spaces.Box:
-    """SPEC §9.3: one action per nozzle in [-1, 1]; the sim maps them to throttles."""
-    return gym.spaces.Box(low=-1.0, high=1.0, shape=(ACTION_SIZE,), dtype=np.float32)
+def action_space(size: int = ACTION_SIZE) -> gym.spaces.Box:
+    """SPEC §9.3: one action per nozzle in [-1, 1]; the sim maps them to throttles.
+    Gated residual control adds one more, the gate (`BatchedSim.action_size()`)."""
+    return gym.spaces.Box(low=-1.0, high=1.0, shape=(size,), dtype=np.float32)
 
 
 def finished_episode(info: dict[str, Any], row: int) -> dict[str, Any]:
@@ -61,7 +62,7 @@ class NineLivesVecEnv(VecEnv):
     ) -> None:
         config = load_sim_config(mode, stage, randomize, reward_overrides, residual)
         self.sim = BatchedSim(n_envs, config, seed)
-        super().__init__(n_envs, observation_space(), action_space())
+        super().__init__(n_envs, observation_space(), action_space(self.sim.action_size()))
 
     def seed(self, seed: int | None = None) -> list[int | None]:
         """Restarts every env's stream of episode seeds from `seed` (SB3 calls this with

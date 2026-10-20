@@ -2,6 +2,7 @@
 //! and stage to run. Python reads the files (`ninelives.sim_config`) and passes their
 //! text, so the Rust module never touches the file system.
 
+use nl_control::ResidualSettings;
 use nl_sim::modes::ModesConfig;
 use nl_sim::reward::RewardConfig;
 use nl_sim::scenarios::{ScenariosConfig, Stage};
@@ -44,6 +45,12 @@ struct ResidualJson {
     base: String,
     /// Throttle per unit of action (above 0).
     scale: f32,
+    /// Divide the nudge by the mode's thrust scale (default off: the first residual run).
+    #[serde(default)]
+    force_scaled: bool,
+    /// The policy's 11th action gates every nudge (default off).
+    #[serde(default)]
+    gated: bool,
 }
 
 /// A parsed config: what to build each environment from, and which stage it starts in.
@@ -54,9 +61,9 @@ pub struct SimConfig {
     pub stage: Stage,
     /// The text of controllers.toml (for PD in `run_eval` and residual control).
     pub controllers_toml: String,
-    /// Residual control: each env's throttles are PD's plus this × the action. None:
-    /// the action alone sets the throttles.
-    pub residual_scale: Option<f32>,
+    /// Residual control: each env's throttles are PD's plus the action, applied per these
+    /// settings. None: the action alone sets the throttles.
+    pub residual: Option<ResidualSettings>,
 }
 
 /// Parses the config JSON. The error says which part is wrong.
@@ -80,7 +87,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         )
     })?;
     let stage = parse_stage(&fields.stage)?;
-    let residual_scale = match &fields.residual {
+    let residual = match &fields.residual {
         None => None,
         Some(residual) => Some(parse_residual(residual)?),
     };
@@ -94,20 +101,24 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         },
         stage,
         controllers_toml: fields.controllers_toml,
-        residual_scale,
+        residual,
     })
 }
 
-/// The residual scale, after checking the base controller is PD (`ResidualPd::new`
+/// The residual settings, after checking the base controller is PD (`ResidualPd::new`
 /// checks the scale).
-fn parse_residual(residual: &ResidualJson) -> Result<f32, String> {
+fn parse_residual(residual: &ResidualJson) -> Result<ResidualSettings, String> {
     if residual.base != "pd" {
         return Err(format!(
             "sim config JSON: residual.base must be \"pd\", not {:?}",
             residual.base
         ));
     }
-    Ok(residual.scale)
+    Ok(ResidualSettings {
+        scale: residual.scale,
+        force_scaled: residual.force_scaled,
+        gated: residual.gated,
+    })
 }
 
 /// A config error as the message Python shows (each names its file and field).
