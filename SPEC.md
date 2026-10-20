@@ -194,8 +194,8 @@ Pin the latest stable versions at scaffold time and record them in lockfiles (`C
 | Inertia | set explicitly ≈ (850, 3250, 2900) kg·m² for (roll X, yaw Y, pitch Z) *(start)*; a real car is not a uniform box |
 | Wheels | `DynamicRayCastVehicleController`, 4 suspension mounts at (±1.3, 0.0, ±0.85), direction −Y, axle ±Z, radius 0.34 m, rest length 0.3 m, max travel 0.2 m *(start)*. This gives a centre of mass ≈ 0.6 m above the ground and ≈ 0.15 m ground clearance at rest |
 | Suspension | stiffness, compression and relaxation damping, max force: tune for stable landings from 2 m drops |
-| Drive | AWD; engine force up to 6 kN per wheel *(start)*; speed cap 45 m/s |
-| Steering | max 0.5 rad at low speed, scaled down to 0.15 rad at 40 m/s; rate-limited |
+| Drive | AWD; engine force up to 3 kN per wheel *(start)*, about 0–100 km/h in 4.2 s; speed cap 55 m/s |
+| Steering | max 0.5 rad at low speed, scaled down to 0.25 rad at 50 m/s; rate-limited to 3 rad/s |
 | Brakes | brake impulse per wheel *(start: tune)*; handbrake not needed |
 | Wheel contact | from each wheel's `raycast_info()`. Count a wheel as touching only if its ray hits **and** the car is upright enough (up·world_up > 0) so upward rays on an inverted car never count as contact. |
 
