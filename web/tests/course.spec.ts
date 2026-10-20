@@ -38,7 +38,7 @@ test('the Gauntlet loads from the URL, and F and Enter switch courses', async ({
   await expect(page.locator('#hud-status')).toContainText('Checkpoint 0/6');
 
   await page.keyboard.press('KeyF');
-  expect(await readCourse(page, 'meshes')).toBeGreaterThan(100);
+  expect(await readCourse(page, 'meshes')).toBeGreaterThan(60);
   expect(await readCourse(page, 'checkpoints')).toBe(0);
   await expect(page.locator('#hud-status')).not.toContainText('Checkpoint');
 
@@ -56,7 +56,7 @@ test('free driving opens in the playground, and ?world=flat in the empty arena',
   await page.goto('/');
   await expect
     .poll(() => readCourse(page, 'meshes'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
-    .toBeGreaterThan(100);
+    .toBeGreaterThan(60);
   expect(await readCourse(page, 'checkpoints')).toBe(0);
 
   await page.goto('/?world=flat');

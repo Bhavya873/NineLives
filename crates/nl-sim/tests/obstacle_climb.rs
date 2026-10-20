@@ -32,8 +32,9 @@ fn course_with(piece: &str) -> CourseSpec {
 }
 
 /// What a full-throttle run at `speed_m_s` from `start_x` along +X did: the largest
-/// speed loss over any 0.1 s, and the highest the centre of mass got, in m.
-fn drive_at(piece: &str, start_x: f32, speed_m_s: f32) -> (f32, f32) {
+/// speed loss over any 0.1 s before the centre of mass passes `lip_x` (so the landing
+/// after the jump doesn't count), and the highest the centre of mass got, in m.
+fn drive_at(piece: &str, start_x: f32, lip_x: f32, speed_m_s: f32) -> (f32, f32) {
     let course = course_with(piece);
     let mut world =
         World::new_on_course(&vehicle(), realistic(), &course, DEFAULT_GROUND_FRICTION, 0);
@@ -50,7 +51,8 @@ fn drive_at(piece: &str, start_x: f32, speed_m_s: f32) -> (f32, f32) {
         world.step(full_throttle);
         let [vx, vy, vz] = world.linear_velocity_m_s();
         speeds_m_s.push((vx * vx + vy * vy + vz * vz).sqrt());
-        if speeds_m_s.len() > WINDOW_STEPS {
+        let before_lip = world.chassis_pose().position_m[0] < lip_x;
+        if before_lip && speeds_m_s.len() > WINDOW_STEPS {
             let before = speeds_m_s[speeds_m_s.len() - 1 - WINDOW_STEPS];
             worst_loss_m_s = worst_loss_m_s.max(before - speeds_m_s[speeds_m_s.len() - 1]);
         }
@@ -61,15 +63,28 @@ fn drive_at(piece: &str, start_x: f32, speed_m_s: f32) -> (f32, f32) {
 
 #[test]
 fn ramps_and_wall_jumps_never_stop_the_car_dead() {
+    // Each piece with the x of its lip (a wall's ramp ends 2 m before the wall).
     let pieces = [
-        r#"{"type": "ramp", "pos": [30, 0, 0], "length": 12, "width": 8, "angle_deg": 15}"#,
-        r#"{"type": "ramp", "pos": [30, 0, 0], "length": 15, "width": 8, "angle_deg": 22}"#,
-        r#"{"type": "ramp", "pos": [30, 0, 0], "length": 15, "width": 8, "angle_deg": 28}"#,
-        r#"{"type": "wall", "pos": [40, 0, 0], "height": 3, "with_ramp": true}"#,
+        (
+            r#"{"type": "ramp", "pos": [30, 0, 0], "length": 12, "width": 8, "angle_deg": 15}"#,
+            42.0,
+        ),
+        (
+            r#"{"type": "ramp", "pos": [30, 0, 0], "length": 15, "width": 8, "angle_deg": 22}"#,
+            45.0,
+        ),
+        (
+            r#"{"type": "ramp", "pos": [30, 0, 0], "length": 15, "width": 8, "angle_deg": 28}"#,
+            45.0,
+        ),
+        (
+            r#"{"type": "wall", "pos": [40, 0, 0], "height": 3, "with_ramp": true}"#,
+            38.0,
+        ),
     ];
-    for piece in pieces {
+    for (piece, lip_x) in pieces {
         for speed_m_s in SPEEDS_M_S {
-            let (worst_loss_m_s, highest_m) = drive_at(piece, -10.0, speed_m_s);
+            let (worst_loss_m_s, highest_m) = drive_at(piece, -10.0, lip_x, speed_m_s);
 
             assert!(
                 worst_loss_m_s < MAX_SPEED_LOSS_M_S,
@@ -91,7 +106,7 @@ fn a_car_driven_across_a_halfpipe_rides_up_past_the_top_of_the_wall() {
         );
         for speed_m_s in SPEEDS_M_S {
             // Start on the 4 m floor, heading across the channel at the +X wall.
-            let (_, highest_m) = drive_at(&piece, -0.8, speed_m_s);
+            let (_, highest_m) = drive_at(&piece, -0.8, f32::INFINITY, speed_m_s);
 
             assert!(
                 highest_m > radius_m,
