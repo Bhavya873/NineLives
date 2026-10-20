@@ -98,9 +98,11 @@ fn the_tank_refills_on_the_ground_but_not_in_the_air() {
     run(&mut world, InputFrame::default(), 1.0);
     let after_air_kg = world.air_kg();
 
-    // SPEC §7.5: +5 kg/s with at least 3 wheels down.
+    // SPEC §7.5: +refill_kg_s with at least 3 wheels down; the settled car has used no
+    // air for longer than refill_delay_s, so refilling runs the whole 2 s.
+    let expected_kg = 100.0 + 2.0 * world.mode().refill_kg_s;
     assert!(
-        (after_ground_kg - 110.0).abs() < 0.1,
+        (after_ground_kg - expected_kg).abs() < 0.1,
         "{after_ground_kg} kg"
     );
     assert_eq!(after_air_kg, after_ground_kg);

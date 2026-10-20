@@ -11,6 +11,9 @@ roof_half_extents_m = [1.2, 0.05, 0.8]
 # Moments of inertia about the body axes: roll (X), yaw (Y), pitch (Z), in kg·m².
 # Set by hand because a real car is not a uniform box.
 inertia_kg_m2 = [850.0, 3250.0, 2900.0]
+# Bottom front and rear edges cut away, [length, rise] in m: the nose and tail clear
+# ramp and halfpipe curves (approach and departure angles of about 27°).
+underside_chamfer_m = [0.6, 0.3]
 
 [air_drag]
 # Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2).

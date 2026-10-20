@@ -16,8 +16,9 @@ use crate::scenarios::{ScenariosConfig, Stage, start_episode};
 use crate::vehicle_config::VehicleConfig;
 use crate::world::{PlaceCarError, World};
 
-/// The obstacle zone is this much smaller than the car on each side, in m, so a car
-/// that only just clears a row is not counted as touching it.
+/// The obstacle zone reaches this much beyond the car's half size on each side, in m.
+/// A hit needs the chassis to touch an obstacle collider too, so the zone only says
+/// which rows count; it must include a car stopped nose-first against a row.
 const OBSTACLE_ZONE_SLACK_M: f32 = 0.2;
 
 /// What success means for an episode (SPEC §9.5).
@@ -267,8 +268,8 @@ fn obstacle_zones(
     vehicle: &VehicleConfig,
 ) -> Vec<ObstacleZone> {
     let [half_length_m, _, half_width_m] = vehicle.chassis.half_extents_m;
-    let reach_along_m = half_length_m - OBSTACLE_ZONE_SLACK_M;
-    let reach_across_m = PARKED_CAR_WIDTH_M / 2.0 + half_width_m - OBSTACLE_ZONE_SLACK_M;
+    let reach_along_m = half_length_m + OBSTACLE_ZONE_SLACK_M;
+    let reach_across_m = PARKED_CAR_WIDTH_M / 2.0 + half_width_m + OBSTACLE_ZONE_SLACK_M;
     let mut zones = Vec::new();
     for piece in &course.pieces {
         if let PieceSpec::CarRow { pos, count, .. } = piece {

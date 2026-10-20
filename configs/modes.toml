@@ -7,10 +7,12 @@ thrust_scale = 1.0
 unlimited_air = false
 # The reported tank size; full lift (80 kg/s) empties it in about 3.25 s.
 tank_capacity_kg = 260.0
-# Refill while at least `refill_min_wheels` wheels touch. A gameplay concession;
-# the in-game help says so.
-refill_kg_s = 5.0
+# Refill while at least `refill_min_wheels` wheels touch and no thruster has fired for
+# `refill_delay_s`: empty to full in about 13 s. A gameplay concession; the in-game
+# help says so. (Owner's free-play feedback: 5 kg/s, about 52 s, felt far too slow.)
+refill_kg_s = 20.0
 refill_min_wheels = 3
+refill_delay_s = 0.5
 # Thrust fades to zero over this last fraction of the tank, so nothing pops.
 empty_fade_fraction = 0.02
 # Hop: this throttle on all four lift nozzles for `hop_s` seconds.
@@ -27,8 +29,9 @@ thrust_scale = 2.0
 unlimited_air = true
 # With unlimited air the tank never empties; "air used" is still counted for stats.
 tank_capacity_kg = 260.0
-refill_kg_s = 5.0
+refill_kg_s = 20.0
 refill_min_wheels = 3
+refill_delay_s = 0.5
 empty_fade_fraction = 0.02
 hop_ff = 0.75
 hop_s = 0.35
