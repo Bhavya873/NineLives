@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn an_infinite_speed_limit_is_rejected() {
-        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 45.0", "max_speed_m_s = inf");
+        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 55.0", "max_speed_m_s = inf");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn reversed_steering_limits_are_rejected() {
         let broken = DEFAULT_VEHICLE_TOML.replace(
-            "max_angle_high_speed_rad = 0.15",
+            "max_angle_high_speed_rad = 0.25",
             "max_angle_high_speed_rad = 0.9",
         );
 
