@@ -3,7 +3,10 @@
     python -m ninelives.tune_pd --generations 20 --popsize 10 --out pd-tuned.toml
 
 Each candidate multiplies every [pd] number by exp(x) (so signs never flip) and is scored
-by PD's mean success over stages A, D and E in both modes, run in Rust (`run_eval`).
+by PD's mean success over stages A, D and E in both modes, each on the plain car and with
+domain randomization (SPEC §9.8), run in Rust (`run_eval`). Scored on the plain car alone,
+the search found huge gains that burned most of the tank and fell apart on randomized
+cars (D 93% → 40%), so the randomized episodes keep it honest.
 Every generation draws a fresh block of tuning seeds from 2,000,000 up, disjoint from the
 validation seeds (1,000,000+, 1,500,000+) and the test seeds (0–999), so the gains
 cannot fit one fixed set. Writes the best candidate's controllers.toml to `--out`.
@@ -21,8 +24,14 @@ import cma
 from ninelives.sim_config import CONFIGS_DIR, load_sim_config
 from ninelives_sim import run_eval
 
-# Stages where PD is not already perfect (B and C are at 100%), in both modes.
-TUNING_CELLS = [(stage, mode) for stage in "ADE" for mode in ("realistic", "arcade")]
+# Stages where PD is not already perfect (B and C are at 100%), in both modes, on the
+# plain car and with domain randomization.
+TUNING_CELLS = [
+    (stage, mode, randomize)
+    for stage in "ADE"
+    for mode in ("realistic", "arcade")
+    for randomize in (False, True)
+]
 FIRST_TUNING_SEED = 2_000_000
 # Up alignment is a cosine: a threshold of 1 or more would never count as upright.
 MAX_UPRIGHT_ALIGNMENT = 0.99
@@ -56,8 +65,8 @@ def scaled_gains(base: dict[str, float], log_factors: list[float]) -> dict[str, 
 def mean_success(controllers_toml: str, episodes: int, first_seed: int) -> float:
     """PD's success rate over `TUNING_CELLS`, `episodes` per cell from `first_seed`."""
     total = 0.0
-    for stage, mode in TUNING_CELLS:
-        config = json.loads(load_sim_config(mode, stage))
+    for stage, mode, randomize in TUNING_CELLS:
+        config = json.loads(load_sim_config(mode, stage, randomize))
         config["controllers_toml"] = controllers_toml
         report = json.loads(run_eval("pd", json.dumps(config), episodes, first_seed))
         total += report["summary"]["success_rate"]
