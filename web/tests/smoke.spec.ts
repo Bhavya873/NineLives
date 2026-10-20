@@ -70,7 +70,7 @@ test('T reaches the AI once the policy has loaded, and a drop test runs clean', 
   await page.goto('/');
   await expect.poll(() => readDebug(page, 'x'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).not.toBeNaN();
 
-  // Off → PD → AI (SPEC §11.3). The policy loads in the background, so keep cycling
+  // PD (the start) → AI → Off (SPEC §11.3). The policy loads in the background, so keep cycling
   // until the sim reports the AI; never press T once it does.
   await expect
     .poll(

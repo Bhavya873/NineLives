@@ -5,9 +5,9 @@
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
-//! the Off, PD, AI and Manual controllers, and courses (`course.rs`, M7).
+//! the Off, PD, AI and (debug-only) Manual controllers, and courses (`course.rs`, M7).
 
-use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off};
+use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind};
 use std::sync::Arc;
 
 use nl_policy::Policy;
@@ -199,7 +199,8 @@ pub enum CrashCode {
 #[wasm_bindgen]
 impl Game {
     /// Builds a game on flat ground from the text of `configs/vehicle.toml`,
-    /// `configs/modes.toml` and `configs/controllers.toml`, starting in Realistic mode. `seed` drives the random
+    /// `configs/modes.toml` and `configs/controllers.toml`, starting in Realistic mode
+    /// with the PD controller. `seed` drives the random
     /// Chaos knocks. A crash respawns by itself after `[events] respawn_delay_s`.
     /// Throws if a config is invalid; the message names the bad field.
     #[wasm_bindgen(constructor)]
@@ -222,7 +223,8 @@ impl Game {
             seed,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
-            controller: ControllerKind::Off(Off),
+            // PD starts in charge, so a new player sees the car land itself (SPEC §11.3).
+            controller: ControllerKind::Pd(Box::new(choices.pd.clone())),
             choices,
             scenarios: ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?,
             buttons_since_control_step: 0,

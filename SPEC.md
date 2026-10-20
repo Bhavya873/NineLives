@@ -337,7 +337,7 @@ pub trait Controller {
 `act` takes only `ctx`: the driver's `InputFrame`, the car's `CarState` (the physical quantities the observation packs) and, from M5, the `observation` built from them (§9.2), which the AI reads. Every runner builds it with `ControlCtx::for_world`. Callers ask `World::is_control_step()` to run controllers at 60 Hz, and the inputs since the last control step are OR-ed so a quick tap is not lost.
 
 1. **Off:** all zeros (feed-forward still works).
-2. **Manual** (debug only): keys map to individual nozzles at throttle 1.
+2. **Manual** (debug only, not in the T cycle): keys map to individual nozzles at throttle 1.
 3. **Pd** (baseline):
    - **Attitude:** the desired up direction in the body frame is `up_des = −g_dir_body`; the error axis is `e = (0,1,0) × up_des`; the desired torque is `τ = I · (kp·e − kd·ω)`, with kp = 8 and kd = 4 *(start)*.
    - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if height < 3 m and downward speed > 4 m/s, command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. Otherwise `F_y = 0` (saves air).
@@ -550,9 +550,9 @@ class Game {
 | C | Chaos (random knock) |
 | X | Drop test: throw the car into a random Stage A start (§9.6), to watch the controller save it |
 | M | toggle Realistic / Arcade |
-| T | cycle controller: Off → Manual in M3; Off → PD → Manual in M4; Off → PD → AI → Manual from M5 (Manual stays reachable for debugging) |
+| T | cycle controller: Off → PD → AI (AI once its policy has loaded). The game starts with PD. Manual is not in the cycle; it stays reachable for debugging only through `set_controller("manual")` |
 | G | toggle ghost |
-| 1–0 | fire nozzles 0–9 (only when the controller is Manual) |
+| 1–0 | fire nozzles 0–9 (only when the controller is Manual, set through the API) |
 | Esc | pause / menu |
 
 ### 11.4 Visuals
