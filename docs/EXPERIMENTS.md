@@ -178,4 +178,5 @@ The unsettled cost kept the policy from ever settling quietly (it landed safely 
 | v4 | v3 minus the rules for when PD acts (brake speed and safety, upright alignment, quiet and lying thresholds) | 0.939 | +14 to +16 | +5 to +10 | −1 to −2 | 0 | +25–50% | 10.6 kg | not adopted (owner): still fires more over bumps; `brake_usable_fraction` 0.99 starts fast-fall braking lower |
 
 - Tuning on success alone moves PD toward firing more often; the search needs the owner's behaviour rules as constraints, not just as tests afterwards.
-- Next (owner's choice): v5 also freezes where braking starts (brake height, margin, usable fraction) and pays 0.05 success per kg past 8 kg over the bumps strip, in either mode.
+- v5 also froze where braking starts (brake height, margin, usable fraction) and paid 0.05 success per kg past 8 kg over the bumps strip, in either mode. Validation mean 0.893 → 0.919: A +8 to +12, E +2 to +7, B and C level, D −2 (99 → 97 plain, 97 → 95 randomized), air +5–10%, bumps strip 7.9 kg; all tests pass with it.
+- **Decision (owner, 2026-10-21): keep the repo gains.** Under Hybrid the AI flies the upsets, where v5's gains are, and PD drives and lands upright jumps (Stage D), where v5 is worse. Hybrid already clears the M7 bar against the repo PD. v5's file is not committed; rerun with the same command if wanted.
