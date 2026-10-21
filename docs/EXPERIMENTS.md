@@ -207,3 +207,24 @@ Final checkpoint, validation (seeds from 1,000,000, 300 episodes): Realistic A 6
 **Repo PD on the round-7 sim** (untuned gains), validation seeds from 1,500,000, 300 episodes, no randomization: Realistic A 70, B 100, C 100, D 99, E 85; Arcade A 71, B 100, C 100, D 100, E 84. The M5 policy (stage-a-004) on test seeds: Stage A 81.0% Realistic, 87.8% Arcade. That passes the 80% Realistic stretch target, mostly thanks to the interlock and the chamfered underside.
 
 Conclusion (owner, 2026-10-21): one policy owning the nozzles through 45 s of driving keeps losing to PD on D/E, while the Stage-A-only policy is the best AI. Next round: **the AI flies, PD drives** (a `Hybrid` controller), paired-seed evals with confidence intervals, and a revised bar (DECISIONS).
+
+
+### 2026-10-21 — Hybrid with the M5 policy, no training (PR #44)
+
+The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-a-004, Stage A only) against repo-gains PD on the round-7 sim. Rust eval runner, validation seeds from 1,500,000, 1000 episodes per cell, no randomization; paired on the same seeds (Wilson 95% intervals, exact McNemar test). Test seeds 0–999 not used.
+
+**Gate v1: the AI takes over at take-off** (fewer than 3 wheels down, or tilt > 60°): **fails**. A 81.3 / 86.6 (PD 68.9 / 69.4), B within CI, but C 34.6 / 57.2 (PD 100 / 99.8: 602 runs out of bounds, median 191 kg air, the AI keeps firing after the hop), D 12.5 / 22.2 (PD 98.8 / 98.9; Off gets 24.7%: the policy has never flown an upright jump), E 45.8 / 49.1.
+
+**Gate v2: the AI takes over only past the upset tilt (60°)**, committed:
+
+| Stage | Realistic PD → Hybrid | Arcade PD → Hybrid | Only PD / only Hybrid succeeded (R; A) | Against the 2026-10-21 bar |
+|---|---|---|---|---|
+| A | 68.9 → **81.0** (p 4e-21) | 69.4 → **86.4** (p 2e-41) | 28 / 149; 10 / 180 | beats PD |
+| B | 99.4 → 99.5 | 99.4 → 99.7 | 5 / 6; 3 / 6 | within PD's CI |
+| C | 100 → 100 | 99.8 → 99.8 | 0 / 0; 0 / 0 | within PD's CI |
+| D | 98.8 → 98.7 | 98.9 → 98.7 | 1 / 0; 2 / 0 | within PD's CI |
+| E | 85.5 → **90.7** (p 6e-11) | 83.8 → **89.8** (p 6e-15) | 8 / 60; 4 / 64 | beats PD |
+
+- **Meets the M7 bar on all ten cells on validation, without training.** Confirmation on the test seeds is pending (owner).
+- Air per save is lower than PD's (A Realistic 35.2 vs 39.7 kg; Arcade 38.6 vs 44.9). Hard landings are a little higher on A (Realistic 4.4% vs 0%, Arcade 3.5% vs 2.0%); they still count as successes.
+- Lesson: the take-off gate handed the policy states it never trained on. Hand a learned controller only the states it was trained for, and leave the rest to the controller that already handles them.
