@@ -43,7 +43,7 @@ function eventKinds(values) {
   return kinds;
 }
 
-test('loading the Gauntlet returns its shapes and starts at checkpoint 0 of 6', () => {
+test('loading the Gauntlet returns its shapes and starts at checkpoint 0 of 8', () => {
   const game = newGame();
 
   const shapes = JSON.parse(game.load_course(gauntletJson));
@@ -54,7 +54,7 @@ test('loading the Gauntlet returns its shapes and starts at checkpoint 0 of 6', 
     assert.ok(surfaces.has(wanted), `no ${wanted} shape`);
   }
   const hud = game.hud();
-  assert.equal(hud[HudField.CheckpointCount], 6);
+  assert.equal(hud[HudField.CheckpointCount], 8);
   assert.equal(hud[HudField.CheckpointsReached], 0);
   assert.equal(hud[HudField.Finished], 0);
 });
@@ -112,12 +112,12 @@ test('with full throttle and the PD controller the Gauntlet can be finished', ()
   game.set_controller('pd');
   game.load_course(gauntletJson);
 
-  for (let second = 0; second < 60 && game.hud()[HudField.Finished] !== 1; second += 1) {
+  for (let second = 0; second < 90 && game.hud()[HudField.Finished] !== 1; second += 1) {
     tickMany(game, FULL_THROTTLE, 120);
     game.drain_events();
   }
 
   const hud = game.hud();
   assert.equal(hud[HudField.Finished], 1, `stuck at x = ${game.chassis_pose()[0]}`);
-  assert.equal(hud[HudField.CheckpointsReached], 6);
+  assert.equal(hud[HudField.CheckpointsReached], 8);
 });

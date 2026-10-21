@@ -61,8 +61,14 @@
     { "type": "landing_pad", "pos": [175, 0, -130] },
     { "type": "corkscrew", "pos": [140, 0, -160], "length": 16, "width": 4, "angle_deg": 18, "bank_deg": 55, "side": "right" },
     { "type": "landing_pad", "pos": [180, 0, -160] },
-    { "type": "kick_plate", "pos": [140, 0, -190], "impulse": [0, 9000, 0], "angular": [3000, 0, 0] },
-    { "type": "kick_plate", "pos": [200, 0, -190], "impulse": [0, 9000, 0], "angular": [-3000, 0, 0] },
-    { "type": "kick_plate", "pos": [260, 0, -190], "impulse": [0, 9000, 0], "angular": [0, 0, -7000] }
+    { "type": "kick_plate", "pos": [140, 0, -190], "impulse": [0, 8000, 0], "angular": [3500, 0, 0] },
+    { "type": "kick_plate", "pos": [200, 0, -190], "impulse": [0, 8000, 0], "angular": [-3500, 0, 0] },
+    { "type": "kick_plate", "pos": [260, 0, -190], "impulse": [0, 9000, 0], "angular": [0, 0, -9000] },
+    { "type": "kick_plate", "pos": [320, 0, -190], "impulse": [0, 8000, 0], "angular": [3500, 12000, 0] },
+    { "type": "kick_plate", "pos": [140, 0, -220], "impulse": [0, 27000, 0], "angular": [0, 0, -27000] },
+    { "type": "kick_plate", "pos": [200, 0, -220], "impulse": [0, 30000, 0], "angular": [0, 0, 30000] },
+    { "type": "kick_plate", "pos": [260, 0, -220], "impulse": [0, 24000, 0], "angular": [-10500, 0, 0] },
+    { "type": "kick_plate", "pos": [320, 0, -220], "impulse": [0, 24000, 0], "angular": [10500, 0, 0] },
+    { "type": "kick_plate", "pos": [380, 0, -220], "impulse": [0, 19500, 0], "angular": [12000, 0, 0] }
   ]
 }

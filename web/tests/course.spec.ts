@@ -1,5 +1,5 @@
 // The Gauntlet in the browser (SPEC §7.11, §11.5, M7): ?course=gauntlet opens straight
-// into the course, which is drawn, shows "Checkpoint 0/6" and logs no errors; F goes
+// into the course, which is drawn, shows "Checkpoint 0/8" and logs no errors; F goes
 // back to free driving in the playground (no checkpoints) and Enter starts the course
 // again. A plain visit opens in the playground, and ?world=flat in the empty arena.
 import { expect, test, type Page } from '@playwright/test';
@@ -34,8 +34,8 @@ test('the Gauntlet loads from the URL, and F and Enter switch courses', async ({
   await expect
     .poll(() => readCourse(page, 'meshes'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(20);
-  expect(await readCourse(page, 'checkpoints')).toBe(6);
-  await expect(page.locator('#hud-status')).toContainText('Checkpoint 0/6');
+  expect(await readCourse(page, 'checkpoints')).toBe(8);
+  await expect(page.locator('#hud-status')).toContainText('Checkpoint 0/8');
 
   await page.keyboard.press('KeyF');
   expect(await readCourse(page, 'meshes')).toBeGreaterThan(60);
@@ -43,7 +43,7 @@ test('the Gauntlet loads from the URL, and F and Enter switch courses', async ({
   await expect(page.locator('#hud-status')).not.toContainText('Checkpoint');
 
   await page.keyboard.press('Enter');
-  expect(await readCourse(page, 'checkpoints')).toBe(6);
+  expect(await readCourse(page, 'checkpoints')).toBe(8);
   expect(consoleErrors).toEqual([]);
 });
 

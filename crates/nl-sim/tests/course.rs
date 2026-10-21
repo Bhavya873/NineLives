@@ -102,7 +102,7 @@ fn the_gauntlet_course_parses_and_has_every_section() {
         );
     }
     assert_eq!(count_surface(&shapes, Surface::Finish), 1);
-    assert_eq!(count_surface(&shapes, Surface::Checkpoint), 6);
+    assert_eq!(count_surface(&shapes, Surface::Checkpoint), 8);
 }
 
 #[test]

@@ -2,7 +2,7 @@
 //! one stage and summarise how it did. No Python needed; the M5 Python eval steps the
 //! same `nl_sim::episode::Episode`, so the numbers can be compared.
 
-use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_HZ};
+use nl_sim::conventions::{INVERTED_TILT_DEG, NOZZLE_COUNT, PHYSICS_HZ};
 use nl_sim::course::CourseSpec;
 use nl_sim::episode::{Episode, EpisodeResult, EpisodeStatus};
 use nl_sim::input::InputFrame;
@@ -24,6 +24,10 @@ pub struct EvalSummary {
     pub save_rate: f32,
     /// Episodes that ended in a crash.
     pub crash_rate: f32,
+    /// Episodes in which the car was tipped past `INVERTED_TILT_DEG` at any moment,
+    /// including a start that was already upside down (Stage A drops). Compare it
+    /// between controllers on the same stage and seeds, not between stages.
+    pub inversion_rate: f32,
     /// Air used during saved upsets, per save (SPEC §10), in kg; None if nothing was saved.
     pub air_per_save_kg: Option<f32>,
     /// Median spin size at first touchdown, in rad/s.
@@ -151,6 +155,7 @@ pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
     let mut successes = 0;
     let mut saved = 0;
     let mut crashed = 0;
+    let mut inverted = 0;
     let mut total_saves = 0;
     let mut total_air_kg = 0.0;
     for result in results {
@@ -164,6 +169,9 @@ pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
         if result.crash_cause.is_some() {
             crashed += 1;
         }
+        if result.peak_tilt_deg > INVERTED_TILT_DEG {
+            inverted += 1;
+        }
         spins.extend(result.touchdown_spin_rad_s);
         falls.extend(result.touchdown_fall_m_s);
         total_saves += result.saves;
@@ -176,6 +184,7 @@ pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
         success_rate: rate(successes),
         save_rate: rate(saved),
         crash_rate: rate(crashed),
+        inversion_rate: rate(inverted),
         air_per_save_kg: (total_saves > 0).then(|| total_air_kg / total_saves as f32),
         touchdown_spin_median_rad_s: percentile(&mut spins, 0.5),
         touchdown_spin_p95_rad_s: percentile(&mut spins, 0.95),
