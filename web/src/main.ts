@@ -55,8 +55,9 @@ import { loadPolicy } from './policy.ts';
 import {
   createScreenEffects,
   renderScreenEffects,
+  nextWindLevel,
   resetScreenEffects,
-  tickScreenEffects,
+  startingWindLevel,
 } from './screen-effects.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
@@ -84,6 +85,8 @@ const hudValues: HudValues = {
   checkpointCount: 0,
   finished: false,
   finishTimeS: 0,
+  gLoad: 1,
+  windWorldM_S: [0, 0, 0],
 };
 
 async function start(): Promise<void> {
@@ -125,7 +128,14 @@ async function start(): Promise<void> {
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
   const params = new URLSearchParams(window.location.search);
-  const effects = createScreenEffects(view.scene, prefersReducedMotion(), params);
+  const effects = createScreenEffects(view.scene, prefersReducedMotion());
+  // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
+  let windLevel = startingWindLevel(params);
+  game.set_wind_level(windLevel);
+  onKeyPress('KeyV', () => {
+    windLevel = nextWindLevel(windLevel);
+    game.set_wind_level(windLevel);
+  });
   const course = createCourseSession(view.scene, view.ground, {
     panel: requireElement('results'),
     lines: requireElement('results-lines'),
@@ -195,7 +205,6 @@ async function start(): Promise<void> {
       game.tick(readInputFrame());
       frames.latestChassis = game.chassis_pose();
       frames.latestWheels = game.wheel_poses();
-      tickScreenEffects(effects, frames.latestChassis, Game.physics_dt_s());
       // Remember where the wreck froze, even if it respawns before the next frame.
       if (game.is_crashed()) {
         crashPosition.fromArray(frames.latestChassis);
@@ -225,7 +234,8 @@ async function start(): Promise<void> {
       view.renderer.render(view.scene, view.camera);
       view.camera.position.sub(shake);
       renderScreenEffects(effects, {
-        simGLoad: hudValues.gLoad,
+        gLoad: hudValues.gLoad,
+        windWorldM_S: hudValues.windWorldM_S,
         crashed: hudValues.crashed,
         camera: view.camera,
         carPosition: carPose.position,
@@ -310,15 +320,10 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.checkpointCount = values[HudField.CheckpointCount] ?? 0;
   out.finished = values[HudField.Finished] === 1;
   out.finishTimeS = values[HudField.FinishTimeS] ?? 0;
-  out.gLoad = G_LOAD_FIELD === undefined ? undefined : values[G_LOAD_FIELD];
+  out.gLoad = values[HudField.GLoad] ?? 1;
+  out.windWorldM_S[0] = values[HudField.WindXMS] ?? 0;
+  out.windWorldM_S[2] = values[HudField.WindZMS] ?? 0;
 }
-
-/**
- * Index of the sim's seat g in `Game.hud()`, once the wasm build has a `GLoad` HUD
- * field (TODO: `Game` HUD field `g_load`); until then undefined and the blackout uses
- * an estimate from the car's motion.
- */
-const G_LOAD_FIELD = (HudField as unknown as Record<string, number | undefined>)['GLoad'];
 
 start().catch((error: unknown) => {
   console.error('Nine Lives failed to start:', error);

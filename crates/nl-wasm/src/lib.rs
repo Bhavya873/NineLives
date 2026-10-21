@@ -83,10 +83,17 @@ pub enum HudField {
     Finished = 18,
     /// Course time at the finish, in s (0 until then).
     FinishTimeS = 19,
+    /// Passenger g-load at the driver's seat, in g (SPEC §9.4): 1 sitting still; the
+    /// screen darkens above 3 g.
+    GLoad = 20,
+    /// The wind now (mean plus gust) along world +X, in m/s.
+    WindXMS = 21,
+    /// The wind now (mean plus gust) along world +Z, in m/s.
+    WindZMS = 22,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::FinishTimeS as usize + 1;
+const HUD_LENGTH: usize = HudField::WindZMS as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
 #[wasm_bindgen]
@@ -388,6 +395,10 @@ impl Game {
         values[HudField::CheckpointCount as usize] = self.world.checkpoint_count() as f32;
         values[HudField::Finished as usize] = one_if(self.world.is_finished());
         values[HudField::FinishTimeS as usize] = self.world.finish_time_s().unwrap_or(0.0);
+        values[HudField::GLoad as usize] = self.world.g_load();
+        let [wind_x_m_s, _, wind_z_m_s] = self.world.wind_m_s();
+        values[HudField::WindXMS as usize] = wind_x_m_s;
+        values[HudField::WindZMS as usize] = wind_z_m_s;
         values
     }
 

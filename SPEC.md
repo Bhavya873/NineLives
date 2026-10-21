@@ -238,7 +238,7 @@ The 6×10 allocation matrix (force + torque per unit throttle) has rank 6, so ev
 - **Valve lag:** first-order, `u_eff += (u_cmd − u_eff) · (1 − exp(−dt/τ))`, with τ = 0.03 s *(start)*.
 - **Applying forces:** each physics step, reset the chassis forces once, then add drag and call `add_force_at_point` per nozzle with the world-space force and point (rotate both by the chassis pose).
 
-- **Thruster interlock (M7):** while the car is steady on the ground (tilt ≤ 15°, centre of mass ≤ 1 m above the ground, |ω| ≤ 1 rad/s, vertical speed ≤ 1 m/s; `[thrusters.interlock]` in vehicle.toml), the controller's throttles are cut to 0. Hop and Boost feed-forward still fire. No controller can idle thrust while parked or push the car around while driving, and no save is ever cut: a falling, tilted or spinning car isn't steady. `World::thrusters_locked()` reports it.
+- **Thruster interlock (M7):** while the car is steady on the ground (tilt ≤ 25°, centre of mass ≤ 1 m above the ground, |ω| ≤ 2.5 rad/s, |vertical speed| ≤ 3 m/s, wide enough that a wheel lifting on a bump or kerb still counts as on the ground; `[thrusters.interlock]` in vehicle.toml), the controller's throttles are cut to 0. Hop and Boost feed-forward still fire. No controller can idle thrust while parked or push the car around while driving, and no save is ever cut: a falling, tilted or spinning car isn't steady. `World::thrusters_locked()` reports it.
 ### 7.5 Air tank
 - Mass flow per nozzle: `ṁ = F_actual / v_e`, with `v_e = 600 m/s` (cold-gas air). At full lift (48 kN) that is 80 kg/s.
 - **Realistic:** capacity 260 kg (the reported figure), so full lift lasts about 3.25 s. Refill +20 kg/s while ≥ 3 wheels touch and no thruster has fired for 0.5 s (`refill_delay_s`); empty to full in about 13 s. This refill rate is a gameplay concession; label it so in the UI help text.
@@ -345,6 +345,8 @@ pub trait Controller {
    - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if downward speed > 4 m/s and height < max(3 m, 1.3 × the stopping distance + 1 m), command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. The stopping distance is (v_down² − 1.5²) / (2a), with a = 0.8 × full lift × the mode's thrust scale / m − g, so a fast fall brakes early enough to stop (a fixed 3 m start landed 10–15 m/s falls hard). Otherwise `F_y = 0` (saves air).
    - **Sideways, airborne and roughly upright:** `F_z = −m · kv_lateral · v_z` (body frame), kv_lateral = 1.5, so the side boosters cancel a slide before touchdown.
    - **Allocation:** solve `min ‖W(B·u − w)‖² + λ‖u‖²` subject to `0 ≤ u ≤ 1`, with `w = [0, F_y, 0, τx, τy, τz]` and `B` the 6×10 matrix scaled by max force. Use projected gradient descent (30 iterations, step `1/L`) or a small active-set NNLS. Torque weights are higher than force weights.
+   - **Air control (round 7), airborne above `air_wish_min_height_m` (3 m) and upright:** the driver's keys steer the flight: steer asks for a yaw rate of ±`air_yaw_rate_rad_s` (1.5), throttle for a nose-down pitch of `air_pitch_rad` (0.35). Below that height, or tilted, PD ignores them and levels the car for the landing.
+   - **Spin-through recovery:** when the car already spins toward upright fast enough to cover the long way round (ω²/(2α) > π − tilt), PD keeps the spin going instead of reversing it. The commanded angular acceleration is capped at `max_angular_accel_rad_s2` (25), which keeps the passenger g-load (9.4) moderate.
    - **On the ground and tipped over:** roll torque to flip back, plus a side-booster push along whichever body side axis points up, `ground_side_push` (0.4) × the car's weight.
    - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m`, not upright and nearly still, and there the roll torque is multiplied by `ground_roll_gain` (tipping the car over its side edge needs far more torque than turning it in the air); when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
 4. **Ai:** loads `models/policy.json`, normalizes the observation, runs the MLP forward pass, and maps the action from [−1, 1] to [0, 1]. The policy is deterministic (mean action).
@@ -410,6 +412,7 @@ Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range 
 | Hard landing (event) | `−1` per `HardLanding` | 1 |
 | Unsettled | `−1` per step after the episode's first touchdown while not settled (9.5) | 0.01 |
 | Air left (success) | share of the tank left, once, on the success step; limited tank only | 1 |
+| G-force | `−max(0, g_seat − 3)²` with `g_seat` the passenger g-load: the smoothed (0.1 s) specific force at the driver's seat (`[passenger]` in vehicle.toml; `World::g_load()`) | 0.05 |
 | Success (event, terminal) | `+1` once, on the step the episode succeeds (9.5); success needs the quiet hold, so this pays for a quiet landing | 5 |
 
 The save quality also has two landing factors (PLAN §3.3): `q = clamp(1 − ‖ω‖/4) · clamp(1 − v_down/6) · clamp(1 − heading_error/45°) · clamp(speed_kept)`; an unknown heading error or speed kept (7.9) counts as 1, so both factors apply only after a take-off from the wheels (drops and tip-overs are unaffected).
@@ -557,6 +560,7 @@ class Game {
 | C | Chaos (random knock) |
 | X | Drop test: throw the car into a random Stage A start (§9.6), to watch the controller save it |
 | M | toggle Realistic / Arcade |
+| V | cycle wind: Off → Breeze → Storm (`?wind=breeze` or `?wind=storm` picks the starting level) |
 | T | cycle controller: Off → PD → AI (AI once its policy has loaded). The game starts with PD. Manual is not in the cycle; it stays reachable for debugging only through `set_controller("manual")` |
 | G | toggle ghost |
 | 1–0 | fire nozzles 0–9 (only when the controller is Manual, set through the API) |
@@ -573,6 +577,8 @@ class Game {
 - **Bottom-left:** speed, and the air gauge (∞ in Arcade) with a red flash below 15%.
 - **Bottom-right:** an attitude ball (roll/pitch), spin rate, and a top-down **nozzle map** of the car with 10 dots glowing by throttle.
 - **Top-right:** saves, crashes, time, Hop cooldown.
+- **Under the stats:** a wind arrow (relative to the camera) with Off / Breeze / Storm and the speed, hidden with no wind; streaks in the air show the wind too.
+- **G blackout:** clear up to 3 g passenger load (`HudField.GLoad`); above it the screen edges darken, reaching full black after about 1 s held, and recover over 1.5 s below 3 g.
 - **Centre toasts:** "SAVE" (with air used), "CRASH" (with cause), "NO AIR".
 
 ### 11.6 Screens and features

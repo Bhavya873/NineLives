@@ -66,11 +66,10 @@ export interface HudValues {
   finished: boolean;
   /** Course time at the finish, in s. */
   finishTimeS: number;
-  /**
-   * Passenger load at the seat, in g, when the sim reports it (`Game` HUD field
-   * `g_load`); undefined until then, and main.ts estimates it from the car's motion.
-   */
-  gLoad?: number;
+  /** Passenger load at the driver's seat, in g (1 sitting still). */
+  gLoad: number;
+  /** The wind now, [x, y, z] in m/s in the world frame: where the air moves to. */
+  windWorldM_S: [number, number, number];
 }
 
 /** The HUD's elements, looked up once at start-up. */

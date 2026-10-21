@@ -137,10 +137,11 @@ function peakThrottleAfterKnock(game, ticks) {
 }
 
 test('after a Chaos knock PD fires to steady the car, where Off fires nothing', () => {
-  // Seed 2's knock lifts wheels off the ground; the same knock for both controllers.
+  // Seed 25's knock is strong enough to unsteady the car past the thruster interlock
+  // (most knocks on a parked car stay inside it); the same knock for both controllers.
   const peaks = {};
   for (const kind of ['off', 'pd']) {
-    const game = new Game(vehicleToml, modesToml, controllersToml, 2n);
+    const game = new Game(vehicleToml, modesToml, controllersToml, 25n);
     game.set_controller(kind);
     tickMany(game, new Uint8Array(4), 120);
     peaks[kind] = peakThrottleAfterKnock(game, 240);

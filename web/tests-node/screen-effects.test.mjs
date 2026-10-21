@@ -1,5 +1,5 @@
-// Unit tests for the HUD screen effects: the g-force blackout's timing, the stand-in g
-// estimate, the wind arrow's angle and label, and the wind streaks' wrapping. Plain Node.
+// Unit tests for the HUD screen effects: the g-force blackout's timing, the wind arrow's
+// angle and label, the wind streaks' wrapping and the wind level setting. Plain Node.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { URLSearchParams } from 'node:url';
@@ -11,10 +11,9 @@ import {
   newGBlackoutState,
   updateGBlackout,
 } from '../src/hud/g-blackout.ts';
-import { newGLoadEstimator, updateGLoadEstimate } from '../src/hud/g-load-estimate.ts';
 import { cameraYawRad, windArrowAngleRad, windLabel } from '../src/hud/wind-indicator.ts';
 import { wrap } from '../src/render/wind-streaks.ts';
-import { previewWind } from '../src/screen-effects.ts';
+import { nextWindLevel, startingWindLevel } from '../src/screen-effects.ts';
 
 const FRAME_S = 1 / 60;
 
@@ -95,33 +94,6 @@ test('the overlay throbs while dark without reduced motion, and hides when clear
   assert.equal(element.hidden, true);
 });
 
-test('the g estimate reads 1 g at rest and about 0 g in free fall', () => {
-  const dtS = 1 / 120;
-  const resting = newGLoadEstimator();
-  const falling = newGLoadEstimator();
-
-  for (let tick = 0; tick < 120; tick += 1) {
-    const timeS = tick * dtS;
-    updateGLoadEstimate(resting, [5, 0.6, 2], dtS);
-    updateGLoadEstimate(falling, [0, 100 - 0.5 * 9.81 * timeS * timeS, 0], dtS);
-  }
-
-  assert.ok(Math.abs(resting.gLoad - 1) < 1e-6);
-  assert.ok(falling.gLoad < 0.05, `free fall reads ${falling.gLoad} g`);
-});
-
-test('a respawn jump is not read as g', () => {
-  const dtS = 1 / 120;
-  const estimator = newGLoadEstimator();
-  for (let tick = 0; tick < 30; tick += 1) {
-    updateGLoadEstimate(estimator, [0, 0.6, 0], dtS);
-  }
-
-  updateGLoadEstimate(estimator, [40, 3, 0], dtS);
-
-  assert.equal(estimator.gLoad, 1);
-});
-
 test('camera yaw is 0 looking along +X and a quarter turn looking along -Z', () => {
   assert.ok(Math.abs(cameraYawRad(1, 0)) < 1e-9);
   assert.ok(Math.abs(cameraYawRad(0, -1) - Math.PI / 2) < 1e-9);
@@ -157,9 +129,11 @@ test('streaks leaving the box come back on the other side', () => {
   assert.equal(wrap(3, -18, 18), 3);
 });
 
-test('the wind preview reads two numbers and ignores anything else', () => {
-  assert.deepEqual(previewWind(new URLSearchParams('wind=8,-3')), [8, 0, -3]);
-  assert.deepEqual(previewWind(new URLSearchParams('wind=500,0')), [60, 0, 0]);
-  assert.deepEqual(previewWind(new URLSearchParams('wind=abc')), [0, 0, 0]);
-  assert.deepEqual(previewWind(new URLSearchParams('')), [0, 0, 0]);
+test('the wind level comes from ?wind= and V cycles Off, Breeze, Storm', () => {
+  assert.equal(startingWindLevel(new URLSearchParams('wind=storm')), 'storm');
+  assert.equal(startingWindLevel(new URLSearchParams('wind=hurricane')), 'off');
+  assert.equal(startingWindLevel(new URLSearchParams('')), 'off');
+  assert.equal(nextWindLevel('off'), 'breeze');
+  assert.equal(nextWindLevel('breeze'), 'storm');
+  assert.equal(nextWindLevel('storm'), 'off');
 });
