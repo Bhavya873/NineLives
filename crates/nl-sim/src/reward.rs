@@ -41,6 +41,9 @@ pub struct RewardWeights {
     /// rewards the quiet-throttle part of success, and the policy idles thrust while
     /// parked (EXPERIMENTS m7-full-002).
     pub success: f32,
+    /// Charged per step on the squared passenger g-load above `shape.g_soft_limit`
+    /// (owner: a sudden turn must stay bearable for whoever sits inside).
+    pub g_force: f32,
 }
 
 /// The constants inside the SPEC §9.4 formulas (`[shape]`).
@@ -63,6 +66,8 @@ pub struct RewardShape {
     pub save_heading_scale_deg: f32,
     /// What a crash costs (before its weight).
     pub crash_penalty: f32,
+    /// Passenger g-load above this is charged (`weights.g_force`), in g.
+    pub g_soft_limit: f32,
 }
 
 /// Everything in reward.toml.
@@ -119,7 +124,7 @@ impl RewardConfig {
     }
 
     /// Every number with its name, for the checks above.
-    fn named_numbers(&self) -> [(&'static str, f32); 20] {
+    fn named_numbers(&self) -> [(&'static str, f32); 22] {
         let w = &self.weights;
         let s = &self.shape;
         [
@@ -135,9 +140,11 @@ impl RewardConfig {
             ("weights.unsettled", w.unsettled),
             ("weights.air_left", w.air_left),
             ("weights.success", w.success),
+            ("weights.g_force", w.g_force),
             ("shape.spin_cap_rad2_s2", s.spin_cap_rad2_s2),
             ("shape.airborne_grace_s", s.airborne_grace_s),
             ("shape.save_base", s.save_base),
+            ("shape.g_soft_limit", s.g_soft_limit),
             ("shape.save_quality", s.save_quality),
             ("shape.save_spin_scale_rad_s", s.save_spin_scale_rad_s),
             ("shape.save_fall_scale_m_s", s.save_fall_scale_m_s),
@@ -194,6 +201,8 @@ pub struct StepSummary {
     /// Share of the tank left at the end of the step, 0..1 (not read with unlimited air,
     /// where there is no tank to save).
     pub air_left_fraction: f32,
+    /// The passenger's smoothed g-load at the end of the step, in g.
+    pub g_load: f32,
 }
 
 /// The reward of one step, term by term (each already weighted), so training can log
@@ -222,11 +231,13 @@ pub struct RewardTerms {
     pub air_left: f32,
     /// Bonus for succeeding (≥ 0).
     pub success: f32,
+    /// Passenger g-load above the soft limit (≤ 0).
+    pub g_force: f32,
 }
 
 impl RewardTerms {
     /// The term names, in `as_array` order (training logs them under these names).
-    pub const NAMES: [&'static str; 11] = [
+    pub const NAMES: [&'static str; 12] = [
         "tilt",
         "spin",
         "air",
@@ -238,10 +249,11 @@ impl RewardTerms {
         "unsettled",
         "air_left",
         "success",
+        "g_force",
     ];
 
     /// The terms in `NAMES` order.
-    pub fn as_array(&self) -> [f32; 11] {
+    pub fn as_array(&self) -> [f32; 12] {
         [
             self.tilt,
             self.spin,
@@ -254,6 +266,7 @@ impl RewardTerms {
             self.unsettled,
             self.air_left,
             self.success,
+            self.g_force,
         ]
     }
 
@@ -303,6 +316,7 @@ pub fn reward_terms(step: &StepSummary, config: &RewardConfig) -> RewardTerms {
             0.0
         },
         success: if step.succeeded { w.success } else { 0.0 },
+        g_force: -w.g_force * (step.g_load - shape.g_soft_limit).max(0.0).powi(2),
     }
 }
 

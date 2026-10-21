@@ -296,6 +296,7 @@ impl TrainingEnv {
             unsettled: episode.unsettled_after_touchdown(),
             succeeded: events.succeeded,
             air_left_fraction: episode.world().air_fraction(),
+            g_load: episode.world().g_load(),
         }
     }
 

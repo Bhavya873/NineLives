@@ -29,6 +29,7 @@ use crate::course::{BoundsSpec, CourseSpec};
 use crate::course_build::{OBSTACLE_USER_DATA, build_course_shapes, shape_collider};
 use crate::course_triggers::{CourseTriggers, TriggerAction};
 use crate::events::{EventInputs, EventTracker, SimEvent};
+use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
 use crate::modes::ModeParams;
@@ -78,7 +79,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 14;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 15;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -138,6 +139,8 @@ pub struct World {
     course_bounds: Option<BoundsSpec>,
     /// The course's checkpoint and finish lines and kick plates, and the car's progress.
     triggers: CourseTriggers,
+    /// The passenger's smoothed g-load (SPEC §9.4).
+    g_load: GLoad,
     /// World time when the car crossed the finish line, in s.
     finish_time_s: Option<f32>,
     /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
@@ -228,6 +231,7 @@ impl World {
             auto_respawn_after_steps: None,
             course_bounds,
             triggers: CourseTriggers::default(),
+            g_load: GLoad::default(),
             finish_time_s: None,
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
@@ -287,6 +291,7 @@ impl World {
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
         self.physics.step();
+        self.update_g_load();
         let touching_after = self.wheels_touching();
         let wheels_down_after = count_true(touching_after);
         // 10. The tank: pay for this step's thrust, then refill if on the ground.
@@ -300,6 +305,23 @@ impl World {
         self.update_triggers();
         // 12. Events (SPEC §7.9).
         self.update_events(&motion_before, touching_after);
+    }
+
+    /// Folds this step's seat g-load into the smoothed passenger g-load (SPEC §9.4).
+    fn update_g_load(&mut self) {
+        let passenger = &self.car.config().passenger;
+        let body = &self.physics.bodies[self.car.chassis];
+        self.g_load.update(
+            body,
+            passenger.seat_offset_m,
+            PHYSICS_DT_S,
+            passenger.smoothing_s,
+        );
+    }
+
+    /// The passenger's smoothed g-load now, in g (SPEC §9.4).
+    pub fn g_load(&self) -> f32 {
+        self.g_load.g()
     }
 
     /// Gives the car a random Chaos knock (SPEC §7.12).
@@ -724,6 +746,7 @@ impl World {
         // suspension read "not touching" until the next step casts them again.
         self.car.forget_wheel_rays();
         self.triggers.forget_car();
+        self.g_load.forget_motion();
         self.events.reset();
         self.steps_since_crash = 0;
         let body = &mut self.physics.bodies[self.car.chassis];

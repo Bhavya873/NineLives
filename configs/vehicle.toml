@@ -80,12 +80,14 @@ exhaust_speed_m_s = 600.0
 # the controller's throttles are cut; Hop and Boost feed-forward still fire. It stops any
 # controller idling thrust while parked or pushing the car off the track while driving
 # (EXPERIMENTS 2026-10-19), and never cuts a save: a falling, tilted or spinning car isn't
-# steady. The centre of mass rests about 0.6 m up.
+# steady. The centre of mass rests about 0.6 m up. Wide enough that a wheel lifting on a
+# bump or a kerb still counts as on the ground (owner: the AI fired whenever one wheel left
+# the ground); a kicker or flip tilts past 25° and unlocks at once.
 [thrusters.interlock]
-max_tilt_deg = 15.0
+max_tilt_deg = 25.0
 max_height_m = 1.0
-max_spin_rad_s = 1.0
-max_vertical_speed_m_s = 1.0
+max_spin_rad_s = 2.5
+max_vertical_speed_m_s = 3.0
 
 
 # The 10 nozzles, in the fixed SPEC §4 order. Position is relative to the centre of
@@ -189,3 +191,10 @@ speed_kept_min_take_off_m_s = 3.0
 # these sizes.
 max_linear_impulse_n_s = 8000.0
 max_angular_impulse_n_m_s = 3000.0
+
+[passenger]
+# The driver's seat relative to the centre of mass (body frame: +X forward, +Y up, +Z
+# right), for the passenger g-load the reward and the screen blackout use.
+seat_offset_m = [-0.2, 0.15, -0.35]
+# The g-load is smoothed with this time constant: one contact step's spike is not felt.
+smoothing_s = 0.1

@@ -49,6 +49,20 @@ pub struct PdConfig {
     /// In the air, sideways sliding is damped with this gain (1/s), so the side boosters
     /// straighten the car's path before touchdown.
     pub kv_lateral: f32,
+    /// Cap on the angular acceleration PD asks for, in rad/s², so a sudden turn stays
+    /// gentle on the passenger (about 3 g at the seat with the spin it allows).
+    pub max_angular_accel_rad_s2: f32,
+    /// Air control: full steer asks for this yaw rate, in rad/s.
+    pub air_yaw_rate_rad_s: f32,
+    /// Air control: full throttle or brake asks for this nose-down or nose-up pitch, in rad.
+    pub air_pitch_rad: f32,
+    /// Air control only above this height; lower, PD lines up for landing, in m.
+    pub air_wish_min_height_m: f32,
+    /// With any wheel down, tilted at most this much (degrees) and spinning at most
+    /// `quiet_max_spin_rad_s`, PD treats the car as driving and leaves the thrusters off.
+    pub quiet_max_tilt_deg: f32,
+    /// See `quiet_max_tilt_deg`, in rad/s.
+    pub quiet_max_spin_rad_s: f32,
 }
 
 /// Everything in controllers.toml.
@@ -99,6 +113,12 @@ impl ControllersConfig {
             ("pd.ground_roll_gain", pd.ground_roll_gain),
             ("pd.ground_side_push", pd.ground_side_push),
             ("pd.kv_lateral", pd.kv_lateral),
+            ("pd.max_angular_accel_rad_s2", pd.max_angular_accel_rad_s2),
+            ("pd.air_yaw_rate_rad_s", pd.air_yaw_rate_rad_s),
+            ("pd.air_pitch_rad", pd.air_pitch_rad),
+            ("pd.air_wish_min_height_m", pd.air_wish_min_height_m),
+            ("pd.quiet_max_tilt_deg", pd.quiet_max_tilt_deg),
+            ("pd.quiet_max_spin_rad_s", pd.quiet_max_spin_rad_s),
             ("allocation.force_weight", allocation.force_weight),
             ("allocation.torque_weight", allocation.torque_weight),
             ("allocation.regularisation", allocation.regularisation),

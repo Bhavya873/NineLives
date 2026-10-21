@@ -31,6 +31,7 @@ fn resting() -> StepSummary {
         unsettled: false,
         succeeded: false,
         air_left_fraction: 1.0,
+        g_load: 1.0,
     }
 }
 
@@ -291,4 +292,21 @@ fn success_pays_its_bonus_once_on_the_success_step_whatever_the_air() {
     assert_eq!(reward_terms(&resting(), &config()).success, 0.0);
     assert!((reward_terms(&succeeded, &config()).success - config().weights.success).abs() < 1e-6);
     assert!(config().weights.success > 0.0);
+}
+
+#[test]
+fn g_load_costs_nothing_up_to_the_soft_limit_and_its_square_above() {
+    let config = config();
+    let at_limit = StepSummary {
+        g_load: config.shape.g_soft_limit,
+        ..resting()
+    };
+    let two_over = StepSummary {
+        g_load: config.shape.g_soft_limit + 2.0,
+        ..resting()
+    };
+
+    assert_eq!(reward_terms(&at_limit, &config).g_force, 0.0);
+    let cost = reward_terms(&two_over, &config).g_force;
+    assert!((cost + 4.0 * config.weights.g_force).abs() < 1e-6, "{cost}");
 }

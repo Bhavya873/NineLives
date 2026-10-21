@@ -31,6 +31,20 @@ ground_side_push = 0.4
 # In the air, damp sideways sliding with gain kv_lateral (1/s): the side boosters
 # straighten the car's path before touchdown.
 kv_lateral = 1.5
+# Passenger comfort: PD never asks for more angular acceleration than this (rad/s²).
+# A car already spinning fast towards upright the long way keeps going round.
+max_angular_accel_rad_s2 = 25.0
+# Air control from the driver, high enough in the air and roughly upright: full steer
+# asks for air_yaw_rate_rad_s, full throttle/brake for air_pitch_rad nose down/up.
+# Below air_wish_min_height_m PD lines the car up for landing instead.
+air_yaw_rate_rad_s = 1.5
+air_pitch_rad = 0.35
+air_wish_min_height_m = 3.0
+# With two wheels down, tilted at most quiet_max_tilt_deg and spinning at most
+# quiet_max_spin_rad_s, PD counts the car as driving and fires nothing: a wheel lifting on
+# a bump is not a save.
+quiet_max_tilt_deg = 15.0
+quiet_max_spin_rad_s = 1.5
 
 [allocation]
 # Solve min |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1 by projected gradient (SPEC §8).

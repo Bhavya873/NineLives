@@ -38,12 +38,17 @@ air_left = 1.0
 # a quiet throttle and the hold (SPEC §9.5), so this pays for the quiet landing itself;
 # without it the policy idled thrust while parked (EXPERIMENTS m7-full-002).
 success = 5.0
+# Passenger comfort: per step, weight × (g-load − shape.g_soft_limit)² above the limit.
+# At 5 g that is 0.2 a step, so sustained high g costs more than most saves pay.
+g_force = 0.05
 
 [shape]
 # |ω|² above this is not charged more (rad²/s²).
 spin_cap_rad2_s2 = 50.0
 # Airtime shorter than this is free (a hop or a short drop).
 airborne_grace_s = 0.5
+# Passenger g-load above this costs weights.g_force (the game starts blacking out here).
+g_soft_limit = 3.0
 # Save = save_base + save_quality × q, with
 # q = clamp01(1 − |ω| / save_spin_scale) × clamp01(1 − fall speed / save_fall_scale)
 #   × clamp01(1 − heading error / save_heading_scale) × clamp01(speed kept),

@@ -5,6 +5,7 @@
 
 use nl_sim::car_state::{CarModel, CarState, WRENCH_SIZE, Wrench};
 use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT};
+use nl_sim::input::InputFrame;
 use nl_sim::modes::ModeParams;
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
@@ -16,6 +17,9 @@ use crate::{ControlCtx, Controller};
 /// Below this size the tilt error has no reliable direction (the car is almost exactly
 /// upside down), so PD picks a roll instead.
 const MIN_TILT_ERROR: f32 = 0.1;
+
+/// Wheels that must touch for PD's quiet rule (`driving_on_wheels`) on a calm car.
+const QUIET_MIN_WHEELS: usize = 2;
 
 /// The PD controller with its allocation, for one car.
 #[derive(Debug, Clone, PartialEq)]
@@ -54,14 +58,20 @@ impl Pd {
         Pd::new(&world.car_model(), config)
     }
 
-    /// The force and torque PD wants now, in the body frame:
-    /// [force x, y, z, torque x, y, z]. All zero while the car drives on its wheels,
-    /// to save air.
+    /// The force and torque PD wants now with no driver input, in the body frame:
+    /// [force x, y, z, torque x, y, z] (see `wanted_wrench_for`).
     pub fn wanted_wrench(&self, state: &CarState) -> Wrench {
-        if state.on_wheels() {
+        self.wanted_wrench_for(state, &InputFrame::default())
+    }
+
+    /// The force and torque PD wants now, in the body frame, with the driver's `input`
+    /// as air-control wishes (steer turns the heading, throttle tilts the nose). All
+    /// zero while the car drives on its wheels, to save air.
+    pub fn wanted_wrench_for(&self, state: &CarState, input: &InputFrame) -> Wrench {
+        if self.driving_on_wheels(state) {
             return [0.0; WRENCH_SIZE];
         }
-        let mut torque = self.attitude_torque(state);
+        let mut torque = self.attitude_torque(state, &self.air_wish(state, input));
         // Low, tipped over and nearly still: lying on the ground, not falling past it.
         let lying_on_ground = state.height_m < self.config.on_ground_height_m
             && state.up_alignment() < self.config.upright_alignment
@@ -82,13 +92,51 @@ impl Pd {
         ]
     }
 
-    /// SPEC §8: up_des = −gravity_dir_body; error e = (0, 1, 0) × up_des;
-    /// τ = I · (kp·e − kd·ω), per body axis.
-    fn attitude_torque(&self, state: &CarState) -> [f32; 3] {
+    /// On its wheels for PD's purposes: three or more down, or two down while the car is
+    /// near level and barely turning, so a wheel lifting on a bump or kerb does not set
+    /// the thrusters firing (owner's free-play feedback). A landing that touches first on
+    /// one wheel, and hops with every wheel up, still get PD: skipping those cost landings.
+    fn driving_on_wheels(&self, state: &CarState) -> bool {
+        let config = &self.config;
+        let near_level = state.up_alignment() >= libm::cosf(config.quiet_max_tilt_deg.to_radians());
+        state.on_wheels()
+            || (state.wheels_down() >= QUIET_MIN_WHEELS
+                && near_level
+                && state.spin_rad_s() <= config.quiet_max_spin_rad_s)
+    }
+
+    /// The driver's air-control wish: high enough in the air and roughly upright, steer
+    /// asks for a yaw rate (left positive, SPEC §4) and throttle for a pitch (forward
+    /// tips the nose down). Near the ground or tumbling, nothing: landing safely wins.
+    fn air_wish(&self, state: &CarState, input: &InputFrame) -> AirWish {
+        let config = &self.config;
+        let free_to_steer = state.wheels_down() == 0
+            && state.height_m > config.air_wish_min_height_m
+            && state.up_alignment() > config.upright_alignment;
+        if !free_to_steer {
+            return AirWish::default();
+        }
+        AirWish {
+            yaw_rate_rad_s: input.steer_fraction() * config.air_yaw_rate_rad_s,
+            nose_down_rad: input.throttle_fraction() * config.air_pitch_rad,
+        }
+    }
+
+    /// SPEC §8: up_des = −gravity_dir_body; error e = a × up_des, where a is the body
+    /// axis that should point up ((0, 1, 0), tipped forward by the pitch wish);
+    /// wanted angular acceleration kp·e − kd·(ω − wished yaw rate), capped at
+    /// `max_angular_accel_rad_s2` for the passenger (SPEC §9.4 g-load); τ = I · that.
+    /// A car already spinning fast towards upright the long way round keeps going
+    /// (`keep_spin_through`) instead of being stopped and turned back.
+    fn attitude_torque(&self, state: &CarState, wish: &AirWish) -> [f32; 3] {
         let [gx, gy, gz] = state.gravity_dir_body;
         let up_wanted = [-gx, -gy, -gz];
-        // (0, 1, 0) × (x, y, z) = (z, 0, −x).
-        let mut error = [up_wanted[2], 0.0, -up_wanted[0]];
+        let (sin_p, cos_p) = (
+            libm::sinf(wish.nose_down_rad),
+            libm::cosf(wish.nose_down_rad),
+        );
+        let axis_up = [-sin_p, cos_p, 0.0];
+        let mut error = cross(axis_up, up_wanted);
         let upside_down = up_wanted[1] < 0.0;
         if upside_down && error[0].abs() < MIN_TILT_ERROR && error[2].abs() < MIN_TILT_ERROR {
             // The cross product vanishes; roll (either way works) at the threshold size,
@@ -97,12 +145,36 @@ impl Pd {
             error = [roll_sign * MIN_TILT_ERROR, 0.0, 0.0];
         }
         let spin = state.angular_velocity_body_rad_s;
+        let wished_spin = [0.0, wish.yaw_rate_rad_s, 0.0];
+        let mut accel = [0.0; 3];
+        for axis in 0..3 {
+            let mut damped_spin = spin[axis] - wished_spin[axis];
+            if axis != 1 && self.keep_spin_through(state, error[axis], spin[axis]) {
+                // Push on round the way it already turns, without braking the spin.
+                error[axis] = -error[axis];
+                damped_spin = 0.0;
+            }
+            accel[axis] = self.config.kp * error[axis] - self.config.kd * damped_spin;
+        }
+        let accel = cap_length(accel, self.config.max_angular_accel_rad_s2);
         let mut torque = [0.0; 3];
         for axis in 0..3 {
-            let wanted = self.config.kp * error[axis] - self.config.kd * spin[axis];
-            torque[axis] = self.inertia_kg_m2[axis] * wanted;
+            torque[axis] = self.inertia_kg_m2[axis] * accel[axis];
         }
         torque
+    }
+
+    /// True when the car spins about a roll or pitch axis away from the short way up
+    /// (spin and error of opposite signs) so fast that stopping alone would carry it past
+    /// the half turn: with s = ω² / (2·α_max), reversing travels θ + 2s but carrying on
+    /// only 2π − θ, so carry on when s > π − θ (θ the tilt from upright).
+    fn keep_spin_through(&self, state: &CarState, error: f32, spin_rad_s: f32) -> bool {
+        if error * spin_rad_s >= 0.0 {
+            return false;
+        }
+        let tilt_rad = libm::acosf(state.up_alignment().clamp(-1.0, 1.0));
+        let stopping_rad = spin_rad_s * spin_rad_s / (2.0 * self.config.max_angular_accel_rad_s2);
+        stopping_rad > std::f32::consts::PI - tilt_rad
     }
 
     /// SPEC §8: when airborne, roughly upright, falling fast and low enough to need it
@@ -166,6 +238,33 @@ impl Pd {
     }
 }
 
+/// What the driver asks of the car in the air (`Pd::air_wish`).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct AirWish {
+    /// Wanted yaw rate, positive turning the nose left, in rad/s.
+    yaw_rate_rad_s: f32,
+    /// Wanted pitch, positive tipping the nose down, in rad.
+    nose_down_rad: f32,
+}
+
+/// a × b.
+fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// `vector` scaled down, if needed, so its length is at most `limit`.
+fn cap_length(vector: [f32; 3], limit: f32) -> [f32; 3] {
+    let length = libm::sqrtf(vector.iter().map(|value| value * value).sum());
+    if length <= limit {
+        return vector;
+    }
+    vector.map(|value| value * limit / length)
+}
+
 /// The total upward push (body +Y force) of all nozzles at full throttle, in N.
 fn full_lift_n(nozzle_wrenches: &[Wrench; NOZZLE_COUNT]) -> f32 {
     let mut lift_n = 0.0;
@@ -181,7 +280,7 @@ impl Controller for Pd {
     }
 
     fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
-        let wrench = self.wanted_wrench(&ctx.state);
+        let wrench = self.wanted_wrench_for(&ctx.state, &ctx.input);
         if wrench == [0.0; WRENCH_SIZE] {
             self.throttles = [0.0; NOZZLE_COUNT];
         } else {

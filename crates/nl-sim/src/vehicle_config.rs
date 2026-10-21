@@ -25,6 +25,28 @@ pub struct VehicleConfig {
     pub thrusters: ThrusterConfig,
     pub events: EventConfig,
     pub chaos: ChaosConfig,
+    /// Where the passenger sits (g-load, SPEC §9.4); defaults to the centre of mass.
+    #[serde(default)]
+    pub passenger: PassengerConfig,
+}
+
+/// The passenger, for the g-load. See `[passenger]` in `configs/vehicle.toml`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PassengerConfig {
+    /// The seat relative to the centre of mass, body frame, in m.
+    pub seat_offset_m: [f32; 3],
+    /// Time constant of the g-load smoothing, in s.
+    pub smoothing_s: f32,
+}
+
+impl Default for PassengerConfig {
+    fn default() -> PassengerConfig {
+        PassengerConfig {
+            seat_offset_m: [0.0; 3],
+            smoothing_s: 0.1,
+        }
+    }
 }
 
 /// The car body. See `[chassis]` in `configs/vehicle.toml`.
@@ -145,7 +167,8 @@ pub struct InterlockConfig {
     pub max_height_m: f32,
     /// Spinning at most this fast, in rad/s.
     pub max_spin_rad_s: f32,
-    /// Moving up or down at most this fast, in m/s, so braking a fall is never cut.
+    /// Moving up or down at most this fast, in m/s, so braking a fall is never cut, nor
+    /// the attitude control of a car rising off a Hop.
     pub max_vertical_speed_m_s: f32,
 }
 
@@ -288,7 +311,9 @@ impl VehicleConfig {
         self.steering.check()?;
         self.thrusters.check()?;
         self.events.check()?;
-        self.chaos.check()
+        self.chaos.check()?;
+        all_must_be_finite("passenger.seat_offset_m", self.passenger.seat_offset_m)?;
+        must_be_positive("passenger.smoothing_s", self.passenger.smoothing_s)
     }
 }
 
