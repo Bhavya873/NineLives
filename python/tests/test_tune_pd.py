@@ -5,7 +5,14 @@ CMA-ES run writes a controllers.toml PD can load."""
 import math
 
 from ninelives.sim_config import CONFIGS_DIR
-from ninelives.tune_pd import main, pd_gains, scaled_gains, with_pd_gains
+from ninelives.tune_pd import (
+    BUMPS_AIR_LIMIT_KG,
+    bumps_air_kg,
+    main,
+    pd_gains,
+    scaled_gains,
+    with_pd_gains,
+)
 
 REPO_TOML = (CONFIGS_DIR / "controllers.toml").read_text()
 
@@ -25,12 +32,12 @@ def test_scaling_multiplies_each_gain_and_caps_a_fraction_below_1():
     base = pd_gains(REPO_TOML)
     log_factors = [0.0] * len(base)
     log_factors[0] = math.log(2.0)
-    log_factors[list(base).index("brake_usable_fraction")] = 1.0
+    log_factors[list(base).index("ground_side_push")] = 2.0
 
     gains = scaled_gains(base, log_factors)
 
     assert math.isclose(gains["kp"], 2.0 * base["kp"])
-    assert gains["brake_usable_fraction"] == 0.99
+    assert gains["ground_side_push"] == 0.99
     assert all(value > 0.0 for value in gains.values())
 
 
@@ -48,3 +55,9 @@ def test_feel_the_comfort_cap_and_when_pd_acts_are_never_tuned():
     for name in ("air_pitch_rad", "max_angular_accel_rad_s2", "brake_speed_m_s"):
         assert name not in gains
     assert "kp" in gains
+
+
+def test_the_repo_pd_stays_under_the_bumps_limit_so_it_pays_nothing():
+    repo_toml = (CONFIGS_DIR / "controllers.toml").read_text()
+
+    assert bumps_air_kg(repo_toml) < BUMPS_AIR_LIMIT_KG
