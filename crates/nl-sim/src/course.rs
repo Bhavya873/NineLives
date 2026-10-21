@@ -14,6 +14,10 @@ pub const GAUNTLET_JSON: &str = include_str!("../../../courses/gauntlet.json");
 /// The training viewer's obstacle arena (SPEC §11.6): ramps and blocks around an open
 /// drop zone at the origin, where Stage A drops start.
 pub const ARENA_JSON: &str = include_str!("../../../courses/arena.json");
+/// The game's open world for free driving (SPEC §11.6): zones of the pieces the AI
+/// trains on (a jump boulevard, a skate park of halfpipes, a jump field, a bumps strip)
+/// around a clear spawn at the origin, with open floor between them.
+pub const PLAYGROUND_JSON: &str = include_str!("../../../courses/playground.json");
 
 /// The only course schema version this build reads.
 pub const COURSE_SCHEMA_VERSION: u32 = 1;
