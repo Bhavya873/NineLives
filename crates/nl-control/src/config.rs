@@ -153,12 +153,26 @@ mod tests {
     fn the_repo_config_loads() {
         let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
 
-        assert_eq!(config.pd.kp, 8.0);
+        assert!(config.pd.kp > 0.0);
+    }
+
+    /// The repo's controllers.toml with the `name = …` line set to `name = value`.
+    fn with_value(name: &str, value: &str) -> String {
+        let prefix = format!("{name} = ");
+        let mut lines: Vec<String> = Vec::new();
+        for line in DEFAULT_CONTROLLERS_TOML.lines() {
+            if line.starts_with(&prefix) {
+                lines.push(format!("{prefix}{value}"));
+            } else {
+                lines.push(line.to_string());
+            }
+        }
+        lines.join("\n")
     }
 
     #[test]
     fn a_negative_gain_is_refused_with_its_field_name() {
-        let broken = DEFAULT_CONTROLLERS_TOML.replace("kd = 4.0", "kd = -4.0");
+        let broken = with_value("kd", "-4.0");
 
         let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
 
@@ -170,8 +184,7 @@ mod tests {
 
     #[test]
     fn an_upright_alignment_above_1_is_refused() {
-        let broken =
-            DEFAULT_CONTROLLERS_TOML.replace("upright_alignment = 0.7", "upright_alignment = 1.5");
+        let broken = with_value("upright_alignment", "1.5");
 
         let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
 

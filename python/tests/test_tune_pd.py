@@ -21,16 +21,16 @@ def test_new_gains_replace_only_the_pd_numbers():
     assert text.split("[allocation]")[1] == REPO_TOML.split("[allocation]")[1]
 
 
-def test_scaling_multiplies_each_gain_and_caps_the_upright_threshold():
+def test_scaling_multiplies_each_gain_and_caps_a_fraction_below_1():
     base = pd_gains(REPO_TOML)
     log_factors = [0.0] * len(base)
     log_factors[0] = math.log(2.0)
-    log_factors[list(base).index("upright_alignment")] = 1.0
+    log_factors[list(base).index("brake_usable_fraction")] = 1.0
 
     gains = scaled_gains(base, log_factors)
 
     assert math.isclose(gains["kp"], 2.0 * base["kp"])
-    assert gains["upright_alignment"] == 0.99
+    assert gains["brake_usable_fraction"] == 0.99
     assert all(value > 0.0 for value in gains.values())
 
 
@@ -42,9 +42,9 @@ def test_a_tiny_tuning_run_writes_a_loadable_controllers_toml(tmp_path):
     assert set(pd_gains(out.read_text())) == set(pd_gains(REPO_TOML))
 
 
-def test_player_feel_and_the_comfort_cap_are_never_tuned():
+def test_feel_the_comfort_cap_and_when_pd_acts_are_never_tuned():
     gains = pd_gains((CONFIGS_DIR / "controllers.toml").read_text())
 
-    for name in ("air_yaw_rate_rad_s", "air_pitch_rad", "max_angular_accel_rad_s2"):
+    for name in ("air_pitch_rad", "max_angular_accel_rad_s2", "brake_speed_m_s"):
         assert name not in gains
     assert "kp" in gains

@@ -35,17 +35,27 @@ TUNING_CELLS = [
 FIRST_TUNING_SEED = 2_000_000
 # Gains controllers.toml requires to be fractions (an up alignment is a cosine; the others
 # are shares of lift or weight), capped just below 1.
-FRACTION_GAINS = ("upright_alignment", "brake_usable_fraction", "ground_side_push")
+FRACTION_GAINS = ("brake_usable_fraction", "ground_side_push")
 MAX_FRACTION = 0.99
 
 
-# Never tuned: the air-control feel (eval presses no keys, so these would drift at random)
-# and the angular-acceleration cap that keeps the passenger g-load down (round 7).
+# Never tuned, so the search changes how hard PD acts but not when (round 7):
+# - the air-control feel (eval presses no keys, so these would drift at random);
+# - the angular-acceleration cap that keeps the passenger g-load down;
+# - the rules for when PD acts at all. Tuned freely, v3 braked any fall faster than
+#   0.4 m/s and fired on bumps (17 kg over the bumps test; owner: it must not fire
+#   whenever a wheel lifts), and braked too late to stop a fast fall.
 UNTUNED = (
     "air_yaw_rate_rad_s",
     "air_pitch_rad",
     "air_wish_min_height_m",
     "max_angular_accel_rad_s2",
+    "upright_alignment",
+    "brake_speed_m_s",
+    "brake_safety",
+    "lying_max_fall_speed_m_s",
+    "quiet_max_tilt_deg",
+    "quiet_max_spin_rad_s",
 )
 
 
