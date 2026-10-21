@@ -11,7 +11,8 @@ import { mapPercent } from '../src/hud/nozzle-map.ts';
 import { readNozzleLayout } from '../src/nozzle-layout.ts';
 import { buildCarBody } from '../src/render/car-mesh.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
-import { portPositionM } from '../src/render/nozzle-ports.ts';
+import { BODY_BEVEL_M, bodyTopM, flankBottomM } from '../src/render/car-shape.ts';
+import { SIDE_PORT_RADIUS_M, portPositionM, portSurface } from '../src/render/nozzle-ports.ts';
 import { Game, controllersToml, modesToml, vehicleToml } from './load-wasm.mjs';
 
 function nozzleLayout() {
@@ -62,6 +63,29 @@ test('every port sits on the body surface, a short way from its nozzle', () => {
     assert.ok(!deepInside.containsPoint(port), `port ${index} is on the surface`);
     assert.ok(port.distanceTo(nozzle) < 0.45, `port ${index} is near its nozzle`);
   });
+});
+
+test('every side port sits on the flat flank, clear of the rounded top edge and arch lip', () => {
+  const nozzles = readNozzleLayout(nozzleLayout());
+  const sidePorts = nozzles.filter((place) => portSurface(place) === 'side');
+
+  assert.equal(sidePorts.length, 4);
+  for (const place of sidePorts) {
+    const [forwardM, upM] = portPositionM(place);
+    // The bevel is measured square to the top edge, so it reaches further down where the
+    // edge slopes.
+    const slope = (bodyTopM(forwardM - 0.01) - bodyTopM(forwardM + 0.01)) / 0.02;
+    const flatTopM = bodyTopM(forwardM) - BODY_BEVEL_M * Math.hypot(1, slope);
+    const flatBottomM = flankBottomM(forwardM) + BODY_BEVEL_M;
+    assert.ok(
+      upM + SIDE_PORT_RADIUS_M <= flatTopM,
+      `port at x ${forwardM}: top ${upM + SIDE_PORT_RADIUS_M} m pokes above the flat at ${flatTopM} m`,
+    );
+    assert.ok(
+      upM - SIDE_PORT_RADIUS_M >= flatBottomM,
+      `port at x ${forwardM}: bottom ${upM - SIDE_PORT_RADIUS_M} m dips below the flat at ${flatBottomM} m`,
+    );
+  }
 });
 
 test('the nozzle map spans the car from edge to edge', () => {
