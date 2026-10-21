@@ -12,6 +12,7 @@ import {
   evalEpisodes,
   newGame,
   policyJson,
+  tickMany,
 } from './load-wasm.mjs';
 
 test('the AI cannot be chosen until a policy is loaded, then it can', () => {
@@ -26,17 +27,36 @@ test('the AI cannot be chosen until a policy is loaded, then it can', () => {
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Ai);
 });
 
-test('with a policy loaded, T cycles PD, AI, Off from the PD start', () => {
+test('with a policy loaded, T cycles PD, AI, Hybrid, Off from the PD start', () => {
   const game = newGame();
   game.load_policy(policyJson);
 
   const seen = [];
-  for (let press = 0; press < 3; press += 1) {
+  for (let press = 0; press < 4; press += 1) {
     game.cycle_controller();
     seen.push(game.hud()[HudField.Controller]);
   }
 
-  assert.deepEqual(seen, [ControllerCode.Ai, ControllerCode.Off, ControllerCode.Pd]);
+  assert.deepEqual(seen, [
+    ControllerCode.Ai,
+    ControllerCode.HybridPd,
+    ControllerCode.Off,
+    ControllerCode.Pd,
+  ]);
+});
+
+test('Hybrid leaves a parked car to PD and hands a dropped car to the AI', () => {
+  const game = newGame();
+  game.load_policy(policyJson);
+  game.set_controller('hybrid');
+  // A new car drops onto its wheels at the start; the AI hands back once it has settled.
+  tickMany(game, new Uint8Array(4), 240); // 2 s
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.HybridPd);
+
+  game.drop_test(5n);
+  tickMany(game, new Uint8Array(4), 2); // one control step
+
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.HybridAi);
 });
 
 test('a policy made for another observation layout is refused, naming the hash', () => {
