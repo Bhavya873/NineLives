@@ -2,13 +2,13 @@
 //! one stage and summarise how it did. No Python needed; the M5 Python eval steps the
 //! same `nl_sim::episode::Episode`, so the numbers can be compared.
 
-use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_HZ};
 use nl_sim::course::CourseSpec;
 use nl_sim::episode::{Episode, EpisodeResult, EpisodeStatus};
 use nl_sim::input::InputFrame;
 use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{ScenariosConfig, Stage};
-use nl_sim::world::PlaceCarError;
+use nl_sim::world::{PlaceCarError, World};
 use serde::Serialize;
 
 use crate::{ControlCtx, Controller};
@@ -72,6 +72,27 @@ pub fn run_episode_on_course(
 ) -> Result<EpisodeResult, PlaceCarError> {
     let episode = Episode::start_on_course(variation, scenarios, stage, course, seed)?;
     Ok(fly_episode(episode, controller, seed))
+}
+
+/// Drives `world`'s car for `seconds` holding `input`, with `controller` acting at 60 Hz
+/// (no episode rules), and returns the air used, in kg. It measures firing the driver
+/// didn't need, e.g. over `courses/bumps-strip.json` (owner, round 7: thrusters must not
+/// fire whenever a wheel lifts).
+pub fn air_used_driving(
+    world: &mut World,
+    controller: &mut dyn Controller,
+    input: InputFrame,
+    seconds: f32,
+) -> f32 {
+    let steps = (seconds * PHYSICS_HZ as f32).round() as usize;
+    for _ in 0..steps {
+        if world.is_control_step() {
+            let ctx = ControlCtx::for_world(world, input);
+            world.set_controller_throttles(controller.act(&ctx));
+        }
+        world.step(input);
+    }
+    world.air_used_kg()
 }
 
 /// Runs `episode` to its end with `controller` (reset for `seed` first).

@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::batched_sim::BatchedSim;
-use crate::eval::{policy_actions, run_eval};
+use crate::eval::{driving_air_kg, policy_actions, run_eval};
 
 /// The nozzle names in their fixed index order.
 #[pyfunction]
@@ -67,6 +67,7 @@ fn reward_term_names() -> Vec<&'static str> {
 fn ninelives_sim(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<BatchedSim>()?;
     module.add_function(wrap_pyfunction!(run_eval, module)?)?;
+    module.add_function(wrap_pyfunction!(driving_air_kg, module)?)?;
     module.add_function(wrap_pyfunction!(policy_actions, module)?)?;
     module.add_function(wrap_pyfunction!(policy_format, module)?)?;
     module.add_function(wrap_pyfunction!(nozzle_names, module)?)?;
