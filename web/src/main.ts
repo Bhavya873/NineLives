@@ -52,6 +52,12 @@ import {
   setCarVisible,
 } from './render/scene.ts';
 import { loadPolicy } from './policy.ts';
+import {
+  createScreenEffects,
+  renderScreenEffects,
+  resetScreenEffects,
+  tickScreenEffects,
+} from './screen-effects.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
 import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
@@ -118,6 +124,8 @@ async function start(): Promise<void> {
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
+  const params = new URLSearchParams(window.location.search);
+  const effects = createScreenEffects(view.scene, prefersReducedMotion(), params);
   const course = createCourseSession(view.scene, view.ground, {
     panel: requireElement('results'),
     lines: requireElement('results-lines'),
@@ -127,9 +135,9 @@ async function start(): Promise<void> {
     showCourse(course, shapesJson);
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
+    resetScreenEffects(effects);
   };
   const startGauntlet = () => startCourse(game.load_course(gauntletJson));
-  const params = new URLSearchParams(window.location.search);
   // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
   const startFreeDrive = () => {
     if (params.get('world') === 'flat') {
@@ -154,6 +162,7 @@ async function start(): Promise<void> {
     // A drop during the respawn wait clears the crash without a Respawn event.
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
+    resetScreenEffects(effects);
   });
   let lastRenderMs = performance.now();
 
@@ -170,6 +179,7 @@ async function start(): Promise<void> {
       stopExplosion(explosion);
       // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
       snapViewToGame(game, frames, view, carPose);
+      resetScreenEffects(effects);
     }
     const toast = toastForEvents(events);
     // Nothing covers the results screen; what happens after the finish doesn't count.
@@ -185,6 +195,7 @@ async function start(): Promise<void> {
       game.tick(readInputFrame());
       frames.latestChassis = game.chassis_pose();
       frames.latestWheels = game.wheel_poses();
+      tickScreenEffects(effects, frames.latestChassis, Game.physics_dt_s());
       // Remember where the wreck froze, even if it respawns before the next frame.
       if (game.is_crashed()) {
         crashPosition.fromArray(frames.latestChassis);
@@ -213,6 +224,14 @@ async function start(): Promise<void> {
       view.camera.position.add(cameraShake(explosion, shake));
       view.renderer.render(view.scene, view.camera);
       view.camera.position.sub(shake);
+      renderScreenEffects(effects, {
+        simGLoad: hudValues.gLoad,
+        crashed: hudValues.crashed,
+        camera: view.camera,
+        carPosition: carPose.position,
+        frameS,
+        nowS: nowMs / 1000,
+      });
 
       updateHud(hud, hudValues);
       updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
@@ -291,7 +310,15 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.checkpointCount = values[HudField.CheckpointCount] ?? 0;
   out.finished = values[HudField.Finished] === 1;
   out.finishTimeS = values[HudField.FinishTimeS] ?? 0;
+  out.gLoad = G_LOAD_FIELD === undefined ? undefined : values[G_LOAD_FIELD];
 }
+
+/**
+ * Index of the sim's seat g in `Game.hud()`, once the wasm build has a `GLoad` HUD
+ * field (TODO: `Game` HUD field `g_load`); until then undefined and the blackout uses
+ * an estimate from the car's motion.
+ */
+const G_LOAD_FIELD = (HudField as unknown as Record<string, number | undefined>)['GLoad'];
 
 start().catch((error: unknown) => {
   console.error('Nine Lives failed to start:', error);
