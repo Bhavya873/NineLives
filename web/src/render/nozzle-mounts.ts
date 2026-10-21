@@ -7,7 +7,8 @@
 import { BoxGeometry, ExtrudeGeometry, Mesh, MeshStandardMaterial, Shape, Vector3 } from 'three';
 
 import type { NozzlePlace } from '../nozzle-layout.ts';
-import { BODY_BOTTOM_M, BODY_WIDTH_M, bodyTopHeightM, paint } from './car-mesh.ts';
+import { paint } from './car-mesh.ts';
+import { BODY_BOTTOM_M, bodyHalfWidthM, bodyTopHeightM, solidUndersideXM } from './car-shape.ts';
 
 /** Dark trim, so pads and plates read as hardware against the paint. */
 const MOUNT_COLOUR = 0x2b2f36;
@@ -27,6 +28,8 @@ const PAD_HALF_LENGTH_M = 0.12;
 const PAD_HALF_WIDTH_M = 0.13;
 /** How far the pad hangs below the body's underside. */
 const PAD_DROP_M = 0.05;
+/** How far a pad over a wheel arch reaches under the solid body beyond the arch. */
+const PAD_ARCH_OVERLAP_M = 0.08;
 
 /** Plate on the tail for a rearward nozzle: half its height and width, and thickness. */
 const PLATE_HALF_SIZE_M = 0.14;
@@ -78,7 +81,7 @@ function buildSidePylon(forwardM: number, upM: number, rightM: number): Mesh {
   // Points are [distance out from the centre line, height]; `side` puts them left or right.
   const outline: [number, number][] = [
     [PYLON_FOOT_INNER_M, footM],
-    [BODY_WIDTH_M / 2, footM],
+    [bodyHalfWidthM(forwardM), footM],
     [faceM, faceBottomM],
     [faceM, faceTopM],
     [faceM - PYLON_TOP_DEPTH_M, faceTopM],
@@ -102,14 +105,32 @@ function buildSidePylon(forwardM: number, upM: number, rightM: number): Mesh {
   return new Mesh(geometry, paint);
 }
 
-/** A flat block from inside the body down to just below its underside. */
+/**
+ * A flat block from inside the body down to just below its underside. A nozzle over a
+ * wheel arch has no body above it, so its pad stretches along the car until it reaches
+ * solid body past the arch.
+ */
 function buildUnderPad(forwardM: number, upM: number, rightM: number): NozzleMount {
   const topM = Math.max(upM, BODY_BOTTOM_M) + PAD_DROP_M;
   const faceM = BODY_BOTTOM_M - PAD_DROP_M;
-  const geometry = new BoxGeometry(2 * PAD_HALF_LENGTH_M, topM - faceM, 2 * PAD_HALF_WIDTH_M);
+  const { startXM, endXM } = padSpanXM(forwardM);
+  const geometry = new BoxGeometry(endXM - startXM, topM - faceM, 2 * PAD_HALF_WIDTH_M);
   const mesh = new Mesh(geometry, trimMaterial);
-  mesh.position.set(forwardM, (topM + faceM) / 2, rightM);
+  mesh.position.set((startXM + endXM) / 2, (topM + faceM) / 2, rightM);
   return { mesh, faceOffsetM: upM - faceM };
+}
+
+/** Where a pad starts and ends along the car: around the nozzle, plus past any arch. */
+function padSpanXM(forwardM: number): { startXM: number; endXM: number } {
+  let startXM = forwardM - PAD_HALF_LENGTH_M;
+  let endXM = forwardM + PAD_HALF_LENGTH_M;
+  const solidXM = solidUndersideXM(forwardM);
+  if (solidXM > forwardM) {
+    endXM = Math.max(endXM, solidXM + PAD_ARCH_OVERLAP_M);
+  } else if (solidXM < forwardM) {
+    startXM = Math.min(startXM, solidXM - PAD_ARCH_OVERLAP_M);
+  }
+  return { startXM, endXM };
 }
 
 /** A thin square plate behind the nozzle, its back face at the nozzle's position. */
