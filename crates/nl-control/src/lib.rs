@@ -2,7 +2,8 @@
 //!
 //! Each controller implements `Controller`. The game and the eval runner call `act` at
 //! 60 Hz and hand the throttles to `World::set_controller_throttles`: `Off`, the debug
-//! `Manual`, the `Pd` baseline with its thruster allocation, and `Ai`, the trained policy.
+//! `Manual`, the `Pd` baseline with its thruster allocation, `Ai`, the trained policy, and
+//! `Hybrid`, where the AI flies and PD drives.
 
 use nl_sim::car_state::CarState;
 use nl_sim::conventions::NOZZLE_COUNT;
@@ -16,6 +17,7 @@ pub mod allocation;
 pub mod config;
 mod controller_kind;
 pub mod eval;
+mod hybrid;
 mod manual;
 mod off;
 mod pd;
@@ -26,6 +28,7 @@ pub use controller_kind::{
     BuildControllerError, CONTROLLER_NAMES, CYCLE_NAMES, ControllerChoiceError, ControllerChoices,
     ControllerKind, build_controller,
 };
+pub use hybrid::{Hybrid, HybridGate, HybridGateSettings};
 pub use manual::Manual;
 pub use off::Off;
 pub use pd::Pd;
