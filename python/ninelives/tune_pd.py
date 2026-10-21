@@ -39,10 +39,20 @@ FRACTION_GAINS = ("upright_alignment", "brake_usable_fraction", "ground_side_pus
 MAX_FRACTION = 0.99
 
 
+# Never tuned: the air-control feel (eval presses no keys, so these would drift at random)
+# and the angular-acceleration cap that keeps the passenger g-load down (round 7).
+UNTUNED = (
+    "air_yaw_rate_rad_s",
+    "air_pitch_rad",
+    "air_wish_min_height_m",
+    "max_angular_accel_rad_s2",
+)
+
+
 def pd_gains(controllers_toml: str) -> dict[str, float]:
-    """The [pd] numbers of a controllers.toml, in file order."""
+    """The tunable [pd] numbers of a controllers.toml, in file order."""
     pd = tomllib.loads(controllers_toml)["pd"]
-    return {name: float(value) for name, value in pd.items()}
+    return {name: float(value) for name, value in pd.items() if name not in UNTUNED}
 
 
 def with_pd_gains(controllers_toml: str, gains: dict[str, float]) -> str:

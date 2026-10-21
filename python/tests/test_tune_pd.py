@@ -40,3 +40,11 @@ def test_a_tiny_tuning_run_writes_a_loadable_controllers_toml(tmp_path):
     main(["--generations", "1", "--popsize", "2", "--episodes", "2", "--out", str(out)])
 
     assert set(pd_gains(out.read_text())) == set(pd_gains(REPO_TOML))
+
+
+def test_player_feel_and_the_comfort_cap_are_never_tuned():
+    gains = pd_gains((CONFIGS_DIR / "controllers.toml").read_text())
+
+    for name in ("air_yaw_rate_rad_s", "air_pitch_rad", "max_angular_accel_rad_s2"):
+        assert name not in gains
+    assert "kp" in gains
