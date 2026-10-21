@@ -45,18 +45,23 @@ test('with a policy loaded, T cycles PD, AI, Hybrid, Off from the PD start', () 
   ]);
 });
 
-test('Hybrid leaves a parked car to PD and hands a dropped car to the AI', () => {
+test('Hybrid leaves a parked car to PD and hands a tumbling car to the AI', () => {
   const game = newGame();
   game.load_policy(policyJson);
   game.set_controller('hybrid');
-  // A new car drops onto its wheels at the start; the AI hands back once it has settled.
-  tickMany(game, new Uint8Array(4), 240); // 2 s
+  tickMany(game, new Uint8Array(4), 2); // one control step
   assert.equal(game.hud()[HudField.Controller], ControllerCode.HybridPd);
 
-  game.drop_test(5n);
-  tickMany(game, new Uint8Array(4), 2); // one control step
+  // Drop tests start at a random tilt; only one past the upset angle (60°) hands over.
+  const seen = new Set();
+  for (let seed = 0n; seed < 20n; seed += 1n) {
+    game.drop_test(seed);
+    tickMany(game, new Uint8Array(4), 2);
+    seen.add(game.hud()[HudField.Controller]);
+  }
 
-  assert.equal(game.hud()[HudField.Controller], ControllerCode.HybridAi);
+  assert.ok(seen.has(ControllerCode.HybridAi), 'a steep drop reached the AI');
+  assert.ok(seen.has(ControllerCode.HybridPd), 'a gentle drop stayed with PD');
 });
 
 test('a policy made for another observation layout is refused, naming the hash', () => {

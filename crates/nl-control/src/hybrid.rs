@@ -1,10 +1,10 @@
-//! The Hybrid controller (DECISIONS 2026-10-21): the AI flies, PD drives. A `HybridGate`
-//! hands the nozzles to the AI when an upset starts (SPEC §7.9's thresholds) and back to
-//! PD once the car has settled the way a save needs. The game, both eval runners and
+//! The Hybrid controller (DECISIONS 2026-10-21): the AI saves upsets, PD does the rest. A
+//! `HybridGate` hands the nozzles to the AI when the car tilts past SPEC §7.9's upset
+//! angle and back to PD once the car has settled the way a save needs. The game, both eval runners and
 //! training (`nl-py`) share the gate, so the policy is trained and judged under one rule.
 
 use nl_sim::car_state::CarState;
-use nl_sim::conventions::{CONTROL_DT_S, NOZZLE_COUNT, ON_WHEELS_MIN_WHEELS, WHEEL_COUNT};
+use nl_sim::conventions::{CONTROL_DT_S, NOZZLE_COUNT, WHEEL_COUNT};
 use nl_sim::vehicle_config::VehicleConfig;
 
 use crate::{Ai, ControlCtx, Controller, Pd};
@@ -87,13 +87,12 @@ impl HybridGate {
         self.ai_in_control
     }
 
-    /// SPEC §7.9's upset, without its 0.3 s airborne wait: off its wheels or tilted past
-    /// the upset angle. The AI flies from take-off, since every jump is a flight.
+    /// Tilted past SPEC §7.9's upset angle. Being airborne alone is not enough: PD lands
+    /// upright jumps and hops almost perfectly, and handing those to the AI as well cut
+    /// Stage D success from 99% to 12% (EXPERIMENTS 2026-10-21).
     fn is_upset(&self, state: &CarState) -> bool {
-        let off_wheels = state.wheels_down() < ON_WHEELS_MIN_WHEELS;
         // Comparing cosines avoids acos; libm keeps it identical on every platform.
-        let tilted = state.up_alignment() < libm::cosf(self.settings.enter_tilt_deg.to_radians());
-        off_wheels || tilted
+        state.up_alignment() < libm::cosf(self.settings.enter_tilt_deg.to_radians())
     }
 
     /// SPEC §7.9's save condition, without the hold: four wheels down, nearly level,
@@ -200,10 +199,19 @@ mod tests {
     }
 
     #[test]
-    fn leaving_the_ground_hands_the_nozzles_to_the_ai_at_once() {
+    fn an_upright_jump_stays_with_pd() {
         let mut gate = HybridGate::new(settings());
 
-        let ai = gate.update(&car(0.0, 0));
+        let ai = gate.update(&car(20.0, 0));
+
+        assert!(!ai);
+    }
+
+    #[test]
+    fn a_car_tumbling_past_the_upset_angle_in_the_air_hands_over_at_once() {
+        let mut gate = HybridGate::new(settings());
+
+        let ai = gate.update(&car(90.0, 0));
 
         assert!(ai);
     }
@@ -222,7 +230,7 @@ mod tests {
     #[test]
     fn the_ai_keeps_control_until_the_car_has_settled_for_the_hold() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(0.0, 0));
+        gate.update(&car(90.0, 0));
 
         for _ in 0..steps(0.5) - 1 {
             assert!(gate.update(&car(2.0, 4)));
@@ -235,7 +243,7 @@ mod tests {
     #[test]
     fn a_bounce_during_the_hold_restarts_it() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(0.0, 0));
+        gate.update(&car(90.0, 0));
         for _ in 0..steps(0.4) {
             gate.update(&car(2.0, 4));
         }
@@ -249,7 +257,7 @@ mod tests {
     #[test]
     fn a_spinning_or_tilted_landing_does_not_count_as_settled() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(0.0, 0));
+        gate.update(&car(90.0, 0));
         let mut spinning = car(2.0, 4);
         spinning.angular_velocity_body_rad_s = [0.0, 2.0, 0.0];
 
@@ -262,7 +270,7 @@ mod tests {
     #[test]
     fn reset_gives_the_nozzles_back_to_pd() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(0.0, 0));
+        gate.update(&car(90.0, 0));
 
         gate.reset();
 
