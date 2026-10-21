@@ -11,6 +11,7 @@ use common::{LEVEL, realistic, vehicle};
 use nl_sim::conventions::PHYSICS_HZ;
 use nl_sim::input::InputFrame;
 use nl_sim::vehicle_config::VehicleConfig;
+use nl_sim::wind::WindLevelConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
 /// `config`'s car 10 m up, level and still.
@@ -30,9 +31,14 @@ fn run(world: &mut World, seconds: f32) {
 
 #[test]
 fn wind_from_behind_pushes_a_still_car_forward() {
-    let mut config = vehicle();
-    config.air_drag.wind_m_s = [10.0, 0.0, 0.0];
-    let mut world = airborne(&config);
+    let mut world = airborne(&vehicle());
+    let steady = WindLevelConfig {
+        mean_speed_m_s: 10.0,
+        gust_std_m_s: 0.0,
+        gust_time_constant_s: 1.0,
+    };
+    // Heading 0 blows along world +X, the way the car faces.
+    world.set_wind(steady, 0.0);
 
     run(&mut world, 1.0);
 

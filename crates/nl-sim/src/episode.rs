@@ -211,6 +211,8 @@ impl Episode {
         course: Option<&CourseSpec>,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
+        let wind = scenarios.wind.storm.scaled(variation.wind.strength);
+        world.set_wind(wind, variation.wind.direction_yaw_rad);
         let stage_start = begin_stage(&mut world, variation, scenarios, plan, course, seed)?;
         let delayed_throttles = vec![[0.0; NOZZLE_COUNT]; variation.latency_control_steps];
         let limit_s = plan.time_limit_s();

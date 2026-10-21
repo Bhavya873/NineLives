@@ -53,6 +53,16 @@
     { "type": "ramp", "pos": [64, 0, 64], "yaw": -45, "length": 10, "width": 6, "angle_deg": 15 },
     { "type": "ramp", "pos": [-64, 0, 64], "yaw": -135, "length": 10, "width": 6, "angle_deg": 18 },
     { "type": "ramp", "pos": [-64, 0, -64], "yaw": 135, "length": 10, "width": 6, "angle_deg": 15 },
-    { "type": "ramp", "pos": [64, 0, -64], "yaw": 45, "length": 10, "width": 6, "angle_deg": 18 }
+    { "type": "ramp", "pos": [64, 0, -64], "yaw": 45, "length": 10, "width": 6, "angle_deg": 18 },
+
+    { "type": "corkscrew", "pos": [140, 0, -100], "length": 15, "width": 4, "angle_deg": 15, "bank_deg": 45, "side": "right" },
+    { "type": "landing_pad", "pos": [175, 0, -100] },
+    { "type": "corkscrew", "pos": [140, 0, -130], "length": 15, "width": 4, "angle_deg": 15, "bank_deg": 45, "side": "left" },
+    { "type": "landing_pad", "pos": [175, 0, -130] },
+    { "type": "corkscrew", "pos": [140, 0, -160], "length": 16, "width": 4, "angle_deg": 18, "bank_deg": 55, "side": "right" },
+    { "type": "landing_pad", "pos": [180, 0, -160] },
+    { "type": "kick_plate", "pos": [140, 0, -190], "impulse": [0, 9000, 0], "angular": [3000, 0, 0] },
+    { "type": "kick_plate", "pos": [200, 0, -190], "impulse": [0, 9000, 0], "angular": [-3000, 0, 0] },
+    { "type": "kick_plate", "pos": [260, 0, -190], "impulse": [0, 9000, 0], "angular": [0, 0, -7000] }
   ]
 }

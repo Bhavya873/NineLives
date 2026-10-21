@@ -29,9 +29,13 @@ const MAX_COUNT: u32 = 20;
 /// every hull solid enough for Rapier to build.
 const MIN_PIECE_SIZE_M: f32 = 0.1;
 const MAX_PIECE_SIZE_M: f32 = 500.0;
-/// Ramp and kicker angles must lie in [MIN, MAX), in degrees.
+/// Ramp, kicker and corkscrew angles must lie in [MIN, MAX), in degrees.
 const MIN_RAMP_ANGLE_DEG: f32 = 1.0;
 const MAX_RAMP_ANGLE_DEG: f32 = 60.0;
+/// A corkscrew's final bank must lie in [MIN, MAX), in degrees: below 90°, so its
+/// raised edge stays a slope and never folds over.
+const MIN_BANK_DEG: f32 = 1.0;
+const MAX_BANK_DEG: f32 = 80.0;
 /// Farthest any bounds corner may sit from the origin on any axis, in m. The floor
 /// spans the bounds, and Rapier loses precision on huge boxes.
 const MAX_BOUNDS_M: f32 = 5000.0;
@@ -115,6 +119,28 @@ pub enum PieceSpec {
         /// Slope, in degrees.
         angle_deg: f32,
         /// Which side of the lane it sits on.
+        side: Side,
+    },
+    /// A twisted ramp across the lane that flips the car: its low edge rises gently
+    /// to `angle_deg` at the lip while the whole surface banks more and more towards
+    /// `side`'s raised edge, up to `bank_deg` at a sheer lip. A car driven over it at
+    /// speed leaves the lip banked hard and spinning about its nose axis, and rolls
+    /// past its side in the air.
+    Corkscrew {
+        /// Start point on the ground, in m.
+        pos: [f32; 3],
+        /// Heading about +Y, in degrees (0 runs along +X).
+        #[serde(default)]
+        yaw: f32,
+        /// Length along the piece's +X, in m.
+        length: f32,
+        /// Width across the piece (local Z), centred on the lane, in m.
+        width: f32,
+        /// Slope of the low edge at the lip, in degrees.
+        angle_deg: f32,
+        /// How far the surface is banked across at the lip, in degrees.
+        bank_deg: f32,
+        /// Which edge is raised: the car rolls away from it.
         side: Side,
     },
     /// A hole in the floor `length` long, across the whole course (runs along +X).
@@ -331,6 +357,7 @@ impl PieceSpec {
         match self {
             PieceSpec::Ramp { .. } => "ramp",
             PieceSpec::Kicker { .. } => "kicker",
+            PieceSpec::Corkscrew { .. } => "corkscrew",
             PieceSpec::Gap { .. } => "gap",
             PieceSpec::CarRow { .. } => "car_row",
             PieceSpec::Halfpipe { .. } => "halfpipe",
@@ -348,6 +375,7 @@ impl PieceSpec {
         match self {
             PieceSpec::Ramp { pos, .. }
             | PieceSpec::Kicker { pos, .. }
+            | PieceSpec::Corkscrew { pos, .. }
             | PieceSpec::Gap { pos, .. }
             | PieceSpec::CarRow { pos, .. }
             | PieceSpec::Halfpipe { pos, .. }
@@ -401,11 +429,20 @@ fn check_piece(index: usize, piece: &PieceSpec, bounds: &BoundsSpec) -> Result<(
             "`count` must be 1 to {MAX_COUNT}, not {count}"
         )));
     }
-    if let PieceSpec::Ramp { angle_deg, .. } | PieceSpec::Kicker { angle_deg, .. } = piece
+    if let PieceSpec::Ramp { angle_deg, .. }
+    | PieceSpec::Kicker { angle_deg, .. }
+    | PieceSpec::Corkscrew { angle_deg, .. } = piece
         && !(MIN_RAMP_ANGLE_DEG..MAX_RAMP_ANGLE_DEG).contains(angle_deg)
     {
         return Err(fail(format!(
             "`angle_deg` must be at least {MIN_RAMP_ANGLE_DEG} and below {MAX_RAMP_ANGLE_DEG}, not {angle_deg}"
+        )));
+    }
+    if let PieceSpec::Corkscrew { bank_deg, .. } = piece
+        && !(MIN_BANK_DEG..MAX_BANK_DEG).contains(bank_deg)
+    {
+        return Err(fail(format!(
+            "`bank_deg` must be at least {MIN_BANK_DEG} and below {MAX_BANK_DEG}, not {bank_deg}"
         )));
     }
     if !bounds.contains(piece.position()) {
@@ -425,6 +462,12 @@ fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
         PieceSpec::Ramp { yaw, angle_deg, .. } | PieceSpec::Kicker { yaw, angle_deg, .. } => {
             numbers.extend([*yaw, *angle_deg]);
         }
+        PieceSpec::Corkscrew {
+            yaw,
+            angle_deg,
+            bank_deg,
+            ..
+        } => numbers.extend([*yaw, *angle_deg, *bank_deg]),
         PieceSpec::KickPlate {
             yaw,
             impulse,
@@ -450,7 +493,9 @@ fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
 /// The sizes a piece declares, by field name; each must be above zero.
 fn piece_sizes(piece: &PieceSpec) -> Vec<(&'static str, f32)> {
     match piece {
-        PieceSpec::Ramp { length, width, .. } | PieceSpec::Kicker { length, width, .. } => {
+        PieceSpec::Ramp { length, width, .. }
+        | PieceSpec::Kicker { length, width, .. }
+        | PieceSpec::Corkscrew { length, width, .. } => {
             vec![("length", *length), ("width", *width)]
         }
         PieceSpec::Gap { length, .. } => vec![("length", *length)],

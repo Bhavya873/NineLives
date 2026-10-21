@@ -90,7 +90,9 @@ fn a_car_resting_on_its_wheels_succeeds_after_the_hold_without_any_save() {
 
 #[test]
 fn a_level_drop_from_3_m_bottoms_out_the_springs_a_hard_landing_but_no_crash() {
-    let mut episode = level_drop(3.0);
+    // 3.1 m: the roof's air drag slows the fall a little, so 3.0 m now stops just short
+    // of the hard-landing compression.
+    let mut episode = level_drop(3.1);
 
     let status = run_to_end(&mut episode);
 

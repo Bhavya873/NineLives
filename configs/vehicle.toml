@@ -16,9 +16,16 @@ inertia_kg_m2 = [850.0, 3250.0, 2900.0]
 underside_chamfer_m = [0.6, 0.3]
 
 [air_drag]
-# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2).
+# SPEC §7.2: drag force along each body axis = -0.5 · air density · drag area · |v| · v,
+# with v the car's velocity through the air (ground speed minus the wind) in the body
+# frame. Drag areas are Cd × area for air along the body's front (X), top (Y) and side (Z)
+# axes, in m². The front keeps the old 0.6 so driving speed and feel are unchanged; side
+# and top are a ~4.5 m × 1.4 m flank and a ~4.5 m × 1.9 m roof with blunt-body Cd.
 air_density_kg_m3 = 1.2
-drag_area_m2 = 0.6
+drag_area_m2 = [0.6, 8.0, 5.5]
+# Where the drag acts, from the centre of mass in the body frame (m): behind and above, so
+# a side wind turns the nose into the wind and leans the car downwind.
+center_of_pressure_offset_m = [-0.3, 0.1, 0.0]
 
 [wheels]
 # Where each suspension is attached, in the body frame, in wheel order FL, FR, RL, RR.

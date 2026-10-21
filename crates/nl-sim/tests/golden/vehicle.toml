@@ -17,9 +17,11 @@ roof_half_extents_m = [1.2, 0.05, 0.8]
 inertia_kg_m2 = [850.0, 3250.0, 2900.0]
 
 [air_drag]
-# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2).
+# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2), per body axis.
+# The golden car keeps one area on every axis and no centre-of-pressure offset (the old
+# single-area drag), so the trace pins the drag maths without new tuning.
 air_density_kg_m3 = 1.2
-drag_area_m2 = 0.6
+drag_area_m2 = [0.6, 0.6, 0.6]
 
 [wheels]
 # Where each suspension is attached, in the body frame, in wheel order FL, FR, RL, RR.

@@ -1,5 +1,5 @@
 //! The game's open world (SPEC §11.6, `courses/playground.json`): it parses and builds
-//! with every zone's pieces, its spawn is clear so no Stage A drop starts against a
+//! with every zone's pieces (the flip zone's corkscrews included), its spawn is clear so no Stage A drop starts against a
 //! piece, the pieces sit well inside the bounds, and an episode on it runs to the end.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
@@ -98,6 +98,9 @@ fn the_playground_has_every_zone_but_no_lines_or_gaps() {
     assert!(count(Surface::Obstacle) >= 20, "car rows, bumps and walls");
     assert!(count(Surface::LandingPad) >= 5);
     assert!(count(Surface::KickPlate) >= 4);
+    let corkscrews = spec.pieces.iter();
+    let corkscrews = corkscrews.filter(|piece| matches!(piece, PieceSpec::Corkscrew { .. }));
+    assert!(corkscrews.count() >= 3, "a flip zone of corkscrews");
     assert_eq!(count(Surface::Floor), 1, "one floor, no gaps");
     assert_eq!(count(Surface::Checkpoint) + count(Surface::Finish), 0);
 }

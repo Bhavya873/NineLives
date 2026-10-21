@@ -48,8 +48,8 @@ fn every_draw_stays_inside_its_range() {
         {
             assert!((0.85..=1.15).contains(&(varied.max_force_n / original.max_force_n)));
         }
-        let [wind_x, wind_y, wind_z] = variation.vehicle.air_drag.wind_m_s;
-        assert!(wind_x.abs() <= 3.0 && wind_y == 0.0 && wind_z.abs() <= 3.0);
+        assert!((0.0..=1.0).contains(&variation.wind.strength));
+        assert!((0.0..=std::f32::consts::TAU).contains(&variation.wind.direction_yaw_rad));
         assert!((1.0..=2.0).contains(&variation.mode.thrust_scale));
         assert!((150.0..=350.0).contains(&variation.mode.tank_capacity_kg));
         assert!(variation.latency_control_steps <= 2);

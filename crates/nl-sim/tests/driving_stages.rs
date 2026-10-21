@@ -57,8 +57,9 @@ fn straight(pieces: Vec<PieceSpec>) -> CourseSpec {
 
 /// A Stage C seed whose hop lands on its wheels with the thrusters off. Most seeds
 /// crash without a controller, so this one is picked by hand; re-pick it (and say so
-/// in the PR) when the car's driving numbers change.
-const STAGE_C_LUCKY_SEED: u64 = 14;
+/// in the PR) when the car's driving numbers change. Re-picked (14 → 87) when air drag got
+/// per-axis areas and a centre of pressure behind the centre of mass, which pitches a hop.
+const STAGE_C_LUCKY_SEED: u64 = 87;
 
 #[test]
 fn stage_c_succeeds_on_the_save_after_the_hop() {

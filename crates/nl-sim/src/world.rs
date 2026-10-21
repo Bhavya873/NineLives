@@ -35,6 +35,7 @@ use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFr
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
 use crate::vehicle_config::VehicleConfig;
+use crate::wind::{Wind, WindLevelConfig};
 
 /// Ground friction for flat-ground worlds when nothing else is chosen (SPEC §7.2).
 /// It only matters when the car's body scrapes the ground.
@@ -79,7 +80,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 15;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 16;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -143,7 +144,9 @@ pub struct World {
     g_load: GLoad,
     /// World time when the car crossed the finish line, in s.
     finish_time_s: Option<f32>,
-    /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
+    /// The wind and its gusts (SPEC §7.2), on a seeded stream of their own.
+    wind: Wind,
+    /// The sim's random generator for Chaos (CLAUDE.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
 }
@@ -233,6 +236,7 @@ impl World {
             triggers: CourseTriggers::default(),
             g_load: GLoad::default(),
             finish_time_s: None,
+            wind: Wind::calm(seed),
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
@@ -283,11 +287,16 @@ impl World {
             self.controller_throttles
         };
         let commanded = combine_throttles(feed_forward, controller);
-        // 5–8. Valve lag, tank gate, nozzle forces, wheels.
+        // 5–8. Valve lag, tank gate, air drag in this step's wind, nozzle forces, wheels.
         let thrust_multiplier = self.thrust_multiplier();
-        let thrust_n =
-            self.car
-                .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
+        self.wind.step(PHYSICS_DT_S);
+        let thrust_n = self.car.prepare_physics_step(
+            &mut self.physics,
+            input,
+            commanded,
+            thrust_multiplier,
+            self.wind.velocity_m_s(),
+        );
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
         self.physics.step();
@@ -338,6 +347,23 @@ impl World {
         {
             self.respawn();
         }
+    }
+
+    /// Sets the wind (SPEC §7.2): `level`'s mean speed and gusts, blowing towards
+    /// `direction_yaw_rad` (0 along world +X, positive turning left, like the car's yaw).
+    pub fn set_wind(&mut self, level: WindLevelConfig, direction_yaw_rad: f32) {
+        self.wind.set(level, direction_yaw_rad);
+    }
+
+    /// Sets the wind to `level` in a direction drawn from the world's seed (the game's
+    /// Off / Breeze / Storm setting, from `[wind]` in scenarios.toml).
+    pub fn set_wind_level(&mut self, level: WindLevelConfig) {
+        self.wind.set_level(level);
+    }
+
+    /// The wind now, mean plus gust, in world coordinates, in m/s (for the HUD).
+    pub fn wind_m_s(&self) -> [f32; 3] {
+        self.wind.velocity_m_s()
     }
 
     /// Makes a crashed car respawn by itself after `delay_s` of sim time (the game's

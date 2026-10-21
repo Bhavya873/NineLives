@@ -43,10 +43,18 @@ impl Game {
 }
 
 impl Game {
-    /// Swaps in a new world and clears everything counted on the old one.
+    /// Gives the world the game's wind setting.
+    pub(crate) fn apply_wind_level(&mut self) {
+        let level = self.scenarios.wind.level(self.wind_level);
+        self.world.set_wind_level(level);
+    }
+
+    /// Swaps in a new world and clears everything counted on the old one; the wind
+    /// setting carries over.
     fn start_fresh(&mut self, mut world: World) {
         world.enable_auto_respawn(self.vehicle.events.respawn_delay_s);
         self.world = world;
+        self.apply_wind_level();
         self.controller.reset(self.seed);
         self.buttons_since_control_step = 0;
         self.saves = 0;

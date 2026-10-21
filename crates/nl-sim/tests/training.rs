@@ -200,7 +200,9 @@ fn a_curriculum_that_starts_harder_than_it_ends_is_refused_by_name() {
 fn a_hard_level_drop_pays_the_hard_landing_cost_and_the_air_left_bonus() {
     let mut config = config();
     config.scenarios.curriculum_a.levels = 1;
-    config.scenarios.stage_a.height_m = [3.0, 3.0];
+    // 3.1 m, as in episode.rs: from 3.0 m the roof's air drag keeps it just short of
+    // a hard landing.
+    config.scenarios.stage_a.height_m = [3.1, 3.1];
     config.scenarios.stage_a.max_tilt_deg = 0.0;
     config.scenarios.stage_a.max_spin_rad_s = 0.0;
     config.scenarios.stage_a.horizontal_speed_m_s = [0.0, 0.0];

@@ -77,12 +77,15 @@ pub struct ChassisConfig {
 #[serde(deny_unknown_fields)]
 pub struct AirDragConfig {
     pub air_density_kg_m3: f32,
-    /// Drag coefficient times frontal area (CdA).
-    pub drag_area_m2: f32,
-    /// Wind velocity in world coordinates, in m/s; drag acts on the car's speed
-    /// relative to it (SPEC §7.2). 0 in vehicle.toml; randomized in training (§9.8).
+    /// Drag coefficient times area (CdA) for air flowing along each body axis: front
+    /// (X), top (Y) and side (Z), in m² (SPEC §7.2). A car is far blunter from the side
+    /// and above than from the front, so a side wind pushes it much harder.
+    pub drag_area_m2: [f32; 3],
+    /// Where the drag acts, from the centre of mass in the body frame, in m. Behind
+    /// the centre of mass, a side wind turns the nose into the wind; above it, it leans
+    /// the car over. Zero (the default) gives no turning at all.
     #[serde(default)]
-    pub wind_m_s: [f32; 3],
+    pub center_of_pressure_offset_m: [f32; 3],
 }
 
 /// The four raycast wheels and their suspension. See `[wheels]`.
@@ -347,8 +350,13 @@ impl ChassisConfig {
 impl AirDragConfig {
     fn check(&self) -> CheckResult {
         must_not_be_negative("air_drag.air_density_kg_m3", self.air_density_kg_m3)?;
-        must_not_be_negative("air_drag.drag_area_m2", self.drag_area_m2)?;
-        all_must_be_finite("air_drag.wind_m_s", self.wind_m_s)
+        for area_m2 in self.drag_area_m2 {
+            must_not_be_negative("air_drag.drag_area_m2", area_m2)?;
+        }
+        all_must_be_finite(
+            "air_drag.center_of_pressure_offset_m",
+            self.center_of_pressure_offset_m,
+        )
     }
 }
 
