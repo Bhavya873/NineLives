@@ -3,11 +3,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Group } from 'three';
+import { Box3, Group, Vector3 } from 'three';
 
 import { airGaugeText, createAirGauge, updateAirGauge } from '../src/hud/air-gauge.ts';
 import { mapPercent } from '../src/hud/nozzle-map.ts';
 import { readNozzleLayout } from '../src/nozzle-layout.ts';
+import { buildCarBody } from '../src/render/car-mesh.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
 import { Game, controllersToml, modesToml, vehicleToml } from './load-wasm.mjs';
 
@@ -40,9 +41,28 @@ test('a flame shows only when its nozzle fires, and grows with the throttle', ()
   assert.equal(flames[0].visible, true);
   assert.equal(flames[1].visible, false);
   assert.ok(flames[9].scale.y > flames[0].scale.y);
-  // Each nozzle is a cone on the car body with its flame as a child.
-  assert.equal(carBody.children.length, 10);
+  // Each nozzle is a mount plus a cone on the car body, with its flame as a child.
+  assert.equal(carBody.children.length, 20);
   assert.equal(flames[0].parent?.parent, carBody);
+});
+
+test('every nozzle sits flush on a mount that touches the body', () => {
+  const carBody = buildCarBody();
+  const bodyBox = new Box3().setFromObject(carBody.children[0]);
+  const partsBefore = carBody.children.length;
+  const flames = createFlames(carBody, readNozzleLayout(nozzleLayout()));
+
+  flames.forEach((flame, index) => {
+    const nozzle = flame.parent;
+    const mount = carBody.children[partsBefore + 2 * index];
+    const mountBox = new Box3().setFromObject(mount).expandByScalar(0.001);
+    // The nozzle's narrow end: half its length back from its centre, against the exhaust.
+    const exhaustDirection = new Vector3(0, 1, 0).applyQuaternion(nozzle.quaternion);
+    const narrowEnd = nozzle.position.clone().addScaledVector(exhaustDirection, -0.06);
+
+    assert.ok(mountBox.containsPoint(narrowEnd), `nozzle ${index} sits on its mount`);
+    assert.ok(mountBox.intersectsBox(bodyBox), `mount ${index} reaches the body`);
+  });
 });
 
 test('the nozzle map spans the car from edge to edge', () => {

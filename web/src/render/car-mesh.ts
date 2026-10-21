@@ -16,7 +16,9 @@ import {
 const WHEEL_RADIUS_M = 0.34;
 const WHEEL_WIDTH_M = 0.26;
 /** Body width; narrower than the 2.0 m physics box so the wheels show at the sides. */
-const BODY_WIDTH_M = 1.72;
+export const BODY_WIDTH_M = 1.72;
+/** Height of the body's flat underside, relative to the centre of mass. */
+export const BODY_BOTTOM_M = -0.4;
 /** The glass cabin sits on top of the body and is narrower, like a real car's. */
 const CABIN_WIDTH_M = 1.36;
 
@@ -28,13 +30,15 @@ const CABIN_WIDTH_M = 1.36;
  * the centre of mass: low nose, sloping bonnet, flat deck up to the rear spoiler lip.
  */
 const BODY_PROFILE_M: [number, number][] = [
-  [2.1, -0.4],
+  [2.1, BODY_BOTTOM_M],
   [2.1, 0.02],
   [0.9, 0.22],
   [-1.95, 0.26],
   [-2.1, 0.32],
-  [-2.1, -0.4],
+  [-2.1, BODY_BOTTOM_M],
 ];
+/** The points of `BODY_PROFILE_M` that trace its top edge, from nose to tail. */
+const BODY_TOP_EDGE_M = BODY_PROFILE_M.slice(1, 5);
 
 /** Cabin outline: raked windscreen, short roof, long fastback rear window. */
 const CABIN_PROFILE_M: [number, number][] = [
@@ -44,7 +48,12 @@ const CABIN_PROFILE_M: [number, number][] = [
   [-1.75, 0.25],
 ];
 
-const paint = new MeshStandardMaterial({ color: 0xe0542f, flatShading: true, roughness: 0.45 });
+/** The body paint, shared with the nozzle pylons (nozzle-mounts.ts). */
+export const paint = new MeshStandardMaterial({
+  color: 0xe0542f,
+  flatShading: true,
+  roughness: 0.45,
+});
 // Light glass and hubs so the car still reads against the dark arena floor when it flips.
 const glass = new MeshStandardMaterial({ color: 0x8fb0c8, flatShading: true, roughness: 0.15 });
 const tyre = new MeshStandardMaterial({ color: 0x1b1b1b, flatShading: true, roughness: 0.9 });
@@ -63,6 +72,23 @@ export function buildCarBody(): Group {
   body.add(new Mesh(cabinGeometry, glass));
   castShadows(body);
   return body;
+}
+
+/**
+ * Height of the lower body's top surface at `xM` metres forward of the centre of mass
+ * (bonnet or deck), read off the side outline. Outside the body it gives the nearest end.
+ */
+export function bodyTopHeightM(xM: number): number {
+  for (let index = 0; index + 1 < BODY_TOP_EDGE_M.length; index += 1) {
+    const [frontX, frontY] = BODY_TOP_EDGE_M[index] ?? [0, 0];
+    const [rearX, rearY] = BODY_TOP_EDGE_M[index + 1] ?? [0, 0];
+    if (xM <= frontX && xM >= rearX) {
+      const along = (frontX - xM) / (frontX - rearX);
+      return frontY + along * (rearY - frontY);
+    }
+  }
+  const nearestEnd = xM > 0 ? BODY_TOP_EDGE_M[0] : BODY_TOP_EDGE_M[BODY_TOP_EDGE_M.length - 1];
+  return nearestEnd?.[1] ?? 0;
 }
 
 /** One wheel: a tyre with its axle along the body's Z axis, plus a hub bar to show spin. */

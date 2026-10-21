@@ -43,6 +43,11 @@ pub struct ChassisConfig {
     /// vehicle.toml; domain randomization (SPEC §9.8) moves it up to ±0.1 m per axis.
     #[serde(default)]
     pub center_of_mass_offset_m: [f32; 3],
+    /// The body box's bottom front and rear edges are cut away: [length along x, rise],
+    /// in m, so the nose and tail clear a ramp or halfpipe curve (a real car's approach
+    /// and departure angles). [0, 0] (the default) keeps a plain box.
+    #[serde(default)]
+    pub underside_chamfer_m: [f32; 2],
 }
 
 /// Air resistance on the body. See `[air_drag]`.
@@ -209,6 +214,13 @@ pub enum VehicleConfigError {
     #[error("vehicle.toml: `{field}` must be a finite number, but it is {value}")]
     NotFinite { field: &'static str, value: f32 },
 
+    /// The chamfer would cut away the whole body box.
+    #[error(
+        "vehicle.toml: `chassis.underside_chamfer_m` [{length}, {rise}] must be shorter than \
+         the body's half length and lower than its height"
+    )]
+    ChamferTooBig { length: f32, rise: f32 },
+
     #[error("vehicle.toml: `{field}` must be at most 180 degrees, but it is {value}")]
     AngleTooLarge { field: &'static str, value: f32 },
 
@@ -271,7 +283,21 @@ impl ChassisConfig {
         all_must_be_finite(
             "chassis.center_of_mass_offset_m",
             self.center_of_mass_offset_m,
-        )
+        )?;
+        self.check_chamfer()
+    }
+
+    /// The chamfer is zero or more and leaves some of the box: shorter than the half
+    /// length, lower than the full height.
+    fn check_chamfer(&self) -> CheckResult {
+        let [length, rise] = self.underside_chamfer_m;
+        must_not_be_negative("chassis.underside_chamfer_m", length)?;
+        must_not_be_negative("chassis.underside_chamfer_m", rise)?;
+        let [half_x, half_y, _] = self.half_extents_m;
+        if length >= half_x || rise >= 2.0 * half_y {
+            return Err(VehicleConfigError::ChamferTooBig { length, rise });
+        }
+        Ok(())
     }
 }
 
@@ -523,7 +549,7 @@ mod tests {
 
     #[test]
     fn an_infinite_speed_limit_is_rejected() {
-        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 45.0", "max_speed_m_s = inf");
+        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 55.0", "max_speed_m_s = inf");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
@@ -585,7 +611,7 @@ mod tests {
     #[test]
     fn reversed_steering_limits_are_rejected() {
         let broken = DEFAULT_VEHICLE_TOML.replace(
-            "max_angle_high_speed_rad = 0.15",
+            "max_angle_high_speed_rad = 0.25",
             "max_angle_high_speed_rad = 0.9",
         );
 

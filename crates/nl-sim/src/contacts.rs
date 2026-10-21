@@ -75,7 +75,37 @@ pub fn read_body_contacts(
 /// True if `collider` has any touching contact point with anything (SPEC §10's
 /// touchdown: the first moment the car meets the ground, wheels or not).
 pub fn is_touching(physics: &PhysicsWorld, collider: ColliderHandle) -> bool {
+    is_touching_where(physics, collider, |_| true)
+}
+
+/// True if `collider` touches a collider whose `user_data` is `user_data` (e.g.
+/// `course_build::OBSTACLE_USER_DATA`).
+pub fn is_touching_tagged(
+    physics: &PhysicsWorld,
+    collider: ColliderHandle,
+    user_data: u128,
+) -> bool {
+    is_touching_where(physics, collider, |other| {
+        physics.colliders[other].user_data == user_data
+    })
+}
+
+/// True if `collider` touches (within `TOUCH_DISTANCE_M`) another collider that `wanted`
+/// accepts.
+fn is_touching_where(
+    physics: &PhysicsWorld,
+    collider: ColliderHandle,
+    wanted: impl Fn(ColliderHandle) -> bool,
+) -> bool {
     for pair in physics.narrow_phase.contact_pairs_with(collider) {
+        let other = if pair.collider1 == collider {
+            pair.collider2
+        } else {
+            pair.collider1
+        };
+        if !wanted(other) {
+            continue;
+        }
         for manifold in pair.manifolds() {
             for point in &manifold.points {
                 if point.dist <= TOUCH_DISTANCE_M {

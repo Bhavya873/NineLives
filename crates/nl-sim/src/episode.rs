@@ -477,7 +477,7 @@ impl Episode {
         if self.world.hop_boost().hop_active() {
             self.tally.hop_started = true;
         }
-        if self.stage.obstacles.is_empty() || !self.world.chassis_touching() {
+        if self.stage.obstacles.is_empty() || !self.world.chassis_touching_obstacle() {
             return;
         }
         let position_m = self.world.chassis_pose().position_m;

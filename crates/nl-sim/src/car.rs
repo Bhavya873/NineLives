@@ -345,10 +345,30 @@ fn build_chassis_body(
         .can_sleep(false)
 }
 
-/// The main body box, centred on the centre of mass.
+/// The main body box, centred on the centre of mass, with its bottom front and rear
+/// edges cut away by `chassis.underside_chamfer_m` so the nose and tail ride over a
+/// curve's rise instead of digging in.
 fn build_body_collider(config: &VehicleConfig) -> ColliderBuilder {
     let [half_x, half_y, half_z] = config.chassis.half_extents_m;
-    ColliderBuilder::cuboid(half_x, half_y, half_z).density(0.0)
+    let [chamfer_length_m, chamfer_rise_m] = config.chassis.underside_chamfer_m;
+    let plain_box = ColliderBuilder::cuboid(half_x, half_y, half_z);
+    if chamfer_length_m <= 0.0 || chamfer_rise_m <= 0.0 {
+        return plain_box.density(0.0);
+    }
+    let mut corners = Vec::new();
+    for z in [-half_z, half_z] {
+        for x in [-half_x, half_x] {
+            corners.push(Vector::new(x, half_y, z));
+            corners.push(Vector::new(x, -half_y + chamfer_rise_m, z));
+        }
+        for x in [-half_x + chamfer_length_m, half_x - chamfer_length_m] {
+            corners.push(Vector::new(x, -half_y, z));
+        }
+    }
+    // A cut box is always convex; the plain box only covers a degenerate hull.
+    ColliderBuilder::convex_hull(&corners)
+        .unwrap_or(plain_box)
+        .density(0.0)
 }
 
 /// The thin roof box, sitting on top of the main body box.

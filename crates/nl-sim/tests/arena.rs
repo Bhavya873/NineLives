@@ -47,7 +47,7 @@ fn world_corners(shape: &CourseShape) -> Vec<Vector> {
             }
             corners
         }
-        ShapeGeometry::Hull { points_m } => points_m.clone(),
+        ShapeGeometry::Hull { points_m } | ShapeGeometry::Mesh { points_m, .. } => points_m.clone(),
     };
     let pose = shape.pose.to_rapier();
     local
@@ -87,7 +87,7 @@ fn the_arena_parses_and_has_ramps_and_blocks_but_no_lines() {
     let shapes = build_course_shapes(&spec);
 
     let count = |surface| shapes.iter().filter(|s| s.surface == surface).count();
-    assert!(count(Surface::Ramp) >= 4 * 6, "four ramps of six segments");
+    assert_eq!(count(Surface::Ramp), 4, "four ramps, one smooth mesh each");
     assert!(count(Surface::Obstacle) >= 10, "blocks, bumps and walls");
     assert_eq!(count(Surface::Floor), 1, "one floor, no gaps");
     assert_eq!(count(Surface::Checkpoint) + count(Surface::Finish), 0);
@@ -115,11 +115,15 @@ fn no_viewer_drop_starts_inside_or_against_an_obstacle() {
 #[test]
 fn no_viewer_drop_meets_an_obstacle_in_its_first_quarter_second() {
     // With nothing in its way, a drop on the arena follows the same path as the same drop
-    // on flat ground; an obstacle at or near the start would bend it.
+    // on the arena's bare floor (same bounds, no pieces); an obstacle at or near the start
+    // would bend it.
+    let mut bare = arena();
+    bare.pieces.clear();
     let plain = EpisodeVariation::none(&vehicle(), realistic());
     for seed in VIEWER_SEEDS {
         let mut on_arena = start_drop(seed);
-        let mut on_flat = Episode::start(&plain, &scenarios(), Stage::A, seed).unwrap();
+        let mut on_flat =
+            Episode::start_on_course(&plain, &scenarios(), Stage::A, &bare, seed).unwrap();
 
         for _ in 0..30 {
             on_arena.step([0.0; NOZZLE_COUNT]);
