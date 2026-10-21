@@ -225,6 +225,19 @@ The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-
 | D | 98.8 → 98.7 | 98.9 → 98.7 | 1 / 0; 2 / 0 | within PD's CI |
 | E | 85.5 → **90.7** (p 6e-11) | 83.8 → **89.8** (p 6e-15) | 8 / 60; 4 / 64 | beats PD |
 
-- **Meets the M7 bar on all ten cells on validation, without training.** Confirmation on the test seeds is pending (owner).
+- **Meets the M7 bar on all ten cells on validation, without training.** Confirmed on the test seeds (below).
 - Air per save is lower than PD's (A Realistic 35.2 vs 39.7 kg; Arcade 38.6 vs 44.9). Hard landings are a little higher on A (Realistic 4.4% vs 0%, Arcade 3.5% vs 2.0%); they still count as successes.
 - Lesson: the take-off gate handed the policy states it never trained on. Hand a learned controller only the states it was trained for, and leave the rest to the controller that already handles them.
+
+**Test seeds 0–999 (one-time, owner-approved), gate v2, 1000 episodes per cell; files `results/eval_hybrid_*` (PR #44), table from `python -m ninelives.compare --candidate hybrid`:**
+
+| Stage | Realistic PD → Hybrid | Arcade PD → Hybrid | Only PD / only Hybrid succeeded (R; A) | Against the 2026-10-21 bar |
+|---|---|---|---|---|
+| A | 67.0 → **81.0** (p 4e-24) | 69.2 → **87.6** (p 2e-43) | 33 / 173; 13 / 197 | beats PD |
+| B | 99.2 → 99.0 | 99.3 → 99.8 | 10 / 8; 2 / 7 | within PD's CI |
+| C | 100 → 100 | 99.6 → 99.6 | 0 / 0; 0 / 0 | within PD's CI |
+| D | 99.5 → 99.3 | 99.3 → 99.3 | 2 / 0; 0 / 0 | within PD's CI |
+| E | 86.8 → **90.7** (p 2e-6) | 85.4 → **90.6** (p 2e-13) | 14 / 53; 3 / 55 | beats PD |
+
+- **The M7 bar is met on all ten test cells.** The PD reruns matched the committed `results/eval_pd_*` files episode for episode.
+- Owner decision after the result: the game defaults to Hybrid once the policy loads (DECISIONS).
