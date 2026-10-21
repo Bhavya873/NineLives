@@ -27,7 +27,9 @@ test('full throttle moves the car along +X', () => {
   assert.equal(pose.length, Game.floats_per_pose());
   assert.ok(pose[0] > 5, `x after 2 s: ${pose[0]}`);
   assert.equal(game.wheel_poses().length, 4 * Game.floats_per_pose());
-  assert.deepEqual(Array.from(game.nozzle_throttles()), new Array(Game.nozzle_count()).fill(0));
+  // Not exactly 0: the valves are still closing from the settle at the start (the drag's
+  // centre of pressure pitches the car a hair as it drops onto its wheels).
+  for (const throttle of game.nozzle_throttles()) assert.ok(throttle < 1e-6, `${throttle}`);
 });
 
 test('the mode comes back with a restored snapshot', () => {
@@ -102,6 +104,8 @@ function eventGroups(values) {
 
 test('a hop reports airborne, upset, hard landing and save events', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+  // Thrusters off, so the bare Hop's own events show (PD would soften the landing).
+  game.set_controller('off');
   tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
   game.drain_events();
 

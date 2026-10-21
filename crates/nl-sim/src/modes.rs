@@ -22,6 +22,10 @@ pub struct ModeParams {
     pub refill_kg_s: f32,
     /// Wheels that must touch the ground for the tank to refill (SPEC §7.5).
     pub refill_min_wheels: usize,
+    /// Seconds without any thrust before refilling starts, so the tank refills when the
+    /// air isn't being used, not between pulses. 0 (the default) refills at once.
+    #[serde(default)]
+    pub refill_delay_s: f32,
     /// Thrust fades to zero over this last fraction of the tank (SPEC §7.5).
     pub empty_fade_fraction: f32,
     /// Throttle a Hop puts on the four lift nozzles.
@@ -91,6 +95,7 @@ impl ModeParams {
         field.positive("thrust_scale", self.thrust_scale)?;
         field.positive("tank_capacity_kg", self.tank_capacity_kg)?;
         field.not_negative("refill_kg_s", self.refill_kg_s)?;
+        field.not_negative("refill_delay_s", self.refill_delay_s)?;
         if !(1..=WHEEL_COUNT).contains(&self.refill_min_wheels) {
             let wheels = self.refill_min_wheels as f32;
             return Err(field.bad("refill_min_wheels", "must be 1 to 4", wheels));

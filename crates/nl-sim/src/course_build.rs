@@ -8,6 +8,7 @@ use rapier3d::prelude::*;
 use serde::Serialize;
 
 use crate::course::{CourseSpec, PieceSpec, Side};
+use crate::course_mesh::{LoftedMesh, loft};
 use crate::world::Pose;
 
 /// Course width across the lane (local Z) where a piece does not give one, in m.
@@ -26,6 +27,9 @@ const BUMP_LENGTH_M: f32 = 5.0;
 const HULL_BASE_DEPTH_M: f32 = 0.2;
 /// Ramps are built from this many convex segments of rising slope.
 const RAMP_SEGMENTS: usize = 6;
+/// A corkscrew's edges are sampled at this many steps along its length, so its twist
+/// looks and drives smooth.
+const CORKSCREW_SAMPLES: usize = 16;
 /// Walls are this thick along the course.
 pub const WALL_THICKNESS_M: f32 = 1.0;
 /// A wall's jump ramp: this long and steep, ending this far before the wall. At 30°
@@ -36,8 +40,8 @@ pub const WALL_RAMP_GAP_M: f32 = 2.0;
 /// Halfpipe walls: flat floor this wide between the curves, wall panels this thick, and
 /// this many flat panels per quarter circle.
 const HALFPIPE_FLOOR_WIDTH_M: f32 = 4.0;
-const HALFPIPE_PANEL_THICKNESS_M: f32 = 0.3;
-const HALFPIPE_PANELS: usize = 8;
+const HALFPIPE_WALL_THICKNESS_M: f32 = 0.3;
+const HALFPIPE_ARC_SEGMENTS: usize = 16;
 /// Markings: landing pads, kick plates and the checkpoint/finish lines, in m along the
 /// course; drawn this thick above the floor.
 const LANDING_PAD_LENGTH_M: f32 = 20.0;
@@ -47,6 +51,9 @@ const LINE_LENGTH_M: f32 = 0.5;
 /// them on a track up to this wide, in m.
 const LINE_WIDTH_M: f32 = 20.0;
 const MARKING_THICKNESS_M: f32 = 0.02;
+/// Rapier `user_data` on the colliders of obstacles (car rows, bumps, walls), so the
+/// sim can tell the chassis hitting one from it touching a ramp or the floor.
+pub const OBSTACLE_USER_DATA: u128 = 1;
 
 /// What a shape is for, so the renderer can colour it (SPEC §11.4: plain colours).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -82,6 +89,13 @@ pub enum ShapeGeometry {
     Hull {
         /// Corner points in the shape's frame, in m.
         points_m: Vec<[f32; 3]>,
+    },
+    /// A closed triangle mesh (curved pieces: ramps, kickers, halfpipe walls), in m.
+    Mesh {
+        /// Corner points in the shape's frame, in m.
+        points_m: Vec<[f32; 3]>,
+        /// Triangles as indices into `points_m`, counter-clockwise seen from outside.
+        triangles: Vec<[u32; 3]>,
     },
 }
 
@@ -132,8 +146,31 @@ pub fn shape_collider(shape: &CourseShape, friction: f32) -> Option<ColliderBuil
                 .collect();
             ColliderBuilder::convex_hull(&points)?
         }
+        ShapeGeometry::Mesh {
+            points_m,
+            triangles,
+        } => {
+            let points: Vec<Vector> = points_m
+                .iter()
+                .map(|point| Vector::from_array(*point))
+                .collect();
+            // Internal-edge fixing keeps contacts on the smooth surface, so the chassis
+            // slides over the joints between triangles instead of catching on them.
+            let flags = TriMeshFlags::ORIENTED | TriMeshFlags::FIX_INTERNAL_EDGES;
+            ColliderBuilder::trimesh_with_flags(points, triangles.clone(), flags).ok()?
+        }
     };
-    Some(builder.position(shape.pose.to_rapier()).friction(friction))
+    let user_data = if shape.surface == Surface::Obstacle {
+        OBSTACLE_USER_DATA
+    } else {
+        0
+    };
+    Some(
+        builder
+            .position(shape.pose.to_rapier())
+            .friction(friction)
+            .user_data(user_data),
+    )
 }
 
 /// The floor: the bounds' footprint at y = 0, cut into segments along X around gaps.
@@ -198,6 +235,28 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
                 Side::Right => *width,
             };
             at(*pos, *yaw).kicker(*length, outer_z, *angle_deg)
+        }
+        PieceSpec::Corkscrew {
+            pos,
+            yaw,
+            length,
+            width,
+            angle_deg,
+            bank_deg,
+            side,
+        } => {
+            // Left is −Z (SPEC §4): the raised edge is on that side of the lane.
+            let raised_side_z = match side {
+                Side::Left => -1.0,
+                Side::Right => 1.0,
+            };
+            let twist = CorkscrewTwist {
+                length: *length,
+                width: *width,
+                lip_angle_deg: *angle_deg,
+                bank_deg: *bank_deg,
+            };
+            at(*pos, *yaw).corkscrew(&twist, raised_side_z)
         }
         PieceSpec::Gap { .. } => Vec::new(),
         PieceSpec::CarRow {
@@ -296,50 +355,58 @@ fn wall(frame: PieceFrame, height: f32, with_ramp: bool) -> Vec<CourseShape> {
     shapes
 }
 
-/// A U-channel along local +X: a flat floor between two quarter-circle walls, each made
-/// of `HALFPIPE_PANELS` flat panels.
+/// A U-channel along local +X: a flat floor between two quarter-circle walls, each one
+/// smooth mesh of `HALFPIPE_ARC_SEGMENTS` facets whose inner face lies on the arc, flush
+/// with the floor.
 fn halfpipe(frame: PieceFrame, radius: f32, length: f32) -> Vec<CourseShape> {
     let mut shapes = Vec::new();
-    let step_rad = std::f32::consts::FRAC_PI_2 / HALFPIPE_PANELS as f32;
     for side in [-1.0_f32, 1.0] {
         let centre_z = side * HALFPIPE_FLOOR_WIDTH_M / 2.0;
-        for panel in 0..HALFPIPE_PANELS {
-            // The panel joins two arc points, at these angles from straight down.
-            let start_rad = panel as f32 * step_rad;
-            let (z0, y0) = arc_point(centre_z, side, radius, start_rad);
-            let (z1, y1) = arc_point(centre_z, side, radius, start_rad + step_rad);
-            let chord_m = ((z1 - z0).powi(2) + (y1 - y0).powi(2)).sqrt();
-            let tilt_rad = libm::atan2f(y1 - y0, z1 - z0);
-            let half = [
-                length / 2.0,
-                HALFPIPE_PANEL_THICKNESS_M / 2.0,
-                chord_m / 2.0,
-            ];
-            // Push the panel away from the arc's centre by half its thickness, so its
-            // inner face (where the wheels ride) lies on the arc, flush with the floor.
-            let mid_z = (z0 + z1) / 2.0;
-            let mid_y = (y0 + y1) / 2.0;
-            let out_z = mid_z - centre_z;
-            let out_y = mid_y - radius;
-            let out_length = (out_z * out_z + out_y * out_y).sqrt();
-            let push_m = HALFPIPE_PANEL_THICKNESS_M / 2.0 / out_length;
-            let centre = [length / 2.0, mid_y + out_y * push_m, mid_z + out_z * push_m];
-            // The panel's long side (local Z) follows the chord: a roll about local +X.
-            shapes.push(frame.local_box(Surface::Ramp, centre, half, -tilt_rad));
-        }
+        let section = |x: f32| {
+            // Lower chain: the wall's outer face; upper chain (reversed): its inner face.
+            let outer_radius = radius + HALFPIPE_WALL_THICKNESS_M;
+            let mut points = arc_points(x, centre_z, side, radius, outer_radius);
+            let mut inner = arc_points(x, centre_z, side, radius, radius);
+            inner.reverse();
+            points.extend(inner);
+            points
+        };
+        shapes.push(frame.mesh(Surface::Ramp, loft(&section(0.0), &section(length))));
     }
     shapes
 }
 
-/// The four corners of one side (at `z`) of a ramp segment: its top edge from
-/// (`x0`, `h0`) to (`x1`, `h1`) and its base `HULL_BASE_DEPTH_M` below the floor.
-fn segment_side(x0: f32, h0: f32, x1: f32, h1: f32, z: f32) -> [[f32; 3]; 4] {
-    [
-        [x0, -HULL_BASE_DEPTH_M, z],
-        [x0, h0, z],
-        [x1, -HULL_BASE_DEPTH_M, z],
-        [x1, h1, z],
-    ]
+/// Points at `x` on an arc of `arc_radius` around the halfpipe wall's centre (`radius`
+/// above (`centre_z`, 0)), from straight down to level with the centre, as (x, y, z).
+fn arc_points(x: f32, centre_z: f32, side: f32, radius: f32, arc_radius: f32) -> Vec<[f32; 3]> {
+    let step_rad = std::f32::consts::FRAC_PI_2 / HALFPIPE_ARC_SEGMENTS as f32;
+    let mut points = Vec::new();
+    for segment in 0..=HALFPIPE_ARC_SEGMENTS {
+        let angle_rad = segment as f32 * step_rad;
+        let z = centre_z + side * arc_radius * libm::sinf(angle_rad);
+        let y = radius - arc_radius * libm::cosf(angle_rad);
+        points.push([x, y, z]);
+    }
+    points
+}
+
+/// A ramp's cross-section at `z` for `loft`: the base `HULL_BASE_DEPTH_M` below the
+/// floor under each profile point (lower chain), then the top at `height_scale` × the
+/// profile height, back to front (upper chain). `start_x` shifts it along the piece.
+fn profile_section(
+    profile: &[(f32, f32)],
+    start_x: f32,
+    z: f32,
+    height_scale: f32,
+) -> Vec<[f32; 3]> {
+    let mut points = Vec::new();
+    for (x, _) in profile {
+        points.push([start_x + x, -HULL_BASE_DEPTH_M, z]);
+    }
+    for (x, height_m) in profile.iter().rev() {
+        points.push([start_x + x, height_scale * height_m, z]);
+    }
+    points
 }
 
 /// A ramp's side profile as (distance along, height) points, in m: `RAMP_SEGMENTS`
@@ -358,12 +425,40 @@ fn ramp_profile(length: f32, lip_angle_deg: f32) -> Vec<(f32, f32)> {
     profile
 }
 
-/// A point on a halfpipe wall's quarter circle, `angle_rad` up from its lowest point,
-/// as (z, y) in m; the circle's centre is `radius` above (`centre_z`, 0).
-fn arc_point(centre_z: f32, side: f32, radius: f32, angle_rad: f32) -> (f32, f32) {
-    let z = centre_z + side * radius * libm::sinf(angle_rad);
-    let y = radius - radius * libm::cosf(angle_rad);
-    (z, y)
+/// A side profile: (distance along the piece, height) points, in m.
+type SideProfile = Vec<(f32, f32)>;
+
+/// A corkscrew's shape: `length` along the piece, `width` across, its low edge rising
+/// to `lip_angle_deg` and its surface banked up to `bank_deg` at the lip.
+struct CorkscrewTwist {
+    length: f32,
+    width: f32,
+    lip_angle_deg: f32,
+    bank_deg: f32,
+}
+
+impl CorkscrewTwist {
+    /// The two edges' side profiles as (distance along, height) points, in m: the low
+    /// edge, then the raised edge. Both start flat at the floor. The low edge curves up
+    /// to `lip_angle_deg` (h = L·tan(angle)·s²/2 with s = x/L, so its slope grows evenly
+    /// from 0), and the bank grows as bank·s², so the surface twists smoothly from flat
+    /// at the foot to steepest at the lip, and the raised edge sits width·tan(bank)
+    /// above the low edge.
+    fn edge_profiles(&self) -> (SideProfile, SideProfile) {
+        let lip_slope = libm::tanf(self.lip_angle_deg.to_radians());
+        let mut low_edge = Vec::new();
+        let mut raised_edge = Vec::new();
+        for sample in 0..=CORKSCREW_SAMPLES {
+            let progress = sample as f32 / CORKSCREW_SAMPLES as f32;
+            let x = progress * self.length;
+            let low_m = self.length * lip_slope * progress * progress / 2.0;
+            let bank_rad = (self.bank_deg * progress * progress).to_radians();
+            let raised_m = low_m + self.width * libm::tanf(bank_rad);
+            low_edge.push((x, low_m));
+            raised_edge.push((x, raised_m));
+        }
+        (low_edge, raised_edge)
+    }
 }
 
 /// A piece's frame: its start point and its heading (yaw about +Y).
@@ -384,7 +479,7 @@ impl PieceFrame {
 
     /// A ramp starting `start_x` along the piece, centred `offset_z` across it, `length`
     /// long and `width` wide, curving up along +X from flat to `lip_angle_deg` at its
-    /// sheer back (see `ramp_profile`): one convex piece per profile segment.
+    /// sheer back (see `ramp_profile`): one smooth mesh.
     fn ramp(
         &self,
         surface: Surface,
@@ -394,15 +489,11 @@ impl PieceFrame {
         width: f32,
         lip_angle_deg: f32,
     ) -> Vec<CourseShape> {
-        let near_z = offset_z - width / 2.0;
-        let far_z = offset_z + width / 2.0;
-        self.profile_hulls(surface, length, lip_angle_deg, |x0, h0, x1, h1| {
-            let mut points = Vec::new();
-            for z in [near_z, far_z] {
-                points.extend(segment_side(start_x + x0, h0, start_x + x1, h1, z));
-            }
-            points
-        })
+        let profile = ramp_profile(length, lip_angle_deg);
+        let section = |z: f32| profile_section(&profile, start_x, z, 1.0);
+        let near = section(offset_z - width / 2.0);
+        let far = section(offset_z + width / 2.0);
+        vec![self.mesh(surface, loft(&near, &far))]
     }
 
     /// A kicker: a ramp beside the lane's centre line (z = 0) out to `outer_z`, whose
@@ -410,29 +501,21 @@ impl PieceFrame {
     /// `outer_z`. So the wheels on that side ride up and the car rolls, with no wall
     /// under the car for the chassis to jam against.
     fn kicker(&self, length: f32, outer_z: f32, lip_angle_deg: f32) -> Vec<CourseShape> {
-        self.profile_hulls(Surface::Ramp, length, lip_angle_deg, |x0, h0, x1, h1| {
-            let mut points = segment_side(x0, 0.0, x1, 0.0, 0.0).to_vec();
-            points.extend(segment_side(x0, h0, x1, h1, outer_z));
-            points
-        })
+        let profile = ramp_profile(length, lip_angle_deg);
+        let centre_line = profile_section(&profile, 0.0, 0.0, 0.0);
+        let outer = profile_section(&profile, 0.0, outer_z, 1.0);
+        vec![self.mesh(Surface::Ramp, loft(&centre_line, &outer))]
     }
 
-    /// One convex hull per segment of a ramp profile; `segment_points` gives a
-    /// segment's corners from its start (x0, h0) and end (x1, h1), in m.
-    fn profile_hulls(
-        &self,
-        surface: Surface,
-        length: f32,
-        lip_angle_deg: f32,
-        segment_points: impl Fn(f32, f32, f32, f32) -> Vec<[f32; 3]>,
-    ) -> Vec<CourseShape> {
-        let profile = ramp_profile(length, lip_angle_deg);
-        let mut shapes = Vec::new();
-        for pair in profile.windows(2) {
-            let [(x0, h0), (x1, h1)] = [pair[0], pair[1]];
-            shapes.push(self.hull(surface, segment_points(x0, h0, x1, h1)));
-        }
-        shapes
+    /// A corkscrew centred on the lane (see `CorkscrewTwist`), its raised edge on the
+    /// side of `raised_side_z` (−1 left, +1 right): one smooth mesh lofted across the
+    /// lane between the low edge and the raised edge.
+    fn corkscrew(&self, twist: &CorkscrewTwist, raised_side_z: f32) -> Vec<CourseShape> {
+        let (low_profile, raised_profile) = twist.edge_profiles();
+        let half_width = twist.width / 2.0;
+        let low_edge = profile_section(&low_profile, 0.0, -raised_side_z * half_width, 1.0);
+        let raised_edge = profile_section(&raised_profile, 0.0, raised_side_z * half_width, 1.0);
+        vec![self.mesh(Surface::Ramp, loft(&low_edge, &raised_edge))]
     }
 
     /// A flat non-solid marking centred on the lane, `length` long from the piece start
@@ -442,6 +525,15 @@ impl PieceFrame {
         let mut shape = self.local_box(surface, [half[0], half[1], 0.0], half, 0.0);
         shape.solid = false;
         shape
+    }
+
+    /// A closed mesh given in the piece frame.
+    fn mesh(&self, surface: Surface, mesh: LoftedMesh) -> CourseShape {
+        let geometry = ShapeGeometry::Mesh {
+            points_m: mesh.points_m,
+            triangles: mesh.triangles,
+        };
+        self.shape(surface, geometry, Vector::ZERO, Rotation::IDENTITY)
     }
 
     /// A convex hull of points given in the piece frame.

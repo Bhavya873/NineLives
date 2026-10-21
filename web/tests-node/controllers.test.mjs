@@ -1,6 +1,6 @@
 // Game API tests for the controllers (SPEC §8, §11.1, §11.3): Off fires nothing, PD saves
 // air on its wheels, Manual fires the nozzle whose key is held, and unknown names are
-// refused.
+// refused. A new game starts with PD; T cycles Off, PD and AI, never Manual.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -10,6 +10,7 @@ import {
   HudField,
   controllersToml,
   modesToml,
+  policyJson,
   tickMany,
   vehicleToml,
 } from './load-wasm.mjs';
@@ -20,8 +21,9 @@ function holdingNozzle(nozzle) {
   return new Uint8Array([0, 0, buttons & 0xff, buttons >> 8]);
 }
 
-test('the game starts with the Off controller, which ignores the nozzle keys', () => {
+test('the Off controller ignores the nozzle keys', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+  game.set_controller('off');
 
   tickMany(game, holdingNozzle(4), 30);
 
@@ -32,6 +34,8 @@ test('the game starts with the Off controller, which ignores the nozzle keys', (
 test('Manual fires only the nozzle whose key is held', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   game.set_controller('manual');
+  // In the air: on the ground, steady, the thruster interlock cuts every controller.
+  game.drop_test(0n);
 
   tickMany(game, holdingNozzle(4), 30);
 
@@ -64,16 +68,36 @@ test('choosing the AI before a policy is loaded is refused with a helpful messag
   assert.throws(() => game.set_controller('ai'), /needs a policy/);
 });
 
-test('without a policy, cycling the controller goes Off, PD, Manual and back to Off', () => {
+test('a new game starts with PD in charge', () => {
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
+});
+
+test('without a policy, cycling the controller goes PD, Off and back to PD', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
   game.cycle_controller();
-  assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
-  game.cycle_controller();
-  assert.equal(game.hud()[HudField.Controller], ControllerCode.Manual);
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Off);
   game.cycle_controller();
 
-  assert.equal(game.hud()[HudField.Controller], ControllerCode.Off);
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
+});
+
+test('T never lands on Manual, and leaving Manual goes to PD', () => {
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+  game.load_policy(policyJson);
+  const seen = [];
+  for (let press = 0; press < 6; press += 1) {
+    game.cycle_controller();
+    seen.push(game.hud()[HudField.Controller]);
+  }
+  game.set_controller('manual');
+
+  game.cycle_controller();
+
+  assert.ok(!seen.includes(ControllerCode.Manual));
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
 });
 
 test('PD fires nothing while the car sits on its wheels, to save air', () => {
@@ -83,12 +107,15 @@ test('PD fires nothing while the car sits on its wheels, to save air', () => {
   tickMany(game, new Uint8Array(4), 240);
 
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Pd);
-  assert.deepEqual(Array.from(game.nozzle_throttles()), new Array(10).fill(0));
+  // Not exactly 0: the valves are still closing from the settle at the start (the drag's
+  // centre of pressure pitches the car a hair as it drops onto its wheels).
+  for (const throttle of game.nozzle_throttles()) assert.ok(throttle < 1e-6, `${throttle}`);
 });
 
 test('a nozzle tap that lands between two control steps still fires', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   game.set_controller('manual');
+  game.drop_test(0n); // in the air, where the interlock never cuts the controller
   game.tick(new Uint8Array(4)); // control step; the next tick is not one
 
   game.tick(holdingNozzle(4)); // the tap
@@ -110,10 +137,11 @@ function peakThrottleAfterKnock(game, ticks) {
 }
 
 test('after a Chaos knock PD fires to steady the car, where Off fires nothing', () => {
-  // Seed 2's knock lifts wheels off the ground; the same knock for both controllers.
+  // Seed 25's knock is strong enough to unsteady the car past the thruster interlock
+  // (most knocks on a parked car stay inside it); the same knock for both controllers.
   const peaks = {};
   for (const kind of ['off', 'pd']) {
-    const game = new Game(vehicleToml, modesToml, controllersToml, 2n);
+    const game = new Game(vehicleToml, modesToml, controllersToml, 25n);
     game.set_controller(kind);
     tickMany(game, new Uint8Array(4), 120);
     peaks[kind] = peakThrottleAfterKnock(game, 240);

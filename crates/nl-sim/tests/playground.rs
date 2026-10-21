@@ -1,5 +1,5 @@
 //! The game's open world (SPEC §11.6, `courses/playground.json`): it parses and builds
-//! with every zone's pieces, its spawn is clear so no Stage A drop starts against a
+//! with every zone's pieces (the flip zone's corkscrews included), its spawn is clear so no Stage A drop starts against a
 //! piece, the pieces sit well inside the bounds, and an episode on it runs to the end.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
@@ -48,7 +48,7 @@ fn world_corners(shape: &CourseShape) -> Vec<Vector> {
             }
             corners
         }
-        ShapeGeometry::Hull { points_m } => points_m.clone(),
+        ShapeGeometry::Hull { points_m } | ShapeGeometry::Mesh { points_m, .. } => points_m.clone(),
     };
     let pose = shape.pose.to_rapier();
     local
@@ -89,18 +89,18 @@ fn the_playground_has_every_zone_but_no_lines_or_gaps() {
 
     let count = |surface| shapes.iter().filter(|s| s.surface == surface).count();
     let is_halfpipe = |index: usize| matches!(spec.pieces[index], PieceSpec::Halfpipe { .. });
-    let halfpipe_panels = shapes.iter().filter(|s| s.piece.is_some_and(is_halfpipe));
+    let halfpipe_walls = shapes.iter().filter(|s| s.piece.is_some_and(is_halfpipe));
+    assert_eq!(halfpipe_walls.count(), 4 * 2, "four halfpipes of two walls");
     assert!(
-        halfpipe_panels.count() >= 4 * 16,
-        "four halfpipes of 16 panels"
-    );
-    assert!(
-        count(Surface::Ramp) >= 15 * 6,
-        "ramps, kickers and halfpipe walls"
+        count(Surface::Ramp) >= 15 + 4 * 2,
+        "ramps, kickers, wall ramps and halfpipe walls"
     );
     assert!(count(Surface::Obstacle) >= 20, "car rows, bumps and walls");
     assert!(count(Surface::LandingPad) >= 5);
     assert!(count(Surface::KickPlate) >= 4);
+    let corkscrews = spec.pieces.iter();
+    let corkscrews = corkscrews.filter(|piece| matches!(piece, PieceSpec::Corkscrew { .. }));
+    assert!(corkscrews.count() >= 3, "a flip zone of corkscrews");
     assert_eq!(count(Surface::Floor), 1, "one floor, no gaps");
     assert_eq!(count(Surface::Checkpoint) + count(Surface::Finish), 0);
 }

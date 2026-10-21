@@ -2,6 +2,8 @@
 //! call from Python. The worlds step in parallel with rayon while the GIL is released;
 //! everything crosses the boundary as numpy arrays (float32 observations, N × 41).
 
+use nl_control::config::ControllersConfig;
+use nl_control::{Pd, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::reward::RewardTerms;
@@ -14,7 +16,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::prelude::*;
 
-use crate::config::{parse_sim_config, parse_stage};
+use crate::config::{SimConfig, parse_sim_config, parse_stage};
 use crate::env_slot::{EnvSlot, SlotStep};
 
 /// What `step` returns: observations, rewards, terminated, truncated, info.
@@ -30,6 +32,8 @@ type StepReturn<'py> = (
 #[pyclass(module = "ninelives_sim")]
 pub struct BatchedSim {
     slots: Vec<EnvSlot>,
+    /// Actions per environment: one per nozzle, plus the gate for gated residual control.
+    action_size: usize,
     /// The scenarios every slot was built with (for `level_count`).
     scenarios: ScenariosConfig,
 }
@@ -46,15 +50,36 @@ impl BatchedSim {
             ));
         }
         let config = parse_sim_config(config_json).map_err(PyValueError::new_err)?;
+        let residual = residual_pd(&config)?;
+        let gated = config.residual.is_some_and(|settings| settings.gated);
+        let action_size = if gated {
+            RESIDUAL_ACTION_COUNT
+        } else {
+            NOZZLE_COUNT
+        };
         let mut slots = Vec::with_capacity(n_envs);
         for index in 0..n_envs {
             let training = config.training.clone();
-            slots.push(EnvSlot::new(training, config.stage, seed, index as u64));
+            let slot_residual = residual.clone();
+            slots.push(EnvSlot::new(
+                training,
+                config.stage,
+                seed,
+                index as u64,
+                slot_residual,
+            ));
         }
         Ok(BatchedSim {
             slots,
+            action_size,
             scenarios: config.training.scenarios,
         })
+    }
+
+    /// Actions per environment `step` expects: 10 (one per nozzle), or 11 with gated
+    /// residual control (the last is the gate).
+    fn action_size(&self) -> usize {
+        self.action_size
     }
 
     /// How many environments there are.
@@ -169,13 +194,14 @@ impl BatchedSim {
         Ok(seeds.iter().map(|seed| Some(*seed)).collect())
     }
 
-    /// The actions as one row of 10 per environment, checking the shape.
+    /// The actions as one row per environment, checking the shape. A row without a gate
+    /// gets a fully open one, which only gated residual control reads.
     fn action_rows(
         &self,
         actions: &PyReadonlyArray2<'_, f32>,
-    ) -> PyResult<Vec<[f32; NOZZLE_COUNT]>> {
+    ) -> PyResult<Vec<[f32; RESIDUAL_ACTION_COUNT]>> {
         let actions = actions.as_array();
-        let expected = (self.slots.len(), NOZZLE_COUNT);
+        let expected = (self.slots.len(), self.action_size);
         if actions.dim() != expected {
             let message = format!(
                 "BatchedSim.step: actions must have shape {expected:?}, not {:?}",
@@ -185,7 +211,8 @@ impl BatchedSim {
         }
         let mut rows = Vec::with_capacity(expected.0);
         for row in actions.rows() {
-            let mut action = [0.0; NOZZLE_COUNT];
+            let mut action = [0.0; RESIDUAL_ACTION_COUNT];
+            action[NOZZLE_COUNT] = 1.0;
             for (index, value) in row.iter().enumerate() {
                 action[index] = *value;
             }
@@ -193,6 +220,22 @@ impl BatchedSim {
         }
         Ok(rows)
     }
+}
+
+/// PD for the config's car with the config's residual scale, if residual control is on
+/// (one copy per environment, so each keeps its own warm start). Like eval, PD is built
+/// for the configured car and mode, not each episode's randomized one.
+fn residual_pd(config: &SimConfig) -> PyResult<Option<ResidualPd>> {
+    let Some(settings) = config.residual else {
+        return Ok(None);
+    };
+    let controllers = ControllersConfig::from_toml_str(&config.controllers_toml)
+        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+    let training = &config.training;
+    let pd = Pd::for_vehicle(&training.vehicle, training.mode, &controllers);
+    let residual = ResidualPd::new(pd, settings)
+        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+    Ok(Some(residual))
 }
 
 /// Packs the per-environment results into SB3's (obs, reward, terminated, truncated,

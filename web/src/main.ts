@@ -52,6 +52,13 @@ import {
   setCarVisible,
 } from './render/scene.ts';
 import { loadPolicy } from './policy.ts';
+import {
+  createScreenEffects,
+  renderScreenEffects,
+  nextWindLevel,
+  resetScreenEffects,
+  startingWindLevel,
+} from './screen-effects.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
 import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
@@ -78,6 +85,8 @@ const hudValues: HudValues = {
   checkpointCount: 0,
   finished: false,
   finishTimeS: 0,
+  gLoad: 1,
+  windWorldM_S: [0, 0, 0],
 };
 
 async function start(): Promise<void> {
@@ -118,6 +127,15 @@ async function start(): Promise<void> {
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
+  const params = new URLSearchParams(window.location.search);
+  const effects = createScreenEffects(view.scene, prefersReducedMotion());
+  // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
+  let windLevel = startingWindLevel(params);
+  game.set_wind_level(windLevel);
+  onKeyPress('KeyV', () => {
+    windLevel = nextWindLevel(windLevel);
+    game.set_wind_level(windLevel);
+  });
   const course = createCourseSession(view.scene, view.ground, {
     panel: requireElement('results'),
     lines: requireElement('results-lines'),
@@ -127,9 +145,9 @@ async function start(): Promise<void> {
     showCourse(course, shapesJson);
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
+    resetScreenEffects(effects);
   };
   const startGauntlet = () => startCourse(game.load_course(gauntletJson));
-  const params = new URLSearchParams(window.location.search);
   // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
   const startFreeDrive = () => {
     if (params.get('world') === 'flat') {
@@ -154,6 +172,7 @@ async function start(): Promise<void> {
     // A drop during the respawn wait clears the crash without a Respawn event.
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
+    resetScreenEffects(effects);
   });
   let lastRenderMs = performance.now();
 
@@ -170,6 +189,7 @@ async function start(): Promise<void> {
       stopExplosion(explosion);
       // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
       snapViewToGame(game, frames, view, carPose);
+      resetScreenEffects(effects);
     }
     const toast = toastForEvents(events);
     // Nothing covers the results screen; what happens after the finish doesn't count.
@@ -213,6 +233,15 @@ async function start(): Promise<void> {
       view.camera.position.add(cameraShake(explosion, shake));
       view.renderer.render(view.scene, view.camera);
       view.camera.position.sub(shake);
+      renderScreenEffects(effects, {
+        gLoad: hudValues.gLoad,
+        windWorldM_S: hudValues.windWorldM_S,
+        crashed: hudValues.crashed,
+        camera: view.camera,
+        carPosition: carPose.position,
+        frameS,
+        nowS: nowMs / 1000,
+      });
 
       updateHud(hud, hudValues);
       updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
@@ -291,6 +320,9 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.checkpointCount = values[HudField.CheckpointCount] ?? 0;
   out.finished = values[HudField.Finished] === 1;
   out.finishTimeS = values[HudField.FinishTimeS] ?? 0;
+  out.gLoad = values[HudField.GLoad] ?? 1;
+  out.windWorldM_S[0] = values[HudField.WindXMS] ?? 0;
+  out.windWorldM_S[2] = values[HudField.WindZMS] ?? 0;
 }
 
 start().catch((error: unknown) => {

@@ -5,9 +5,9 @@
 //! back into flat `Float32Array`s that three.js can read without extra objects.
 //!
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
-//! the Off, PD, AI and Manual controllers, and courses (`course.rs`, M7).
+//! the Off, PD, AI and (debug-only) Manual controllers, and courses (`course.rs`, M7).
 
-use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind, Off};
+use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind};
 use std::sync::Arc;
 
 use nl_policy::Policy;
@@ -22,6 +22,7 @@ use nl_sim::input::{
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
 use nl_sim::vehicle_config::VehicleConfig;
+use nl_sim::wind::WindLevel;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
 use wasm_bindgen::prelude::*;
 
@@ -82,10 +83,17 @@ pub enum HudField {
     Finished = 18,
     /// Course time at the finish, in s (0 until then).
     FinishTimeS = 19,
+    /// Passenger g-load at the driver's seat, in g (SPEC §9.4): 1 sitting still; the
+    /// screen darkens above 3 g.
+    GLoad = 20,
+    /// The wind now (mean plus gust) along world +X, in m/s.
+    WindXMS = 21,
+    /// The wind now (mean plus gust) along world +Z, in m/s.
+    WindZMS = 22,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::FinishTimeS as usize + 1;
+const HUD_LENGTH: usize = HudField::WindZMS as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
 #[wasm_bindgen]
@@ -144,6 +152,8 @@ pub struct Game {
     /// Starts for the drop test: the repo's scenarios.toml, built in (the game passes no
     /// scenarios of its own).
     scenarios: ScenariosConfig,
+    /// The wind setting (SPEC §7.2), kept so a rebuilt world (`load_course`) gets it too.
+    wind_level: WindLevel,
     /// Buttons pressed on any tick since the last control step, so a quick tap of a
     /// nozzle key between two control steps still reaches the controller.
     buttons_since_control_step: u16,
@@ -199,7 +209,8 @@ pub enum CrashCode {
 #[wasm_bindgen]
 impl Game {
     /// Builds a game on flat ground from the text of `configs/vehicle.toml`,
-    /// `configs/modes.toml` and `configs/controllers.toml`, starting in Realistic mode. `seed` drives the random
+    /// `configs/modes.toml` and `configs/controllers.toml`, starting in Realistic mode
+    /// with the PD controller. `seed` drives the random
     /// Chaos knocks. A crash respawns by itself after `[events] respawn_delay_s`.
     /// Throws if a config is invalid; the message names the bad field.
     #[wasm_bindgen(constructor)]
@@ -222,9 +233,11 @@ impl Game {
             seed,
             modes,
             nozzle_layout: flatten_nozzle_layout(&config),
-            controller: ControllerKind::Off(Off),
+            // PD starts in charge, so a new player sees the car land itself (SPEC §11.3).
+            controller: ControllerKind::Pd(Box::new(choices.pd.clone())),
             choices,
             scenarios: ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?,
+            wind_level: WindLevel::Off,
             buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
@@ -234,6 +247,20 @@ impl Game {
     /// Switches physics mode: "realistic" or "arcade". Throws on any other name.
     pub fn set_mode(&mut self, mode: &str) -> Result<(), JsError> {
         self.world.set_mode(self.mode_params(mode)?);
+        Ok(())
+    }
+
+    /// Sets the wind: "off", "breeze" or "storm" (SPEC §7.2, levels from `[wind]` in
+    /// scenarios.toml), blowing in a direction drawn from the game's seed, with gusts.
+    /// Throws on any other name. Loading a course keeps the setting.
+    pub fn set_wind_level(&mut self, level: &str) -> Result<(), JsError> {
+        let level = WindLevel::from_name(level).ok_or_else(|| {
+            JsError::new(&format!(
+                "set_wind_level: unknown level '{level}'; use off, breeze or storm"
+            ))
+        })?;
+        self.wind_level = level;
+        self.apply_wind_level();
         Ok(())
     }
 
@@ -363,6 +390,10 @@ impl Game {
         values[HudField::CheckpointCount as usize] = self.world.checkpoint_count() as f32;
         values[HudField::Finished as usize] = one_if(self.world.is_finished());
         values[HudField::FinishTimeS as usize] = self.world.finish_time_s().unwrap_or(0.0);
+        values[HudField::GLoad as usize] = self.world.g_load();
+        let [wind_x_m_s, _, wind_z_m_s] = self.world.wind_m_s();
+        values[HudField::WindXMS as usize] = wind_x_m_s;
+        values[HudField::WindZMS as usize] = wind_z_m_s;
         values
     }
 

@@ -19,15 +19,19 @@ pub mod eval;
 mod manual;
 mod off;
 mod pd;
+mod residual;
 
 pub use ai::Ai;
 pub use controller_kind::{
-    BuildControllerError, CONTROLLER_NAMES, ControllerChoiceError, ControllerChoices,
+    BuildControllerError, CONTROLLER_NAMES, CYCLE_NAMES, ControllerChoiceError, ControllerChoices,
     ControllerKind, build_controller,
 };
 pub use manual::Manual;
 pub use off::Off;
 pub use pd::Pd;
+pub use residual::{
+    RESIDUAL_ACTION_COUNT, ResidualPd, ResidualSettings, add_residual, gate_opening,
+};
 
 /// What a controller may look at on a control step (SPEC §8).
 #[derive(Debug, Clone, Copy, PartialEq)]

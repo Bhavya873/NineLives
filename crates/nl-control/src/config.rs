@@ -18,8 +18,17 @@ pub struct PdConfig {
     pub kd: f32,
     /// Braking only happens while the car's up axis points at least this far up.
     pub upright_alignment: f32,
-    /// Braking only happens below this height.
+    /// Braking always starts by this height (the floor of the stopping-distance rule).
     pub brake_height_m: f32,
+    /// Braking starts this many times the stopping distance up, so a fast fall gets
+    /// thrust early enough to slow down (owner's free-play feedback: hard landings).
+    pub brake_safety: f32,
+    /// The share of full lift the stopping distance counts on (the rest is headroom for
+    /// attitude torque), 0..1.
+    pub brake_usable_fraction: f32,
+    /// Extra height added to the stopping distance: the centre of mass rides this far
+    /// above the ground on landing, plus slack, in m.
+    pub brake_margin_m: f32,
     /// ... and when falling faster than this.
     pub brake_speed_m_s: f32,
     /// The fall speed braking aims for.
@@ -34,6 +43,26 @@ pub struct PdConfig {
     /// Lying on the ground, the roll torque is multiplied by this: tipping the car over
     /// its side edge needs much more than turning it in the air.
     pub ground_roll_gain: f32,
+    /// Lying on its side, the side boosters push the car up with this share of its weight
+    /// (along whichever side axis points up), helping the roll torque flip it.
+    pub ground_side_push: f32,
+    /// In the air, sideways sliding is damped with this gain (1/s), so the side boosters
+    /// straighten the car's path before touchdown.
+    pub kv_lateral: f32,
+    /// Cap on the angular acceleration PD asks for, in rad/s², so a sudden turn stays
+    /// gentle on the passenger (about 3 g at the seat with the spin it allows).
+    pub max_angular_accel_rad_s2: f32,
+    /// Air control: full steer asks for this yaw rate, in rad/s.
+    pub air_yaw_rate_rad_s: f32,
+    /// Air control: full throttle or brake asks for this nose-down or nose-up pitch, in rad.
+    pub air_pitch_rad: f32,
+    /// Air control only above this height; lower, PD lines up for landing, in m.
+    pub air_wish_min_height_m: f32,
+    /// With any wheel down, tilted at most this much (degrees) and spinning at most
+    /// `quiet_max_spin_rad_s`, PD treats the car as driving and leaves the thrusters off.
+    pub quiet_max_tilt_deg: f32,
+    /// See `quiet_max_tilt_deg`, in rad/s.
+    pub quiet_max_spin_rad_s: f32,
 }
 
 /// Everything in controllers.toml.
@@ -73,12 +102,23 @@ impl ControllersConfig {
             ("pd.kd", pd.kd),
             ("pd.upright_alignment", pd.upright_alignment),
             ("pd.brake_height_m", pd.brake_height_m),
+            ("pd.brake_safety", pd.brake_safety),
+            ("pd.brake_usable_fraction", pd.brake_usable_fraction),
+            ("pd.brake_margin_m", pd.brake_margin_m),
             ("pd.brake_speed_m_s", pd.brake_speed_m_s),
             ("pd.target_descent_m_s", pd.target_descent_m_s),
             ("pd.kv", pd.kv),
             ("pd.on_ground_height_m", pd.on_ground_height_m),
             ("pd.lying_max_fall_speed_m_s", pd.lying_max_fall_speed_m_s),
             ("pd.ground_roll_gain", pd.ground_roll_gain),
+            ("pd.ground_side_push", pd.ground_side_push),
+            ("pd.kv_lateral", pd.kv_lateral),
+            ("pd.max_angular_accel_rad_s2", pd.max_angular_accel_rad_s2),
+            ("pd.air_yaw_rate_rad_s", pd.air_yaw_rate_rad_s),
+            ("pd.air_pitch_rad", pd.air_pitch_rad),
+            ("pd.air_wish_min_height_m", pd.air_wish_min_height_m),
+            ("pd.quiet_max_tilt_deg", pd.quiet_max_tilt_deg),
+            ("pd.quiet_max_spin_rad_s", pd.quiet_max_spin_rad_s),
             ("allocation.force_weight", allocation.force_weight),
             ("allocation.torque_weight", allocation.torque_weight),
             ("allocation.regularisation", allocation.regularisation),
@@ -89,11 +129,17 @@ impl ControllersConfig {
                 return Err(ControllersConfigError::NotPositive { field, value });
             }
         }
-        // An alignment is the cosine of a tilt, so it must be a fraction.
-        if pd.upright_alignment > 1.0 {
-            let field = "pd.upright_alignment";
-            let value = pd.upright_alignment;
-            return Err(ControllersConfigError::NotFraction { field, value });
+        // An alignment is the cosine of a tilt and the others are shares, so each must be
+        // a fraction.
+        let fractions = [
+            ("pd.upright_alignment", pd.upright_alignment),
+            ("pd.brake_usable_fraction", pd.brake_usable_fraction),
+            ("pd.ground_side_push", pd.ground_side_push),
+        ];
+        for (field, value) in fractions {
+            if value > 1.0 {
+                return Err(ControllersConfigError::NotFraction { field, value });
+            }
         }
         Ok(())
     }
@@ -107,12 +153,26 @@ mod tests {
     fn the_repo_config_loads() {
         let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
 
-        assert_eq!(config.pd.kp, 8.0);
+        assert!(config.pd.kp > 0.0);
+    }
+
+    /// The repo's controllers.toml with the `name = …` line set to `name = value`.
+    fn with_value(name: &str, value: &str) -> String {
+        let prefix = format!("{name} = ");
+        let mut lines: Vec<String> = Vec::new();
+        for line in DEFAULT_CONTROLLERS_TOML.lines() {
+            if line.starts_with(&prefix) {
+                lines.push(format!("{prefix}{value}"));
+            } else {
+                lines.push(line.to_string());
+            }
+        }
+        lines.join("\n")
     }
 
     #[test]
     fn a_negative_gain_is_refused_with_its_field_name() {
-        let broken = DEFAULT_CONTROLLERS_TOML.replace("kd = 4.0", "kd = -4.0");
+        let broken = with_value("kd", "-4.0");
 
         let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
 
@@ -124,8 +184,7 @@ mod tests {
 
     #[test]
     fn an_upright_alignment_above_1_is_refused() {
-        let broken =
-            DEFAULT_CONTROLLERS_TOML.replace("upright_alignment = 0.7", "upright_alignment = 1.5");
+        let broken = with_value("upright_alignment", "1.5");
 
         let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
 

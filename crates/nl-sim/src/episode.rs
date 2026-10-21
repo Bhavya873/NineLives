@@ -211,6 +211,8 @@ impl Episode {
         course: Option<&CourseSpec>,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
+        let wind = scenarios.wind.storm.scaled(variation.wind.strength);
+        world.set_wind(wind, variation.wind.direction_yaw_rad);
         let stage_start = begin_stage(&mut world, variation, scenarios, plan, course, seed)?;
         let delayed_throttles = vec![[0.0; NOZZLE_COUNT]; variation.latency_control_steps];
         let limit_s = plan.time_limit_s();
@@ -449,14 +451,15 @@ impl Episode {
         self.tally.settled_since_s = start_or_break_run(self.tally.settled_since_s, settled, now_s);
     }
 
-    /// PLAN §3.3: starts or breaks the run of quiet throttles (the controller's
-    /// throttle sum below `success_quiet_throttle_sum`) that success needs.
+    /// PLAN §3.3: starts or breaks the run of quiet throttles that success needs: the
+    /// thruster interlock is holding the controller off (no air can blow, SPEC §7.4), or
+    /// the controller's throttles add up to less than `success_quiet_throttle_sum`.
     fn track_quiet_throttles(&mut self) {
-        let mut throttle_sum = 0.0;
-        for throttle in self.commanded_throttles {
-            throttle_sum += throttle;
-        }
-        let quiet = throttle_sum < self.rules.success_quiet_throttle_sum;
+        let sum = quiet_throttle_sum(
+            &self.commanded_throttles,
+            self.rules.success_quiet_nozzle_deadband,
+        );
+        let quiet = self.world.thrusters_locked() || sum < self.rules.success_quiet_throttle_sum;
         let now_s = self.world.time_s() as f32;
         self.tally.quiet_since_s = start_or_break_run(self.tally.quiet_since_s, quiet, now_s);
     }
@@ -477,7 +480,7 @@ impl Episode {
         if self.world.hop_boost().hop_active() {
             self.tally.hop_started = true;
         }
-        if self.stage.obstacles.is_empty() || !self.world.chassis_touching() {
+        if self.stage.obstacles.is_empty() || !self.world.chassis_touching_obstacle() {
             return;
         }
         let position_m = self.world.chassis_pose().position_m;
@@ -554,4 +557,16 @@ fn start_or_break_run(since_s: Option<f32>, holds: bool, now_s: f32) -> Option<f
         return None;
     }
     Some(since_s.unwrap_or(now_s))
+}
+
+/// The throttle sum the quiet-throttle rule counts: every throttle at or above
+/// `deadband` (near-zero noise isn't idling).
+pub fn quiet_throttle_sum(throttles: &[f32; NOZZLE_COUNT], deadband: f32) -> f32 {
+    let mut sum = 0.0;
+    for throttle in throttles {
+        if *throttle >= deadband {
+            sum += throttle;
+        }
+    }
+    sum
 }

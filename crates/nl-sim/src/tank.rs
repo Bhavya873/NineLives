@@ -1,7 +1,7 @@
 //! The compressed-air tank that feeds the thrusters (SPEC §7.5).
 //!
-//! Thrust uses air: mass flow = force / exhaust speed. The tank refills slowly while
-//! the car stands on its wheels. Near empty, thrust fades out smoothly instead of
+//! Thrust uses air: mass flow = force / exhaust speed. The tank refills while the car
+//! stands on its wheels and has not used air for `refill_delay_s`. Near empty, thrust fades out smoothly instead of
 //! cutting off. In unlimited-air modes the tank never drains but air used is counted.
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,9 @@ use crate::modes::ModeParams;
 pub struct AirTank {
     air_kg: f32,
     air_used_kg: f32,
+    /// Seconds since air was last used (refilling waits for `refill_delay_s`).
+    #[serde(default)]
+    idle_s: f32,
 }
 
 impl AirTank {
@@ -21,6 +24,7 @@ impl AirTank {
         AirTank {
             air_kg: mode.tank_capacity_kg,
             air_used_kg: 0.0,
+            idle_s: 0.0,
         }
     }
 
@@ -62,6 +66,9 @@ impl AirTank {
         mode: &ModeParams,
     ) {
         let mut used_kg = total_force_n / exhaust_speed_m_s * dt_s;
+        if used_kg > 0.0 {
+            self.idle_s = 0.0;
+        }
         if !mode.unlimited_air {
             // Never count more air than was actually in the tank.
             used_kg = used_kg.min(self.air_kg);
@@ -70,9 +77,12 @@ impl AirTank {
         self.air_used_kg += used_kg;
     }
 
-    /// Refills at `refill_kg_s` while enough wheels touch the ground (SPEC §7.5).
+    /// Refills at `refill_kg_s` while enough wheels touch the ground and no air has been
+    /// used for `refill_delay_s` (SPEC §7.5). Call after `use_air` each step.
     pub fn refill(&mut self, wheels_touching: usize, dt_s: f32, mode: &ModeParams) {
-        if wheels_touching >= mode.refill_min_wheels {
+        let rested = self.idle_s >= mode.refill_delay_s;
+        self.idle_s += dt_s;
+        if wheels_touching >= mode.refill_min_wheels && rested {
             self.air_kg = (self.air_kg + mode.refill_kg_s * dt_s).min(mode.tank_capacity_kg);
         }
     }
@@ -132,7 +142,10 @@ mod tests {
 
     #[test]
     fn the_tank_refills_only_with_at_least_three_wheels_down() {
-        let mode = realistic();
+        let mode = ModeParams {
+            refill_delay_s: 0.0,
+            ..realistic()
+        };
         let mut tank = AirTank::full(&mode);
         tank.set_air_kg(100.0, &mode);
 
@@ -142,7 +155,27 @@ mod tests {
         let after_three_wheels = tank.air_kg();
 
         assert_eq!(after_two_wheels, 100.0);
-        assert_eq!(after_three_wheels, 105.0);
+        assert_eq!(after_three_wheels, 100.0 + mode.refill_kg_s);
+    }
+
+    #[test]
+    fn refilling_waits_until_no_air_has_been_used_for_the_delay() {
+        let mode = ModeParams {
+            refill_delay_s: 0.5,
+            ..realistic()
+        };
+        let mut tank = AirTank::full(&mode);
+        tank.set_air_kg(100.0, &mode);
+
+        tank.use_air(12_000.0, 600.0, 0.1, &mode);
+        let after_firing = tank.air_kg();
+        tank.refill(4, 0.4, &mode);
+        let still_waiting = tank.air_kg();
+        tank.refill(4, 0.2, &mode);
+        tank.refill(4, 1.0, &mode);
+
+        assert_eq!(still_waiting, after_firing);
+        assert!(tank.air_kg() > after_firing, "refills once rested");
     }
 
     #[test]

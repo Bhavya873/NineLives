@@ -68,7 +68,8 @@ impl Car {
     /// Everything the car does before the physics step, in SPEC §7.1 order: read the
     /// driver's input, move the valves toward the commanded throttles, reset and add
     /// forces (drag, nozzles), then run the raycast wheels.
-    /// `thrust_multiplier` is the mode's thrust scale times the tank's thrust gate.
+    /// `thrust_multiplier` is the mode's thrust scale times the tank's thrust gate;
+    /// `wind_m_s` is the wind now, in world coordinates.
     /// Returns the total thrust applied this step, for the air tank.
     /// Call exactly once per physics step, just before `PhysicsWorld::step`.
     pub fn prepare_physics_step(
@@ -77,6 +78,7 @@ impl Car {
         input: InputFrame,
         commanded_throttles: [f32; NOZZLE_COUNT],
         thrust_multiplier: f32,
+        wind_m_s: [f32; 3],
     ) -> f32 {
         self.apply_driver_input(physics, input);
         let thrusters = &self.config.thrusters;
@@ -85,7 +87,7 @@ impl Car {
             PHYSICS_DT_S,
             thrusters.valve_time_constant_s,
         );
-        self.reset_forces_and_apply_air_drag(physics);
+        self.reset_forces_and_apply_air_drag(physics, Vector::from_array(wind_m_s));
         let thrust_n = apply_nozzle_forces(
             &mut physics.bodies[self.chassis],
             thrusters,
@@ -141,23 +143,28 @@ impl Car {
         }
     }
 
-    /// Clears last step's forces and torques, then adds air drag at the centre of mass
-    /// (SPEC §7.2). Rapier keeps user forces between steps, so this must run once per
-    /// physics step, before adding any other force.
-    fn reset_forces_and_apply_air_drag(&self, physics: &mut PhysicsWorld) {
+    /// Clears last step's forces and torques, then adds air drag at the centre of
+    /// pressure (SPEC §7.2), against the car's motion through `wind_m_s` (world frame).
+    /// Rapier keeps user forces between steps, so this must run once per physics step,
+    /// before adding any other force.
+    fn reset_forces_and_apply_air_drag(&self, physics: &mut PhysicsWorld, wind_m_s: Vector) {
         let drag = &self.config.air_drag;
         let body = &mut physics.bodies[self.chassis];
-        // Drag acts on the speed through the air, not over the ground.
-        let velocity_m_s = body.linvel() - Vector::from_array(drag.wind_m_s);
-        // SPEC §7.2: F = -0.5 · ρ · CdA · |v| · v
-        let drag_force_n = -0.5
+        let rotation = *body.rotation();
+        // Drag acts on the speed through the air, not over the ground, and each body
+        // axis has its own drag area, so work in the body frame.
+        let air_velocity_body_m_s = rotation.inverse() * (body.linvel() - wind_m_s);
+        let areas_m2 = Vector::from_array(drag.drag_area_m2);
+        // SPEC §7.2: F_i = -0.5 · ρ · CdA_i · |v| · v_i along each body axis i.
+        let drag_body_n = -0.5
             * drag.air_density_kg_m3
-            * drag.drag_area_m2
-            * velocity_m_s.length()
-            * velocity_m_s;
+            * air_velocity_body_m_s.length()
+            * (areas_m2 * air_velocity_body_m_s);
+        let offset_m = rotation * Vector::from_array(drag.center_of_pressure_offset_m);
+        let centre_of_pressure_m = body.center_of_mass() + offset_m;
         body.reset_forces(false);
         body.reset_torques(false);
-        body.add_force(drag_force_n, false);
+        body.add_force_at_point(rotation * drag_body_n, centre_of_pressure_m, false);
     }
 
     /// Casts the wheel rays and applies suspension, grip, engine and brake forces.
@@ -345,10 +352,30 @@ fn build_chassis_body(
         .can_sleep(false)
 }
 
-/// The main body box, centred on the centre of mass.
+/// The main body box, centred on the centre of mass, with its bottom front and rear
+/// edges cut away by `chassis.underside_chamfer_m` so the nose and tail ride over a
+/// curve's rise instead of digging in.
 fn build_body_collider(config: &VehicleConfig) -> ColliderBuilder {
     let [half_x, half_y, half_z] = config.chassis.half_extents_m;
-    ColliderBuilder::cuboid(half_x, half_y, half_z).density(0.0)
+    let [chamfer_length_m, chamfer_rise_m] = config.chassis.underside_chamfer_m;
+    let plain_box = ColliderBuilder::cuboid(half_x, half_y, half_z);
+    if chamfer_length_m <= 0.0 || chamfer_rise_m <= 0.0 {
+        return plain_box.density(0.0);
+    }
+    let mut corners = Vec::new();
+    for z in [-half_z, half_z] {
+        for x in [-half_x, half_x] {
+            corners.push(Vector::new(x, half_y, z));
+            corners.push(Vector::new(x, -half_y + chamfer_rise_m, z));
+        }
+        for x in [-half_x + chamfer_length_m, half_x - chamfer_length_m] {
+            corners.push(Vector::new(x, -half_y, z));
+        }
+    }
+    // A cut box is always convex; the plain box only covers a degenerate hull.
+    ColliderBuilder::convex_hull(&corners)
+        .unwrap_or(plain_box)
+        .density(0.0)
 }
 
 /// The thin roof box, sitting on top of the main body box.

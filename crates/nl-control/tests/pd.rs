@@ -247,6 +247,160 @@ fn pd_brakes_a_fast_low_upright_fall_and_ignores_a_slow_one() {
     assert_eq!(pd.wanted_wrench(&falling(2.0))[1], 0.0);
 }
 
+/// A level car in the air at `height_m`, falling at `speed_m_s`, in a mode whose thrust
+/// is multiplied by `thrust_scale`.
+fn falling_level(height_m: f32, speed_m_s: f32, thrust_scale: f32) -> CarState {
+    CarState {
+        linear_velocity_body_m_s: [0.0, -speed_m_s, 0.0],
+        wheel_contact: [false; 4],
+        height_m,
+        mode_thrust_scale: thrust_scale,
+        ..CarState::default()
+    }
+}
+
+#[test]
+fn a_fast_fall_brakes_from_high_enough_to_stop_and_a_slow_one_still_waits() {
+    let pd = Pd::new(&car_model(), &controllers());
+
+    // 15 m/s needs about 13 m to stop on Realistic's lift: braking starts well above the
+    // old fixed 3 m, but not from any height.
+    assert!(pd.wanted_wrench(&falling_level(6.0, 15.0, 1.0))[1] > 0.0);
+    assert!(pd.wanted_wrench(&falling_level(12.0, 15.0, 1.0))[1] > 0.0);
+    assert_eq!(pd.wanted_wrench(&falling_level(40.0, 15.0, 1.0))[1], 0.0);
+    // 5 m/s stops within the 3 m floor, so it waits as before.
+    assert_eq!(pd.wanted_wrench(&falling_level(6.0, 5.0, 1.0))[1], 0.0);
+}
+
+#[test]
+fn arcade_thrust_lets_the_same_fall_brake_later() {
+    let pd = Pd::new(&car_model(), &controllers());
+
+    let realistic = pd.wanted_wrench(&falling_level(9.0, 15.0, 1.0));
+    let arcade = pd.wanted_wrench(&falling_level(9.0, 15.0, 2.0));
+
+    assert!(realistic[1] > 0.0);
+    assert_eq!(arcade[1], 0.0);
+}
+
+#[test]
+fn sliding_right_in_the_air_gets_a_push_to_the_left_and_on_wheels_none() {
+    let pd = Pd::new(&car_model(), &controllers());
+    let sliding = |wheel_contact: [bool; 4]| CarState {
+        linear_velocity_body_m_s: [0.0, 0.0, 3.0],
+        wheel_contact,
+        height_m: 3.0,
+        ..CarState::default()
+    };
+
+    assert!(pd.wanted_wrench(&sliding([false; 4]))[2] < 0.0);
+    assert_eq!(pd.wanted_wrench(&sliding([true; 4]))[2], 0.0);
+}
+
+#[test]
+fn a_car_lying_on_its_right_side_is_pushed_towards_its_left_side_which_faces_up() {
+    let pd = Pd::new(&car_model(), &controllers());
+    // Right side (+Z) down on the ground: body −Z points up.
+    let state = CarState {
+        gravity_dir_body: [0.0, 0.0, 1.0],
+        wheel_contact: [false; 4],
+        height_m: 0.5,
+        ..CarState::default()
+    };
+
+    let wrench = pd.wanted_wrench(&state);
+
+    assert!(wrench[2] < 0.0, "side push {wrench:?}");
+}
+
+/// A level car high in the air, holding still.
+fn level_in_the_air(height_m: f32) -> CarState {
+    CarState {
+        wheel_contact: [false; 4],
+        height_m,
+        ..CarState::default()
+    }
+}
+
+fn input(throttle: i8, steer: i8) -> InputFrame {
+    InputFrame {
+        throttle,
+        steer,
+        ..InputFrame::default()
+    }
+}
+
+#[test]
+fn steering_left_in_the_air_asks_for_a_left_yaw_and_forward_tips_the_nose_down() {
+    let pd = Pd::new(&car_model(), &controllers());
+    let state = level_in_the_air(10.0);
+
+    let turning = pd.wanted_wrench_for(&state, &input(0, 127));
+    let diving = pd.wanted_wrench_for(&state, &input(127, 0));
+
+    // Positive yaw turns the nose left; a negative torque about +Z tips the nose down.
+    assert!(turning[4] > 0.0, "yaw torque {turning:?}");
+    assert!(diving[5] < 0.0, "pitch torque {diving:?}");
+}
+
+#[test]
+fn near_the_ground_air_control_gives_way_to_lining_up_for_landing() {
+    let pd = Pd::new(&car_model(), &controllers());
+    let state = level_in_the_air(1.5);
+
+    let wrench = pd.wanted_wrench_for(&state, &input(127, 127));
+
+    assert_eq!(wrench[4], 0.0);
+    assert_eq!(wrench[5], 0.0);
+}
+
+#[test]
+fn a_car_spinning_fast_past_upside_down_keeps_rolling_the_same_way() {
+    let pd = Pd::new(&car_model(), &controllers());
+    // Rolled about 135°: the short way back is a negative roll, but the car is rolling
+    // positive, away from it, fast enough that carrying on is the shorter trip.
+    let tilt = 135_f32.to_radians();
+    let state = CarState {
+        gravity_dir_body: [0.0, -tilt.cos(), tilt.sin()],
+        angular_velocity_body_rad_s: [8.0, 0.0, 0.0],
+        wheel_contact: [false; 4],
+        height_m: 10.0,
+        ..CarState::default()
+    };
+
+    let wrench = pd.wanted_wrench(&state);
+
+    assert!(wrench[3] > 0.0, "roll torque {wrench:?}");
+}
+
+#[test]
+fn pd_never_asks_for_more_than_the_angular_acceleration_cap() {
+    let config = controllers();
+    let model = car_model();
+    let pd = Pd::new(&model, &config);
+    let state = CarState {
+        gravity_dir_body: [0.7, 0.0, 0.7],
+        angular_velocity_body_rad_s: [6.0, -4.0, 5.0],
+        wheel_contact: [false; 4],
+        height_m: 10.0,
+        ..CarState::default()
+    };
+
+    let wrench = pd.wanted_wrench(&state);
+
+    let mut accel_squared = 0.0;
+    for axis in 0..3 {
+        let accel = wrench[3 + axis] / model.principal_inertia_kg_m2[axis];
+        accel_squared += accel * accel;
+    }
+    let cap = config.pd.max_angular_accel_rad_s2;
+    assert!(
+        accel_squared.sqrt() <= cap * 1.001,
+        "{} > {cap}",
+        accel_squared.sqrt()
+    );
+}
+
 #[test]
 fn pd_leaves_the_thrusters_off_while_the_car_drives() {
     let mut pd = Pd::new(&car_model(), &controllers());
@@ -281,4 +435,42 @@ fn pd_saves_a_car_dropped_on_its_side_from_8_m_and_off_does_not() {
 
     assert!(survives_side_drop_from_8_m(&mut pd), "PD should save it");
     assert!(!survives_side_drop_from_8_m(&mut Off), "Off should not");
+}
+
+#[test]
+fn pd_driving_over_bumps_uses_almost_no_air() {
+    // The owner saw thrusters fire whenever a wheel left the ground on bumps.
+    let course = nl_sim::course::CourseSpec::from_json_str(
+        r#"{"version": 1, "name": "bumps", "start": {"pos": [0, 0.7, 0], "yaw": 0},
+        "bounds": {"min": [-50, -20, -30], "max": [300, 60, 30]},
+        "pieces": [{"type": "bumps", "pos": [30, 0, 0], "count": 8, "height": 0.4}]}"#,
+    )
+    .unwrap();
+    let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
+    let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML).unwrap();
+    let mut world = World::new_on_course(
+        &config,
+        modes.realistic,
+        &course,
+        DEFAULT_GROUND_FRICTION,
+        0,
+    );
+    let mut pd = Pd::new(&world.car_model(), &controllers());
+    let drive = InputFrame {
+        throttle: 127,
+        ..InputFrame::default()
+    };
+
+    for _ in 0..8 * PHYSICS_HZ as usize {
+        if world.is_control_step() {
+            let ctx = ControlCtx::for_world(&world, drive);
+            world.set_controller_throttles(pd.act(&ctx));
+        }
+        world.step(drive);
+    }
+
+    let x_m = world.chassis_pose().position_m[0];
+    let used_kg = world.air_used_kg();
+    assert!(x_m > 80.0, "only reached x = {x_m} m ({used_kg} kg used)");
+    assert!(world.air_used_kg() < 8.0, "used {} kg", world.air_used_kg());
 }

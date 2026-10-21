@@ -2,6 +2,7 @@
 //! and stage to run. Python reads the files (`ninelives.sim_config`) and passes their
 //! text, so the Rust module never touches the file system.
 
+use nl_control::ResidualSettings;
 use nl_sim::modes::ModesConfig;
 use nl_sim::reward::RewardConfig;
 use nl_sim::scenarios::{ScenariosConfig, Stage};
@@ -26,9 +27,39 @@ struct SimConfigJson {
     /// Domain randomization (SPEC §9.8) for `BatchedSim` episodes and, with `eval --dr`,
     /// for `run_eval`.
     randomize: bool,
+    /// With `randomize`, also draw the mode each episode; false keeps `mode`'s preset,
+    /// for a policy trained for one mode. Without it, true.
+    #[serde(default = "always")]
+    randomize_mode: bool,
     /// configs/pieces.json (Stage D's course pieces); without it the built-in copy.
     #[serde(default)]
     pieces_json: Option<String>,
+    /// Residual control for `BatchedSim` (M7 approach 2); without it the action is the
+    /// throttle as usual.
+    #[serde(default)]
+    residual: Option<ResidualJson>,
+}
+
+/// Serde default for `randomize_mode`.
+fn always() -> bool {
+    true
+}
+
+/// `residual` in the config JSON: which controller the policy's action is added to and
+/// how much throttle one unit of action is worth.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResidualJson {
+    /// Only "pd" so far.
+    base: String,
+    /// Throttle per unit of action (above 0).
+    scale: f32,
+    /// Divide the nudge by the mode's thrust scale (default off: the first residual run).
+    #[serde(default)]
+    force_scaled: bool,
+    /// The policy's 11th action gates every nudge (default off).
+    #[serde(default)]
+    gated: bool,
 }
 
 /// A parsed config: what to build each environment from, and which stage it starts in.
@@ -37,8 +68,11 @@ pub struct SimConfig {
     pub training: TrainingConfig,
     /// The stage every environment starts in.
     pub stage: Stage,
-    /// The text of controllers.toml (for PD in `run_eval`).
+    /// The text of controllers.toml (for PD in `run_eval` and residual control).
     pub controllers_toml: String,
+    /// Residual control: each env's throttles are PD's plus the action, applied per these
+    /// settings. None: the action alone sets the throttles.
+    pub residual: Option<ResidualSettings>,
 }
 
 /// Parses the config JSON. The error says which part is wrong.
@@ -54,6 +88,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
             .with_pieces_json(pieces_json)
             .map_err(as_message)?;
     }
+    scenarios.randomization.vary_mode = fields.randomize_mode;
     let reward = RewardConfig::from_toml_str(&fields.reward_toml).map_err(as_message)?;
     let mode = modes.by_name(&fields.mode).ok_or_else(|| {
         format!(
@@ -62,6 +97,10 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         )
     })?;
     let stage = parse_stage(&fields.stage)?;
+    let residual = match &fields.residual {
+        None => None,
+        Some(residual) => Some(parse_residual(residual)?),
+    };
     Ok(SimConfig {
         training: TrainingConfig {
             vehicle,
@@ -72,6 +111,23 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         },
         stage,
         controllers_toml: fields.controllers_toml,
+        residual,
+    })
+}
+
+/// The residual settings, after checking the base controller is PD (`ResidualPd::new`
+/// checks the scale).
+fn parse_residual(residual: &ResidualJson) -> Result<ResidualSettings, String> {
+    if residual.base != "pd" {
+        return Err(format!(
+            "sim config JSON: residual.base must be \"pd\", not {:?}",
+            residual.base
+        ));
+    }
+    Ok(ResidualSettings {
+        scale: residual.scale,
+        force_scaled: residual.force_scaled,
+        gated: residual.gated,
     })
 }
 

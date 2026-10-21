@@ -11,11 +11,21 @@ roof_half_extents_m = [1.2, 0.05, 0.8]
 # Moments of inertia about the body axes: roll (X), yaw (Y), pitch (Z), in kg·m².
 # Set by hand because a real car is not a uniform box.
 inertia_kg_m2 = [850.0, 3250.0, 2900.0]
+# Bottom front and rear edges cut away, [length, rise] in m: the nose and tail clear
+# ramp and halfpipe curves (approach and departure angles of about 27°).
+underside_chamfer_m = [0.6, 0.3]
 
 [air_drag]
-# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2).
+# SPEC §7.2: drag force along each body axis = -0.5 · air density · drag area · |v| · v,
+# with v the car's velocity through the air (ground speed minus the wind) in the body
+# frame. Drag areas are Cd × area for air along the body's front (X), top (Y) and side (Z)
+# axes, in m². The front keeps the old 0.6 so driving speed and feel are unchanged; side
+# and top are a ~4.5 m × 1.4 m flank and a ~4.5 m × 1.9 m roof with blunt-body Cd.
 air_density_kg_m3 = 1.2
-drag_area_m2 = 0.6
+drag_area_m2 = [0.6, 8.0, 5.5]
+# Where the drag acts, from the centre of mass in the body frame (m): behind and above, so
+# a side wind turns the nose into the wind and leans the car downwind.
+center_of_pressure_offset_m = [-0.3, 0.1, 0.0]
 
 [wheels]
 # Where each suspension is attached, in the body frame, in wheel order FL, FR, RL, RR.
@@ -37,15 +47,17 @@ suspension_stiffness_per_kg = 50.0
 suspension_compression_damping_per_kg = 3.5
 suspension_relaxation_damping_per_kg = 5.0
 max_suspension_force_n = 40000.0
-# Tyre grip: sideways grip is about friction_slip × g (1.2 g here), and Rapier allows
-# twice that for driving and braking forces.
-friction_slip = 1.2
+# Tyre grip: sideways grip is about friction_slip × g (a steady full-lock circle pulls
+# about 1.2–1.3 g at 1.4), and Rapier allows twice that for driving and braking forces.
+# Measure changes with `cargo run --release -p nl-sim --example drive_feel`.
+friction_slip = 1.4
 side_friction_stiffness = 1.0
 
 [drive]
-# All-wheel drive.
-max_engine_force_per_wheel_n = 6000.0
-max_speed_m_s = 45.0
+# All-wheel drive. 3 kN per wheel gives 0–100 km/h in about 4.2 s and a long pull up
+# to the 55 m/s cap (about 33 m/s after 5 s), instead of hitting the cap almost at once.
+max_engine_force_per_wheel_n = 3000.0
+max_speed_m_s = 55.0
 max_reverse_speed_m_s = 8.0
 # Brake impulse per wheel per physics step, in N·s.
 # 40 N·s × 120 steps/s × 4 wheels ≈ 19 kN, about 1.1 g of braking for 1800 kg.
@@ -60,16 +72,30 @@ reverse_below_speed_m_s = 0.5
 # Front wheels only. The limit shrinks linearly from the low-speed value to the
 # high-speed value as speed rises from 0 to `high_speed_m_s`.
 max_angle_low_speed_rad = 0.5
-max_angle_high_speed_rad = 0.15
-high_speed_m_s = 40.0
+max_angle_high_speed_rad = 0.25
+high_speed_m_s = 50.0
 # How fast the wheels can turn, in rad/s.
-max_rate_rad_s = 2.0
+max_rate_rad_s = 3.0
 
 [thrusters]
 # Valve lag: each valve opens and closes like a first-order filter (SPEC §7.4).
 valve_time_constant_s = 0.03
 # Cold-gas exhaust speed; air used per second = thrust / exhaust speed (SPEC §7.5).
 exhaust_speed_m_s = 600.0
+
+# Thruster interlock (SPEC §7.4): while the car is steady on the ground (all four limits),
+# the controller's throttles are cut; Hop and Boost feed-forward still fire. It stops any
+# controller idling thrust while parked or pushing the car off the track while driving
+# (EXPERIMENTS 2026-10-19), and never cuts a save: a falling, tilted or spinning car isn't
+# steady. The centre of mass rests about 0.6 m up. Wide enough that a wheel lifting on a
+# bump or a kerb still counts as on the ground (owner: the AI fired whenever one wheel left
+# the ground); a kicker or flip tilts past 25° and unlocks at once.
+[thrusters.interlock]
+max_tilt_deg = 25.0
+max_height_m = 1.0
+max_spin_rad_s = 2.5
+max_vertical_speed_m_s = 3.0
+
 
 # The 10 nozzles, in the fixed SPEC §4 order. Position is relative to the centre of
 # mass in the body frame (+X forward, +Y up, +Z right). Direction is the push on the
@@ -172,3 +198,10 @@ speed_kept_min_take_off_m_s = 3.0
 # these sizes.
 max_linear_impulse_n_s = 8000.0
 max_angular_impulse_n_m_s = 3000.0
+
+[passenger]
+# The driver's seat relative to the centre of mass (body frame: +X forward, +Y up, +Z
+# right), for the passenger g-load the reward and the screen blackout use.
+seat_offset_m = [-0.2, 0.15, -0.35]
+# The g-load is smoothed with this time constant: one contact step's spike is not felt.
+smoothing_s = 0.1

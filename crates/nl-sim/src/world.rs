@@ -20,20 +20,22 @@ use crate::car_state::{
 };
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
-use crate::contacts::{MotionBeforeStep, is_touching, read_body_contacts};
+use crate::contacts::{MotionBeforeStep, is_touching, is_touching_tagged, read_body_contacts};
 use crate::conventions::{
     NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
     gravity_vector,
 };
 use crate::course::{BoundsSpec, CourseSpec};
-use crate::course_build::{build_course_shapes, shape_collider};
+use crate::course_build::{OBSTACLE_USER_DATA, build_course_shapes, shape_collider};
 use crate::course_triggers::{CourseTriggers, TriggerAction};
 use crate::events::{EventInputs, EventTracker, SimEvent};
+use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
 use crate::vehicle_config::VehicleConfig;
+use crate::wind::{Wind, WindLevelConfig};
 
 /// Ground friction for flat-ground worlds when nothing else is chosen (SPEC §7.2).
 /// It only matters when the car's body scrapes the ground.
@@ -78,7 +80,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 12;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 16;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -138,9 +140,13 @@ pub struct World {
     course_bounds: Option<BoundsSpec>,
     /// The course's checkpoint and finish lines and kick plates, and the car's progress.
     triggers: CourseTriggers,
+    /// The passenger's smoothed g-load (SPEC §9.4).
+    g_load: GLoad,
     /// World time when the car crossed the finish line, in s.
     finish_time_s: Option<f32>,
-    /// The only source of randomness in the sim (CLAUDE.md golden rule 2).
+    /// The wind and its gusts (SPEC §7.2), on a seeded stream of their own.
+    wind: Wind,
+    /// The sim's random generator for Chaos (CLAUDE.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
 }
@@ -228,7 +234,9 @@ impl World {
             auto_respawn_after_steps: None,
             course_bounds,
             triggers: CourseTriggers::default(),
+            g_load: GLoad::default(),
             finish_time_s: None,
+            wind: Wind::calm(seed),
             rng: ChaCha8Rng::seed_from_u64(seed),
             step_count: 0,
         }
@@ -273,15 +281,26 @@ impl World {
         }
         // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
         let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
-        let commanded = combine_throttles(feed_forward, self.controller_throttles);
-        // 5–8. Valve lag, tank gate, nozzle forces, wheels.
+        let controller = if self.thrusters_locked() {
+            [0.0; NOZZLE_COUNT]
+        } else {
+            self.controller_throttles
+        };
+        let commanded = combine_throttles(feed_forward, controller);
+        // 5–8. Valve lag, tank gate, air drag in this step's wind, nozzle forces, wheels.
         let thrust_multiplier = self.thrust_multiplier();
-        let thrust_n =
-            self.car
-                .prepare_physics_step(&mut self.physics, input, commanded, thrust_multiplier);
+        self.wind.step(PHYSICS_DT_S);
+        let thrust_n = self.car.prepare_physics_step(
+            &mut self.physics,
+            input,
+            commanded,
+            thrust_multiplier,
+            self.wind.velocity_m_s(),
+        );
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
         self.physics.step();
+        self.update_g_load();
         let touching_after = self.wheels_touching();
         let wheels_down_after = count_true(touching_after);
         // 10. The tank: pay for this step's thrust, then refill if on the ground.
@@ -295,6 +314,23 @@ impl World {
         self.update_triggers();
         // 12. Events (SPEC §7.9).
         self.update_events(&motion_before, touching_after);
+    }
+
+    /// Folds this step's seat g-load into the smoothed passenger g-load (SPEC §9.4).
+    fn update_g_load(&mut self) {
+        let passenger = &self.car.config().passenger;
+        let body = &self.physics.bodies[self.car.chassis];
+        self.g_load.update(
+            body,
+            passenger.seat_offset_m,
+            PHYSICS_DT_S,
+            passenger.smoothing_s,
+        );
+    }
+
+    /// The passenger's smoothed g-load now, in g (SPEC §9.4).
+    pub fn g_load(&self) -> f32 {
+        self.g_load.g()
     }
 
     /// Gives the car a random Chaos knock (SPEC §7.12).
@@ -311,6 +347,23 @@ impl World {
         {
             self.respawn();
         }
+    }
+
+    /// Sets the wind (SPEC §7.2): `level`'s mean speed and gusts, blowing towards
+    /// `direction_yaw_rad` (0 along world +X, positive turning left, like the car's yaw).
+    pub fn set_wind(&mut self, level: WindLevelConfig, direction_yaw_rad: f32) {
+        self.wind.set(level, direction_yaw_rad);
+    }
+
+    /// Sets the wind to `level` in a direction drawn from the world's seed (the game's
+    /// Off / Breeze / Storm setting, from `[wind]` in scenarios.toml).
+    pub fn set_wind_level(&mut self, level: WindLevelConfig) {
+        self.wind.set_level(level);
+    }
+
+    /// The wind now, mean plus gust, in world coordinates, in m/s (for the HUD).
+    pub fn wind_m_s(&self) -> [f32; 3] {
+        self.wind.velocity_m_s()
     }
 
     /// Makes a crashed car respawn by itself after `delay_s` of sim time (the game's
@@ -466,6 +519,12 @@ impl World {
         }
     }
 
+    /// True if the body or roof box touches an obstacle (a car row, bump or wall).
+    pub fn chassis_touching_obstacle(&self) -> bool {
+        is_touching_tagged(&self.physics, self.car.body_collider, OBSTACLE_USER_DATA)
+            || is_touching_tagged(&self.physics, self.car.roof_collider, OBSTACLE_USER_DATA)
+    }
+
     /// True if the body or roof box touches anything now (wheels are rays, not boxes).
     pub fn chassis_touching(&self) -> bool {
         is_touching(&self.physics, self.car.body_collider)
@@ -497,6 +556,19 @@ impl World {
     }
 
     /// Angle between the car's up axis and world up: 0 level, π upside down.
+    /// True while the thruster interlock cuts the controller's throttles: the car is
+    /// steady on the ground (`[thrusters.interlock]`: upright, low, not falling, barely
+    /// turning). Hop and Boost feed-forward are never cut.
+    pub fn thrusters_locked(&self) -> bool {
+        let lock = &self.car.config().thrusters.interlock;
+        let body = &self.physics.bodies[self.car.chassis];
+        let steady = self.tilt_rad() <= lock.max_tilt_deg.to_radians()
+            && body.angvel().length() <= lock.max_spin_rad_s
+            && body.linvel().y.abs() <= lock.max_vertical_speed_m_s;
+        // The height needs a ray, so it is checked last, only when the rest already hold.
+        steady && height_above_ground_m(&self.physics, &self.car) <= lock.max_height_m
+    }
+
     pub fn tilt_rad(&self) -> f32 {
         // libm, not std: std's acos is the platform's and differs in the last bit between
         // macOS, Linux and wasm, and the event rules compare this angle (rule 2).
@@ -700,6 +772,7 @@ impl World {
         // suspension read "not touching" until the next step casts them again.
         self.car.forget_wheel_rays();
         self.triggers.forget_car();
+        self.g_load.forget_motion();
         self.events.reset();
         self.steps_since_crash = 0;
         let body = &mut self.physics.bodies[self.car.chassis];

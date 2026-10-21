@@ -1,0 +1,199 @@
+// The car's outline in numbers (SPEC §11.4): side profiles of the body and cabin, the
+// wheel arches cut into the body, and helpers that turn a side outline into a bevelled
+// solid. car-mesh.ts assembles the parts; nozzle-ports.ts reads the body's sides and
+// underside from here so every thruster port sits on the paint.
+// All shapes stay inside the physics boxes in configs/vehicle.toml (body x ±2.1,
+// y ±0.45, z ±1.0, roof up to y = 0.55), so landings and roof hits look right.
+import { type BufferGeometry, ExtrudeGeometry, Shape } from 'three';
+import { TessellateModifier } from 'three/examples/jsm/modifiers/TessellateModifier.js';
+
+/** Body width; narrower than the 2.0 m physics box so the tyres show at the sides. */
+export const BODY_WIDTH_M = 1.76;
+/** Height of the body's flat floor between the wheels, relative to the centre of mass. */
+export const BODY_BOTTOM_M = -0.4;
+/** Where the wheel arches are centred along the car (the axles in configs/vehicle.toml). */
+const ARCH_CENTRES_X_M = [1.3, -1.3];
+/** Arch radius: the 0.34 m tyre plus room to steer and bounce. */
+const ARCH_RADIUS_M = 0.39;
+/** Arch centre height: where the wheel centre sits with the car at rest. */
+const ARCH_CENTRE_Y_M = -0.25;
+/** Straight pieces used to draw each arch. */
+const ARCH_SEGMENTS = 7;
+
+/** How far the bevel rounds off the body's edges, across and along the outline. */
+export const BODY_BEVEL_M = 0.05;
+
+/**
+ * Top edge of the body seen from the left, as [x forward, y up] points from nose to
+ * tail: a rounded nose, a bonnet rising to the windscreen, then a flat rear deck with a
+ * small lip. The cabin sits on the deck between the windscreen base and the tail.
+ */
+const BODY_TOP_EDGE_M: [number, number][] = [
+  [2.1, -0.02],
+  [2.07, 0.07],
+  [1.95, 0.15],
+  [1.5, 0.26],
+  [0.95, 0.29],
+  [-1.6, 0.3],
+  [-2.0, 0.31],
+  [-2.1, 0.22],
+];
+
+/**
+ * Lower outline from tail to nose: the tail and nose undersides are cut away like the
+ * physics box's underside chamfer, with an arch over each axle in between.
+ */
+function bodyBottomEdgeM(): [number, number][] {
+  const [frontArchX = 1.3, rearArchX = -1.3] = ARCH_CENTRES_X_M;
+  return [
+    [-2.1, -0.16],
+    [-1.8, -0.36],
+    ...archPointsM(rearArchX),
+    ...archPointsM(frontArchX),
+    [1.8, -0.36],
+    [2.1, -0.16],
+  ];
+}
+
+/** The body's full side outline: the top edge then the bottom edge, as one loop. */
+export function bodyProfileM(): [number, number][] {
+  return [...BODY_TOP_EDGE_M, ...bodyBottomEdgeM()];
+}
+
+/**
+ * A plain side outline with no arches, for the dark wheel-well liner that fills the
+ * space between the arches, so no daylight shows through the car above the tyres.
+ */
+export const LINER_PROFILE_M: [number, number][] = [
+  [1.9, 0.05],
+  [0.9, 0.24],
+  [-1.9, 0.24],
+  [-1.9, BODY_BOTTOM_M],
+  [1.9, BODY_BOTTOM_M],
+];
+
+/** Cabin outline: raked windscreen, short roof, long fastback down to the deck. */
+export const CABIN_PROFILE_M: [number, number][] = [
+  [0.95, 0.27],
+  [0.32, 0.52],
+  [-0.72, 0.52],
+  [-1.68, 0.28],
+];
+
+/**
+ * Points along one wheel arch, from its rear foot over the top to its front foot,
+ * where the circle meets the floor at `BODY_BOTTOM_M`.
+ */
+function archPointsM(centreXM: number): [number, number][] {
+  // The feet sit below the arch centre, at angles π + footAngle (rear) and −footAngle
+  // (front), measured from +x with y up.
+  const footDropM = ARCH_CENTRE_Y_M - BODY_BOTTOM_M;
+  const footAngleRad = Math.asin(footDropM / ARCH_RADIUS_M);
+  const points: [number, number][] = [];
+  // Sweep from the rear foot over the top of the arch to the front foot.
+  const startRad = Math.PI + footAngleRad;
+  const endRad = -footAngleRad;
+  for (let step = 0; step <= ARCH_SEGMENTS; step += 1) {
+    const angleRad = startRad + ((endRad - startRad) * step) / ARCH_SEGMENTS;
+    points.push([
+      centreXM + ARCH_RADIUS_M * Math.cos(angleRad),
+      ARCH_CENTRE_Y_M + ARCH_RADIUS_M * Math.sin(angleRad),
+    ]);
+  }
+  return points;
+}
+
+/**
+ * If `xM` lies over a wheel arch, the x of that arch's end nearer the car's end (where
+ * solid body starts again under the nose or tail); otherwise `xM` itself. Downward
+ * lift ports use it to sit past the arch, under the body.
+ */
+export function solidUndersideXM(xM: number): number {
+  for (const centreXM of ARCH_CENTRES_X_M) {
+    if (Math.abs(xM - centreXM) < ARCH_RADIUS_M) {
+      return centreXM + Math.sign(centreXM) * ARCH_RADIUS_M;
+    }
+  }
+  return xM;
+}
+
+/** Past this distance from the centre (either way along the car), the body narrows. */
+const NOSE_TAPER_START_M = 1.4;
+/** How much narrower the very nose and tail are than the middle (0.16 = 16 %). */
+const NOSE_TAPER = 0.16;
+/**
+ * How much of the full width the car keeps at `xM` metres forward, 0..1: full width
+ * between the wheels, narrowing toward the nose and tail for a rounded plan view.
+ * (The bevel on the body's edges already makes it narrower at the top.)
+ */
+export function bodyWidthScale(xM: number): number {
+  const taperLengthM = 2.1 - NOSE_TAPER_START_M;
+  const noseAmount = Math.min(1, Math.max(0, (Math.abs(xM) - NOSE_TAPER_START_M) / taperLengthM));
+  // Squared, so the nose curves in rather than cutting a straight wedge.
+  return 1 - NOSE_TAPER * noseAmount * noseAmount;
+}
+
+/** Half the body's width at `xM` metres forward (see `bodyWidthScale`). */
+export function bodyHalfWidthM(xM: number): number {
+  return (BODY_WIDTH_M / 2) * bodyWidthScale(xM);
+}
+
+/** Longest triangle edge before warping, so the long flat sides bend in small facets. */
+const WARP_EDGE_M = 0.3;
+
+/** Squeezes a body part across the car by `bodyWidthScale`, so every part follows the
+ * same rounded plan. Returns a new, finer-cut geometry. */
+export function warpToBodyShape(original: BufferGeometry): BufferGeometry {
+  // Cut long triangles first: a big flat triangle squeezed unevenly would show a crease.
+  const geometry = new TessellateModifier(WARP_EDGE_M, 8).modify(original);
+  const positions = geometry.getAttribute('position');
+  for (let index = 0; index < positions.count; index += 1) {
+    const scale = bodyWidthScale(positions.getX(index));
+    positions.setZ(index, positions.getZ(index) * scale);
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** How a side outline becomes a solid: its width and how much its edges are rounded. */
+export interface ExtrudeOptions {
+  widthM: number;
+  /** Edge rounding in metres; 0 for sharp edges. */
+  bevelM: number;
+  /** Centre of the solid across the car (z); 0 for the middle. */
+  centreZM: number;
+}
+
+/**
+ * Turns a side outline into a solid `widthM` wide centred on `centreZM`. The bevel
+ * rounds every edge inward, so the outline and width stay the outer size.
+ */
+export function extrudeProfile(
+  points: [number, number][],
+  options: ExtrudeOptions,
+): ExtrudeGeometry {
+  const outline = new Shape();
+  points.forEach(([x, y], index) => {
+    if (index === 0) {
+      outline.moveTo(x, y);
+    } else {
+      outline.lineTo(x, y);
+    }
+  });
+  outline.closePath();
+
+  const bevelM = options.bevelM;
+  const geometry = new ExtrudeGeometry(outline, {
+    depth: options.widthM - 2 * bevelM,
+    bevelEnabled: bevelM > 0,
+    bevelThickness: bevelM,
+    bevelSize: bevelM,
+    // Pull the bevel inside the outline, so the solid stays within the physics box.
+    bevelOffset: -bevelM,
+    bevelSegments: 2,
+  });
+  // ExtrudeGeometry grows along +Z from 0 (plus the bevel); centre it on `centreZM`.
+  geometry.translate(0, 0, options.centreZM - options.widthM / 2 + bevelM);
+  return geometry;
+}

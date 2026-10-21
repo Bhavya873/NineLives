@@ -20,7 +20,14 @@ class Curriculum:
     weights: dict[str, float]
     level_counts: dict[str, int]
     window: int
-    advance_at: float
+    # The bar to move up a level: one value, or one per level (the last repeats).
+    advance_at: float | list[float]
+    # Eval mode: unlock the next stage once the newest stage's eval matches PD's success
+    # at its hardest level (`pd_success`, measured on the validation seeds at the start of
+    # the run), or after `unlock_every_steps` steps without an unlock (None: never).
+    pd_success: dict[str, float] = field(default_factory=dict)
+    unlock_every_steps: int | None = None
+    last_unlock_step: int = 0
     unlocked: int = 1
     levels: dict[str, int] = field(default_factory=dict)
     recent: dict[str, list[bool]] = field(default_factory=dict)
@@ -50,10 +57,35 @@ class Curriculum:
         del window[: -self.window]
         return True
 
-    def judge_eval(self, stage: str, success_rate: float) -> bool:
-        """Promotes `stage` if its deterministic eval at its current level passes the bar
-        (`promote_on: eval`). Returns True when this changed the mix."""
-        return success_rate > self.advance_at and self.advance(stage)
+    def judge_eval(self, stage: str, success_rate: float, steps: int = 0) -> bool:
+        """Eval mode: moves `stage` up a level if its deterministic eval passes its
+        level's bar, or, at its hardest level, unlocks the next stage if the eval matches
+        PD's success there (`steps` dates that unlock). Returns True when the mix changed."""
+        if not self.is_last_level(stage):
+            return success_rate > self.bar(stage) and self.advance(stage)
+        pd_rate = self.pd_success.get(stage)
+        if pd_rate is None or success_rate < pd_rate or not self.advance(stage):
+            return False
+        self.last_unlock_step = steps
+        return True
+
+    def unlock_if_due(self, steps: int) -> bool:
+        """Unlocks the next stage once `unlock_every_steps` have passed since the last
+        unlock, so later stages are never starved. Returns True when it unlocked."""
+        if self.unlock_every_steps is None or self.unlocked >= len(self.stages):
+            return False
+        if steps - self.last_unlock_step < self.unlock_every_steps:
+            return False
+        self.unlocked += 1
+        self.last_unlock_step = steps
+        return True
+
+    def bar(self, stage: str) -> float:
+        """The success rate `stage` must beat to move up from its current level."""
+        if isinstance(self.advance_at, float):
+            return self.advance_at
+        level = min(self.levels[stage], len(self.advance_at) - 1)
+        return self.advance_at[level]
 
     def needs_eval_to_advance(self, stage: str) -> bool:
         """True while passing `stage` would change the mix: below its hardest level, or
@@ -93,7 +125,7 @@ class Curriculum:
     def window_is_good(self, stage: str) -> bool:
         """A full window whose success rate passes the bar."""
         full = len(self.recent[stage]) >= self.window
-        return full and self.success_rate(stage) > self.advance_at
+        return full and self.success_rate(stage) > self.bar(stage)
 
     def is_last_level(self, stage: str) -> bool:
         """True at the stage's hardest level."""
@@ -106,6 +138,8 @@ class Curriculum:
             "unlocked": self.unlocked,
             "levels": self.levels,
             "recent": self.recent,
+            "pd_success": self.pd_success,
+            "last_unlock_step": self.last_unlock_step,
         }
 
     def restore(self, progress: dict[str, Any]) -> None:
@@ -121,6 +155,8 @@ class Curriculum:
                 f"{self.stages}; resume with the same stages or start a new run"
             )
         self.unlocked = min(int(progress["unlocked"]), len(self.stages))
+        self.pd_success = dict(progress.get("pd_success", {}))
+        self.last_unlock_step = int(progress.get("last_unlock_step", 0))
         for stage in self.stages:
             saved_level = int(progress["levels"][stage])
             self.levels[stage] = min(saved_level, self.level_counts[stage] - 1)

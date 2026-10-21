@@ -81,6 +81,16 @@ pub enum PieceTemplate {
         angle_deg: [f32; 2],
         run_out_m: f32,
     },
+    /// A corkscrew on a random side: it flips the car, so the thrusters must save it
+    /// (a jump).
+    Corkscrew {
+        weight: f32,
+        length_m: [f32; 2],
+        width_m: [f32; 2],
+        angle_deg: [f32; 2],
+        bank_deg: [f32; 2],
+        run_out_m: f32,
+    },
     /// A run of bumps.
     Bumps {
         weight: f32,
@@ -186,6 +196,7 @@ impl PieceTemplate {
             PieceTemplate::Ramp { weight, .. }
             | PieceTemplate::RampGap { weight, .. }
             | PieceTemplate::Kicker { weight, .. }
+            | PieceTemplate::Corkscrew { weight, .. }
             | PieceTemplate::Bumps { weight, .. }
             | PieceTemplate::KickPlate { weight, .. }
             | PieceTemplate::Halfpipe { weight, .. }
@@ -199,6 +210,7 @@ impl PieceTemplate {
             PieceTemplate::Ramp { run_out_m, .. }
             | PieceTemplate::RampGap { run_out_m, .. }
             | PieceTemplate::Kicker { run_out_m, .. }
+            | PieceTemplate::Corkscrew { run_out_m, .. }
             | PieceTemplate::Bumps { run_out_m, .. }
             | PieceTemplate::KickPlate { run_out_m, .. }
             | PieceTemplate::Halfpipe { run_out_m, .. }
@@ -210,7 +222,10 @@ impl PieceTemplate {
     fn is_jump(&self) -> bool {
         matches!(
             self,
-            PieceTemplate::Ramp { .. } | PieceTemplate::RampGap { .. } | PieceTemplate::Wall { .. }
+            PieceTemplate::Ramp { .. }
+                | PieceTemplate::RampGap { .. }
+                | PieceTemplate::Corkscrew { .. }
+                | PieceTemplate::Wall { .. }
         )
     }
 
@@ -243,6 +258,13 @@ impl PieceTemplate {
                 gap_m,
                 ..
             } => vec![*length_m, *width_m, *angle_deg, *gap_m],
+            PieceTemplate::Corkscrew {
+                length_m,
+                width_m,
+                angle_deg,
+                bank_deg,
+                ..
+            } => vec![*length_m, *width_m, *angle_deg, *bank_deg],
             PieceTemplate::Bumps {
                 count, height_m, ..
             } => vec![[count[0] as f32, count[1] as f32], *height_m],
@@ -343,13 +365,28 @@ fn lay_piece(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> (Vec<P
                 length,
                 width: draw(rng, *width_m),
                 angle_deg: draw(rng, *angle_deg),
-                side: if coin_flip(rng) {
-                    Side::Left
-                } else {
-                    Side::Right
-                },
+                side: random_side(rng),
             };
             (vec![kicker], length)
+        }
+        PieceTemplate::Corkscrew {
+            length_m,
+            width_m,
+            angle_deg,
+            bank_deg,
+            ..
+        } => {
+            let length = draw(rng, *length_m);
+            let corkscrew = PieceSpec::Corkscrew {
+                pos,
+                yaw: 0.0,
+                length,
+                width: draw(rng, *width_m),
+                angle_deg: draw(rng, *angle_deg),
+                bank_deg: draw(rng, *bank_deg),
+                side: random_side(rng),
+            };
+            (vec![corkscrew], length)
         }
         PieceTemplate::Bumps {
             count, height_m, ..
@@ -430,6 +467,15 @@ fn kick_plate(
         yaw: 0.0,
         impulse: [0.0, draw(rng, up_n_s), sign * draw(rng, side_n_s)],
         angular: [sign * draw(rng, roll_n_m_s), 0.0, 0.0],
+    }
+}
+
+/// Left or right, evenly.
+fn random_side(rng: &mut ChaCha8Rng) -> Side {
+    if coin_flip(rng) {
+        Side::Left
+    } else {
+        Side::Right
     }
 }
 

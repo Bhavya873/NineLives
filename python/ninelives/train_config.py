@@ -12,6 +12,10 @@ ACTIVATION_NAMES = ("tanh", "relu")
 STAGE_NAMES = ("A", "B", "C", "D", "E")
 
 
+# The final eval (results/) uses seeds 0–999; training's validation seeds must stay above.
+TEST_SEED_COUNT = 1000
+
+
 @dataclass
 class PpoSettings:
     """SB3 PPO hyperparameters."""
@@ -34,6 +38,30 @@ class PpoSettings:
 
 
 @dataclass
+class ResidualSettings:
+    """Residual control (M7 approach 2): each throttle is the base controller's plus
+    `scale` × the policy's action, clamped to [0, 1], all in Rust."""
+
+    # The controller the policy nudges; only "pd".
+    base: str
+    # Throttle per unit of action: an action in [−1, 1] moves a throttle by up to ±scale.
+    scale: float
+    # Divide each nudge by the mode's thrust scale, as PD's allocation does (round 6).
+    force_scaled: bool = False
+    # An 11th action gates every nudge by (a + 1) / 2 (round 6).
+    gated: bool = False
+
+    def as_sim_json(self) -> dict[str, object]:
+        """The `residual` entry of the sim config JSON (crates/nl-py/src/config.rs)."""
+        return {
+            "base": self.base,
+            "scale": self.scale,
+            "force_scaled": self.force_scaled,
+            "gated": self.gated,
+        }
+
+
+@dataclass
 class TrainConfig:
     """One training run's settings."""
 
@@ -44,17 +72,30 @@ class TrainConfig:
     # How often each unlocked stage comes up.
     stage_weights: dict[str, float]
     randomize: bool
+    # False keeps `mode`'s preset under randomization: a policy for one mode (round 7).
+    randomize_mode: bool
     total_steps: int
     ppo: PpoSettings
     clip_obs: float
     curriculum_window: int
-    curriculum_advance_at: float
+    # Bar to move up a level: one value, or one per level (the last repeats).
+    curriculum_advance_at: float | list[float]
+    # Eval mode: unlock the next stage once the newest one matches PD at its hardest level.
+    curriculum_unlock_on_pd: bool
+    # Eval mode: also unlock the next stage after this many steps without one (None: never).
+    curriculum_unlock_every_steps: int | None
+    # Reward weights replaced for this run, e.g. {"hard_landing": 0.0} for an ablation.
+    reward_overrides: dict[str, float]
     # What promotes a stage: "eval" (a deterministic fixed-seed eval at each checkpoint)
     # or "training" (the window of training episodes, which include exploration noise).
     curriculum_promote_on: str
     checkpoint_every_steps: int
     eval_episodes: int
     eval_seed: int
+    # Residual control around PD; None trains the policy's action as the throttle.
+    residual: ResidualSettings | None = None
+    # Start with every stage unlocked at its hardest level (no curriculum to climb).
+    curriculum_start_at_hardest: bool = False
 
 
 def load_train_config(path: Path) -> TrainConfig:
@@ -71,20 +112,63 @@ def load_train_config(path: Path) -> TrainConfig:
                 for stage, weight in raw["curriculum"]["stage_weights"].items()
             },
             randomize=strict_bool("randomize", raw["randomize"]),
+            randomize_mode=strict_bool("randomize_mode", raw.get("randomize_mode", True)),
             total_steps=int(raw["total_steps"]),
             ppo=read_ppo(raw["ppo"]),
             clip_obs=float(raw["normalize"]["clip_obs"]),
             curriculum_window=int(raw["curriculum"]["window"]),
-            curriculum_advance_at=float(raw["curriculum"]["advance_at"]),
+            curriculum_advance_at=read_bar(raw["curriculum"]["advance_at"]),
+            curriculum_unlock_on_pd=strict_bool(
+                "curriculum.unlock.beat_pd",
+                raw["curriculum"].get("unlock", {}).get("beat_pd", False),
+            ),
+            curriculum_unlock_every_steps=optional_int(
+                raw["curriculum"].get("unlock", {}).get("every_steps")
+            ),
+            reward_overrides={
+                str(name): float(value) for name, value in raw.get("reward_overrides", {}).items()
+            },
             curriculum_promote_on=str(raw["curriculum"].get("promote_on", "eval")),
             checkpoint_every_steps=int(raw["checkpoint"]["every_steps"]),
             eval_episodes=int(raw["checkpoint"]["eval_episodes"]),
             eval_seed=int(raw["checkpoint"]["eval_seed"]),
+            residual=read_residual(raw.get("residual")),
+            curriculum_start_at_hardest=strict_bool(
+                "curriculum.start_at_hardest", raw["curriculum"].get("start_at_hardest", False)
+            ),
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error
     check_ranges(path, config)
     return config
+
+
+def read_residual(raw: dict[str, Any] | None) -> ResidualSettings | None:
+    """The optional `residual` section: `{base: pd, scale: 0.5}`, optionally with
+    `force_scaled` and `gated` (both default false)."""
+    if raw is None:
+        return None
+    unknown = set(raw) - set(ResidualSettings.__dataclass_fields__)
+    if unknown:
+        raise ValueError(f"unknown residual settings {sorted(unknown)}")
+    return ResidualSettings(
+        base=str(raw["base"]),
+        scale=float(raw["scale"]),
+        force_scaled=strict_bool("residual.force_scaled", raw.get("force_scaled", False)),
+        gated=strict_bool("residual.gated", raw.get("gated", False)),
+    )
+
+
+def read_bar(value: object) -> float | list[float]:
+    """`curriculum.advance_at`: one number, or a list of one number per level."""
+    if isinstance(value, list):
+        return [float(item) for item in value]
+    return float(value)  # type: ignore[arg-type]
+
+
+def optional_int(value: object) -> int | None:
+    """An integer setting that may be left out (None)."""
+    return None if value is None else int(value)  # type: ignore[call-overload]
 
 
 def strict_bool(name: str, value: object) -> bool:
@@ -122,6 +206,13 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     if config.ppo.activation not in ACTIVATION_NAMES:
         raise ValueError(f"{path}: ppo.activation must be one of {ACTIVATION_NAMES}")
     check_stages(path, config)
+    if config.eval_seed < TEST_SEED_COUNT:
+        raise ValueError(
+            f"{path}: checkpoint.eval_seed must be at least {TEST_SEED_COUNT}: seeds "
+            f"0–{TEST_SEED_COUNT - 1} are the test seeds of the final eval, never used to "
+            "choose checkpoints or promote stages"
+        )
+    check_residual(path, config)
     if config.curriculum_promote_on not in ("eval", "training"):
         raise ValueError(f'{path}: curriculum.promote_on must be "eval" or "training"')
     counts = {
@@ -133,6 +224,23 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
     for name, value in counts.items():
         if value < 1:
             raise ValueError(f"{path}: {name} must be at least 1, not {value}")
+
+
+def check_residual(path: Path, config: TrainConfig) -> None:
+    """A residual run nudges PD, so its policy must start at a zero action: the action
+    head starts zeroed, and an action bias would be silently ignored."""
+    residual = config.residual
+    if residual is None:
+        return
+    if residual.base != "pd":
+        raise ValueError(f'{path}: residual.base must be "pd", not {residual.base!r}')
+    if not residual.scale > 0.0:
+        raise ValueError(f"{path}: residual.scale must be above 0, not {residual.scale}")
+    if config.ppo.initial_action_bias != 0.0:
+        raise ValueError(
+            f"{path}: with residual control set ppo.initial_action_bias to 0 (a zero action "
+            "is exactly PD); a bias of −1 would start by pulling every throttle down"
+        )
 
 
 def check_stages(path: Path, config: TrainConfig) -> None:

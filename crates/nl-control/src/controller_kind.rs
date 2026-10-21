@@ -28,8 +28,12 @@ pub enum ControllerKind {
     Manual(Manual),
 }
 
-/// The names `from_name` accepts, in the order T cycles through them (SPEC §11.3).
+/// The names `from_name` accepts.
 pub const CONTROLLER_NAMES: [&str; 4] = ["off", "pd", "ai", "manual"];
+
+/// The controllers the T key cycles through, in order (SPEC §11.3). Manual is left
+/// out: it stays a debug controller that only `set_controller("manual")` picks.
+pub const CYCLE_NAMES: [&str; 3] = ["off", "pd", "ai"];
 
 /// What the named controllers are built from: PD for this car, and the loaded policy
 /// if there is one. The owner builds it once and never runs it.
@@ -125,16 +129,17 @@ impl ControllerKind {
         }
     }
 
-    /// A fresh controller of the kind after this one in the T-key cycle (Off → PD → AI
-    /// → Manual), wrapping round; the AI is skipped while no policy is loaded.
+    /// A fresh controller of the kind after this one in the T-key cycle (Off → PD → AI),
+    /// wrapping round; the AI is skipped while no policy is loaded. Manual, which is
+    /// not in the cycle, is followed by PD as if it were Off.
     pub fn next(&self, choices: &ControllerChoices) -> ControllerKind {
-        let mut index = CONTROLLER_NAMES
+        let mut index = CYCLE_NAMES
             .iter()
             .position(|name| *name == self.name())
             .unwrap_or(0);
         loop {
-            index = (index + 1) % CONTROLLER_NAMES.len();
-            if let Ok(next) = ControllerKind::from_name(CONTROLLER_NAMES[index], choices) {
+            index = (index + 1) % CYCLE_NAMES.len();
+            if let Ok(next) = ControllerKind::from_name(CYCLE_NAMES[index], choices) {
                 return next;
             }
         }
@@ -229,6 +234,16 @@ mod tests {
             seen.push(controller.name());
         }
 
-        assert_eq!(seen, ["pd", "manual", "off"]);
+        assert_eq!(seen, ["pd", "off", "pd"]);
+    }
+
+    #[test]
+    fn the_cycle_leaves_manual_for_pd_and_never_returns_to_it() {
+        let choices = choices_without_policy();
+
+        let next = ControllerKind::Manual(Manual).next(&choices);
+
+        assert_eq!(next.name(), "pd");
+        assert!(!CYCLE_NAMES.contains(&"manual"));
     }
 }

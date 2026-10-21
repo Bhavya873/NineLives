@@ -66,9 +66,10 @@ pub fn scripted_input(step: u32) -> InputFrame {
     }
 }
 
-/// The scripted thruster throttles for `step`, so the trace also covers the nozzle
-/// forces: a half-strength lift pulse (enough for a short hop), then S_FL, which
-/// pushes the nose right, against the left turn.
+/// The scripted controller throttles for `step`: a half-strength lift pulse, then S_FL
+/// during the left turn. The car is steady on the ground both times, so the thruster
+/// interlock (SPEC §7.4) cuts them; the trace still covers the nozzle forces through
+/// Hop and Boost, whose feed-forward the interlock never cuts.
 pub fn scripted_throttles(step: u32) -> [f32; NOZZLE_COUNT] {
     let second = step / PHYSICS_HZ;
     let mut throttles = [0.0; NOZZLE_COUNT];

@@ -26,22 +26,17 @@ test('the AI cannot be chosen until a policy is loaded, then it can', () => {
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Ai);
 });
 
-test('with a policy loaded, T cycles Off, PD, AI, Manual', () => {
+test('with a policy loaded, T cycles PD, AI, Off from the PD start', () => {
   const game = newGame();
   game.load_policy(policyJson);
 
   const seen = [];
-  for (let press = 0; press < 4; press += 1) {
+  for (let press = 0; press < 3; press += 1) {
     game.cycle_controller();
     seen.push(game.hud()[HudField.Controller]);
   }
 
-  assert.deepEqual(seen, [
-    ControllerCode.Pd,
-    ControllerCode.Ai,
-    ControllerCode.Manual,
-    ControllerCode.Off,
-  ]);
+  assert.deepEqual(seen, [ControllerCode.Ai, ControllerCode.Off, ControllerCode.Pd]);
 });
 
 test('a policy made for another observation layout is refused, naming the hash', () => {

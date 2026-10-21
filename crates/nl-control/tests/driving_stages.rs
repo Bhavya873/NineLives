@@ -81,7 +81,11 @@ fn stage_c_hops_and_saves_with_pd_in_both_modes() {
             "{mode_name}:\n{}",
             failures(&results)
         );
-        assert!(results.iter().all(|result| result.saves >= 1));
+        assert!(
+            results.iter().all(|result| result.saves >= 1),
+            "{mode_name}: an episode without a save:\n{}",
+            failures(&results)
+        );
     }
 }
 

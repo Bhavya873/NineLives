@@ -29,12 +29,14 @@ def evaluate(
     first_seed: int,
     policy: Path = DEFAULT_POLICY_PATH,
     randomize: bool = False,
+    randomize_mode: bool = True,
 ) -> dict[str, Any]:
     """The eval report: settings, the SPEC §10 summary and every episode's row.
     `policy` is the exported policy file the AI controller loads; `randomize` gives
-    every episode its own randomized car and world (SPEC §9.8)."""
+    every episode its own randomized car and world (SPEC §9.8); with
+    `randomize_mode=False` the mode stays `mode`'s preset (a per-mode policy)."""
     policy_json = policy.read_text() if controller == "ai" else None
-    config = load_sim_config(mode, stage, randomize)
+    config = load_sim_config(mode, stage, randomize, randomize_mode=randomize_mode)
     report = json.loads(run_eval(controller, config, episodes, first_seed, policy_json))
     return {
         "controller": controller,
@@ -82,9 +84,19 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, default=0, help="first episode seed")
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY_PATH, help="for ai")
     parser.add_argument("--dr", action="store_true", help="domain randomization (SPEC §9.8)")
+    parser.add_argument(
+        "--keep-mode", action="store_true", help="with --dr, keep the mode's preset"
+    )
     args = parser.parse_args(argv)
     report = evaluate(
-        args.controller, args.stage, args.mode, args.episodes, args.seed, args.policy, args.dr
+        args.controller,
+        args.stage,
+        args.mode,
+        args.episodes,
+        args.seed,
+        args.policy,
+        args.dr,
+        not args.keep_mode,
     )
     print(json.dumps(report["summary"], indent=2))
     print(f"wrote {write_report(report)}")

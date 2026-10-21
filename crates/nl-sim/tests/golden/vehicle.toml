@@ -17,9 +17,11 @@ roof_half_extents_m = [1.2, 0.05, 0.8]
 inertia_kg_m2 = [850.0, 3250.0, 2900.0]
 
 [air_drag]
-# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2).
+# Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2), per body axis.
+# The golden car keeps one area on every axis and no centre-of-pressure offset (the old
+# single-area drag), so the trace pins the drag maths without new tuning.
 air_density_kg_m3 = 1.2
-drag_area_m2 = 0.6
+drag_area_m2 = [0.6, 0.6, 0.6]
 
 [wheels]
 # Where each suspension is attached, in the body frame, in wheel order FL, FR, RL, RR.
@@ -73,6 +75,18 @@ max_rate_rad_s = 2.0
 valve_time_constant_s = 0.03
 # Cold-gas exhaust speed; air used per second = thrust / exhaust speed (SPEC §7.5).
 exhaust_speed_m_s = 600.0
+
+# Thruster interlock (SPEC §7.4): while the car is steady on the ground (all four limits),
+# the controller's throttles are cut; Hop and Boost feed-forward still fire. It stops any
+# controller idling thrust while parked or pushing the car off the track while driving
+# (EXPERIMENTS 2026-10-19), and never cuts a save: a falling, tilted or spinning car isn't
+# steady. The centre of mass rests about 0.6 m up.
+[thrusters.interlock]
+max_tilt_deg = 15.0
+max_height_m = 1.0
+max_spin_rad_s = 1.0
+max_vertical_speed_m_s = 1.0
+
 
 # The 10 nozzles, in the fixed SPEC §4 order. Position is relative to the centre of
 # mass in the body frame (+X forward, +Y up, +Z right). Direction is the push on the

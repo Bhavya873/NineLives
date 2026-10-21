@@ -2,8 +2,8 @@
 //! drawn from the ranges in `[randomization]` of scenarios.toml, so the policy cannot
 //! overfit one exact car. Draws come from the episode seed on a ChaCha8 stream of their
 //! own, so an episode seed always gives the same variation (CLAUDE.md rule 2). The
-//! `Episode` applies a variation: car, mode and ground at the start, then actuation
-//! latency and observation noise while it runs.
+//! `Episode` applies a variation: car, mode, ground and wind at the start, then
+//! actuation latency and observation noise while it runs.
 
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -38,8 +38,11 @@ pub struct RandomizationConfig {
     pub latency_control_steps: [u32; 2],
     /// Friction of the ground the body scrapes.
     pub ground_friction: [f32; 2],
-    /// Largest wind speed along each horizontal world axis, either way, in m/s.
-    pub wind_m_s: f32,
+    /// Wind strength as a fraction of the Storm level (0 calm, 1 Storm), [low, high].
+    pub wind_strength: [f32; 2],
+    /// Draw the mode (thrust scale, air, tank) each episode; false keeps the run's mode
+    /// preset, for a policy trained for one mode (round 7).
+    pub vary_mode: bool,
     /// The mode's thrust scale.
     pub thrust_scale: [f32; 2],
     /// Chance of an episode with unlimited air.
@@ -77,6 +80,26 @@ pub struct EpisodeVariation {
     pub latency_control_steps: usize,
     /// Sensor noise on what controllers see (all zero: none).
     pub obs_noise: ObsNoise,
+    /// The wind: how strong, as a fraction of the Storm level, and which way it blows.
+    pub wind: WindDraw,
+}
+
+/// One episode's wind (SPEC §9.8): `strength` × the Storm level of `[wind]`, blowing
+/// towards `direction_yaw_rad` (0 along world +X, positive turning left).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WindDraw {
+    /// 0 is calm, 1 the full Storm level with its gusts.
+    pub strength: f32,
+    /// Where the wind blows towards, in rad.
+    pub direction_yaw_rad: f32,
+}
+
+impl WindDraw {
+    /// No wind.
+    pub const CALM: WindDraw = WindDraw {
+        strength: 0.0,
+        direction_yaw_rad: 0.0,
+    };
 }
 
 impl EpisodeVariation {
@@ -89,6 +112,7 @@ impl EpisodeVariation {
             ground_friction: DEFAULT_GROUND_FRICTION,
             latency_control_steps: 0,
             obs_noise: ObsNoise::default(),
+            wind: WindDraw::CALM,
         }
     }
 
@@ -118,12 +142,19 @@ pub fn sample_variation(
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     rng.set_stream(VARIATION_RNG_STREAM);
     let [fewest_steps, most_steps] = config.latency_control_steps;
+    let varied_vehicle = vary_vehicle(config, vehicle, &mut rng);
+    // Drawn even when the mode is kept, so every later draw is the same either way.
+    let varied_mode = vary_mode(config, mode, &mut rng);
     EpisodeVariation {
-        vehicle: vary_vehicle(config, vehicle, &mut rng),
-        mode: vary_mode(config, mode, &mut rng),
+        vehicle: varied_vehicle,
+        mode: if config.vary_mode { varied_mode } else { mode },
         ground_friction: draw(&mut rng, config.ground_friction),
         latency_control_steps: rng.random_range(fewest_steps..=most_steps) as usize,
         obs_noise: config.noise,
+        wind: WindDraw {
+            strength: draw(&mut rng, config.wind_strength),
+            direction_yaw_rad: draw(&mut rng, [0.0, std::f32::consts::TAU]),
+        },
     }
 }
 
@@ -160,7 +191,7 @@ fn add_noise(values: &mut [f32], sigma: f32, rng: &mut ChaCha8Rng) {
     }
 }
 
-/// Mass, inertia, centre of mass, nozzle forces, valve lag and wind.
+/// Mass, inertia, centre of mass, nozzle forces and valve lag.
 fn vary_vehicle(
     config: &RandomizationConfig,
     vehicle: &VehicleConfig,
@@ -181,8 +212,6 @@ fn vary_vehicle(
         nozzle.max_force_n *= draw(rng, config.max_force_factor);
     }
     varied.thrusters.valve_time_constant_s = draw(rng, config.valve_time_constant_s);
-    let wind = config.wind_m_s;
-    varied.air_drag.wind_m_s = [draw(rng, [-wind, wind]), 0.0, draw(rng, [-wind, wind])];
     varied
 }
 

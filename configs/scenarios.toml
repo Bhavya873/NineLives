@@ -9,6 +9,9 @@ success_hold_s = 1.0
 # success_quiet_hold_s of it, unbroken, so blowing air while parked is not a finished
 # episode (PLAN §3.3). Success needs four wheels down, so lifting a wheel can't dodge it.
 success_quiet_throttle_sum = 0.05
+# ...not counting nozzles below this throttle: near-zero noise isn't idling, while the old
+# idle habit (0.08-0.4 on a few nozzles) still fails (owner's round-4 choice, 2026-10-19).
+success_quiet_nozzle_deadband = 0.02
 success_quiet_hold_s = 0.5
 # Settled (PLAN §3.3): four wheels down, spin below the save rule's
 # save_max_spin_rad_s (vehicle.toml [events]) and sideways speed below
@@ -124,8 +127,12 @@ valve_time_constant_s = [0.02, 0.06]
 # Whole control steps between the policy acting and the valves hearing it.
 latency_control_steps = [0, 2]
 ground_friction = [0.6, 1.2]
-# Wind up to this speed along each horizontal world axis, either way, in m/s.
-wind_m_s = 3.0
+# Wind strength as a fraction of the [wind.storm] level (0 calm, 1 a full storm with its
+# gusts), drawn evenly, blowing in a random direction.
+wind_strength = [0.0, 1.0]
+# Mode draws below; a per-mode run sets vary_mode = false through its train config
+# (`randomize_mode: false`) and keeps its mode preset.
+vary_mode = true
 thrust_scale = [1.0, 2.0]
 # Otherwise the tank holds tank_capacity_kg.
 unlimited_air_probability = 0.4
@@ -137,3 +144,23 @@ gravity_dir = 0.01
 spin_rad_s = 0.05
 speed_m_s = 0.1
 height_m = 0.05
+
+[wind]
+# SPEC §7.2: the game's wind setting (Off / Breeze / Storm); training draws up to Storm
+# (randomization.wind_strength). A steady wind of mean_speed_m_s in a random horizontal
+# direction, plus Ornstein–Uhlenbeck gusts along each horizontal axis of typical size
+# gust_std_m_s that last about gust_time_constant_s.
+[wind.off]
+mean_speed_m_s = 0.0
+gust_std_m_s = 0.0
+gust_time_constant_s = 1.0
+
+[wind.breeze]
+mean_speed_m_s = 5.0
+gust_std_m_s = 1.5
+gust_time_constant_s = 2.0
+
+[wind.storm]
+mean_speed_m_s = 15.0
+gust_std_m_s = 5.0
+gust_time_constant_s = 1.5

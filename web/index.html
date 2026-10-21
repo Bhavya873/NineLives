@@ -20,6 +20,12 @@
         position: fixed;
         inset: 0;
       }
+      #g-blackout {
+        /* The g-force vignette (src/hud/g-blackout.ts): above the 3D view, under the HUD. */
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
       .hud {
         position: fixed;
         padding: 6px 10px;
@@ -125,6 +131,24 @@
         text-align: right;
         white-space: pre-line;
       }
+      #hud-wind {
+        /* Wind readout (src/hud/wind-indicator.ts), under the stats; hidden with no wind. */
+        right: 16px;
+        top: 108px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 16px;
+      }
+      #hud-wind[hidden] {
+        display: none;
+      }
+      #hud-wind-arrow,
+      #hud-wind-arrow svg {
+        display: block;
+        width: 22px;
+        height: 22px;
+      }
       #results {
         left: 50%;
         top: 50%;
@@ -161,6 +185,7 @@
   </head>
   <body>
     <div id="game"></div>
+    <div id="g-blackout" hidden></div>
     <div id="hud-speed" class="hud">0 km/h</div>
     <div id="hud-status" class="hud">Realistic</div>
     <div id="hud-air" class="hud">
@@ -170,6 +195,14 @@
     </div>
     <div id="hud-nozzles" class="hud"></div>
     <div id="hud-stats" class="hud"></div>
+    <div id="hud-wind" class="hud" hidden>
+      <span id="hud-wind-arrow">
+        <svg viewBox="-12 -12 24 24" aria-hidden="true">
+          <path d="M0 -10 L7 2 L2 1 L2 10 L-2 10 L-2 1 L-7 2 Z" fill="#d6ecff" />
+        </svg>
+      </span>
+      <span id="hud-wind-label">Off</span>
+    </div>
     <div id="hud-toast" class="hud" hidden></div>
     <div id="results" class="hud" hidden>
       <h2>Finished</h2>
@@ -179,7 +212,7 @@
     <button id="chaos-button" type="button" title="A random knock (C)">Chaos</button>
     <div id="hud-help" class="hud">
       W/S or ↑/↓ drive · A/D or ←/→ steer · Space hop · Shift boost · M mode · T controller · C
-      chaos · X drop test · R respawn · Enter Gauntlet · F free drive ·
+      chaos · V wind · X drop test · R respawn · Enter Gauntlet · F free drive ·
       <a href="./viewer.html">training viewer</a><br />
       The tank slowly refills while the car is on its wheels (a game rule, not real physics).
     </div>

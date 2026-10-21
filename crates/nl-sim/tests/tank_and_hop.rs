@@ -98,9 +98,11 @@ fn the_tank_refills_on_the_ground_but_not_in_the_air() {
     run(&mut world, InputFrame::default(), 1.0);
     let after_air_kg = world.air_kg();
 
-    // SPEC §7.5: +5 kg/s with at least 3 wheels down.
+    // SPEC §7.5: +refill_kg_s with at least 3 wheels down; the settled car has used no
+    // air for longer than refill_delay_s, so refilling runs the whole 2 s.
+    let expected_kg = 100.0 + 2.0 * world.mode().refill_kg_s;
     assert!(
-        (after_ground_kg - 110.0).abs() < 0.1,
+        (after_ground_kg - expected_kg).abs() < 0.1,
         "{after_ground_kg} kg"
     );
     assert_eq!(after_air_kg, after_ground_kg);
@@ -210,6 +212,8 @@ fn out_of_air_starts_where_thrust_starts_to_fade_and_never_in_arcade() {
 #[test]
 fn an_empty_tank_shows_no_flames_even_with_the_valves_open() {
     let mut world = new_world();
+    // In the air, where the thruster interlock never cuts the controller.
+    lift_into_the_air(&mut world, 20.0);
     world.set_controller_throttles([1.0; NOZZLE_COUNT]);
     run(&mut world, InputFrame::default(), 0.3);
     assert!(world.flame_fractions()[0] > 0.5);

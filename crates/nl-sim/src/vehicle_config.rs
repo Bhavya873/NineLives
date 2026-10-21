@@ -25,6 +25,28 @@ pub struct VehicleConfig {
     pub thrusters: ThrusterConfig,
     pub events: EventConfig,
     pub chaos: ChaosConfig,
+    /// Where the passenger sits (g-load, SPEC §9.4); defaults to the centre of mass.
+    #[serde(default)]
+    pub passenger: PassengerConfig,
+}
+
+/// The passenger, for the g-load. See `[passenger]` in `configs/vehicle.toml`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PassengerConfig {
+    /// The seat relative to the centre of mass, body frame, in m.
+    pub seat_offset_m: [f32; 3],
+    /// Time constant of the g-load smoothing, in s.
+    pub smoothing_s: f32,
+}
+
+impl Default for PassengerConfig {
+    fn default() -> PassengerConfig {
+        PassengerConfig {
+            seat_offset_m: [0.0; 3],
+            smoothing_s: 0.1,
+        }
+    }
 }
 
 /// The car body. See `[chassis]` in `configs/vehicle.toml`.
@@ -43,6 +65,11 @@ pub struct ChassisConfig {
     /// vehicle.toml; domain randomization (SPEC §9.8) moves it up to ±0.1 m per axis.
     #[serde(default)]
     pub center_of_mass_offset_m: [f32; 3],
+    /// The body box's bottom front and rear edges are cut away: [length along x, rise],
+    /// in m, so the nose and tail clear a ramp or halfpipe curve (a real car's approach
+    /// and departure angles). [0, 0] (the default) keeps a plain box.
+    #[serde(default)]
+    pub underside_chamfer_m: [f32; 2],
 }
 
 /// Air resistance on the body. See `[air_drag]`.
@@ -50,12 +77,15 @@ pub struct ChassisConfig {
 #[serde(deny_unknown_fields)]
 pub struct AirDragConfig {
     pub air_density_kg_m3: f32,
-    /// Drag coefficient times frontal area (CdA).
-    pub drag_area_m2: f32,
-    /// Wind velocity in world coordinates, in m/s; drag acts on the car's speed
-    /// relative to it (SPEC §7.2). 0 in vehicle.toml; randomized in training (§9.8).
+    /// Drag coefficient times area (CdA) for air flowing along each body axis: front
+    /// (X), top (Y) and side (Z), in m² (SPEC §7.2). A car is far blunter from the side
+    /// and above than from the front, so a side wind pushes it much harder.
+    pub drag_area_m2: [f32; 3],
+    /// Where the drag acts, from the centre of mass in the body frame, in m. Behind
+    /// the centre of mass, a side wind turns the nose into the wind; above it, it leans
+    /// the car over. Zero (the default) gives no turning at all.
     #[serde(default)]
-    pub wind_m_s: [f32; 3],
+    pub center_of_pressure_offset_m: [f32; 3],
 }
 
 /// The four raycast wheels and their suspension. See `[wheels]`.
@@ -122,8 +152,27 @@ pub struct ThrusterConfig {
     pub valve_time_constant_s: f32,
     /// Speed of the cold-gas exhaust; air used = thrust / this speed (SPEC §7.5).
     pub exhaust_speed_m_s: f32,
+    /// When the controller's throttles are cut (`[thrusters.interlock]`).
+    pub interlock: InterlockConfig,
     /// The nozzles, in the fixed `NOZZLE_NAMES` order.
     pub nozzles: [NozzleConfig; NOZZLE_COUNT],
+}
+
+/// The thruster interlock (SPEC §7.4): while the car is steady on the ground, the
+/// controller's throttles are cut (Hop and Boost feed-forward still fire). Steady means
+/// all four limits hold.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InterlockConfig {
+    /// Tilt at most this, in degrees.
+    pub max_tilt_deg: f32,
+    /// Centre of mass at most this high above the ground below it, in m.
+    pub max_height_m: f32,
+    /// Spinning at most this fast, in rad/s.
+    pub max_spin_rad_s: f32,
+    /// Moving up or down at most this fast, in m/s, so braking a fall is never cut, nor
+    /// the attitude control of a car rising off a Hop.
+    pub max_vertical_speed_m_s: f32,
 }
 
 /// When upsets, saves and crashes happen (SPEC §7.9). See `[events]`.
@@ -209,6 +258,13 @@ pub enum VehicleConfigError {
     #[error("vehicle.toml: `{field}` must be a finite number, but it is {value}")]
     NotFinite { field: &'static str, value: f32 },
 
+    /// The chamfer would cut away the whole body box.
+    #[error(
+        "vehicle.toml: `chassis.underside_chamfer_m` [{length}, {rise}] must be shorter than \
+         the body's half length and lower than its height"
+    )]
+    ChamferTooBig { length: f32, rise: f32 },
+
     #[error("vehicle.toml: `{field}` must be at most 180 degrees, but it is {value}")]
     AngleTooLarge { field: &'static str, value: f32 },
 
@@ -258,7 +314,9 @@ impl VehicleConfig {
         self.steering.check()?;
         self.thrusters.check()?;
         self.events.check()?;
-        self.chaos.check()
+        self.chaos.check()?;
+        all_must_be_finite("passenger.seat_offset_m", self.passenger.seat_offset_m)?;
+        must_be_positive("passenger.smoothing_s", self.passenger.smoothing_s)
     }
 }
 
@@ -271,15 +329,34 @@ impl ChassisConfig {
         all_must_be_finite(
             "chassis.center_of_mass_offset_m",
             self.center_of_mass_offset_m,
-        )
+        )?;
+        self.check_chamfer()
+    }
+
+    /// The chamfer is zero or more and leaves some of the box: shorter than the half
+    /// length, lower than the full height.
+    fn check_chamfer(&self) -> CheckResult {
+        let [length, rise] = self.underside_chamfer_m;
+        must_not_be_negative("chassis.underside_chamfer_m", length)?;
+        must_not_be_negative("chassis.underside_chamfer_m", rise)?;
+        let [half_x, half_y, _] = self.half_extents_m;
+        if length >= half_x || rise >= 2.0 * half_y {
+            return Err(VehicleConfigError::ChamferTooBig { length, rise });
+        }
+        Ok(())
     }
 }
 
 impl AirDragConfig {
     fn check(&self) -> CheckResult {
         must_not_be_negative("air_drag.air_density_kg_m3", self.air_density_kg_m3)?;
-        must_not_be_negative("air_drag.drag_area_m2", self.drag_area_m2)?;
-        all_must_be_finite("air_drag.wind_m_s", self.wind_m_s)
+        for area_m2 in self.drag_area_m2 {
+            must_not_be_negative("air_drag.drag_area_m2", area_m2)?;
+        }
+        all_must_be_finite(
+            "air_drag.center_of_pressure_offset_m",
+            self.center_of_pressure_offset_m,
+        )
     }
 }
 
@@ -393,6 +470,14 @@ impl ThrusterConfig {
             self.valve_time_constant_s,
         )?;
         must_be_positive("thrusters.exhaust_speed_m_s", self.exhaust_speed_m_s)?;
+        let lock = &self.interlock;
+        must_be_positive("thrusters.interlock.max_tilt_deg", lock.max_tilt_deg)?;
+        must_be_positive("thrusters.interlock.max_height_m", lock.max_height_m)?;
+        must_be_positive("thrusters.interlock.max_spin_rad_s", lock.max_spin_rad_s)?;
+        must_be_positive(
+            "thrusters.interlock.max_vertical_speed_m_s",
+            lock.max_vertical_speed_m_s,
+        )?;
         for (index, nozzle) in self.nozzles.iter().enumerate() {
             nozzle.check(index)?;
         }
@@ -523,7 +608,7 @@ mod tests {
 
     #[test]
     fn an_infinite_speed_limit_is_rejected() {
-        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 45.0", "max_speed_m_s = inf");
+        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 55.0", "max_speed_m_s = inf");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
@@ -585,7 +670,7 @@ mod tests {
     #[test]
     fn reversed_steering_limits_are_rejected() {
         let broken = DEFAULT_VEHICLE_TOML.replace(
-            "max_angle_high_speed_rad = 0.15",
+            "max_angle_high_speed_rad = 0.25",
             "max_angle_high_speed_rad = 0.9",
         );
 

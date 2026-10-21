@@ -12,7 +12,7 @@ use nl_sim::car_state::CarState;
 use nl_sim::episode::Episode;
 use nl_sim::obs::{OBS_SPEC, PREV_ACTION_INDEX};
 use nl_sim::randomization::{
-    EpisodeVariation, ObsNoise, add_state_noise, noise_rng, sample_variation,
+    EpisodeVariation, ObsNoise, RandomizationConfig, add_state_noise, noise_rng, sample_variation,
 };
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 
@@ -48,8 +48,8 @@ fn every_draw_stays_inside_its_range() {
         {
             assert!((0.85..=1.15).contains(&(varied.max_force_n / original.max_force_n)));
         }
-        let [wind_x, wind_y, wind_z] = variation.vehicle.air_drag.wind_m_s;
-        assert!(wind_x.abs() <= 3.0 && wind_y == 0.0 && wind_z.abs() <= 3.0);
+        assert!((0.0..=1.0).contains(&variation.wind.strength));
+        assert!((0.0..=std::f32::consts::TAU).contains(&variation.wind.direction_yaw_rad));
         assert!((1.0..=2.0).contains(&variation.mode.thrust_scale));
         assert!((150.0..=350.0).contains(&variation.mode.tank_capacity_kg));
         assert!(variation.latency_control_steps <= 2);
@@ -155,4 +155,22 @@ fn a_bad_randomization_range_is_refused_by_name() {
         error.to_string().contains("unlimited_air_probability"),
         "{error}"
     );
+}
+
+#[test]
+fn keeping_the_mode_keeps_the_preset_and_draws_everything_else_the_same() {
+    let varying = scenarios().randomization;
+    let keeping = RandomizationConfig {
+        vary_mode: false,
+        ..varying
+    };
+
+    let varied = sample_variation(&varying, &vehicle(), realistic(), 9);
+    let kept = sample_variation(&keeping, &vehicle(), realistic(), 9);
+
+    assert_eq!(kept.mode, realistic());
+    assert_ne!(varied.mode, realistic());
+    assert_eq!(kept.vehicle, varied.vehicle);
+    assert_eq!(kept.ground_friction, varied.ground_friction);
+    assert_eq!(kept.wind, varied.wind);
 }

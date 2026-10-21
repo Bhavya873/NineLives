@@ -118,7 +118,8 @@ class RunCheckpointCallback(BaseCallback):
             success = success_and_crash_rates(rows)[0]
             self.logger.record(f"curriculum/{stage}/eval_success", success)
             print(f"{self.num_timesteps} steps: {stage} level {level} eval success {success:.3f}")
-            changed = curriculum.judge_eval(stage, success) or changed
+            changed = curriculum.judge_eval(stage, success, self.num_timesteps) or changed
+        changed = curriculum.unlock_if_due(self.num_timesteps) or changed
         if changed:
             send_mix(self.training_env, self.state)
 
@@ -142,6 +143,7 @@ class RunCheckpointCallback(BaseCallback):
             mode=self.config.mode,
             stage=stage,
             level=level,
+            residual=residual_json(self.config),
         )
 
     def evaluate(self, normalizer: VecNormalize, stages: list[str]) -> float:
@@ -166,6 +168,11 @@ class RunCheckpointCallback(BaseCallback):
     def record_progress(self, steps: int) -> None:
         """Records `steps` and this run's total wall time in the shared state."""
         record_progress(self.state, steps, self.wall_seconds_before, self.started_at)
+
+
+def residual_json(config: TrainConfig) -> dict[str, object] | None:
+    """The run's residual setting as the sim config wants it (None without one)."""
+    return None if config.residual is None else config.residual.as_sim_json()
 
 
 class TimeLimitCallback(BaseCallback):

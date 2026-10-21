@@ -265,6 +265,7 @@ def test_a_passing_eval_moves_a_stage_up_and_a_failing_one_does_not():
 
 def test_only_stages_whose_pass_would_change_the_mix_need_an_eval():
     plan = curriculum(levels_a=2)
+    plan.pd_success = {"A": 0.5, "B": 0.5}
 
     assert plan.needs_eval_to_advance("A")  # below its hardest level
     plan.judge_eval("A", 1.0)
@@ -295,3 +296,91 @@ def test_a_config_without_promote_on_promotes_on_eval(tmp_path):
     path.write_text(yaml.safe_dump(config))
 
     assert load_train_config(path).curriculum_promote_on == "eval"
+
+
+def test_each_level_has_its_own_bar_and_the_last_one_repeats():
+    plan = curriculum(levels_a=5)
+    plan.advance_at = [0.85, 0.75]
+
+    assert not plan.judge_eval("A", 0.80)
+    assert plan.judge_eval("A", 0.86)
+    assert plan.judge_eval("A", 0.80)  # level 1: bar 0.75
+    assert plan.bar("A") == 0.75  # level 2 reuses the last bar
+
+
+def test_the_hardest_level_unlocks_the_next_stage_once_it_matches_pd():
+    plan = curriculum(levels_a=1)
+    plan.pd_success = {"A": 0.58}
+
+    assert not plan.judge_eval("A", 0.57, steps=3_000_000)
+    assert plan.judge_eval("A", 0.58, steps=4_000_000)
+
+    assert plan.unlocked_stages() == ["A", "B"]
+    assert plan.last_unlock_step == 4_000_000
+
+
+def test_a_stage_unlocks_on_time_when_the_newest_never_matches_pd():
+    plan = curriculum()
+    plan.unlock_every_steps = 15_000_000
+
+    assert not plan.unlock_if_due(14_000_000)
+    assert plan.unlock_if_due(15_000_000)
+    assert not plan.unlock_if_due(20_000_000)
+    assert plan.unlock_if_due(30_000_000)
+
+    assert plan.unlocked_stages() == ["A", "B", "C"]
+    assert not plan.unlock_if_due(90_000_000)
+
+
+def test_reward_overrides_replace_only_the_named_weights():
+    from ninelives.sim_config import override_reward_weights
+
+    toml = "[weights]\ntilt = 0.05\nhard_landing = 1.0\n\n[shape]\nhard_landing = 7.0\n"
+
+    out = override_reward_weights(toml, {"hard_landing": 0.0})
+
+    assert "hard_landing = 0.0\n" in out
+    assert "[shape]\nhard_landing = 7.0" in out
+    with pytest.raises(ValueError, match="not a \\[weights\\] entry"):
+        override_reward_weights(toml, {"no_such_weight": 1.0})
+
+
+def test_validation_seeds_inside_the_test_range_are_refused(tmp_path):
+    config = yaml.safe_load(small_config(tmp_path, 1024).read_text())
+    config["checkpoint"]["eval_seed"] = 500
+    path = tmp_path / "leaky.yaml"
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match="test seeds"):
+        run(tmp_path, path)
+
+
+def test_a_warm_started_run_begins_with_the_given_checkpoints_policy(tmp_path):
+    from stable_baselines3 import PPO
+
+    run(tmp_path, small_config(tmp_path, 2048))
+    source = tmp_path / "smoke" / "latest"
+    config = small_config(tmp_path, 1)
+    args = ["--config", str(config), "--run-id", "warm", "--runs-dir", str(tmp_path)]
+
+    train([*args, "--init-from", str(source)])
+
+    started = PPO.load(tmp_path / "warm" / "latest" / "model.zip", device="cpu")
+    original = PPO.load(source / "model.zip", device="cpu")
+    started_bias = started.policy.action_net.bias.detach()
+    original_bias = original.policy.action_net.bias.detach()
+    assert (started_bias - original_bias).abs().max() < 0.05
+
+
+def test_keep_curriculum_carries_over_the_checkpoints_unlocked_stages(tmp_path):
+    run(tmp_path, small_config(tmp_path, 2048))
+    source = tmp_path / "smoke" / "latest"
+    state = json.loads((source / "state.json").read_text())
+    state["curriculum"]["unlocked"] = 2
+    (source / "state.json").write_text(json.dumps(state))
+    config = small_config(tmp_path, 1)
+    args = ["--config", str(config), "--run-id", "warm", "--runs-dir", str(tmp_path)]
+
+    result = train([*args, "--init-from", str(source), "--keep-curriculum"])
+
+    assert result.curriculum.unlocked == 2
