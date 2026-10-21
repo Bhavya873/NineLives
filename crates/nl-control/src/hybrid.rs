@@ -1,7 +1,7 @@
 //! The Hybrid controller (DECISIONS 2026-10-21): the AI saves upsets, PD does the rest. A
 //! `HybridGate` hands the nozzles to the AI when the car tilts past SPEC §7.9's upset
-//! angle and back to PD once the car has settled the way a save needs. The game, both eval runners and
-//! training (`nl-py`) share the gate, so the policy is trained and judged under one rule.
+//! angle and back to PD once the car has settled the way a save needs. The game and both
+//! eval runners share the gate, so the shipped controller is judged under the rule it runs.
 
 use nl_sim::car_state::CarState;
 use nl_sim::conventions::{CONTROL_DT_S, NOZZLE_COUNT, WHEEL_COUNT};

@@ -25,7 +25,7 @@ use rayon::prelude::*;
 use crate::config::{SimConfig, parse_sim_config};
 
 /// Runs `episodes` episodes with seeds `first_seed`, `first_seed + 1`, … using
-/// `controller` ("off", "pd", "ai" or "manual"; "ai" needs `policy_json`). Episodes run in
+/// `controller` ("off", "pd", "ai", "hybrid" or "manual"; "ai" and "hybrid" need `policy_json`). Episodes run in
 /// parallel. Returns the report as JSON: `{"summary": …, "episodes": […]}`, the same
 /// summary (SPEC §10 metrics) and per-episode rows the Rust eval runner writes.
 #[pyfunction]
