@@ -1,7 +1,7 @@
 // A generic low-poly sports car (SPEC §11.4: no brand shapes).
 // The painted body, glass cabin and dark trim are side outlines (car-shape.ts) pushed out
-// across the car with bevelled edges, plus small boxes for lights, bumpers, skirts and a
-// rear wing. Parts that share a material are merged into one mesh, so each car costs a
+// across the car with bevelled edges, plus small boxes for lights, bumpers, skirts, a
+// front intake, wing mirrors and a rear wing. Parts that share a material are merged into one mesh, so each car costs a
 // handful of draw calls (the training viewer draws 64). The body group sits at the
 // car's centre of mass. Wheels are separate groups: the sim gives each its own pose.
 import {
@@ -34,8 +34,8 @@ const CABIN_BEVEL_M = 0.09;
 /** The dark liner between the arches stops short of the tyres' inner faces (z ±0.72). */
 const LINER_WIDTH_M = 1.4;
 
-/** The body paint, shared with the nozzle pylons (nozzle-mounts.ts). */
-export const paint = new MeshStandardMaterial({
+/** The body paint. */
+const paint = new MeshStandardMaterial({
   color: 0xe0542f,
   flatShading: true,
   roughness: 0.45,
@@ -62,12 +62,13 @@ const taillight = new MeshStandardMaterial({
   flatShading: true,
 });
 const tyre = new MeshStandardMaterial({ color: 0x1b1b1b, flatShading: true, roughness: 0.9 });
-const hub = new MeshStandardMaterial({ color: 0xc8c8c8, flatShading: true, metalness: 0.6 });
+const rim = new MeshStandardMaterial({ color: 0xc8c8c8, flatShading: true, metalness: 0.6 });
 
 // One merged geometry per material, shared by every car built.
 const paintGeometry = mergeParts([
   extrudeProfile(bodyProfileM(), { widthM: BODY_WIDTH_M, bevelM: BODY_BEVEL_M, centreZM: 0 }),
   ...roofAndPillars(),
+  ...wingMirrors(),
 ]);
 const glassGeometry = mergeParts([
   extrudeProfile(CABIN_PROFILE_M, { widthM: CABIN_WIDTH_M, bevelM: CABIN_BEVEL_M, centreZM: 0 }),
@@ -76,12 +77,25 @@ const trimGeometry = mergeParts([
   extrudeProfile(LINER_PROFILE_M, { widthM: LINER_WIDTH_M, bevelM: 0, centreZM: 0 }),
   ...bumpers(),
   ...sideSkirts(),
+  ...frontIntake(),
   ...rearWing(),
 ]);
 const headlightGeometry = mergeParts(headlights());
 const taillightGeometry = mergeParts(taillights());
 const tyreGeometry = new CylinderGeometry(WHEEL_RADIUS_M, WHEEL_RADIUS_M, WHEEL_WIDTH_M, 14);
-const hubGeometry = new BoxGeometry(WHEEL_RADIUS_M * 1.4, 0.08, WHEEL_WIDTH_M + 0.02);
+/** Rim radius: the tyre's sidewall shows as a dark band around it. */
+const RIM_RADIUS_M = 0.23;
+const rimGeometry = new CylinderGeometry(RIM_RADIUS_M, RIM_RADIUS_M, WHEEL_WIDTH_M + 0.01, 14);
+/** Five spokes across the rim's outer faces, so a turning wheel shows its spin. */
+const spokeGeometry = mergeOrThrow(
+  [0, 1, 2, 3, 4].map((index) => {
+    const spoke = new BoxGeometry(RIM_RADIUS_M * 0.9, 0.045, WHEEL_WIDTH_M + 0.03);
+    spoke.translate(RIM_RADIUS_M * 0.45, 0, 0);
+    spoke.rotateZ((index * 2 * Math.PI) / 5);
+    return spoke;
+  }),
+);
+const spoke = new MeshStandardMaterial({ color: 0x5a5f66, flatShading: true, metalness: 0.5 });
 
 /**
  * The car body: painted body (its first child, which the nozzle mounts attach to),
@@ -98,17 +112,20 @@ export function buildCarBody(): Group {
   return body;
 }
 
-/** One wheel: a tyre with its axle along the body's Z axis, plus a hub bar to show spin. */
+/** One wheel: a tyre with its axle along the body's Z axis, a light rim and dark spokes. */
 export function buildWheel(): Group {
   const wheel = new Group();
 
-  const tyreMesh = new Mesh(tyreGeometry, tyre);
-  // Cylinders stand along Y in three.js; lay this one along Z, the sim's axle axis.
-  tyreMesh.rotation.x = Math.PI / 2;
-  wheel.add(tyreMesh);
-
-  const hubBar = new Mesh(hubGeometry, hub);
-  wheel.add(hubBar);
+  for (const [geometry, material] of [
+    [tyreGeometry, tyre],
+    [rimGeometry, rim],
+  ] as const) {
+    const disc = new Mesh(geometry, material);
+    // Cylinders stand along Y in three.js; lay this one along Z, the sim's axle axis.
+    disc.rotation.x = Math.PI / 2;
+    wheel.add(disc);
+  }
+  wheel.add(new Mesh(spokeGeometry, spoke));
 
   castShadows(wheel);
   return wheel;
@@ -123,6 +140,16 @@ function roofAndPillars(): BufferGeometry[] {
     parts.push(boxAt([-0.5, 0.27, side * 0.62], [-0.4, 0.52, side * 0.72]));
   }
   return parts;
+}
+
+/** A wing mirror on each door, just ahead of the side window. */
+function wingMirrors(): BufferGeometry[] {
+  return [-1, 1].map((side) => boxAt([0.62, 0.3, side * 0.7], [0.74, 0.38, side * 0.86]));
+}
+
+/** A dark intake across the lower nose, between the headlights' feet. */
+function frontIntake(): BufferGeometry[] {
+  return [boxAt([2.06, -0.13, -0.5], [2.125, -0.05, 0.5])];
 }
 
 /** Dark bumpers wrapping the lower nose and tail, following the cut-away underside. */
@@ -191,12 +218,17 @@ function boxAt(min: [number, number, number], max: [number, number, number]): Bo
 
 /** Merges parts into one geometry and gives it the body's rounded plan. */
 function mergeParts(parts: BufferGeometry[]): BufferGeometry {
+  return warpToBodyShape(mergeOrThrow(parts));
+}
+
+/** Merges parts into one geometry; they may mix indexed and non-indexed geometry. */
+function mergeOrThrow(parts: BufferGeometry[]): BufferGeometry {
   const unindexed = parts.map((part) => (part.index ? part.toNonIndexed() : part));
   const merged = mergeGeometries(unindexed);
   if (!merged) {
     throw new Error('car-mesh.ts: the car parts could not be merged (mismatched attributes)');
   }
-  return warpToBodyShape(merged);
+  return merged;
 }
 
 function castShadows(object: Object3D): void {

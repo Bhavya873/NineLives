@@ -1,5 +1,6 @@
 // Unit tests for the thruster visuals (SPEC §11.4, §11.5): flames follow the throttles,
-// the nozzle map places dots by nozzle position, and the air gauge text. Plain Node.
+// ports sit on the body, the nozzle map places dots by nozzle position, and the air
+// gauge text. Plain Node.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -10,6 +11,7 @@ import { mapPercent } from '../src/hud/nozzle-map.ts';
 import { readNozzleLayout } from '../src/nozzle-layout.ts';
 import { buildCarBody } from '../src/render/car-mesh.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
+import { portPositionM } from '../src/render/nozzle-ports.ts';
 import { Game, controllersToml, modesToml, vehicleToml } from './load-wasm.mjs';
 
 function nozzleLayout() {
@@ -41,27 +43,24 @@ test('a flame shows only when its nozzle fires, and grows with the throttle', ()
   assert.equal(flames[0].visible, true);
   assert.equal(flames[1].visible, false);
   assert.ok(flames[9].scale.y > flames[0].scale.y);
-  // Each nozzle is a mount plus a cone on the car body, with its flame as a child.
+  // Each nozzle is a port plus its flame, both on the car body.
   assert.equal(carBody.children.length, 20);
-  assert.equal(flames[0].parent?.parent, carBody);
+  assert.equal(flames[0].parent, carBody);
 });
 
-test('every nozzle sits flush on a mount that touches the body', () => {
+test('every port sits on the body surface, a short way from its nozzle', () => {
   const carBody = buildCarBody();
   const bodyBox = new Box3().setFromObject(carBody.children[0]);
-  const partsBefore = carBody.children.length;
-  const flames = createFlames(carBody, readNozzleLayout(nozzleLayout()));
+  const deepInside = bodyBox.clone().expandByScalar(-0.03);
+  const nozzles = readNozzleLayout(nozzleLayout());
 
-  flames.forEach((flame, index) => {
-    const nozzle = flame.parent;
-    const mount = carBody.children[partsBefore + 2 * index];
-    const mountBox = new Box3().setFromObject(mount).expandByScalar(0.001);
-    // The nozzle's narrow end: half its length back from its centre, against the exhaust.
-    const exhaustDirection = new Vector3(0, 1, 0).applyQuaternion(nozzle.quaternion);
-    const narrowEnd = nozzle.position.clone().addScaledVector(exhaustDirection, -0.06);
+  nozzles.forEach((place, index) => {
+    const port = new Vector3().fromArray(portPositionM(place));
+    const nozzle = new Vector3().fromArray(place.positionM);
 
-    assert.ok(mountBox.containsPoint(narrowEnd), `nozzle ${index} sits on its mount`);
-    assert.ok(mountBox.intersectsBox(bodyBox), `mount ${index} reaches the body`);
+    assert.ok(bodyBox.distanceToPoint(port) < 0.03, `port ${index} touches the body`);
+    assert.ok(!deepInside.containsPoint(port), `port ${index} is on the surface`);
+    assert.ok(port.distanceTo(nozzle) < 0.45, `port ${index} is near its nozzle`);
   });
 });
 

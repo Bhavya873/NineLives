@@ -1,7 +1,7 @@
 // The car's outline in numbers (SPEC §11.4): side profiles of the body and cabin, the
 // wheel arches cut into the body, and helpers that turn a side outline into a bevelled
-// solid. car-mesh.ts assembles the parts; nozzle-mounts.ts reads the body's top and
-// underside from here so every thruster mount sits on the paint.
+// solid. car-mesh.ts assembles the parts; nozzle-ports.ts reads the body's sides and
+// underside from here so every thruster port sits on the paint.
 // All shapes stay inside the physics boxes in configs/vehicle.toml (body x ±2.1,
 // y ±0.45, z ±1.0, roof up to y = 0.55), so landings and roof hits look right.
 import { type BufferGeometry, ExtrudeGeometry, Shape } from 'three';
@@ -104,26 +104,9 @@ function archPointsM(centreXM: number): [number, number][] {
 }
 
 /**
- * Height of the body's top surface at `xM` metres forward of the centre of mass
- * (bonnet or deck), read off the side outline. Outside the body it gives the nearest end.
- */
-export function bodyTopHeightM(xM: number): number {
-  for (let index = 0; index + 1 < BODY_TOP_EDGE_M.length; index += 1) {
-    const [frontX, frontY] = BODY_TOP_EDGE_M[index] ?? [0, 0];
-    const [rearX, rearY] = BODY_TOP_EDGE_M[index + 1] ?? [0, 0];
-    if (xM <= frontX && xM >= rearX) {
-      const along = (frontX - xM) / (frontX - rearX);
-      return frontY + along * (rearY - frontY);
-    }
-  }
-  const nearestEnd = xM > 0 ? BODY_TOP_EDGE_M[0] : BODY_TOP_EDGE_M[BODY_TOP_EDGE_M.length - 1];
-  return nearestEnd?.[1] ?? 0;
-}
-
-/**
  * If `xM` lies over a wheel arch, the x of that arch's end nearer the car's end (where
  * solid body starts again under the nose or tail); otherwise `xM` itself. Downward
- * nozzle pads use it to reach past the arch to the body.
+ * lift ports use it to sit past the arch, under the body.
  */
 export function solidUndersideXM(xM: number): number {
   for (const centreXM of ARCH_CENTRES_X_M) {
