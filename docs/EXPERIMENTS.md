@@ -167,3 +167,43 @@ The unsettled cost kept the policy from ever settling quietly (it landed safely 
 - Charging sideways speed made it worse. Charging thrust while steady on the ground fixes driving (out of bounds 26% → 8–11%), but every variant breaks drops and tip-overs (A and B go to 0%, timing out).
 - No candidate met the round-4 rule (beat the start on D and E, lose ≤ 3 points on A, B and C). The 100M-step continuation was not run.
 - Next to investigate: why the ground-thrust cost stops A/B landings from succeeding even with the 0.02 deadband (likely a remaining trickle, or the cost firing during the landing itself).
+
+
+### 2026-10-19/20 — M7 rounds 5–6: three-approach batch, residual-100m, PD tuning
+
+**Round 5 batch** (owner's choice): three approaches in parallel, 25M steps each, scored on validation seeds from 1,500,000 (300 episodes per cell, Stage A at level 4), A–E in both modes. Rule: most cells beating PD wins; mean success breaks ties.
+
+| Run | Approach | Cells beating PD (of 10) | Realistic A / D / E | Arcade A / D / E |
+|---|---|---|---|---|
+| batch-ppo | PPO continued from m7-full-004 best, LR 1e-4, D/E-heavy weights | 2 | – | – |
+| batch-bc | behaviour cloning from PD, then PPO | 2 | – | – |
+| **batch-residual** | PD + 0.5 × policy action (head zeroed, so it starts as PD) | **3** | 68.3 / 95.7 / 81.7 | 74.7 / 84.3 / 76.7 |
+| PD (then) | – | – | 59.7 / 95.7 / 81.3 | 60.3 / 95.7 / 79.0 |
+
+**residual-100m:** `configs/train/residual.yaml` (worktree m7-residual, commit 87ece93), fresh, seed 0, 100M steps, all stages at their hardest level from the start (weights A .25 B .05 C .1 D .4 E .2), 2.3 h. Checkpoint evals (200 episodes per stage, seeds from 1,000,000) from TensorBoard:
+
+| Steps | A | B | C | D | E | Mean |
+|---|---|---|---|---|---|---|
+| 1M | 60.5% | 100% | 100% | 97.0% | 83.0% | **88.1% (best)** |
+| 21M | 62.0% | 100% | 100% | 89.0% | 80.0% | 86.2% |
+| 41M | 64.0% | 100% | 100% | 87.5% | 80.0% | 86.3% |
+| 61M | 61.5% | 100% | 100% | 84.5% | 78.5% | 84.9% |
+| 91M | 60.5% | 100% | 100% | 84.5% | 79.0% | 84.8% |
+
+Final checkpoint, validation (seeds from 1,000,000, 300 episodes): Realistic A 62.7, B 100, C 100, D 96.0, E 80.3; Arcade A 71.0, B 100, C 100, D 92.3, E 79.3. It beats the PD of the time on 4 of 10 cells: **bar not met**. Not exported.
+
+- **The residual never improved on PD.** The best checkpoint is the first (1M steps, nudges still near zero). Training gained at most 3–4 points on A and gave back 12 on D and 4 on E.
+- The batch's "3 cells vs 2" margin was inside 300-episode noise (±2.8 points standard error at 60%), so the batch picked a winner that didn't hold over a long run.
+- Round-6 diagnosis: the nudge was not divided by `thrust_scale` while PD's allocation is, which overshot in Arcade. The fixes, **R1** (`residual-r1.yaml`, force-scaled nudge) and **R2** (`residual-r2.yaml`, force-scaled + a learned gate), were **planned, not run** (commit c08f1b4): round 7 changed the sim first, and the owner then dropped residual as the main line (DECISIONS 2026-10-21).
+
+**PD tuning** (`python -m ninelives.tune_pd`, CMA-ES on tuning seeds ≥ 2,000,000, scored on A, D and E in both modes):
+
+| Version | Scored on | Result | Outcome |
+|---|---|---|---|
+| v1 | plain car only | huge gains, burned the tank; randomized D 93% → 40% | rejected (overfit) |
+| v2 | plain + randomized, fraction gains capped, pre-round-7 PD | 0.914 vs repo 0.847 on its own tuning seeds | never validated; obsolete after round 7's PD changes |
+| v3, v4 | round-7 PD | see the round-7 rows | – |
+
+**Repo PD on the round-7 sim** (untuned gains), validation seeds from 1,500,000, 300 episodes, no randomization: Realistic A 70, B 100, C 100, D 99, E 85; Arcade A 71, B 100, C 100, D 100, E 84. The M5 policy (stage-a-004) on test seeds: Stage A 81.0% Realistic, 87.8% Arcade. That passes the 80% Realistic stretch target, mostly thanks to the interlock and the chamfered underside.
+
+Conclusion (owner, 2026-10-21): one policy owning the nozzles through 45 s of driving keeps losing to PD on D/E, while the Stage-A-only policy is the best AI. Next round: **the AI flies, PD drives** (a `Hybrid` controller), paired-seed evals with confidence intervals, and a revised bar (DECISIONS).

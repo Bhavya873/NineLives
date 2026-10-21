@@ -519,6 +519,7 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 - Stage A Arcade, AI save rate ≥ 95%; Stage A Realistic ≥ 80%; Stage B Arcade ≥ 90%.
 - AI beats PD on save rate or on air per save in Realistic mode.
 - Gauntlet crash rate with AI ≤ ⅓ of the crash rate with Off.
+- **M7 bar** (2026-10-21): the AI, run as `Hybrid` (it owns the nozzles only during upsets; PD otherwise), beats PD on Stages A and E and stays within PD's 95% confidence interval where PD succeeds ≥ 97% (B, C, D), in both modes. Comparisons use the same seeds for both controllers and ≥ 1000 episodes.
 
 ---
 
