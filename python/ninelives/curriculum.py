@@ -31,17 +31,41 @@ class Curriculum:
             self.recent.setdefault(stage, [])
 
     def record(self, episode: dict[str, Any]) -> bool:
-        """Counts one finished episode (BatchedSim's episode row). Returns True when this
-        changed the mix: a stage moved up a level or the next stage unlocked. Episodes
-        from a locked stage or an older level are ignored."""
+        """Counts one finished episode (BatchedSim's episode row) and promotes its stage
+        when the window passes. Returns True when this changed the mix: a stage moved up
+        a level or the next stage unlocked."""
+        if not self.note(episode):
+            return False
+        stage = episode["stage"]
+        return self.window_is_good(stage) and self.advance(stage)
+
+    def note(self, episode: dict[str, Any]) -> bool:
+        """Adds one finished episode to its stage's window, without promoting. Episodes
+        from a locked stage or an older level are ignored (returns False)."""
         stage = episode["stage"]
         if stage not in self.unlocked_stages() or episode["level"] != self.levels[stage]:
             return False
         window = self.recent[stage]
         window.append(bool(episode["success"]))
         del window[: -self.window]
-        if not self.window_is_good(stage):
-            return False
+        return True
+
+    def judge_eval(self, stage: str, success_rate: float) -> bool:
+        """Promotes `stage` if its deterministic eval at its current level passes the bar
+        (`promote_on: eval`). Returns True when this changed the mix."""
+        return success_rate > self.advance_at and self.advance(stage)
+
+    def needs_eval_to_advance(self, stage: str) -> bool:
+        """True while passing `stage` would change the mix: below its hardest level, or
+        the newest unlocked stage with more stages still locked."""
+        if not self.is_last_level(stage):
+            return True
+        newest = stage == self.unlocked_stages()[-1]
+        return newest and self.unlocked < len(self.stages)
+
+    def advance(self, stage: str) -> bool:
+        """Moves `stage` up a level, or unlocks the next stage if `stage` is the newest
+        one at its hardest level. Returns True when this changed the mix."""
         if not self.is_last_level(stage):
             self.levels[stage] += 1
             self.recent[stage] = []

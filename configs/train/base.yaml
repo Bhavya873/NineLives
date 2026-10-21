@@ -19,6 +19,12 @@ ppo:
   ent_coef: 0.0
   net_arch: [128, 128]    # the same for the policy and the value network
   activation: tanh
+  # Start each throttle's mean at −1, the edge of zero throttle (SB3 clips actions to
+  # [−1, 1]): the deterministic policy idles at exactly 0, as the quiet-throttle success
+  # rule needs, while half the samples still fire so braking gets explored. A mean of −2
+  # sampled almost no firing and never learned to brake (EXPERIMENTS m7-smoke runs).
+  log_std_init: 0.0
+  initial_action_bias: -1.0
 
 normalize:
   clip_obs: 10.0       # VecNormalize(norm_obs=True, norm_reward=True)
@@ -26,6 +32,10 @@ normalize:
 curriculum:
   window: 500          # success rate over the last this many episodes at the level
   advance_at: 0.85     # move up a level, or unlock the next stage, above this
+  # Promote on a deterministic eval at each checkpoint (current level, the eval seeds), not
+  # on training episodes: their exploration noise alone breaks the quiet-throttle success
+  # rule, so the window never passes (EXPERIMENTS m7-full-001).
+  promote_on: eval
   # How often each unlocked stage comes up (SPEC §9.9); sampled in Rust per episode.
   stage_weights: {A: 0.25, B: 0.15, C: 0.2, D: 0.3, E: 0.1}
 

@@ -222,7 +222,7 @@ fn step_return<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<StepReturn<
 /// - `terminal_obs`: that episode's last observation (N × 41; zeros where not done);
 /// - `episode`: that episode's row as a JSON object string (`FinishedEpisode`: the
 ///   eval `EpisodeResult` fields plus `stage`, `level`, `control_steps`), else None;
-/// - `reward_terms`: this step's reward per term (N × 10, columns `reward_term_names()`).
+/// - `reward_terms`: this step's reward per term (N × `reward_term_names().len()`, in that order).
 fn info_dict<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<Bound<'py, PyDict>> {
     let count = steps.len();
     let mut done = vec![false; count];
@@ -262,7 +262,7 @@ fn observations_array<'py>(
     table(py, observations.len(), OBS_DIM, flat)
 }
 
-/// Each step's reward terms as an N × 10 float32 array (columns: `RewardTerms::NAMES`).
+/// Each step's reward terms as an N × `RewardTerms::NAMES.len()` float32 array (columns: `RewardTerms::NAMES`).
 fn reward_terms_array<'py>(
     py: Python<'py>,
     steps: &[SlotStep],
