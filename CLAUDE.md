@@ -68,6 +68,7 @@ maturin develop --release -m crates/nl-py/Cargo.toml
 ruff check python && pytest python/tests
 python -m ninelives.train --config configs/train/base.yaml --run-id <name>
 python -m ninelives.eval --controller ai --stage A --mode realistic --episodes 1000 --seed 0
+python -m ninelives.compare --candidate hybrid   # paired vs PD on the same seeds, M7 bar verdict
 python -m ninelives.export --run runs/<name> --out models/policy.json
 python -m ninelives.charts
 
