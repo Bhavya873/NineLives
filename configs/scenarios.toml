@@ -130,6 +130,9 @@ ground_friction = [0.6, 1.2]
 # Wind strength as a fraction of the [wind.storm] level (0 calm, 1 a full storm with its
 # gusts), drawn evenly, blowing in a random direction.
 wind_strength = [0.0, 1.0]
+# Mode draws below; a per-mode run sets vary_mode = false through its train config
+# (`randomize_mode: false`) and keeps its mode preset.
+vary_mode = true
 thrust_scale = [1.0, 2.0]
 # Otherwise the tank holds tank_capacity_kg.
 unlimited_air_probability = 0.4

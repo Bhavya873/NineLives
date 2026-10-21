@@ -1,7 +1,7 @@
 // The wind readout (HUD only): a small arrow showing which way the wind blows as seen
 // from the camera, and a label such as "Breeze 6 m/s". It takes the wind as a world
-// vector (the way the air moves, in m/s, +Y up) and the camera's yaw, so the sim can
-// feed it later; until then the wind is zero and the readout stays hidden.
+// vector (the way the air moves, in m/s, +Y up; the sim's `HudField.WindXMS/WindZMS`)
+// and the camera's yaw. With no wind the readout stays hidden.
 
 import { setText } from '../dom.ts';
 

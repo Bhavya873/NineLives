@@ -12,7 +12,7 @@ use nl_sim::car_state::CarState;
 use nl_sim::episode::Episode;
 use nl_sim::obs::{OBS_SPEC, PREV_ACTION_INDEX};
 use nl_sim::randomization::{
-    EpisodeVariation, ObsNoise, add_state_noise, noise_rng, sample_variation,
+    EpisodeVariation, ObsNoise, RandomizationConfig, add_state_noise, noise_rng, sample_variation,
 };
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 
@@ -155,4 +155,22 @@ fn a_bad_randomization_range_is_refused_by_name() {
         error.to_string().contains("unlimited_air_probability"),
         "{error}"
     );
+}
+
+#[test]
+fn keeping_the_mode_keeps_the_preset_and_draws_everything_else_the_same() {
+    let varying = scenarios().randomization;
+    let keeping = RandomizationConfig {
+        vary_mode: false,
+        ..varying
+    };
+
+    let varied = sample_variation(&varying, &vehicle(), realistic(), 9);
+    let kept = sample_variation(&keeping, &vehicle(), realistic(), 9);
+
+    assert_eq!(kept.mode, realistic());
+    assert_ne!(varied.mode, realistic());
+    assert_eq!(kept.vehicle, varied.vehicle);
+    assert_eq!(kept.ground_friction, varied.ground_friction);
+    assert_eq!(kept.wind, varied.wind);
 }

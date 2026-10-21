@@ -72,6 +72,8 @@ class TrainConfig:
     # How often each unlocked stage comes up.
     stage_weights: dict[str, float]
     randomize: bool
+    # False keeps `mode`'s preset under randomization: a policy for one mode (round 7).
+    randomize_mode: bool
     total_steps: int
     ppo: PpoSettings
     clip_obs: float
@@ -110,6 +112,7 @@ def load_train_config(path: Path) -> TrainConfig:
                 for stage, weight in raw["curriculum"]["stage_weights"].items()
             },
             randomize=strict_bool("randomize", raw["randomize"]),
+            randomize_mode=strict_bool("randomize_mode", raw.get("randomize_mode", True)),
             total_steps=int(raw["total_steps"]),
             ppo=read_ppo(raw["ppo"]),
             clip_obs=float(raw["normalize"]["clip_obs"]),

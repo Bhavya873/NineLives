@@ -4,7 +4,10 @@
 // about a second, and it fades back over 1.5 s once g drops. A plain HTML layer above
 // the canvas; the maths is pure so tests can run it without a browser.
 
-/** Below this load (in g) the screen stays clear. */
+/**
+ * Below this load (in g) the screen stays clear. A HUD-only look number; it matches the
+ * reward's `shape.g_soft_limit` in reward.toml (owner: soft limit about 3 g).
+ */
 export const BLACKOUT_THRESHOLD_G = 3;
 /** Above the threshold, each extra g adds this much darkness at once (6 g: 0.75). */
 const DARKNESS_PER_EXTRA_G = 0.25;

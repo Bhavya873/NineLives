@@ -27,6 +27,10 @@ struct SimConfigJson {
     /// Domain randomization (SPEC §9.8) for `BatchedSim` episodes and, with `eval --dr`,
     /// for `run_eval`.
     randomize: bool,
+    /// With `randomize`, also draw the mode each episode; false keeps `mode`'s preset,
+    /// for a policy trained for one mode. Without it, true.
+    #[serde(default = "always")]
+    randomize_mode: bool,
     /// configs/pieces.json (Stage D's course pieces); without it the built-in copy.
     #[serde(default)]
     pieces_json: Option<String>,
@@ -34,6 +38,11 @@ struct SimConfigJson {
     /// throttle as usual.
     #[serde(default)]
     residual: Option<ResidualJson>,
+}
+
+/// Serde default for `randomize_mode`.
+fn always() -> bool {
+    true
 }
 
 /// `residual` in the config JSON: which controller the policy's action is added to and
@@ -79,6 +88,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
             .with_pieces_json(pieces_json)
             .map_err(as_message)?;
     }
+    scenarios.randomization.vary_mode = fields.randomize_mode;
     let reward = RewardConfig::from_toml_str(&fields.reward_toml).map_err(as_message)?;
     let mode = modes.by_name(&fields.mode).ok_or_else(|| {
         format!(

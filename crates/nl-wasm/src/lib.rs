@@ -264,11 +264,6 @@ impl Game {
         Ok(())
     }
 
-    /// The wind now, mean plus gust, in world coordinates: [x, y, z] in m/s.
-    pub fn wind_m_s(&self) -> Vec<f32> {
-        self.world.wind_m_s().to_vec()
-    }
-
     /// Chooses what fires the thrusters by name: "off", "pd", "ai" or "manual". Throws
     /// on any other name, or on "ai" before a policy is loaded (`load_policy`). It takes
     /// over at the next control step.

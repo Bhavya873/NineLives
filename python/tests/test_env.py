@@ -148,3 +148,18 @@ def test_the_pieces_json_comes_from_the_config_and_a_broken_one_is_refused():
 
     with pytest.raises(ValueError, match="pieces.json"):
         BatchedSim(1, json.dumps(config), 0)
+
+
+def test_a_per_mode_run_keeps_its_mode_while_everything_else_is_randomized():
+    names = [row["name"] for row in obs_spec()]
+    thrust, unlimited = names.index("thrust_scale"), names.index("unlimited_air")
+    seeds = np.arange(32, dtype=np.uint64)
+    kept = BatchedSim(32, load_sim_config("arcade", randomize=True, randomize_mode=False), 0)
+    varied = BatchedSim(32, load_sim_config("arcade", randomize=True), 0)
+
+    kept_obs = kept.reset(seeds)
+    varied_obs = varied.reset(seeds)
+
+    assert np.all(kept_obs[:, thrust] == 2.0)
+    assert np.all(kept_obs[:, unlimited] == 1.0)
+    assert len(np.unique(varied_obs[:, thrust])) > 1

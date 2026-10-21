@@ -209,6 +209,7 @@ def train(argv: list[str] | None = None) -> RunState:
         config.randomize,
         config.reward_overrides,
         residual_json(config),
+        config.randomize_mode,
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)

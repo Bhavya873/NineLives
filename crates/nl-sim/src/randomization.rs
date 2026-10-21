@@ -40,6 +40,9 @@ pub struct RandomizationConfig {
     pub ground_friction: [f32; 2],
     /// Wind strength as a fraction of the Storm level (0 calm, 1 Storm), [low, high].
     pub wind_strength: [f32; 2],
+    /// Draw the mode (thrust scale, air, tank) each episode; false keeps the run's mode
+    /// preset, for a policy trained for one mode (round 7).
+    pub vary_mode: bool,
     /// The mode's thrust scale.
     pub thrust_scale: [f32; 2],
     /// Chance of an episode with unlimited air.
@@ -139,9 +142,12 @@ pub fn sample_variation(
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     rng.set_stream(VARIATION_RNG_STREAM);
     let [fewest_steps, most_steps] = config.latency_control_steps;
+    let varied_vehicle = vary_vehicle(config, vehicle, &mut rng);
+    // Drawn even when the mode is kept, so every later draw is the same either way.
+    let varied_mode = vary_mode(config, mode, &mut rng);
     EpisodeVariation {
-        vehicle: vary_vehicle(config, vehicle, &mut rng),
-        mode: vary_mode(config, mode, &mut rng),
+        vehicle: varied_vehicle,
+        mode: if config.vary_mode { varied_mode } else { mode },
         ground_friction: draw(&mut rng, config.ground_friction),
         latency_control_steps: rng.random_range(fewest_steps..=most_steps) as usize,
         obs_noise: config.noise,

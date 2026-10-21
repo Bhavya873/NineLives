@@ -59,8 +59,9 @@ class NineLivesVecEnv(VecEnv):
         randomize: bool = False,
         reward_overrides: dict[str, float] | None = None,
         residual: dict[str, object] | None = None,
+        randomize_mode: bool = True,
     ) -> None:
-        config = load_sim_config(mode, stage, randomize, reward_overrides, residual)
+        config = load_sim_config(mode, stage, randomize, reward_overrides, residual, randomize_mode)
         self.sim = BatchedSim(n_envs, config, seed)
         super().__init__(n_envs, observation_space(), action_space(self.sim.action_size()))
 
