@@ -22,6 +22,7 @@ use nl_sim::input::{
 use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
 use nl_sim::vehicle_config::VehicleConfig;
+use nl_sim::wind::WindLevel;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
 use wasm_bindgen::prelude::*;
 
@@ -144,6 +145,8 @@ pub struct Game {
     /// Starts for the drop test: the repo's scenarios.toml, built in (the game passes no
     /// scenarios of its own).
     scenarios: ScenariosConfig,
+    /// The wind setting (SPEC §7.2), kept so a rebuilt world (`load_course`) gets it too.
+    wind_level: WindLevel,
     /// Buttons pressed on any tick since the last control step, so a quick tap of a
     /// nozzle key between two control steps still reaches the controller.
     buttons_since_control_step: u16,
@@ -227,6 +230,7 @@ impl Game {
             controller: ControllerKind::Pd(Box::new(choices.pd.clone())),
             choices,
             scenarios: ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?,
+            wind_level: WindLevel::Off,
             buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
@@ -237,6 +241,25 @@ impl Game {
     pub fn set_mode(&mut self, mode: &str) -> Result<(), JsError> {
         self.world.set_mode(self.mode_params(mode)?);
         Ok(())
+    }
+
+    /// Sets the wind: "off", "breeze" or "storm" (SPEC §7.2, levels from `[wind]` in
+    /// scenarios.toml), blowing in a direction drawn from the game's seed, with gusts.
+    /// Throws on any other name. Loading a course keeps the setting.
+    pub fn set_wind_level(&mut self, level: &str) -> Result<(), JsError> {
+        let level = WindLevel::from_name(level).ok_or_else(|| {
+            JsError::new(&format!(
+                "set_wind_level: unknown level '{level}'; use off, breeze or storm"
+            ))
+        })?;
+        self.wind_level = level;
+        self.apply_wind_level();
+        Ok(())
+    }
+
+    /// The wind now, mean plus gust, in world coordinates: [x, y, z] in m/s.
+    pub fn wind_m_s(&self) -> Vec<f32> {
+        self.world.wind_m_s().to_vec()
     }
 
     /// Chooses what fires the thrusters by name: "off", "pd", "ai" or "manual". Throws

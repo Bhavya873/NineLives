@@ -20,6 +20,7 @@ use crate::driver_bot::DriverBotConfig;
 use crate::driving_stages::{ChaosStageConfig, CourseStageConfig, HopStageConfig};
 use crate::obs::MAX_THRUST_SCALE;
 use crate::randomization::RandomizationConfig;
+use crate::wind::WindConfig;
 use crate::world::{PlaceCarError, Pose, World};
 
 /// The ChaCha8 stream scenario draws use (Chaos uses the default stream 0).
@@ -150,6 +151,8 @@ pub struct ScenariosConfig {
     pub driver_bot: DriverBotConfig,
     /// The `[randomization]` section (SPEC §9.8).
     pub randomization: RandomizationConfig,
+    /// The `[wind]` section: the game's wind levels (SPEC §7.2).
+    pub wind: WindConfig,
     /// The Stage D course pieces (pieces.json), set with `with_pieces_json`; None uses
     /// the built-in copy. Not part of scenarios.toml.
     #[serde(skip)]
@@ -194,6 +197,14 @@ pub enum ScenariosConfigError {
         field: &'static str,
         rule: &'static str,
     },
+
+    #[error(
+        "scenarios.toml: `wind.{level}.{field}` must be a finite number, zero or more (the time constant above zero)"
+    )]
+    BadWind {
+        level: &'static str,
+        field: &'static str,
+    },
 }
 
 impl ScenariosConfig {
@@ -204,6 +215,7 @@ impl ScenariosConfig {
         config.check_numbers()?;
         config.check_curriculum()?;
         config.check_randomization()?;
+        config.check_wind()?;
         config.check_driving_stages()?;
         Ok(config)
     }
@@ -313,6 +325,28 @@ impl ScenariosConfig {
                 "between 0 and 1",
             ));
         }
+        let [weakest, strongest] = ranges.wind_strength;
+        if !(0.0 <= weakest && weakest <= strongest && strongest <= 1.0) {
+            return Err(bad_randomization(
+                "wind_strength",
+                "[low, high] with 0 ≤ low ≤ high ≤ 1 (1 is the Storm level)",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Every wind level's speeds must be zero or more and its time constant above zero.
+    fn check_wind(&self) -> Result<(), ScenariosConfigError> {
+        let levels = [
+            ("off", self.wind.off),
+            ("breeze", self.wind.breeze),
+            ("storm", self.wind.storm),
+        ];
+        for (level, settings) in levels {
+            if let Some(field) = settings.first_bad_field() {
+                return Err(ScenariosConfigError::BadWind { level, field });
+            }
+        }
         Ok(())
     }
 
@@ -420,7 +454,6 @@ impl ScenariosConfig {
                 "randomization.center_of_mass_offset_m",
                 self.randomization.center_of_mass_offset_m,
             ),
-            ("randomization.wind_m_s", self.randomization.wind_m_s),
             (
                 "randomization.noise.gravity_dir",
                 self.randomization.noise.gravity_dir,

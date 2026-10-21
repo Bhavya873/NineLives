@@ -35,4 +35,5 @@ pub mod tank;
 pub mod thrusters;
 pub mod training;
 pub mod vehicle_config;
+pub mod wind;
 pub mod world;
