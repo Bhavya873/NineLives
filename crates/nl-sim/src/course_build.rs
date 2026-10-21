@@ -27,6 +27,9 @@ const BUMP_LENGTH_M: f32 = 5.0;
 const HULL_BASE_DEPTH_M: f32 = 0.2;
 /// Ramps are built from this many convex segments of rising slope.
 const RAMP_SEGMENTS: usize = 6;
+/// A corkscrew's edges are sampled at this many steps along its length, so its twist
+/// looks and drives smooth.
+const CORKSCREW_SAMPLES: usize = 16;
 /// Walls are this thick along the course.
 pub const WALL_THICKNESS_M: f32 = 1.0;
 /// A wall's jump ramp: this long and steep, ending this far before the wall. At 30°
@@ -233,6 +236,28 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             };
             at(*pos, *yaw).kicker(*length, outer_z, *angle_deg)
         }
+        PieceSpec::Corkscrew {
+            pos,
+            yaw,
+            length,
+            width,
+            angle_deg,
+            bank_deg,
+            side,
+        } => {
+            // Left is −Z (SPEC §4): the raised edge is on that side of the lane.
+            let raised_side_z = match side {
+                Side::Left => -1.0,
+                Side::Right => 1.0,
+            };
+            let twist = CorkscrewTwist {
+                length: *length,
+                width: *width,
+                lip_angle_deg: *angle_deg,
+                bank_deg: *bank_deg,
+            };
+            at(*pos, *yaw).corkscrew(&twist, raised_side_z)
+        }
         PieceSpec::Gap { .. } => Vec::new(),
         PieceSpec::CarRow {
             pos,
@@ -400,6 +425,42 @@ fn ramp_profile(length: f32, lip_angle_deg: f32) -> Vec<(f32, f32)> {
     profile
 }
 
+/// A side profile: (distance along the piece, height) points, in m.
+type SideProfile = Vec<(f32, f32)>;
+
+/// A corkscrew's shape: `length` along the piece, `width` across, its low edge rising
+/// to `lip_angle_deg` and its surface banked up to `bank_deg` at the lip.
+struct CorkscrewTwist {
+    length: f32,
+    width: f32,
+    lip_angle_deg: f32,
+    bank_deg: f32,
+}
+
+impl CorkscrewTwist {
+    /// The two edges' side profiles as (distance along, height) points, in m: the low
+    /// edge, then the raised edge. Both start flat at the floor. The low edge curves up
+    /// to `lip_angle_deg` (h = L·tan(angle)·s²/2 with s = x/L, so its slope grows evenly
+    /// from 0), and the bank grows as bank·s², so the surface twists smoothly from flat
+    /// at the foot to steepest at the lip, and the raised edge sits width·tan(bank)
+    /// above the low edge.
+    fn edge_profiles(&self) -> (SideProfile, SideProfile) {
+        let lip_slope = libm::tanf(self.lip_angle_deg.to_radians());
+        let mut low_edge = Vec::new();
+        let mut raised_edge = Vec::new();
+        for sample in 0..=CORKSCREW_SAMPLES {
+            let progress = sample as f32 / CORKSCREW_SAMPLES as f32;
+            let x = progress * self.length;
+            let low_m = self.length * lip_slope * progress * progress / 2.0;
+            let bank_rad = (self.bank_deg * progress * progress).to_radians();
+            let raised_m = low_m + self.width * libm::tanf(bank_rad);
+            low_edge.push((x, low_m));
+            raised_edge.push((x, raised_m));
+        }
+        (low_edge, raised_edge)
+    }
+}
+
 /// A piece's frame: its start point and its heading (yaw about +Y).
 struct PieceFrame {
     index: usize,
@@ -444,6 +505,17 @@ impl PieceFrame {
         let centre_line = profile_section(&profile, 0.0, 0.0, 0.0);
         let outer = profile_section(&profile, 0.0, outer_z, 1.0);
         vec![self.mesh(Surface::Ramp, loft(&centre_line, &outer))]
+    }
+
+    /// A corkscrew centred on the lane (see `CorkscrewTwist`), its raised edge on the
+    /// side of `raised_side_z` (−1 left, +1 right): one smooth mesh lofted across the
+    /// lane between the low edge and the raised edge.
+    fn corkscrew(&self, twist: &CorkscrewTwist, raised_side_z: f32) -> Vec<CourseShape> {
+        let (low_profile, raised_profile) = twist.edge_profiles();
+        let half_width = twist.width / 2.0;
+        let low_edge = profile_section(&low_profile, 0.0, -raised_side_z * half_width, 1.0);
+        let raised_edge = profile_section(&raised_profile, 0.0, raised_side_z * half_width, 1.0);
+        vec![self.mesh(Surface::Ramp, loft(&low_edge, &raised_edge))]
     }
 
     /// A flat non-solid marking centred on the lane, `length` long from the piece start

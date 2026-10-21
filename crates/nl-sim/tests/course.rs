@@ -292,6 +292,32 @@ fn a_left_kicker_sits_on_the_left_minus_z_side() {
 }
 
 #[test]
+fn a_right_corkscrew_is_raised_on_the_right_plus_z_edge_and_highest_at_its_lip() {
+    let shapes = piece_shapes(
+        r#"{"type": "corkscrew", "pos": [40, 0, 0], "length": 15, "width": 4, "angle_deg": 15, "bank_deg": 45, "side": "right"}"#,
+    );
+
+    let top = highest_point(&all_world_points(&shapes));
+    // The raised edge is the right (+Z) one, 2 m from the centre line, at the lip
+    // (x = 55): about 15 · tan 15° / 2 ≈ 2 m plus 4 · tan 45° = 4 m above the floor.
+    assert!((top[2] - 2.0).abs() < 1e-3, "z = {}", top[2]);
+    assert!((top[0] - 55.0).abs() < 1e-3, "x = {}", top[0]);
+    assert!((top[1] - 6.0).abs() < 0.1, "y = {}", top[1]);
+}
+
+#[test]
+fn a_corkscrew_banked_past_eighty_degrees_is_refused_by_name() {
+    let text = course_with(
+        r#"{"type": "corkscrew", "pos": [40, 0, 0], "length": 15, "width": 4, "angle_deg": 15, "bank_deg": 85, "side": "left"}"#,
+    );
+
+    let message = parse(&text).unwrap_err().to_string();
+
+    assert!(message.contains("piece 0 'corkscrew'"), "{message}");
+    assert!(message.contains("bank_deg"), "{message}");
+}
+
+#[test]
 fn a_car_row_has_one_box_per_car_along_the_course() {
     let shapes =
         piece_shapes(r#"{"type": "car_row", "pos": [40, 0, 0], "count": 5, "height": 1.4}"#);

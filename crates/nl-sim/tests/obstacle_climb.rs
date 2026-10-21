@@ -115,3 +115,47 @@ fn a_car_driven_across_a_halfpipe_rides_up_past_the_top_of_the_wall() {
         }
     }
 }
+
+/// The largest tilt from upright, in degrees, of a full-throttle run at `speed_m_s` from
+/// x = −10 along +X over `piece`, for four seconds or until the car crashes.
+fn peak_tilt_deg(piece: &str, speed_m_s: f32) -> f32 {
+    let course = course_with(piece);
+    let mut world =
+        World::new_on_course(&vehicle(), realistic(), &course, DEFAULT_GROUND_FRICTION, 0);
+    world
+        .place_car([-10.0, 0.62, 0.0], LEVEL, [speed_m_s, 0.0, 0.0], [0.0; 3])
+        .unwrap();
+    let full_throttle = InputFrame {
+        throttle: 127,
+        ..InputFrame::default()
+    };
+    let mut peak_tilt_rad = 0.0_f32;
+    for _ in 0..STEPS {
+        world.step(full_throttle);
+        peak_tilt_rad = peak_tilt_rad.max(world.tilt_rad());
+        if world.is_crashed() {
+            break;
+        }
+    }
+    peak_tilt_rad.to_degrees()
+}
+
+#[test]
+fn a_car_driven_over_a_corkscrew_is_rolled_past_its_side() {
+    // The owner: "the car doesn't flip upside down in the obstacles". A corkscrew's
+    // twisted lip must roll a car past 90° so the thrusters have something to save.
+    for side in ["left", "right"] {
+        let piece = format!(
+            r#"{{"type": "corkscrew", "pos": [20, 0, 0], "length": 15, "width": 4,
+            "angle_deg": 15, "bank_deg": 45, "side": "{side}"}}"#
+        );
+        for speed_m_s in [15.0, 20.0] {
+            let tilt_deg = peak_tilt_deg(&piece, speed_m_s);
+
+            assert!(
+                tilt_deg > 90.0,
+                "{side} corkscrew at {speed_m_s} m/s: only {tilt_deg:.0}° of tilt"
+            );
+        }
+    }
+}
