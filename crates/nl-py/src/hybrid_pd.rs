@@ -7,6 +7,7 @@ use nl_control::HybridSwitch;
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::Observation;
 use nl_sim::reward::RewardTerms;
+use nl_sim::scenarios::Stage;
 use nl_sim::training::{FinishedEpisode, TrainingEnv};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -23,8 +24,8 @@ struct PdStretch {
     observation: Observation,
     /// The row of the sim episode the AI flew in, if it ended under PD.
     finished: Option<FinishedEpisode>,
-    /// The reward of that episode's last step, if it ended in success.
-    success_terms: Option<RewardTerms>,
+    /// The reward the AI's last landing earned under PD (see `landing_credit`).
+    landing_credit: RewardTerms,
 }
 
 /// PD and the gate for one environment, and whether the AI has flown this sim episode.
@@ -63,10 +64,8 @@ impl HybridPd {
 
     /// One AI control step with `throttle_actions`. The policy's episode ends with the
     /// sim episode, or when the gate hands back to PD, which then flies hidden until the
-    /// next handover. The gate releases a settled car before the sim judges success
-    /// (`save_hold_s` < `success_hold_s`), so if that sim episode then succeeds under PD
-    /// before the AI flies again, the release step earns its success and air-left
-    /// bonuses. A later crash or time limit under PD is not the landing's doing.
+    /// next handover. The release step also earns what the AI's landing earns after it
+    /// (`landing_credit`); a later crash or time limit under PD is not its doing.
     pub fn step(
         &mut self,
         env: &mut TrainingEnv,
@@ -87,10 +86,9 @@ impl HybridPd {
         // Released: the car is settled on its wheels, so the policy's episode is over.
         step.terminated = true;
         let stretch = self.fly_pd(env, seeds)?;
-        if let Some(terms) = stretch.success_terms {
-            step.terms.success += terms.success;
-            step.terms.air_left += terms.air_left;
-        }
+        step.terms.save += stretch.landing_credit.save;
+        step.terms.success += stretch.landing_credit.success;
+        step.terms.air_left += stretch.landing_credit.air_left;
         step.end_episode(outcome.observation, stretch.finished, stretch.observation);
         Ok(step)
     }
@@ -119,16 +117,21 @@ impl HybridPd {
         seeds: &mut ChaCha8Rng,
     ) -> Result<PdStretch, String> {
         let mut finished = None;
-        let mut success_terms = None;
+        let mut landing_credit = RewardTerms::default();
         let mut episodes_without_ai = 0;
         loop {
             let outcome = env
                 .step_throttles(self.switch.pd_throttles())
                 .ok_or(NOT_RESET)?;
+            if self.ai_flew {
+                // Still the AI's sim episode: the gate has not handed over since its landing.
+                landing_credit.save += outcome.terms.save;
+            }
             if let Some(episode) = outcome.finished {
                 if self.ai_flew {
-                    if episode.result.success {
-                        success_terms = Some(outcome.terms);
+                    if success_is_the_landing(episode.stage) {
+                        landing_credit.success += outcome.terms.success;
+                        landing_credit.air_left += outcome.terms.air_left;
                     }
                     finished = Some(episode);
                 } else {
@@ -142,11 +145,21 @@ impl HybridPd {
                 return Ok(PdStretch {
                     observation,
                     finished,
-                    success_terms,
+                    landing_credit,
                 });
             }
         }
     }
+}
+
+/// The landing credit (DECISIONS 2026-10-21): the gate releases a settled car before the
+/// sim confirms the save or judges success, so what the landing earns under hidden PD
+/// goes to the release step. A save under PD is always the AI's landing (any new upset
+/// hands the car back first). Success is the landing itself on Stages A, B and F (land
+/// and hold); on C, D and E it means finishing the course, which PD did, so it is not
+/// credited.
+fn success_is_the_landing(stage: Stage) -> bool {
+    matches!(stage, Stage::A | Stage::B | Stage::F)
 }
 
 /// An error once PD has flown too many episodes in a row without a handover.
