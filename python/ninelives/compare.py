@@ -19,7 +19,7 @@ from pathlib import Path
 from ninelives.sim_config import REPO_ROOT
 
 STAGES = ("A", "B", "C", "D", "E")
-# Compared only when both controllers have files for them (older results lack Stage F).
+# Older results lack these; a missing one shows as a failing row, never silently.
 OPTIONAL_STAGES = ("F",)
 MODES = ("realistic", "arcade")
 # z for a two-sided 95% interval.
@@ -101,16 +101,12 @@ def bar_verdict(stage: str, cell: PairedCell) -> str:
     return "FAIL: below the baseline's interval"
 
 
-def successes_by_seed(path: Path) -> dict[int, bool]:
-    """Each episode's success in an eval file, keyed by seed."""
+def read_report(path: Path) -> tuple[dict[int, bool], float | None]:
+    """An eval file's successes keyed by seed, and its share of episodes past 150° of
+    tilt (None if the file predates it)."""
     report = json.loads(path.read_text())
-    return {row["seed"]: bool(row["success"]) for row in report["episodes"]}
-
-
-def inversion_rate(path: Path) -> float | None:
-    """The eval file's share of episodes past 150° of tilt, or None if it predates it."""
-    report = json.loads(path.read_text())
-    return report.get("summary", {}).get("inversion_rate")
+    successes = {row["seed"]: bool(row["success"]) for row in report["episodes"]}
+    return successes, report.get("summary", {}).get("inversion_rate")
 
 
 def percent_or_dash(rate: float | None) -> str:
@@ -135,18 +131,18 @@ def table_row(
     )
 
 
-def stages_to_compare(results_dir: Path, names: tuple[str, str], suffix: str) -> list[str]:
-    """A–E always; an optional stage only when every file for it is there."""
-    stages = list(STAGES)
+def missing_optional_stages(results_dir: Path, names: tuple[str, str], suffix: str) -> list[str]:
+    """The optional stages some of whose files are missing."""
+    missing = []
     for stage in OPTIONAL_STAGES:
         files = [
             results_dir / f"eval_{name}_{stage}_{mode}{suffix}.json"
             for name in names
             for mode in MODES
         ]
-        if all(path.exists() for path in files):
-            stages.append(stage)
-    return stages
+        if not all(path.exists() for path in files):
+            missing.append(stage)
+    return missing
 
 
 def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") -> list[str]:
@@ -157,16 +153,20 @@ def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") 
         "| McNemar p | inverted | M7 bar |",
         "|---|---|---|---|---|---|---|---|",
     ]
-    for stage in stages_to_compare(results_dir, (baseline, candidate), suffix):
+    missing = missing_optional_stages(results_dir, (baseline, candidate), suffix)
+    for stage in STAGES + OPTIONAL_STAGES:
+        if stage in missing:
+            # A must-beat stage with no results must not pass the bar by being absent.
+            lines.append(f"| {stage} | both | missing eval files | | | | | FAIL: no results |")
+            continue
         for mode in MODES:
             stem = f"_{stage}_{mode}{suffix}.json"
-            baseline_file = results_dir / f"eval_{baseline}{stem}"
-            candidate_file = results_dir / f"eval_{candidate}{stem}"
-            cell = pair_successes(
-                successes_by_seed(baseline_file), successes_by_seed(candidate_file)
+            baseline_wins, baseline_inverted = read_report(results_dir / f"eval_{baseline}{stem}")
+            candidate_wins, candidate_inverted = read_report(
+                results_dir / f"eval_{candidate}{stem}"
             )
-            inverted = (inversion_rate(baseline_file), inversion_rate(candidate_file))
-            lines.append(table_row(stage, mode, cell, inverted))
+            cell = pair_successes(baseline_wins, candidate_wins)
+            lines.append(table_row(stage, mode, cell, (baseline_inverted, candidate_inverted)))
     return lines
 
 

@@ -11,7 +11,12 @@ from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 
-from ninelives.rollout import evaluate_fixed_seeds, evaluate_hybrid, success_and_crash_rates
+from ninelives.rollout import (
+    checkpoint_policy_json,
+    evaluate_fixed_seeds,
+    evaluate_hybrid,
+    success_and_crash_rates,
+)
 from ninelives.run_files import RunState, record_progress, save_checkpoint
 from ninelives.train_config import TrainConfig
 
@@ -77,6 +82,8 @@ class RunCheckpointCallback(BaseCallback):
         self.wall_seconds_before = state.wall_seconds
         every = config.checkpoint_every_steps
         self.next_save = (state.steps // every + 1) * every
+        # A Hybrid run's policy JSON at the current checkpoint (None: not a Hybrid run).
+        self.policy_json: str | None = None
 
     def _on_step(self) -> bool:
         if self.num_timesteps >= self.next_save:
@@ -92,6 +99,9 @@ class RunCheckpointCallback(BaseCallback):
         self.record_progress(self.num_timesteps)
         numbered = self.run_dir / "checkpoints" / str(self.num_timesteps)
         save_checkpoint(numbered, self.model, normalizer)
+        # A Hybrid run scores the exported policy; export it once for every stage's eval.
+        if self.config.controller == "hybrid":
+            self.policy_json = checkpoint_policy_json(self.model, normalizer)
         if self.config.curriculum_promote_on == "eval":
             self.promote_from_eval(normalizer)
         stages = self.state.curriculum.unlocked_stages()
@@ -137,10 +147,9 @@ class RunCheckpointCallback(BaseCallback):
         """`stage` at `level` on fixed seeds from `first_seed` (default: the
         best-checkpoint eval seeds), acting deterministically. A Hybrid run is scored as
         the shipped Hybrid controller, always at the stage's hardest level."""
-        if self.config.controller == "hybrid":
+        if self.policy_json is not None:
             return evaluate_hybrid(
-                self.model,
-                normalizer,
+                self.policy_json,
                 episodes=self.config.eval_episodes,
                 first_seed=self.config.eval_seed if first_seed is None else first_seed,
                 mode=self.config.mode,

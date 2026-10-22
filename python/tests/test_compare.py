@@ -99,12 +99,12 @@ def test_compare_prints_a_row_per_stage_and_mode(tmp_path):
 
     lines = compare(tmp_path, "pd", "hybrid")
 
-    assert len(lines) == 2 + 10
+    assert len(lines) == 2 + 10 + 1
     assert lines[2].startswith("| A | realistic | 50.0%")
     assert lines[2].endswith("| beats |")
 
 
-def test_stage_f_rows_appear_only_when_both_controllers_have_stage_f_files(tmp_path):
+def test_stage_f_fails_the_bar_until_both_controllers_have_stage_f_files(tmp_path):
     write_both(tmp_path, "ABCDE")
     write_eval(tmp_path, "pd", "F", "realistic", [True, False] * 50)
 
@@ -112,7 +112,7 @@ def test_stage_f_rows_appear_only_when_both_controllers_have_stage_f_files(tmp_p
     write_both(tmp_path, "F")
     with_f = compare(tmp_path, "pd", "hybrid")
 
-    assert len(without_f) == 2 + 10
+    assert without_f[-1] == "| F | both | missing eval files | | | | | FAIL: no results |"
     assert len(with_f) == 2 + 12
     assert with_f[-1].startswith("| F | arcade |")
 

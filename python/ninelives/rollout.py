@@ -15,20 +15,24 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
 
 from ninelives.env import finished_episode
+from ninelives.eval import evaluate
 from ninelives.export import export_policy
 from ninelives.sim_config import load_sim_config
-from ninelives_sim import BatchedSim, run_eval
+from ninelives_sim import BatchedSim
+
+
+def checkpoint_policy_json(model: PPO, normalizer: VecNormalize) -> str:
+    """The model exported as the policy JSON the game loads (export it once per checkpoint)."""
+    return json.dumps(export_policy(model, normalizer, "checkpoint-eval"))
 
 
 def evaluate_hybrid(
-    model: PPO, normalizer: VecNormalize, episodes: int, first_seed: int, mode: str, stage: str
+    policy_json: str, episodes: int, first_seed: int, mode: str, stage: str
 ) -> list[dict[str, Any]]:
-    """Scores the policy as it ships (DECISIONS 2026-10-21, D4): exported to policy JSON
-    and run by the Rust Hybrid controller (PD until the gate hands over), the code the
-    game and the eval runner use. Each stage runs at its hardest level; rows in seed order."""
-    policy_json = json.dumps(export_policy(model, normalizer, "checkpoint-eval"))
-    config = load_sim_config(mode, stage)
-    report = json.loads(run_eval("hybrid", config, episodes, first_seed, policy_json))
+    """Scores the policy as it ships (DECISIONS 2026-10-21, D4): run by the Rust Hybrid
+    controller (PD until the gate hands over), the code the game and the eval runner use.
+    Each stage runs at its hardest level; rows in seed order."""
+    report = evaluate("hybrid", stage, mode, episodes, first_seed, policy_json=policy_json)
     return report["episodes"]
 
 
