@@ -21,7 +21,12 @@ import {
   recordTick,
   togglePerfOverlay,
 } from './hud/perf-overlay.ts';
-import { type ControllerName, createTitleScreen, showPicked } from './hud/title-screen.ts';
+import {
+  type ControllerName,
+  createTitleScreen,
+  disableAiPicks,
+  showPicked,
+} from './hud/title-screen.ts';
 import {
   createToasts,
   showNoAirIfNew,
@@ -127,9 +132,23 @@ async function start(): Promise<void> {
     }
     game.set_controller(name);
   };
+  const title = createTitleScreen(requireElement('title-screen'), window, {
+    chooseController,
+    chooseMode: (name) => game.set_mode(name),
+  });
+  // Marks the controller and mode the sim is really using.
+  const showCurrentPicks = () => {
+    const hud = game.hud();
+    const mode = hud[HudField.Mode] === ModeCode.Arcade ? 'arcade' : 'realistic';
+    showPicked(title, controllerName(hud[HudField.Controller] ?? ControllerCode.Off), mode);
+  };
   void loadPolicy(game).then((loaded) => {
     policyLoaded = loaded;
     if (!loaded) {
+      // An AI pick made while loading can't happen: say so instead of leaving it marked.
+      waitingForPolicy = null;
+      disableAiPicks(title);
+      showCurrentPicks();
       return;
     }
     if (waitingForPolicy !== null) {
@@ -138,16 +157,8 @@ async function start(): Promise<void> {
       game.set_controller('hybrid');
     }
   });
-  const title = createTitleScreen(requireElement('title-screen'), window, {
-    chooseController,
-    chooseMode: (name) => game.set_mode(name),
-  });
   // Esc reopens the title screen: show what M and T have changed since.
-  onKeyPress('Escape', () => {
-    const hud = game.hud();
-    const mode = hud[HudField.Mode] === ModeCode.Arcade ? 'arcade' : 'realistic';
-    showPicked(title, controllerName(hud[HudField.Controller] ?? ControllerCode.Off), mode);
-  });
+  onKeyPress('Escape', showCurrentPicks);
   const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
   onKeyPress('F3', () => togglePerfOverlay(perf));
   bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
@@ -299,7 +310,8 @@ async function start(): Promise<void> {
       updateNozzleMap(nozzleDots, throttles);
       updateToasts(toasts, nowMs);
       showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
-      recordFrame(perf, performance.now() - nowMs, performance.now());
+      const frameEndMs = performance.now();
+      recordFrame(perf, frameEndMs - nowMs, frameEndMs);
     },
   });
 

@@ -84,6 +84,16 @@ export function showPicked(title: TitleScreen, controller: string, mode: string)
   }
 }
 
+/** Greys out the AI and PD + AI buttons when the policy failed to load. */
+export function disableAiPicks(title: TitleScreen): void {
+  for (const button of title.controllerButtons) {
+    if (button.dataset.controller === 'ai' || button.dataset.controller === 'hybrid') {
+      button.disabled = true;
+      button.title = 'AI unavailable: the policy did not load';
+    }
+  }
+}
+
 /** Marks `picked` as the pressed button of its group. */
 function markPicked(group: HTMLButtonElement[], picked: HTMLButtonElement): void {
   for (const button of group) {

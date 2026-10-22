@@ -48,6 +48,11 @@
         max-width: calc(100vw - 220px);
         font-size: 14px;
       }
+      #hud-help a {
+        /* The HUD ignores the mouse, but this link must still be clickable. */
+        pointer-events: auto;
+        color: #ffb59e;
+      }
       #hud-status {
         /* SPEC §11.5: mode (and controller, course section later) top-left. */
         left: 16px;
@@ -152,9 +157,9 @@
         height: 22px;
       }
       #hud-perf {
-        /* F3 (src/hud/perf-overlay.ts): fps and ms per tick and per frame. */
+        /* F3 (src/hud/perf-overlay.ts): fps and ms per tick and per frame, under the wind. */
         right: 16px;
-        bottom: 16px;
+        top: 150px;
         font-size: 13px;
       }
       #title-screen {

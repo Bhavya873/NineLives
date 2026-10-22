@@ -56,6 +56,27 @@ test('an AI pick on the title screen holds once the policy has loaded', async ({
   await expect(aiButton).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('an AI pick is undone and greyed out when the policy fails to load', async ({ page }) => {
+  // Hold the policy request until the AI pick is made, then fail it.
+  let failPolicy = () => {};
+  const pickMade = new Promise<void>((resolve) => (failPolicy = resolve));
+  await page.route('**/policy*.json', async (route) => {
+    await pickMade;
+    await route.fulfill({ status: 404, body: '' });
+  });
+  await page.goto('/');
+  await waitForGame(page);
+  const aiButton = page.locator('#title-screen button[data-controller="ai"]');
+  const pdButton = page.locator('#title-screen button[data-controller="pd"]');
+
+  await aiButton.click();
+  failPolicy();
+
+  await expect(aiButton).toBeDisabled({ timeout: SLOW_MACHINE_TIMEOUT_MS });
+  await expect(aiButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(pdButton).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('F3 shows the frame rate and milliseconds per tick', async ({ page }) => {
   await page.goto('/');
   await waitForGame(page);
