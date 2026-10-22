@@ -1,5 +1,5 @@
 //! The Rust eval runner's command line (SPEC §10). Runs Off, PD or the AI policy through
-//! seeded episodes of any stage (A to E) and writes `results/eval_<controller>_<stage>_<mode>.json`.
+//! seeded episodes of any stage (A to F) and writes `results/eval_<controller>_<stage>_<mode>.json`.
 //!
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0

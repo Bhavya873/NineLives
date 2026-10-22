@@ -20,7 +20,7 @@ struct SimConfigJson {
     reward_toml: String,
     /// "realistic" or "arcade".
     mode: String,
-    /// "A" to "E".
+    /// "A" to "F".
     stage: String,
     /// configs/controllers.toml (PD's gains, for `run_eval`).
     controllers_toml: String,
@@ -136,8 +136,8 @@ fn as_message(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
-/// "A" to "E" as a `Stage`, or an error that lists the valid names.
+/// "A" to "F" as a `Stage`, or an error that lists the valid names.
 pub fn parse_stage(name: &str) -> Result<Stage, String> {
     Stage::from_name(name)
-        .ok_or_else(|| format!("stage must be one of \"A\" to \"E\", not {name:?}"))
+        .ok_or_else(|| format!("stage must be one of \"A\" to \"F\", not {name:?}"))
 }

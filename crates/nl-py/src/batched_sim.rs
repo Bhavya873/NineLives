@@ -136,13 +136,13 @@ impl BatchedSim {
         }
     }
 
-    /// How many curriculum levels `stage` ("A" to "E") has; the last is the full stage.
+    /// How many curriculum levels `stage` ("A" to "F") has; the last is the full stage.
     fn level_count(&self, stage: &str) -> PyResult<u32> {
         let stage = parse_stage(stage).map_err(PyValueError::new_err)?;
         Ok(self.scenarios.level_count(stage))
     }
 
-    /// Sets the stage ("A" to "E") and curriculum level for every environment's next
+    /// Sets the stage ("A" to "F") and curriculum level for every environment's next
     /// episode (SPEC §9.9); running episodes finish as they started.
     fn set_stage_and_level(&mut self, stage: &str, level: u32) -> PyResult<()> {
         let stage = parse_stage(stage).map_err(PyValueError::new_err)?;

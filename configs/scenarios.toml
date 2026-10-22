@@ -91,6 +91,25 @@ knock_count = [1, 3]
 # When each knock comes (s after the start).
 knock_time_s = [0.5, 6.0]
 
+[stage_f]
+# Flight (SPEC §9.6): the driver bot rolls the car onto one strong flip plate (a preset
+# from configs/pieces.json, picked by its weight) on a flat straight and keeps driving,
+# so the AI learns to land with the driver's throttle and steer in its observation.
+# Success is Stage A's (wheels down, quiet, held); a landing that turns the car
+# episode.max_landing_heading_error_deg or more from its take-off heading fails it.
+time_limit_s = 10.0
+# Speed the car meets the plate at, which the bot then holds (m/s).
+speed_m_s = [10.0, 28.0]
+# Multiplies the preset's impulses: pieces.json strong_strength (3) turns the car past
+# 120° even with the thrusters on; 2 is a little milder, for variety.
+strength = [2.0, 3.0]
+# The plate sits this far ahead of the start (m): the car reaches it in under 0.5 s.
+plate_ahead_m = 5.0
+# Room either side for a sideways landing (m), as wide as the playground's flip row.
+half_width_m = 40.0
+# Flat floor past the plate (m): a 28 m/s car covers about 250 m in 10 s.
+run_out_m = 300.0
+
 [driver_bot]
 # SPEC §9.7 (training only). Stage D's target speed; Stage C holds its start speed.
 target_speed_m_s = [10.0, 30.0]

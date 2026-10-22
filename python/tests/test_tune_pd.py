@@ -4,17 +4,30 @@ CMA-ES run writes a controllers.toml PD can load."""
 
 import math
 
+import pytest
+
 from ninelives.sim_config import CONFIGS_DIR
 from ninelives.tune_pd import (
     BUMPS_AIR_LIMIT_KG,
+    FINAL_TEST_FIRST_SEED,
     bumps_air_kg,
     main,
     pd_gains,
     scaled_gains,
+    tuning_seeds_start,
     with_pd_gains,
 )
 
 REPO_TOML = (CONFIGS_DIR / "controllers.toml").read_text()
+
+
+def test_tuning_seeds_never_reach_the_final_test_block():
+    # 1000 generations of 1000 episodes end exactly at the block's first seed.
+    last_allowed = tuning_seeds_start(999, 1000)
+
+    assert last_allowed + 1000 <= FINAL_TEST_FIRST_SEED
+    with pytest.raises(ValueError, match="final test block"):
+        tuning_seeds_start(1000, 1000)
 
 
 def test_new_gains_replace_only_the_pd_numbers():

@@ -4,8 +4,10 @@
 
 Both controllers must have been run on the same seeds (`ninelives.eval` or the Rust
 runner). Per stage and mode it prints success with a Wilson 95% interval, the episodes
-only one of them won, an exact McNemar p-value on those, and the bar's verdict: beat the
-baseline on A and E, stay within its interval where it succeeds at least 97% of the time.
+only one of them won, an exact McNemar p-value on those, each one's inversion rate (share
+of episodes past 150° of tilt, when the files carry it), and the bar's verdict: beat the
+baseline on A, E and F, stay within its interval where it succeeds at least 97% of the
+time. Stage F rows appear only when both controllers have Stage F files.
 """
 
 import argparse
@@ -17,11 +19,14 @@ from pathlib import Path
 from ninelives.sim_config import REPO_ROOT
 
 STAGES = ("A", "B", "C", "D", "E")
+# Compared only when both controllers have files for them (older results lack Stage F).
+OPTIONAL_STAGES = ("F",)
 MODES = ("realistic", "arcade")
 # z for a two-sided 95% interval.
 Z_95 = 1.96
-# The candidate must beat the baseline on these stages (SPEC §10 M7 bar).
-MUST_BEAT_STAGES = ("A", "E")
+# The candidate must beat the baseline on these stages (SPEC §10 M7 bar; F is the flight
+# stage, where the AI does all the work).
+MUST_BEAT_STAGES = ("A", "E", "F")
 # Where the baseline succeeds this often, staying within its interval is enough.
 NEAR_PERFECT_SUCCESS = 0.97
 # Significance level for "beats".
@@ -102,17 +107,46 @@ def successes_by_seed(path: Path) -> dict[int, bool]:
     return {row["seed"]: bool(row["success"]) for row in report["episodes"]}
 
 
-def table_row(stage: str, mode: str, cell: PairedCell) -> str:
-    """One markdown table row for a cell."""
+def inversion_rate(path: Path) -> float | None:
+    """The eval file's share of episodes past 150° of tilt, or None if it predates it."""
+    report = json.loads(path.read_text())
+    return report.get("summary", {}).get("inversion_rate")
+
+
+def percent_or_dash(rate: float | None) -> str:
+    """A rate as a percentage, or a dash when unknown."""
+    return "—" if rate is None else f"{rate:.0%}"
+
+
+def table_row(
+    stage: str, mode: str, cell: PairedCell, inverted: tuple[float | None, float | None]
+) -> str:
+    """One markdown table row for a cell; `inverted` is each controller's inversion rate."""
     base_low, base_high = wilson_interval(cell.baseline_wins, cell.episodes)
     cand_low, cand_high = wilson_interval(cell.candidate_wins, cell.episodes)
     p = mcnemar_p(cell.only_baseline, cell.only_candidate)
+    base_inverted, cand_inverted = inverted
     return (
         f"| {stage} | {mode} | {cell.baseline_rate:.1%} [{base_low:.1%}–{base_high:.1%}] "
         f"| {cell.candidate_rate:.1%} [{cand_low:.1%}–{cand_high:.1%}] "
         f"| {cell.only_baseline} / {cell.only_candidate} | {p:.2g} "
+        f"| {percent_or_dash(base_inverted)} / {percent_or_dash(cand_inverted)} "
         f"| {bar_verdict(stage, cell)} |"
     )
+
+
+def stages_to_compare(results_dir: Path, names: tuple[str, str], suffix: str) -> list[str]:
+    """A–E always; an optional stage only when every file for it is there."""
+    stages = list(STAGES)
+    for stage in OPTIONAL_STAGES:
+        files = [
+            results_dir / f"eval_{name}_{stage}_{mode}{suffix}.json"
+            for name in names
+            for mode in MODES
+        ]
+        if all(path.exists() for path in files):
+            stages.append(stage)
+    return stages
 
 
 def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") -> list[str]:
@@ -120,17 +154,19 @@ def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") 
     files in `results_dir` (`suffix` is `_dr` for randomized runs)."""
     lines = [
         f"| Stage | Mode | {baseline} | {candidate} | only {baseline} / only {candidate} "
-        "| McNemar p | M7 bar |",
-        "|---|---|---|---|---|---|---|",
+        "| McNemar p | inverted | M7 bar |",
+        "|---|---|---|---|---|---|---|---|",
     ]
-    for stage in STAGES:
+    for stage in stages_to_compare(results_dir, (baseline, candidate), suffix):
         for mode in MODES:
             stem = f"_{stage}_{mode}{suffix}.json"
+            baseline_file = results_dir / f"eval_{baseline}{stem}"
+            candidate_file = results_dir / f"eval_{candidate}{stem}"
             cell = pair_successes(
-                successes_by_seed(results_dir / f"eval_{baseline}{stem}"),
-                successes_by_seed(results_dir / f"eval_{candidate}{stem}"),
+                successes_by_seed(baseline_file), successes_by_seed(candidate_file)
             )
-            lines.append(table_row(stage, mode, cell))
+            inverted = (inversion_rate(baseline_file), inversion_rate(candidate_file))
+            lines.append(table_row(stage, mode, cell, inverted))
     return lines
 
 

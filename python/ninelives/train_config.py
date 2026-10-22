@@ -9,7 +9,7 @@ import yaml
 # Activation names `ppo.activation` may use (train.py maps them to torch layers).
 ACTIVATION_NAMES = ("tanh", "relu")
 # The scenario stages the sim knows (SPEC §9.6).
-STAGE_NAMES = ("A", "B", "C", "D", "E")
+STAGE_NAMES = ("A", "B", "C", "D", "E", "F")
 
 
 # The final eval (results/) uses seeds 0–999; training's validation seeds must stay above.

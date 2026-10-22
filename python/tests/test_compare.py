@@ -67,21 +67,62 @@ def test_a_near_perfect_baseline_only_needs_the_candidate_inside_its_interval():
     assert bar_verdict("D", drop).startswith("FAIL")
 
 
-def write_eval(folder: Path, name: str, stage: str, mode: str, wins: list[bool]) -> None:
-    """A minimal eval file: one row per seed with its success."""
+def write_eval(
+    folder: Path,
+    name: str,
+    stage: str,
+    mode: str,
+    wins: list[bool],
+    inversion_rate: float | None = None,
+) -> None:
+    """A minimal eval file: one row per seed with its success, and the summary's
+    inversion rate when given."""
     rows = [{"seed": seed, "success": won} for seed, won in enumerate(wins)]
+    report: dict = {"episodes": rows}
+    if inversion_rate is not None:
+        report["summary"] = {"inversion_rate": inversion_rate}
     path = folder / f"eval_{name}_{stage}_{mode}.json"
-    path.write_text(json.dumps({"episodes": rows}))
+    path.write_text(json.dumps(report))
+
+
+def write_both(folder: Path, stages: str, inversion_rates=(None, None)) -> None:
+    """PD winning half and Hybrid every episode, on `stages` in both modes."""
+    pd_inverted, hybrid_inverted = inversion_rates
+    for stage in stages:
+        for mode in ("realistic", "arcade"):
+            write_eval(folder, "pd", stage, mode, [True, False] * 50, pd_inverted)
+            write_eval(folder, "hybrid", stage, mode, [True, True] * 50, hybrid_inverted)
 
 
 def test_compare_prints_a_row_per_stage_and_mode(tmp_path):
-    for stage in "ABCDE":
-        for mode in ("realistic", "arcade"):
-            write_eval(tmp_path, "pd", stage, mode, [True, False] * 50)
-            write_eval(tmp_path, "hybrid", stage, mode, [True, True] * 50)
+    write_both(tmp_path, "ABCDE")
 
     lines = compare(tmp_path, "pd", "hybrid")
 
     assert len(lines) == 2 + 10
     assert lines[2].startswith("| A | realistic | 50.0%")
     assert lines[2].endswith("| beats |")
+
+
+def test_stage_f_rows_appear_only_when_both_controllers_have_stage_f_files(tmp_path):
+    write_both(tmp_path, "ABCDE")
+    write_eval(tmp_path, "pd", "F", "realistic", [True, False] * 50)
+
+    without_f = compare(tmp_path, "pd", "hybrid")
+    write_both(tmp_path, "F")
+    with_f = compare(tmp_path, "pd", "hybrid")
+
+    assert len(without_f) == 2 + 10
+    assert len(with_f) == 2 + 12
+    assert with_f[-1].startswith("| F | arcade |")
+
+
+def test_the_inverted_column_shows_each_controllers_rate_or_a_dash(tmp_path):
+    write_both(tmp_path, "ABCDE", inversion_rates=(0.45, 0.6))
+
+    rows = compare(tmp_path, "pd", "hybrid")
+    write_both(tmp_path, "ABCDE")
+    old_rows = compare(tmp_path, "pd", "hybrid")
+
+    assert "| 45% / 60% |" in rows[2]
+    assert "| — / — |" in old_rows[2]

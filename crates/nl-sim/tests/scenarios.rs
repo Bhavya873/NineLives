@@ -107,7 +107,8 @@ fn stage_names_read_either_case() {
     assert_eq!(Stage::from_name("B"), Some(Stage::B));
     assert_eq!(Stage::from_name("c"), Some(Stage::C));
     assert_eq!(Stage::from_name("E"), Some(Stage::E));
-    assert_eq!(Stage::from_name("F"), None);
+    assert_eq!(Stage::from_name("f"), Some(Stage::F));
+    assert_eq!(Stage::from_name("G"), None);
 }
 
 #[test]
