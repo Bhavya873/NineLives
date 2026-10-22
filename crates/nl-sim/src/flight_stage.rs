@@ -6,8 +6,8 @@
 use serde::Deserialize;
 
 use crate::course::CourseSpec;
-use crate::course_gen::{FlipPlates, FlipPreset, PieceCatalog};
-use crate::driving_stages::{pick_weighted, straight_course, stream_rng};
+use crate::course_gen::{FlipPlates, FlipPreset, PieceCatalog, pick_preset};
+use crate::driving_stages::{straight_course, stream_rng};
 use crate::scenarios::draw;
 
 /// The ChaCha8 stream for Stage F draws.
@@ -49,11 +49,8 @@ pub fn draw_flight_setup(
     seed: u64,
 ) -> FlightSetup {
     let mut rng = stream_rng(seed, FLIGHT_STAGE_RNG_STREAM);
-    let weights: Vec<f32> = plates.presets.iter().map(|preset| preset.weight).collect();
-    let indices: Vec<usize> = (0..plates.presets.len()).collect();
-    let index = pick_weighted(&indices, &weights, &mut rng);
     FlightSetup {
-        preset: plates.presets[index].clone(),
+        preset: pick_preset(&plates.presets, &mut rng).clone(),
         strength: draw(&mut rng, config.strength),
         speed_m_s: draw(&mut rng, config.speed_m_s),
     }

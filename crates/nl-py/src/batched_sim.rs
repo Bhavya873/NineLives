@@ -2,8 +2,7 @@
 //! call from Python. The worlds step in parallel with rayon while the GIL is released;
 //! everything crosses the boundary as numpy arrays (float32 observations, N × 41).
 
-use nl_control::config::ControllersConfig;
-use nl_control::{HybridGateSettings, Pd, RESIDUAL_ACTION_COUNT, ResidualPd};
+use nl_control::{ControllerChoices, HybridSwitch, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::reward::RewardTerms;
@@ -17,7 +16,7 @@ use pyo3::types::PyDict;
 use rayon::prelude::*;
 
 use crate::config::{SimConfig, parse_sim_config, parse_stage};
-use crate::env_slot::{EnvSlot, SlotStep};
+use crate::env_slot::{EnvSlot, SlotControl, SlotStep};
 use crate::hybrid_pd::HybridPd;
 
 /// What `step` returns: observations, rewards, terminated, truncated, info.
@@ -51,8 +50,7 @@ impl BatchedSim {
             ));
         }
         let config = parse_sim_config(config_json).map_err(PyValueError::new_err)?;
-        let residual = residual_pd(&config)?;
-        let hybrid = hybrid_pd(&config)?;
+        let control = slot_control(&config)?;
         let gated = config.residual.is_some_and(|settings| settings.gated);
         let action_size = if gated {
             RESIDUAL_ACTION_COUNT
@@ -67,8 +65,7 @@ impl BatchedSim {
                 config.stage,
                 seed,
                 index as u64,
-                residual.clone(),
-                hybrid.clone(),
+                control.clone(),
             ));
         }
         Ok(BatchedSim {
@@ -226,32 +223,27 @@ impl BatchedSim {
 
 /// PD for the config's car with the config's residual scale, if residual control is on
 /// (one copy per environment, so each keeps its own warm start). Like eval, PD is built
-/// for the configured car and mode, not each episode's randomized one.
-fn residual_pd(config: &SimConfig) -> PyResult<Option<ResidualPd>> {
-    let Some(settings) = config.residual else {
-        return Ok(None);
-    };
-    let controllers = ControllersConfig::from_toml_str(&config.controllers_toml)
-        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
-    let training = &config.training;
-    let pd = Pd::for_vehicle(&training.vehicle, training.mode, &controllers);
-    let residual = ResidualPd::new(pd, settings)
-        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
-    Ok(Some(residual))
-}
-
-/// PD behind the game's Hybrid gate, if the config trains under it (one copy per
-/// environment). PD is built like `residual_pd`'s; the gate reads vehicle.toml `[events]`.
-fn hybrid_pd(config: &SimConfig) -> PyResult<Option<HybridPd>> {
-    if !config.hybrid {
-        return Ok(None);
+/// How each environment applies the policy's action. PD (for residual control or behind
+/// the Hybrid gate) is built as the game and the eval runners build it.
+fn slot_control(config: &SimConfig) -> PyResult<SlotControl> {
+    if config.residual.is_none() && !config.hybrid {
+        return Ok(SlotControl::Direct);
     }
-    let controllers = ControllersConfig::from_toml_str(&config.controllers_toml)
-        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
     let training = &config.training;
-    let pd = Pd::for_vehicle(&training.vehicle, training.mode, &controllers);
-    let settings = HybridGateSettings::for_vehicle(&training.vehicle);
-    Ok(Some(HybridPd::new(pd, settings)))
+    let choices = ControllerChoices::from_configs(
+        &training.vehicle,
+        training.mode,
+        &config.controllers_toml,
+        None,
+    )
+    .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+    let Some(settings) = config.residual else {
+        let switch = HybridSwitch::new(choices.pd, choices.hybrid_gate);
+        return Ok(SlotControl::Hybrid(HybridPd::new(switch)));
+    };
+    let residual = ResidualPd::new(choices.pd, settings)
+        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+    Ok(SlotControl::Residual(residual))
 }
 
 /// Packs the per-environment results into SB3's (obs, reward, terminated, truncated,

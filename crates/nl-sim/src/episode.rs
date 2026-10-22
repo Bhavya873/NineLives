@@ -495,7 +495,7 @@ impl Episode {
         }
     }
 
-    /// PLAN §3.3 on Stages C and D: a judged landing (a Save with a heading error) that
+    /// PLAN §3.3 on every goal but `HoldOnWheels` (Stages C, D and F): a judged landing (a Save with a heading error) that
     /// turned the car `max_landing_heading_error_deg` or more fails the episode.
     fn judge_landing_heading(&mut self, quality: &LandingQuality) {
         if self.stage.goal == Goal::HoldOnWheels {

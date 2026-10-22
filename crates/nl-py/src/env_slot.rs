@@ -1,8 +1,8 @@
 //! One environment inside a `BatchedSim`: a `TrainingEnv`, the generator that draws its
 //! episode seeds, and SPEC §9.1 auto-reset (an episode that ends hands back its last
 //! observation and starts the next episode straight away). With residual control the
-//! slot also runs PD and adds the action to PD's throttles; with Hybrid gating PD flies
-//! hidden until the gate hands over, and each AI stretch is one episode for the policy.
+//! slot also runs PD and adds the action to PD's throttles; with Hybrid gating
+//! (`hybrid_pd.rs`) PD flies hidden until the gate hands over.
 
 use nl_control::{ControlCtx, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
@@ -21,12 +21,19 @@ use crate::hybrid_pd::HybridPd;
 /// ChaCha8 stream 1 of the episode seed, Chaos stream 0).
 const SLOT_SEED_KEY: u64 = 0x6e6c_5f73_6c6f_7473; // "nl_slots" in ASCII
 
-/// Hybrid gating gives up after this many episodes in a row that PD flew alone: the
-/// stage mix almost never upsets the car, so training would only spin.
-const MAX_EPISODES_WITHOUT_AI: u32 = 10_000;
-
 /// Stepping before the first `reset`.
-const NOT_RESET: &str = "BatchedSim: call reset() before step()";
+pub(crate) const NOT_RESET: &str = "BatchedSim: call reset() before step()";
+
+/// How the policy's action reaches the nozzles.
+#[derive(Debug, Clone)]
+pub enum SlotControl {
+    /// The action is the throttles (SPEC §9.3).
+    Direct,
+    /// PD (reset with each episode) plus the scaled action.
+    Residual(ResidualPd),
+    /// PD flies until the game's gate hands over; each AI stretch is an episode.
+    Hybrid(HybridPd),
+}
 
 /// What one environment produced on one step.
 pub struct SlotStep {
@@ -48,35 +55,44 @@ pub struct SlotStep {
     pub finished: Option<FinishedEpisode>,
 }
 
+impl SlotStep {
+    /// The policy's episode ended on this step: `last` was its final observation,
+    /// `finished` the row of a sim episode that ended, `next` the next episode's start.
+    pub fn end_episode(
+        &mut self,
+        last: Observation,
+        finished: Option<FinishedEpisode>,
+        next: Observation,
+    ) {
+        self.terminal_observation = Some(last);
+        self.finished = finished;
+        self.observation = next;
+    }
+}
+
 /// One environment and its seed generator.
 pub struct EnvSlot {
     env: TrainingEnv,
     /// Draws the seed of each episode this slot starts by itself. Every slot uses its
     /// own ChaCha8 stream of the batch seed, so slots never repeat each other.
     seeds: ChaCha8Rng,
-    /// Residual control: PD (reset with each episode) plus the scaled action. None: the
-    /// action alone sets the throttles (SPEC §9.3).
-    residual: Option<ResidualPd>,
-    /// Hybrid gating: PD flies until the gate hands the car to the policy.
-    hybrid: Option<HybridPd>,
+    control: SlotControl,
 }
 
 impl EnvSlot {
-    /// Slot number `index` of a batch started from `batch_seed`; `residual` turns on
-    /// residual control around that PD, `hybrid` turns on Hybrid gating (not both).
+    /// Slot number `index` of a batch started from `batch_seed`, its actions applied
+    /// through `control`.
     pub fn new(
         config: TrainingConfig,
         stage: Stage,
         batch_seed: u64,
         index: u64,
-        residual: Option<ResidualPd>,
-        hybrid: Option<HybridPd>,
+        control: SlotControl,
     ) -> EnvSlot {
         EnvSlot {
             env: TrainingEnv::new(config, stage),
             seeds: slot_seed_stream(batch_seed, index),
-            residual,
-            hybrid,
+            control,
         }
     }
 
@@ -89,124 +105,38 @@ impl EnvSlot {
     /// With Hybrid gating, returns the observation at the gate's first handover (later
     /// episodes come from the stream if PD flies this one alone).
     pub fn reset(&mut self, seed: Option<u64>) -> Result<Observation, String> {
-        let observation = self.start_episode(seed)?;
-        if self.hybrid.is_none() {
-            return Ok(observation);
+        let seed = seed.unwrap_or_else(|| self.seeds.next_u64());
+        match &mut self.control {
+            SlotControl::Direct => {}
+            SlotControl::Residual(residual) => residual.reset(seed),
+            SlotControl::Hybrid(hybrid) => {
+                return hybrid.start(&mut self.env, &mut self.seeds, seed);
+            }
         }
-        let (observation, _) = self.until_handover()?;
-        Ok(observation)
+        start_env(&mut self.env, seed)
     }
 
     /// One control step; an episode that ends here is replaced by a fresh one. The last
     /// action is the residual gate, unused without gated residual control.
     pub fn step(&mut self, action: [f32; RESIDUAL_ACTION_COUNT]) -> Result<SlotStep, String> {
-        if self.hybrid.is_some() {
-            return self.step_hybrid(action);
-        }
-        let outcome = self.step_env(action).ok_or(NOT_RESET)?;
-        let mut step = slot_step(&outcome);
-        if let Some(episode) = outcome.finished {
-            step.terminal_observation = Some(outcome.observation);
-            step.finished = Some(episode);
-            step.observation = self.reset(None)?;
-        }
-        Ok(step)
-    }
-
-    /// Steps the environment with `action`: as the throttles (SPEC §9.3), or with
-    /// residual control as a nudge to what PD makes of the same noisy view the policy
-    /// acted on.
-    fn step_env(&mut self, action: [f32; RESIDUAL_ACTION_COUNT]) -> Option<StepOutcome> {
-        let Some(residual) = &mut self.residual else {
-            return self.env.step(throttle_actions(action));
+        let outcome = match &mut self.control {
+            SlotControl::Direct => self.env.step(throttle_actions(action)),
+            SlotControl::Residual(residual) => {
+                // A nudge to what PD makes of the same noisy view the policy acted on.
+                let ctx = controller_ctx(&self.env);
+                self.env.step_throttles(residual.act(&ctx, action))
+            }
+            SlotControl::Hybrid(hybrid) => {
+                return hybrid.step(&mut self.env, &mut self.seeds, throttle_actions(action));
+            }
         };
-        let ctx = controller_ctx(&self.env);
-        let throttles = residual.act(&ctx, action);
-        self.env.step_throttles(throttles)
-    }
-
-    /// One AI control step under Hybrid gating (the gate gave the AI this step when the
-    /// last call returned). The policy's episode ends with the sim episode, or when the
-    /// gate hands back to PD, which then flies hidden until the next handover.
-    fn step_hybrid(&mut self, action: [f32; RESIDUAL_ACTION_COUNT]) -> Result<SlotStep, String> {
-        let ctx = controller_ctx(&self.env);
-        self.hybrid_pd()?.pd_throttles(&ctx);
-        let outcome = self.env.step(throttle_actions(action)).ok_or(NOT_RESET)?;
+        let outcome = outcome.ok_or(NOT_RESET)?;
         let mut step = slot_step(&outcome);
         if let Some(episode) = outcome.finished {
-            step.terminal_observation = Some(outcome.observation);
-            step.finished = Some(episode);
-            step.observation = self.reset(None)?;
-            return Ok(step);
+            let next = self.reset(None)?;
+            step.end_episode(outcome.observation, Some(episode), next);
         }
-        let (state, _) = self.env.controller_view();
-        if self.hybrid_pd()?.ai_in_control(&state) {
-            return Ok(step);
-        }
-        // Released: the car is settled on its wheels, so the policy's episode is over.
-        step.terminated = true;
-        step.terminal_observation = Some(outcome.observation);
-        let (observation, finished) = self.fly_pd()?;
-        step.observation = observation;
-        step.finished = finished;
         Ok(step)
-    }
-
-    /// Starts the next sim episode from `seed` (or the stream) with fresh controllers.
-    fn start_episode(&mut self, seed: Option<u64>) -> Result<Observation, String> {
-        let seed = seed.unwrap_or_else(|| self.seeds.next_u64());
-        if let Some(residual) = &mut self.residual {
-            residual.reset(seed);
-        }
-        if let Some(hybrid) = &mut self.hybrid {
-            hybrid.reset(seed);
-        }
-        self.env
-            .reset(seed)
-            .map_err(|error| format!("episode seed {seed}: {error}"))
-    }
-
-    /// From a fresh episode: the observation where the gate first gives the AI the car,
-    /// with PD flying (hidden) until then.
-    fn until_handover(&mut self) -> Result<(Observation, Option<FinishedEpisode>), String> {
-        let (state, observation) = self.env.controller_view();
-        if self.hybrid_pd()?.ai_in_control(&state) {
-            return Ok((observation, None));
-        }
-        self.fly_pd()
-    }
-
-    /// PD flies (the gate has just said PD) until the gate hands over, starting new
-    /// episodes from the stream as old ones end. Returns the handover observation and
-    /// the row of an episode the AI flew in that ended under PD, if any.
-    fn fly_pd(&mut self) -> Result<(Observation, Option<FinishedEpisode>), String> {
-        let mut finished = None;
-        let mut episodes_without_ai = 0;
-        loop {
-            let ctx = controller_ctx(&self.env);
-            let throttles = self.hybrid_pd()?.pd_throttles(&ctx);
-            let outcome = self.env.step_throttles(throttles).ok_or(NOT_RESET)?;
-            if let Some(episode) = outcome.finished {
-                if self.hybrid_pd()?.ai_flew() {
-                    finished = Some(episode);
-                } else {
-                    episodes_without_ai += 1;
-                    check_ai_gets_flights(episodes_without_ai)?;
-                }
-                self.start_episode(None)?;
-            }
-            let (state, observation) = self.env.controller_view();
-            if self.hybrid_pd()?.ai_in_control(&state) {
-                return Ok((observation, finished));
-            }
-        }
-    }
-
-    /// The Hybrid PD; only called with gating on.
-    fn hybrid_pd(&mut self) -> Result<&mut HybridPd, String> {
-        self.hybrid
-            .as_mut()
-            .ok_or_else(|| "BatchedSim: Hybrid gating is off".to_string())
     }
 
     /// The stage and curriculum level for the episodes this slot starts next.
@@ -220,9 +150,15 @@ impl EnvSlot {
     }
 }
 
+/// Starts `env`'s episode from `seed`; its first observation.
+pub(crate) fn start_env(env: &mut TrainingEnv, seed: u64) -> Result<Observation, String> {
+    env.reset(seed)
+        .map_err(|error| format!("episode seed {seed}: {error}"))
+}
+
 /// What a controller sees of `env` now: the noisy state and observation the policy
 /// acted on, with no driver input (as in eval).
-fn controller_ctx(env: &TrainingEnv) -> ControlCtx {
+pub(crate) fn controller_ctx(env: &TrainingEnv) -> ControlCtx {
     let (state, observation) = env.controller_view();
     ControlCtx {
         input: InputFrame::default(),
@@ -232,7 +168,7 @@ fn controller_ctx(env: &TrainingEnv) -> ControlCtx {
 }
 
 /// A step's result before any episode bookkeeping.
-fn slot_step(outcome: &StepOutcome) -> SlotStep {
+pub(crate) fn slot_step(outcome: &StepOutcome) -> SlotStep {
     SlotStep {
         observation: outcome.observation,
         terms: outcome.terms,
@@ -248,18 +184,6 @@ fn throttle_actions(action: [f32; RESIDUAL_ACTION_COUNT]) -> [f32; NOZZLE_COUNT]
     let mut throttle_actions = [0.0; NOZZLE_COUNT];
     throttle_actions.copy_from_slice(&action[..NOZZLE_COUNT]);
     throttle_actions
-}
-
-/// An error once PD has flown too many episodes in a row without a handover.
-fn check_ai_gets_flights(episodes_without_ai: u32) -> Result<(), String> {
-    if episodes_without_ai < MAX_EPISODES_WITHOUT_AI {
-        return Ok(());
-    }
-    Err(format!(
-        "BatchedSim: Hybrid gating ran {episodes_without_ai} episodes in a row without \
-         the gate handing the car to the AI; add a stage that upsets the car (A, B, E or F) \
-         at a level that tips it past the gate's angle"
-    ))
 }
 
 /// The generator of slot `index`'s episode seeds: its own ChaCha8 stream of the keyed

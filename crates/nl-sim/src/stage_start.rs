@@ -168,13 +168,13 @@ pub(crate) fn begin_stage(
     course: Option<&CourseSpec>,
     seed: u64,
 ) -> Result<StageStart, PlaceCarError> {
-    let mut start = match (plan.base, &plan.hop) {
-        (Stage::F, _) => begin_flight(world, variation, scenarios, plan, course, seed)?,
-        (Stage::A | Stage::B, _) => {
+    let mut start = match (plan.base, &plan.hop, &plan.flight) {
+        (_, _, Some(flight)) => begin_flight(world, variation, scenarios, flight, course, seed)?,
+        (Stage::A | Stage::B, _, _) => {
             start_episode(world, plan.base, scenarios, seed)?;
             no_driver(Goal::HoldOnWheels)
         }
-        (_, Some((setup, profile))) => {
+        (_, Some((setup, profile)), _) => {
             begin_hop(world, variation, scenarios, setup, profile, course, seed)?
         }
         _ => begin_course(world, variation, scenarios, plan, course, seed)?,
@@ -260,19 +260,17 @@ fn begin_flight(
     world: &mut World,
     variation: &EpisodeVariation,
     scenarios: &ScenariosConfig,
-    plan: &StagePlan,
+    setup: &FlightSetup,
     course: Option<&CourseSpec>,
     seed: u64,
 ) -> Result<StageStart, PlaceCarError> {
-    let speed_m_s = plan.flight.as_ref().map_or(0.0, |setup| setup.speed_m_s);
     let centerline = course.map_or(Centerline::along_x(), Centerline::of_course);
-    roll_forward(world, speed_m_s)?;
-    let bot_config = scenarios.driver_bot;
+    roll_forward(world, setup.speed_m_s)?;
     let bot = DriverBot::new(
-        bot_config,
+        scenarios.driver_bot,
         &variation.vehicle,
         centerline,
-        speed_m_s,
+        setup.speed_m_s,
         &[],
         seed,
     );
