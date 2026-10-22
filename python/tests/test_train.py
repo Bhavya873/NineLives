@@ -458,3 +458,13 @@ def test_keep_curriculum_carries_over_the_checkpoints_unlocked_stages(tmp_path):
     result = train([*args, "--init-from", str(source), "--keep-curriculum"])
 
     assert result.curriculum.unlocked == 2
+
+
+def test_the_shipped_flight_config_trains_under_the_gate_from_the_hardest_level():
+    from ninelives.train_config import load_train_config
+
+    config = load_train_config(CONFIGS_DIR / "train" / "flight.yaml")
+
+    assert config.controller == "hybrid"
+    assert config.curriculum_start_at_hardest
+    assert "F" in config.stages
