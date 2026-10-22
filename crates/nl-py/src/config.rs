@@ -38,6 +38,10 @@ struct SimConfigJson {
     /// throttle as usual.
     #[serde(default)]
     residual: Option<ResidualJson>,
+    /// "hybrid": `BatchedSim` trains under the game's Hybrid gate (PD flies until the gate
+    /// hands over; each AI stretch is one episode). Without it, the policy flies always.
+    #[serde(default)]
+    controller: Option<String>,
 }
 
 /// Serde default for `randomize_mode`.
@@ -73,6 +77,8 @@ pub struct SimConfig {
     /// Residual control: each env's throttles are PD's plus the action, applied per these
     /// settings. None: the action alone sets the throttles.
     pub residual: Option<ResidualSettings>,
+    /// Train under the Hybrid gate (config `"controller": "hybrid"`).
+    pub hybrid: bool,
 }
 
 /// Parses the config JSON. The error says which part is wrong.
@@ -101,6 +107,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         None => None,
         Some(residual) => Some(parse_residual(residual)?),
     };
+    let hybrid = parse_hybrid(fields.controller.as_deref(), residual.is_some())?;
     Ok(SimConfig {
         training: TrainingConfig {
             vehicle,
@@ -112,6 +119,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         stage,
         controllers_toml: fields.controllers_toml,
         residual,
+        hybrid,
     })
 }
 
@@ -129,6 +137,21 @@ fn parse_residual(residual: &ResidualJson) -> Result<ResidualSettings, String> {
         force_scaled: residual.force_scaled,
         gated: residual.gated,
     })
+}
+
+/// True for `"controller": "hybrid"`; refuses any other name, and Hybrid gating together
+/// with residual control (the gate hands the policy the whole car, not a nudge).
+fn parse_hybrid(controller: Option<&str>, with_residual: bool) -> Result<bool, String> {
+    match controller {
+        None => Ok(false),
+        Some("hybrid") if with_residual => {
+            Err("sim config JSON: \"controller\": \"hybrid\" cannot be used with residual".into())
+        }
+        Some("hybrid") => Ok(true),
+        Some(other) => Err(format!(
+            "sim config JSON: controller must be \"hybrid\" (or left out), not {other:?}"
+        )),
+    }
 }
 
 /// A config error as the message Python shows (each names its file and field).

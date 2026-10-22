@@ -3,7 +3,7 @@
 //! everything crosses the boundary as numpy arrays (float32 observations, N × 41).
 
 use nl_control::config::ControllersConfig;
-use nl_control::{Pd, RESIDUAL_ACTION_COUNT, ResidualPd};
+use nl_control::{HybridGateSettings, Pd, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::reward::RewardTerms;
@@ -18,6 +18,7 @@ use rayon::prelude::*;
 
 use crate::config::{SimConfig, parse_sim_config, parse_stage};
 use crate::env_slot::{EnvSlot, SlotStep};
+use crate::hybrid_pd::HybridPd;
 
 /// What `step` returns: observations, rewards, terminated, truncated, info.
 type StepReturn<'py> = (
@@ -51,6 +52,7 @@ impl BatchedSim {
         }
         let config = parse_sim_config(config_json).map_err(PyValueError::new_err)?;
         let residual = residual_pd(&config)?;
+        let hybrid = hybrid_pd(&config)?;
         let gated = config.residual.is_some_and(|settings| settings.gated);
         let action_size = if gated {
             RESIDUAL_ACTION_COUNT
@@ -60,13 +62,13 @@ impl BatchedSim {
         let mut slots = Vec::with_capacity(n_envs);
         for index in 0..n_envs {
             let training = config.training.clone();
-            let slot_residual = residual.clone();
             slots.push(EnvSlot::new(
                 training,
                 config.stage,
                 seed,
                 index as u64,
-                slot_residual,
+                residual.clone(),
+                hybrid.clone(),
             ));
         }
         Ok(BatchedSim {
@@ -238,6 +240,20 @@ fn residual_pd(config: &SimConfig) -> PyResult<Option<ResidualPd>> {
     Ok(Some(residual))
 }
 
+/// PD behind the game's Hybrid gate, if the config trains under it (one copy per
+/// environment). PD is built like `residual_pd`'s; the gate reads vehicle.toml `[events]`.
+fn hybrid_pd(config: &SimConfig) -> PyResult<Option<HybridPd>> {
+    if !config.hybrid {
+        return Ok(None);
+    }
+    let controllers = ControllersConfig::from_toml_str(&config.controllers_toml)
+        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+    let training = &config.training;
+    let pd = Pd::for_vehicle(&training.vehicle, training.mode, &controllers);
+    let settings = HybridGateSettings::for_vehicle(&training.vehicle);
+    Ok(Some(HybridPd::new(pd, settings)))
+}
+
 /// Packs the per-environment results into SB3's (obs, reward, terminated, truncated,
 /// info) shape.
 fn step_return<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<StepReturn<'py>> {
@@ -261,10 +277,12 @@ fn step_return<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<StepReturn<
 }
 
 /// SPEC §9.1 `info`, one row per environment:
-/// - `done`: the row's episode ended this step (bool);
+/// - `done`: the row's episode (for the policy) ended this step (bool);
 /// - `terminal_obs`: that episode's last observation (N × 41; zeros where not done);
-/// - `episode`: that episode's row as a JSON object string (`FinishedEpisode`: the
-///   eval `EpisodeResult` fields plus `stage`, `level`, `control_steps`), else None;
+/// - `episode`: the row of a sim episode that ended as a JSON object string
+///   (`FinishedEpisode`: the eval `EpisodeResult` fields plus `stage`, `level`,
+///   `control_steps`), else None. Without Hybrid gating it comes exactly with `done`;
+///   with gating an episode can end under PD after the policy's last stretch;
 /// - `reward_terms`: this step's reward per term (N × `reward_term_names().len()`, in that order).
 fn info_dict<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<Bound<'py, PyDict>> {
     let count = steps.len();
@@ -272,9 +290,11 @@ fn info_dict<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<Bound<'py, Py
     let mut terminal_obs = vec![[0.0; OBS_DIM]; count];
     let mut episodes: Vec<Option<String>> = vec![None; count];
     for (row, step) in steps.iter().enumerate() {
-        if let Some((episode, last_observation)) = &step.finished {
+        if let Some(last_observation) = step.terminal_observation {
             done[row] = true;
-            terminal_obs[row] = *last_observation;
+            terminal_obs[row] = last_observation;
+        }
+        if let Some(episode) = &step.finished {
             episodes[row] = Some(episode_json(episode)?);
         }
     }

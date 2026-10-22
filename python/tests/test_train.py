@@ -54,6 +54,37 @@ def test_a_resumed_run_carries_on_from_its_saved_step_and_level(tmp_path):
     assert state.curriculum.levels["A"] >= 2
 
 
+def hybrid_config(tmp_path: Path, total_steps: int) -> Path:
+    """The small config trained under the Hybrid gate on Stages A and F."""
+    config = yaml.safe_load(small_config(tmp_path, total_steps).read_text())
+    config["controller"] = "hybrid"
+    config["stages"] = ["A", "F"]
+    config["curriculum"]["stage_weights"] = {"A": 0.5, "F": 0.5}
+    config["curriculum"]["start_at_hardest"] = True
+    path = tmp_path / "hybrid.yaml"
+    path.write_text(yaml.safe_dump(config))
+    return path
+
+
+def test_a_hybrid_smoke_run_trains_under_the_gate_and_keeps_a_best_checkpoint(tmp_path):
+    state = run(tmp_path, hybrid_config(tmp_path, 20_000))
+
+    assert state.steps >= 20_000
+    assert (tmp_path / "smoke" / "best" / "model.zip").is_file()
+    # The best checkpoint was scored by the Rust Hybrid eval, so it has a real rate.
+    assert 0.0 <= state.best_eval_success <= 1.0
+
+
+def test_a_hybrid_run_that_climbs_a_curriculum_is_refused(tmp_path):
+    path = hybrid_config(tmp_path, 1024)
+    config = yaml.safe_load(path.read_text())
+    config["curriculum"]["start_at_hardest"] = False
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match="start_at_hardest"):
+        run(tmp_path, path)
+
+
 def test_starting_over_an_existing_run_is_refused(tmp_path):
     config = small_config(tmp_path, 1024)
     run(tmp_path, config)

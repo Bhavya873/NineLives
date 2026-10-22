@@ -10,7 +10,7 @@ import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 
-from ninelives.rollout import evaluate_fixed_seeds, success_and_crash_rates
+from ninelives.rollout import evaluate_fixed_seeds, evaluate_hybrid, success_and_crash_rates
 from ninelives.run_files import RunState, record_progress, save_checkpoint
 from ninelives.train_config import TrainConfig
 
@@ -134,7 +134,17 @@ class RunCheckpointCallback(BaseCallback):
         self, normalizer: VecNormalize, stage: str, level: int, first_seed: int | None = None
     ) -> list[dict[str, Any]]:
         """`stage` at `level` on fixed seeds from `first_seed` (default: the
-        best-checkpoint eval seeds), acting deterministically."""
+        best-checkpoint eval seeds), acting deterministically. A Hybrid run is scored as
+        the shipped Hybrid controller, always at the stage's hardest level."""
+        if self.config.controller == "hybrid":
+            return evaluate_hybrid(
+                self.model,
+                normalizer,
+                episodes=self.config.eval_episodes,
+                first_seed=self.config.eval_seed if first_seed is None else first_seed,
+                mode=self.config.mode,
+                stage=stage,
+            )
         return evaluate_fixed_seeds(
             self.model,
             normalizer,
@@ -168,6 +178,12 @@ class RunCheckpointCallback(BaseCallback):
     def record_progress(self, steps: int) -> None:
         """Records `steps` and this run's total wall time in the shared state."""
         record_progress(self.state, steps, self.wall_seconds_before, self.started_at)
+
+
+def controller_json(config: TrainConfig) -> str | None:
+    """The run's controller as the sim config wants it: "hybrid", or None (the policy
+    flies every step)."""
+    return "hybrid" if config.controller == "hybrid" else None
 
 
 def residual_json(config: TrainConfig) -> dict[str, object] | None:

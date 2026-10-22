@@ -23,6 +23,7 @@ from ninelives.callbacks import (
     CurriculumCallback,
     RunCheckpointCallback,
     TimeLimitCallback,
+    controller_json,
     residual_json,
 )
 from ninelives.curriculum import Curriculum
@@ -210,6 +211,7 @@ def train(argv: list[str] | None = None) -> RunState:
         config.reward_overrides,
         residual_json(config),
         config.randomize_mode,
+        controller_json(config),
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)

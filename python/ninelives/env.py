@@ -60,8 +60,11 @@ class NineLivesVecEnv(VecEnv):
         reward_overrides: dict[str, float] | None = None,
         residual: dict[str, object] | None = None,
         randomize_mode: bool = True,
+        controller: str | None = None,
     ) -> None:
-        config = load_sim_config(mode, stage, randomize, reward_overrides, residual, randomize_mode)
+        config = load_sim_config(
+            mode, stage, randomize, reward_overrides, residual, randomize_mode, controller
+        )
         self.sim = BatchedSim(n_envs, config, seed)
         super().__init__(n_envs, observation_space(), action_space(self.sim.action_size()))
 
@@ -86,11 +89,13 @@ class NineLivesVecEnv(VecEnv):
         observations, rewards, terminated, truncated, info = self.sim.step(self._actions)
         infos: list[dict[str, Any]] = [{} for _ in range(self.num_envs)]
         for row in np.flatnonzero(info["done"]):
-            infos[row] = {
-                "terminal_observation": info["terminal_obs"][row],
-                "TimeLimit.truncated": bool(truncated[row]),
-                "nl_episode": finished_episode(info, row),
-            }
+            infos[row]["terminal_observation"] = info["terminal_obs"][row]
+            infos[row]["TimeLimit.truncated"] = bool(truncated[row])
+        # Usually the same rows; under Hybrid gating an episode can also end while PD
+        # flies, after the policy's last stretch.
+        for row, episode in enumerate(info["episode"]):
+            if episode is not None:
+                infos[row]["nl_episode"] = finished_episode(info, row)
         return observations, rewards, terminated | truncated, infos
 
     def set_stage_and_level(self, stage: str, level: int) -> None:

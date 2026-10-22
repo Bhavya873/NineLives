@@ -96,6 +96,10 @@ class TrainConfig:
     residual: ResidualSettings | None = None
     # Start with every stage unlocked at its hardest level (no curriculum to climb).
     curriculum_start_at_hardest: bool = False
+    # "ai": the policy flies every step. "hybrid": train under the game's Hybrid gate (PD
+    # flies until the gate hands over; each AI stretch is an episode), and score
+    # checkpoints as the shipped Hybrid controller.
+    controller: str = "ai"
 
 
 def load_train_config(path: Path) -> TrainConfig:
@@ -136,6 +140,7 @@ def load_train_config(path: Path) -> TrainConfig:
             curriculum_start_at_hardest=strict_bool(
                 "curriculum.start_at_hardest", raw["curriculum"].get("start_at_hardest", False)
             ),
+            controller=str(raw.get("controller", "ai")),
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error
@@ -213,6 +218,7 @@ def check_ranges(path: Path, config: TrainConfig) -> None:
             "choose checkpoints or promote stages"
         )
     check_residual(path, config)
+    check_controller(path, config)
     if config.curriculum_promote_on not in ("eval", "training"):
         raise ValueError(f'{path}: curriculum.promote_on must be "eval" or "training"')
     counts = {
@@ -240,6 +246,23 @@ def check_residual(path: Path, config: TrainConfig) -> None:
         raise ValueError(
             f"{path}: with residual control set ppo.initial_action_bias to 0 (a zero action "
             "is exactly PD); a bias of −1 would start by pulling every throttle down"
+        )
+
+
+def check_controller(path: Path, config: TrainConfig) -> None:
+    """ "ai" or "hybrid". A Hybrid run hands the policy the whole car (not a residual
+    nudge) and is scored by the Rust Hybrid eval, which always runs a stage's hardest
+    level, so its curriculum must start there."""
+    if config.controller not in ("ai", "hybrid"):
+        raise ValueError(f'{path}: controller must be "ai" or "hybrid", not {config.controller!r}')
+    if config.controller != "hybrid":
+        return
+    if config.residual is not None:
+        raise ValueError(f'{path}: controller "hybrid" cannot be used with residual control')
+    if not config.curriculum_start_at_hardest:
+        raise ValueError(
+            f'{path}: controller "hybrid" needs curriculum.start_at_hardest: true (its '
+            "checkpoint eval runs each stage at its hardest level)"
         )
 
 
