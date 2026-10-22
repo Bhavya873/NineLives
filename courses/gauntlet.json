@@ -2,7 +2,7 @@
   "version": 1,
   "name": "Gauntlet",
   "start": { "pos": [0, 0.7, 0], "yaw": 0 },
-  "bounds": { "min": [-50, -20, -40], "max": [750, 60, 40] },
+  "bounds": { "min": [-50, -20, -10], "max": [560, 60, 10] },
   "pieces": [
     { "type": "kicker", "pos": [40, 0, 0], "length": 8, "width": 2, "angle_deg": 15, "side": "left" },
     { "type": "checkpoint", "pos": [60, 0, 0] },
@@ -22,10 +22,6 @@
     { "type": "landing_pad", "pos": [430, 0, 0] },
     { "type": "checkpoint", "pos": [465, 0, 0] },
     { "type": "wall", "pos": [510, 0, 0], "height": 3, "with_ramp": true },
-    { "type": "checkpoint", "pos": [530, 0, 0] },
-    { "type": "kick_plate", "pos": [560, 0, 0], "impulse": [0, 30000, 0], "angular": [0, 0, 30000] },
-    { "type": "checkpoint", "pos": [620, 0, 0] },
-    { "type": "kick_plate", "pos": [650, 0, 0], "impulse": [0, 24000, 0], "angular": [-10500, 0, 0] },
-    { "type": "finish", "pos": [700, 0, 0] }
+    { "type": "finish", "pos": [530, 0, 0] }
   ]
 }

@@ -1,7 +1,7 @@
 //! Saves over flip plates (SPEC §7.11, §8), in both modes, on bounds as wide as the
 //! real courses. Mild plates (generated courses): PD and Hybrid land every pass, the
-//! thrusters stopping the flip early. Strong plates (Gauntlet, playground, Stage F): the
-//! car goes past 120° even with the thrusters on, Hybrid's AI takes over and lands it.
+//! thrusters stopping the flip early. Strong plates (playground, Stage F): the car goes
+//! past 120° even with the thrusters on, Hybrid's AI takes over and lands it.
 //! The Hybrid tests run the shipped models/policy.json.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
@@ -31,9 +31,10 @@ const SPEEDS_M_S: [f32; 4] = [10.0, 16.0, 22.0, 28.0];
 const UPSET_DEG: f32 = 30.0;
 /// A strong pass must tip the car past this even with the thrusters on, in degrees.
 const STRONG_UPSET_DEG: f32 = 120.0;
-/// Half the width of a generated course's bounds and of the Gauntlet's, in m.
+/// Half the width of a generated course's bounds, in m (pieces.json track_half_width_m).
 const GENERATED_HALF_WIDTH_M: f32 = 10.0;
-const GAUNTLET_HALF_WIDTH_M: f32 = 40.0;
+/// Room either side for a strong plate's landing, in m.
+const STRONG_HALF_WIDTH_M: f32 = 40.0;
 const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 /// How one pass ended.
@@ -205,7 +206,7 @@ fn on_strong_flip_plates_the_car_turns_over_and_hybrids_ai_lands_it() {
     let mut passes = 0;
     for (mode_name, mode) in both_modes() {
         for (label, preset, strength, speed_m_s) in plates(&presets, &[flip.strong_strength]) {
-            let mut world = approach(mode, (preset, strength), speed_m_s, GAUNTLET_HALF_WIDTH_M);
+            let mut world = approach(mode, (preset, strength), speed_m_s, STRONG_HALF_WIDTH_M);
 
             let pass = fly(&mut world, &mut hybrid_for(mode), Hybrid::ai_in_control);
 
@@ -225,7 +226,9 @@ fn on_strong_flip_plates_the_car_turns_over_and_hybrids_ai_lands_it() {
         "not turned over / AI never took over: {not_flipped:#?}"
     );
     // Landing it is about the policy. The shipped (Stage A) policy misses one Realistic
-    // barrel roll at 22 m/s; a policy trained on Stage F should land every one.
+    // barrel roll at 22 m/s; a policy trained on Stage F should land every one. A save
+    // here ignores the landing heading and runs with the driver idle; Stage F judges both
+    // (DECISIONS 2026-10-21, flip plates).
     let saved_share = 1.0 - crashed.len() as f32 / passes as f32;
     assert!(
         saved_share >= 0.9,
