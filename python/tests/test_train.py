@@ -85,6 +85,49 @@ def test_a_hybrid_run_that_climbs_a_curriculum_is_refused(tmp_path):
         run(tmp_path, path)
 
 
+def policy_weights(model_zip: Path) -> object:
+    """Every policy parameter of a saved model, as one flat tensor."""
+    import torch
+    from stable_baselines3 import PPO
+
+    model = PPO.load(model_zip, device="cpu")
+    return torch.nn.utils.parameters_to_vector(model.policy.parameters())
+
+
+def test_two_runs_from_the_same_seed_learn_the_same_weights(tmp_path):
+    import torch
+
+    config = small_config(tmp_path, 4096)
+    for run_id in ("first", "second"):
+        train(["--config", str(config), "--run-id", run_id, "--runs-dir", str(tmp_path)])
+
+    first = policy_weights(tmp_path / "first" / "latest" / "model.zip")
+    second = policy_weights(tmp_path / "second" / "latest" / "model.zip")
+    assert torch.equal(first, second)
+
+
+def test_a_policy_weight_that_turns_nan_stops_training():
+    import torch
+    from stable_baselines3 import PPO
+
+    from ninelives.callbacks import check_finite_weights
+
+    model = PPO("MlpPolicy", "Pendulum-v1", device="cpu")
+    check_finite_weights(model)
+    with torch.no_grad():
+        model.policy.action_net.bias[0] = float("nan")
+
+    with pytest.raises(FloatingPointError, match="action_net.bias"):
+        check_finite_weights(model)
+
+
+def test_the_time_limit_stops_early_and_still_saves_latest(tmp_path):
+    state = run(tmp_path, small_config(tmp_path, 1_000_000), "--max-minutes", "0")
+
+    assert state.steps < 1_000_000
+    assert (tmp_path / "smoke" / "latest" / "model.zip").is_file()
+
+
 def test_starting_over_an_existing_run_is_refused(tmp_path):
     config = small_config(tmp_path, 1024)
     run(tmp_path, config)

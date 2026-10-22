@@ -21,6 +21,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 from ninelives.callbacks import (
     CurriculumCallback,
+    FiniteCheckCallback,
     RunCheckpointCallback,
     TimeLimitCallback,
     controller_json,
@@ -230,6 +231,7 @@ def train(argv: list[str] | None = None) -> RunState:
         CurriculumCallback(state, promote_from_training),
         checkpoints,
         TimeLimitCallback(args.max_minutes),
+        FiniteCheckCallback(),
     ]
     try:
         model.learn(

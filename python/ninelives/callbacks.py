@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 
@@ -189,6 +190,32 @@ def controller_json(config: TrainConfig) -> str | None:
 def residual_json(config: TrainConfig) -> dict[str, object] | None:
     """The run's residual setting as the sim config wants it (None without one)."""
     return None if config.residual is None else config.residual.as_sim_json()
+
+
+class FiniteCheckCallback(BaseCallback):
+    """Stops training with a FloatingPointError at the first NaN or infinity in an
+    observation, a reward or (after each PPO update) a policy weight. train.py does not
+    save `latest/` after an error, so the last good checkpoint survives."""
+
+    def _on_step(self) -> bool:
+        for name in ("new_obs", "rewards"):
+            values = self.locals[name]
+            if not np.all(np.isfinite(values)):
+                raise FloatingPointError(f"training {name} hold NaN or infinity: {values}")
+        return True
+
+    def _on_rollout_start(self) -> None:
+        check_finite_weights(self.model)
+
+
+def check_finite_weights(model: BaseAlgorithm) -> None:
+    """Raises FloatingPointError naming the first policy parameter that is not finite."""
+    for name, parameter in model.policy.named_parameters():
+        if not bool(parameter.detach().isfinite().all()):
+            raise FloatingPointError(
+                f"policy weight {name} is NaN or infinite: training diverged; resume from the "
+                "last good latest/ with a lower learning rate"
+            )
 
 
 class TimeLimitCallback(BaseCallback):
