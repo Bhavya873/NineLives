@@ -154,6 +154,8 @@ def tune(generations: int, popsize: int, episodes: int, sigma: float) -> str:
     base = pd_gains(base_toml)
     strategy = cma.CMAEvolutionStrategy([0.0] * len(base), sigma, {"popsize": popsize})
     best_toml, best_margin = base_toml, 0.0
+    # Refuse a run whose last generation would reach the test block before it starts.
+    tuning_seeds_start(generations - 1, episodes)
     for generation in range(generations):
         first_seed = tuning_seeds_start(generation, episodes)
         candidates = strategy.ask()

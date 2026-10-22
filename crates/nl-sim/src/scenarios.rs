@@ -555,6 +555,14 @@ impl ScenariosConfig {
             let rule = "three weights (A, C, D), none negative, not all zero";
             return bad("stage_e.base_stage_weights", rule);
         }
+        // The car starts on its wheels, so the success hold runs from t = 0: it must hit
+        // the plate (at the slowest speed) before a quiet car could succeed on the ground.
+        let slowest_m_s = self.stage_f.speed_m_s[0];
+        let half_hold_s = 0.5 * self.episode.success_hold_s;
+        if slowest_m_s <= 0.0 || self.stage_f.plate_ahead_m / slowest_m_s > half_hold_s {
+            let rule = "close enough that the slowest speed reaches the plate within half of episode.success_hold_s";
+            return bad("stage_f.plate_ahead_m", rule);
+        }
         if self.driver_bot.target_speed_m_s[0] <= 0.0 {
             let rule = "[low, high] with 0 < low ≤ high";
             return bad("driver_bot.target_speed_m_s", rule);

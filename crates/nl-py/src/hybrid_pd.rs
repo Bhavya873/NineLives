@@ -6,6 +6,7 @@
 use nl_control::HybridSwitch;
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::Observation;
+use nl_sim::reward::RewardTerms;
 use nl_sim::training::{FinishedEpisode, TrainingEnv};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -15,6 +16,16 @@ use crate::env_slot::{NOT_RESET, SlotStep, controller_ctx, slot_step, start_env}
 /// Hybrid gating gives up after this many episodes in a row that PD flew alone: the
 /// stage mix almost never upsets the car, so training would only spin.
 const MAX_EPISODES_WITHOUT_AI: u32 = 10_000;
+
+/// What a hidden PD stretch ended with.
+struct PdStretch {
+    /// The observation at the gate's next handover: the policy's next first observation.
+    observation: Observation,
+    /// The row of the sim episode the AI flew in, if it ended under PD.
+    finished: Option<FinishedEpisode>,
+    /// The reward of that episode's last step, if it ended in success.
+    success_terms: Option<RewardTerms>,
+}
 
 /// PD and the gate for one environment, and whether the AI has flown this sim episode.
 #[derive(Debug, Clone)]
@@ -47,13 +58,15 @@ impl HybridPd {
             return Ok(env.controller_view().1);
         }
         // A fresh episode has no AI stretch yet, so no row can come back here.
-        let (observation, _) = self.fly_pd(env, seeds)?;
-        Ok(observation)
+        Ok(self.fly_pd(env, seeds)?.observation)
     }
 
     /// One AI control step with `throttle_actions`. The policy's episode ends with the
     /// sim episode, or when the gate hands back to PD, which then flies hidden until the
-    /// next handover.
+    /// next handover. The gate releases a settled car before the sim judges success
+    /// (`save_hold_s` < `success_hold_s`), so if that sim episode then succeeds under PD
+    /// before the AI flies again, the release step earns its success and air-left
+    /// bonuses. A later crash or time limit under PD is not the landing's doing.
     pub fn step(
         &mut self,
         env: &mut TrainingEnv,
@@ -73,8 +86,12 @@ impl HybridPd {
         }
         // Released: the car is settled on its wheels, so the policy's episode is over.
         step.terminated = true;
-        let (next, finished) = self.fly_pd(env, seeds)?;
-        step.end_episode(outcome.observation, finished, next);
+        let stretch = self.fly_pd(env, seeds)?;
+        if let Some(terms) = stretch.success_terms {
+            step.terms.success += terms.success;
+            step.terms.air_left += terms.air_left;
+        }
+        step.end_episode(outcome.observation, stretch.finished, stretch.observation);
         Ok(step)
     }
 
@@ -95,14 +112,14 @@ impl HybridPd {
     }
 
     /// PD flies (the gate has just said PD) until the gate hands over, starting new
-    /// episodes from `seeds` as old ones end. Returns the handover observation and the
-    /// row of an episode the AI flew in that ended under PD, if any.
+    /// episodes from `seeds` as old ones end.
     fn fly_pd(
         &mut self,
         env: &mut TrainingEnv,
         seeds: &mut ChaCha8Rng,
-    ) -> Result<(Observation, Option<FinishedEpisode>), String> {
+    ) -> Result<PdStretch, String> {
         let mut finished = None;
+        let mut success_terms = None;
         let mut episodes_without_ai = 0;
         loop {
             let outcome = env
@@ -110,6 +127,9 @@ impl HybridPd {
                 .ok_or(NOT_RESET)?;
             if let Some(episode) = outcome.finished {
                 if self.ai_flew {
+                    if episode.result.success {
+                        success_terms = Some(outcome.terms);
+                    }
                     finished = Some(episode);
                 } else {
                     episodes_without_ai += 1;
@@ -118,7 +138,12 @@ impl HybridPd {
                 self.begin(env, seeds.next_u64())?;
             }
             if self.decide(env) {
-                return Ok((env.controller_view().1, finished));
+                let observation = env.controller_view().1;
+                return Ok(PdStretch {
+                    observation,
+                    finished,
+                    success_terms,
+                });
             }
         }
     }
@@ -131,7 +156,7 @@ fn check_ai_gets_flights(episodes_without_ai: u32) -> Result<(), String> {
     }
     Err(format!(
         "BatchedSim: Hybrid gating ran {episodes_without_ai} episodes in a row without \
-         the gate handing the car to the AI; add a stage that upsets the car (A, B, E or F) \
+         the gate handing the car to the AI; add a stage that upsets the car (A, E or F) \
          at a level that tips it past the gate's angle"
     ))
 }

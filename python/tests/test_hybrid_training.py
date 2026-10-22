@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from ninelives.sim_config import REPO_ROOT, load_sim_config
-from ninelives_sim import BatchedSim, policy_actions
+from ninelives_sim import BatchedSim, policy_actions, reward_term_names
 
 # vehicle.toml [events] upset_tilt_deg: the gate hands over above this.
 UPSET_TILT_DEG = 60.0
@@ -47,6 +47,7 @@ def test_a_saved_flight_ends_at_the_gates_release_and_its_row_still_arrives():
     sim.set_stage_and_level("A", sim.level_count("A") - 1)
     observations = sim.reset()
     released_rows = []
+    success_column = reward_term_names().index("success")
 
     for _ in range(1500):
         actions = policy_actions(SHIPPED_POLICY, observations)
@@ -55,6 +56,8 @@ def test_a_saved_flight_ends_at_the_gates_release_and_its_row_still_arrives():
             episode = info["episode"][row]
             if episode is not None and json.loads(episode)["success"]:
                 released_rows.append(json.loads(episode))
+                # The landing earns the success bonus even though PD finished the hold.
+                assert info["reward_terms"][row, success_column] > 0.0
 
     # The gate releases a settled car before Stage A's 1 s hold is up, so a saved
     # flight's success row comes in on the release step, after PD finished the hold.

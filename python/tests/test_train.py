@@ -85,6 +85,38 @@ def test_a_hybrid_run_that_climbs_a_curriculum_is_refused(tmp_path):
         run(tmp_path, path)
 
 
+@pytest.mark.parametrize(
+    ("ppo_change", "stages", "message"),
+    [
+        ({"activation": "relu"}, None, "tanh"),
+        ({}, ["D"], "almost never tip"),
+    ],
+)
+def test_a_hybrid_config_that_could_not_train_or_score_is_refused(
+    tmp_path, ppo_change, stages, message
+):
+    path = hybrid_config(tmp_path, 1024)
+    config = yaml.safe_load(path.read_text())
+    config["ppo"].update(ppo_change)
+    if stages is not None:
+        config["stages"] = stages
+        config["curriculum"]["stage_weights"] = {stage: 1.0 for stage in stages}
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match=message):
+        run(tmp_path, path)
+
+
+def test_a_hybrid_run_cannot_carry_over_a_curriculum(tmp_path):
+    run(tmp_path, small_config(tmp_path, 2048))
+    checkpoint = tmp_path / "smoke" / "latest"
+    config = hybrid_config(tmp_path, 1024)
+    args = ["--config", str(config), "--run-id", "hybrid", "--runs-dir", str(tmp_path)]
+
+    with pytest.raises(SystemExit, match="keep-curriculum"):
+        train([*args, "--init-from", str(checkpoint), "--keep-curriculum"])
+
+
 def policy_weights(model_zip: Path) -> object:
     """Every policy parameter of a saved model, as one flat tensor."""
     import torch

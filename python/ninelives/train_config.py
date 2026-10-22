@@ -10,6 +10,8 @@ import yaml
 ACTIVATION_NAMES = ("tanh", "relu")
 # The scenario stages the sim knows (SPEC §9.6).
 STAGE_NAMES = ("A", "B", "C", "D", "E", "F")
+# Stages that regularly tip the car past the Hybrid gate's angle (DECISIONS 2026-10-21).
+UPSETTING_STAGES = ("A", "E", "F")
 
 
 # The final eval (results/) uses seeds 0–999; training's validation seeds must stay above.
@@ -263,6 +265,16 @@ def check_controller(path: Path, config: TrainConfig) -> None:
         raise ValueError(
             f'{path}: controller "hybrid" needs curriculum.start_at_hardest: true (its '
             "checkpoint eval runs each stage at its hardest level)"
+        )
+    if config.ppo.activation != "tanh":
+        raise ValueError(
+            f'{path}: controller "hybrid" needs ppo.activation: tanh (its checkpoints are '
+            "scored as the exported policy, and export supports tanh MLPs only)"
+        )
+    if not set(config.stages) & set(UPSETTING_STAGES):
+        raise ValueError(
+            f'{path}: controller "hybrid" needs one of stages {UPSETTING_STAGES}: the others '
+            "almost never tip the car past the gate, so the AI would never fly"
         )
 
 

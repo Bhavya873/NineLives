@@ -74,3 +74,11 @@ def test_the_repo_pd_stays_under_the_bumps_limit_so_it_pays_nothing():
     repo_toml = (CONFIGS_DIR / "controllers.toml").read_text()
 
     assert bumps_air_kg(repo_toml) < BUMPS_AIR_LIMIT_KG
+
+
+def test_a_tuning_run_too_long_for_the_seed_range_is_refused_before_it_starts():
+    from ninelives.tune_pd import tune
+
+    # Refused at once: no generation runs (each would take minutes).
+    with pytest.raises(ValueError, match="final test block"):
+        tune(generations=1001, popsize=2, episodes=1000, sigma=0.1)

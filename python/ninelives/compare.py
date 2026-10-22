@@ -7,7 +7,8 @@ runner). Per stage and mode it prints success with a Wilson 95% interval, the ep
 only one of them won, an exact McNemar p-value on those, each one's inversion rate (share
 of episodes past 150° of tilt, when the files carry it), and the bar's verdict: beat the
 baseline on A, E and F, stay within its interval where it succeeds at least 97% of the
-time. Stage F rows appear only when both controllers have Stage F files.
+time. Stage F is newer than older results folders; without its files it shows as a
+failing row, so the bar never passes by its absence.
 """
 
 import argparse
@@ -20,7 +21,7 @@ from ninelives.sim_config import REPO_ROOT
 
 STAGES = ("A", "B", "C", "D", "E")
 # Older results lack these; a missing one shows as a failing row, never silently.
-OPTIONAL_STAGES = ("F",)
+NEWER_STAGES = ("F",)
 MODES = ("realistic", "arcade")
 # z for a two-sided 95% interval.
 Z_95 = 1.96
@@ -131,10 +132,10 @@ def table_row(
     )
 
 
-def missing_optional_stages(results_dir: Path, names: tuple[str, str], suffix: str) -> list[str]:
-    """The optional stages some of whose files are missing."""
+def missing_newer_stages(results_dir: Path, names: tuple[str, str], suffix: str) -> list[str]:
+    """The newer stages some of whose files are missing."""
     missing = []
-    for stage in OPTIONAL_STAGES:
+    for stage in NEWER_STAGES:
         files = [
             results_dir / f"eval_{name}_{stage}_{mode}{suffix}.json"
             for name in names
@@ -153,8 +154,8 @@ def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") 
         "| McNemar p | inverted | M7 bar |",
         "|---|---|---|---|---|---|---|---|",
     ]
-    missing = missing_optional_stages(results_dir, (baseline, candidate), suffix)
-    for stage in STAGES + OPTIONAL_STAGES:
+    missing = missing_newer_stages(results_dir, (baseline, candidate), suffix)
+    for stage in STAGES + NEWER_STAGES:
         if stage in missing:
             # A must-beat stage with no results must not pass the bar by being absent.
             lines.append(f"| {stage} | both | missing eval files | | | | | FAIL: no results |")

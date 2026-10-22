@@ -224,7 +224,8 @@ impl BatchedSim {
 /// PD for the config's car with the config's residual scale, if residual control is on
 /// (one copy per environment, so each keeps its own warm start). Like eval, PD is built
 /// How each environment applies the policy's action. PD (for residual control or behind
-/// the Hybrid gate) is built as the game and the eval runners build it.
+/// the Hybrid gate) is built as the game and the eval runners build it: once, for the
+/// config's base car and mode, not each episode's randomized one.
 fn slot_control(config: &SimConfig) -> PyResult<SlotControl> {
     if config.residual.is_none() && !config.hybrid {
         return Ok(SlotControl::Direct);
