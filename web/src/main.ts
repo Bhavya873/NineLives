@@ -16,6 +16,13 @@ import { createAirGauge, updateAirGauge } from './hud/air-gauge.ts';
 import { findHud, type HudValues, updateHud } from './hud/hud.ts';
 import { createNozzleMap, updateNozzleMap } from './hud/nozzle-map.ts';
 import {
+  createPerfOverlay,
+  recordFrame,
+  recordTick,
+  togglePerfOverlay,
+} from './hud/perf-overlay.ts';
+import { type ControllerName, createTitleScreen, showPicked } from './hud/title-screen.ts';
+import {
   createToasts,
   showNoAirIfNew,
   showToast,
@@ -100,14 +107,49 @@ async function start(): Promise<void> {
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
   // SPEC §11.3: T cycles the controller; the sim owns the order (AI joins once loaded).
-  onKeyPress('KeyT', () => game.cycle_controller());
+  onKeyPress('KeyT', () => {
+    playerPicked = true;
+    waitingForPolicy = null;
+    game.cycle_controller();
+  });
   // Hybrid is the default once the policy is in (DECISIONS 2026-10-21); the game starts
-  // with PD while it loads, and a player who has already pressed T keeps their choice.
+  // with PD while it loads. A player who has picked a controller on the title screen, or
+  // pressed T, keeps their choice; an AI pick made before the policy loads waits for it.
+  let policyLoaded = false;
+  let playerPicked = false;
+  let waitingForPolicy: ControllerName | null = null;
+  const chooseController = (name: ControllerName) => {
+    playerPicked = true;
+    waitingForPolicy = null;
+    if ((name === 'ai' || name === 'hybrid') && !policyLoaded) {
+      waitingForPolicy = name;
+      return;
+    }
+    game.set_controller(name);
+  };
   void loadPolicy(game).then((loaded) => {
-    if (loaded && game.hud()[HudField.Controller] === ControllerCode.Pd) {
+    policyLoaded = loaded;
+    if (!loaded) {
+      return;
+    }
+    if (waitingForPolicy !== null) {
+      game.set_controller(waitingForPolicy);
+    } else if (!playerPicked && game.hud()[HudField.Controller] === ControllerCode.Pd) {
       game.set_controller('hybrid');
     }
   });
+  const title = createTitleScreen(requireElement('title-screen'), window, {
+    chooseController,
+    chooseMode: (name) => game.set_mode(name),
+  });
+  // Esc reopens the title screen: show what M and T have changed since.
+  onKeyPress('Escape', () => {
+    const hud = game.hud();
+    const mode = hud[HudField.Mode] === ModeCode.Arcade ? 'arcade' : 'realistic';
+    showPicked(title, controllerName(hud[HudField.Controller] ?? ControllerCode.Off), mode);
+  });
+  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
+  onKeyPress('F3', () => togglePerfOverlay(perf));
   bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
 
   const frames: PhysicsFrames = {
@@ -181,6 +223,7 @@ async function start(): Promise<void> {
     resetScreenEffects(effects);
   });
   let lastRenderMs = performance.now();
+  const invertedTiltRad = (Game.inverted_tilt_deg() * Math.PI) / 180;
 
   /**
    * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
@@ -197,7 +240,7 @@ async function start(): Promise<void> {
       snapViewToGame(game, frames, view, carPose);
       resetScreenEffects(effects);
     }
-    const toast = toastForEvents(events);
+    const toast = toastForEvents(events, invertedTiltRad);
     // Nothing covers the results screen; what happens after the finish doesn't count.
     if (toast && !course.resultsShown) {
       showToast(toasts, toast, nowMs);
@@ -206,6 +249,7 @@ async function start(): Promise<void> {
 
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
+      const tickStartMs = performance.now();
       frames.previousChassis = frames.latestChassis;
       frames.previousWheels = frames.latestWheels;
       game.tick(readInputFrame());
@@ -215,6 +259,7 @@ async function start(): Promise<void> {
       if (game.is_crashed()) {
         crashPosition.fromArray(frames.latestChassis);
       }
+      recordTick(perf, performance.now() - tickStartMs);
     },
     render: (blend) => {
       const nowMs = performance.now();
@@ -254,6 +299,7 @@ async function start(): Promise<void> {
       updateNozzleMap(nozzleDots, throttles);
       updateToasts(toasts, nowMs);
       showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
+      recordFrame(perf, performance.now() - nowMs, performance.now());
     },
   });
 
@@ -304,6 +350,23 @@ function snapViewToGame(
   frames.previousWheels = frames.latestWheels = game.wheel_poses();
   placeCar(view, frames, 1, carPose);
   snapCamera(view.camera, carPose);
+}
+
+/** The title screen's name for a HUD controller code (Manual has none). */
+function controllerName(code: number): string {
+  switch (code) {
+    case ControllerCode.HybridAi:
+    case ControllerCode.HybridPd:
+      return 'hybrid';
+    case ControllerCode.Pd:
+      return 'pd';
+    case ControllerCode.Ai:
+      return 'ai';
+    case ControllerCode.Off:
+      return 'off';
+    default:
+      return 'manual';
+  }
 }
 
 /** Copies the values the HUD shows out of `Game.hud()`'s array into `out`. */

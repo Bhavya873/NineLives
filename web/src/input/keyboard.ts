@@ -50,6 +50,8 @@ const HANDLED_KEYS = [
   ...BOOST_KEYS,
   ...CHAOS_KEYS,
   ...RESET_KEYS,
+  // The performance overlay, not the browser's find-in-page.
+  'F3',
 ];
 
 /** Keys that are currently held down, by `KeyboardEvent.code`. */

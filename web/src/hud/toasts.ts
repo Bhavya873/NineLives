@@ -1,4 +1,5 @@
-// Centre-screen toasts (SPEC §11.5): "SAVE" with the air used, "CRASH" with the cause,
+// Centre-screen toasts (SPEC §11.5): "SAVE" (or "FLIP SAVE" after the car went past
+// upside down) with the air used, "CRASH" with the cause,
 // and "NO AIR". It turns drained sim events into short messages (main.ts shows "NO AIR"
 // when the sim's out-of-air flag turns on); it never touches physics.
 import { FLOATS_PER_EVENT } from '../sim-events.ts';
@@ -36,15 +37,19 @@ export function createToasts(element: HTMLElement): Toasts {
 
 /**
  * The toast for a batch of drained events, or null if none deserves one. When several
- * do, the last one wins (a crash after a save is the news).
+ * do, the last one wins (a crash after a save is the news). A save whose peak tilt
+ * reached `invertedTiltRad` (the sim's flipped mark, `Game.inverted_tilt_deg()`) is a
+ * flip save.
  */
-export function toastForEvents(events: Float32Array): string | null {
+export function toastForEvents(events: Float32Array, invertedTiltRad: number): string | null {
   let text: string | null = null;
   for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
     const kind = events[start];
     if (kind === EventKind.Save) {
       const airUsedKg = events[start + 2] ?? 0;
-      text = `SAVE · ${airUsedKg.toFixed(1)} kg air`;
+      const peakTiltRad = events[start + 3] ?? 0;
+      const label = peakTiltRad >= invertedTiltRad ? 'FLIP SAVE' : 'SAVE';
+      text = `${label} · ${airUsedKg.toFixed(1)} kg air`;
     } else if (kind === EventKind.Crash) {
       const cause = CRASH_CAUSE_TEXT[events[start + 1] ?? 0] ?? '';
       text = cause ? `CRASH · ${cause}` : 'CRASH';

@@ -6,10 +6,19 @@ import { test } from 'node:test';
 import { createToasts, showNoAirIfNew, showToast, toastForEvents } from '../src/hud/toasts.ts';
 import { CrashCode, EventKind } from './load-wasm.mjs';
 
+/** The sim's flipped mark (150°), in radians. */
+const INVERTED_TILT_RAD = (150 * Math.PI) / 180;
+
 test('a save toast shows the air used', () => {
   const events = new Float32Array([EventKind.Save, 1.2, 14.25, 2.0]);
 
-  assert.equal(toastForEvents(events), 'SAVE · 14.3 kg air');
+  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'SAVE · 14.3 kg air');
+});
+
+test('a save past upside down is a flip save', () => {
+  const events = new Float32Array([EventKind.Save, 1.8, 9.0, 3.0]);
+
+  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'FLIP SAVE · 9.0 kg air');
 });
 
 test('a crash after a save in the same frame wins, with its cause', () => {
@@ -24,13 +33,13 @@ test('a crash after a save in the same frame wins, with its cause', () => {
     0,
   ]);
 
-  assert.equal(toastForEvents(events), 'CRASH · landed on the roof');
+  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'CRASH · landed on the roof');
 });
 
 test('airborne and respawn events get no toast', () => {
   const events = new Float32Array([EventKind.AirborneStart, 0, 0, 0, EventKind.Respawn, 0, 0, 0]);
 
-  assert.equal(toastForEvents(events), null);
+  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), null);
 });
 
 /** A stand-in for the toast's page element: only the two fields the module uses. */
