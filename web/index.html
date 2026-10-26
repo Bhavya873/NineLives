@@ -260,6 +260,14 @@
         background: #000;
         text-align: center;
       }
+      #game-over .wordmark {
+        margin: 0 0 18px;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
       #game-over h2 {
         margin: 0;
         font-size: 44px;
@@ -319,7 +327,7 @@
     </div>
     <dl id="hud-keys" class="hud" aria-label="Keys">
       <dt>W S / ↑ ↓</dt>
-      <dd>drive · brake</dd>
+      <dd>drive, brake</dd>
       <dt>A D / ← →</dt>
       <dd>steer</dd>
       <dt>Space</dt>
@@ -330,8 +338,10 @@
       <dd>drop test</dd>
       <dt>R</dt>
       <dd>respawn</dd>
-      <dt>M · V</dt>
-      <dd>mode · wind</dd>
+      <dt>M</dt>
+      <dd>mode</dd>
+      <dt>V</dt>
+      <dd>wind</dd>
       <dt>Esc</dt>
       <dd>pause</dd>
     </dl>
@@ -358,14 +368,15 @@
     <div id="hud-perf" class="hud" hidden></div>
     <section id="paused" class="hud" hidden>
       <h2>Paused</h2>
-      <p>Esc to drive on</p>
+      <p>Press Esc to resume</p>
     </section>
     <section id="game-over" hidden>
+      <h1 class="wordmark">Nine Lives</h1>
       <h2>Out of lives</h2>
       <p id="game-over-summary"></p>
       <button type="button" id="restart">Restart</button>
       <a href="https://github.com/Bhavya873/NineLives" target="_blank" rel="noopener"
-        >How it works, on GitHub</a
+        >Source and write-up on GitHub</a
       >
     </section>
     <script type="module" src="/src/main.ts"></script>

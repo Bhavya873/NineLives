@@ -49,9 +49,9 @@ async function start(): Promise<void> {
     throw new Error('The wasm build and the viewer disagree on the pose layout');
   }
   const status = requireElement('viewer-status');
-  const board = requireElement('viewer-board');
   const toggle = requireElement('arena-toggle');
   const run = await loadNewestRun();
+  const board = createBoard(requireElement('viewer-board'), run);
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
   const arena = createArena(requireElement('viewer'));
   const arenaView = createArenaView(arena.scene, arena.camera, arena.ground);
@@ -91,17 +91,17 @@ async function start(): Promise<void> {
         view.spreadOnGrid = state.arena === 'flat';
         setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
       }
-      const lines: string[] = [];
       state.rows.forEach((row, index) => {
         const outcomes = row.crowd.outcomes();
         updateCrowdRow(view, index, row.crowd.chassis_poses(), row.crowd.wheel_poses(), outcomes);
-        lines.push(
-          `${rowLabels(state.run)[index]} · landed ${count(outcomes, CrowdOutcome.Landed)}/${CARS_PER_CHECKPOINT}`,
-        );
+        const cells = board[index];
+        if (cells) {
+          setText(cells.landed, String(count(outcomes, CrowdOutcome.Landed)));
+          setText(cells.crashed, String(count(outcomes, CrowdOutcome.Crashed)));
+        }
       });
       arena.renderer.render(arena.scene, arena.camera);
       setText(status, statusText(state));
-      setText(board, lines.join('\n'));
       nextRoundWhenDone(state);
     },
   });
@@ -152,22 +152,48 @@ function nextRoundWhenDone(state: ViewerState): void {
   }
 }
 
-/** Each checkpoint's label, e.g. "#3 · 16M steps". */
+/** A checkpoint's training steps in millions, e.g. "16M". */
+function stepsText(steps: number): string {
+  return `${Number((steps / 1e6).toFixed(1))}M`;
+}
+
+/** Each checkpoint's label over its cars, e.g. "#3 (16M)". */
 function rowLabels(run: RunEntry): string[] {
+  return run.checkpoints.map((entry, index) => `#${index + 1} (${stepsText(entry.steps)})`);
+}
+
+/** The scoreboard cells a checkpoint's counts go in. */
+interface BoardCells {
+  landed: HTMLElement;
+  crashed: HTMLElement;
+}
+
+/** Fills `table` with one row per checkpoint and returns each row's count cells. */
+function createBoard(table: HTMLElement, run: RunEntry): BoardCells[] {
+  const header = table.insertAdjacentElement('beforeend', document.createElement('tr'));
+  for (const title of ['Checkpoint', 'Steps', 'Landed', 'Crashed']) {
+    const cell = document.createElement('th');
+    cell.textContent = title;
+    header?.appendChild(cell);
+  }
   return run.checkpoints.map((entry, index) => {
-    const millions = Number((entry.steps / 1e6).toFixed(1));
-    return `#${index + 1} · ${millions}M steps`;
+    const row = document.createElement('tr');
+    const cells = [`#${index + 1}`, stepsText(entry.steps), '0', '0'].map((text) => {
+      const cell = document.createElement('td');
+      cell.textContent = text;
+      row.appendChild(cell);
+      return cell;
+    });
+    table.appendChild(row);
+    return { landed: cells[2] as HTMLElement, crashed: cells[3] as HTMLElement };
   });
 }
 
-/** "Flat arena · run stage-a-004 · 8 checkpoints at once · round 1". */
+/** "Run stage-a-004: 8 checkpoints at once, 8 drops each, flat arena, round 1". */
 function statusText(state: ViewerState): string {
-  return [
-    arenaLabel(state.arena),
-    `run ${state.run.run_id}`,
-    `${state.rows.length} checkpoints at once`,
-    `round ${state.round + 1}`,
-  ].join(' · ');
+  const arena = arenaLabel(state.arena).toLowerCase();
+  const checkpoints = `${state.rows.length} checkpoints at once`;
+  return `Run ${state.run.run_id}: ${checkpoints}, ${CARS_PER_CHECKPOINT} drops each, ${arena}, round ${state.round + 1}`;
 }
 
 /** Cars landed so far, over every checkpoint. */

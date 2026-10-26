@@ -98,7 +98,8 @@ export function restartLives(lives: Lives, values: HudValues): void {
 export function runSummary(lives: Lives, values: HudValues): string {
   const saves = values.saves - lives.savesAtStart;
   const time = formatTime(values.timeS - lives.timeAtStartS);
-  return `${saves} saves · ${time} on the road`;
+  const savesText = saves === 1 ? '1 save' : `${saves} saves`;
+  return `${savesText} in ${time}`;
 }
 
 /** One heart as an SVG of square pixels. */

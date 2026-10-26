@@ -42,7 +42,7 @@ async function readLanded(page: Page): Promise<number> {
   return (await readViewer(page))?.landed ?? -1;
 }
 
-/** Waits until the status line names `label` ("Flat arena" or "Obstacle arena"). */
+/** Waits until the status line names `label` ("flat arena" or "obstacle arena"). */
 async function expectArena(page: Page, label: string): Promise<void> {
   await expect(page.locator('#viewer-status')).toContainText(label, {
     timeout: SLOW_MACHINE_TIMEOUT_MS,
@@ -58,7 +58,7 @@ test('the training viewer flies every checkpoint at once and cars land', async (
   await expect(page.locator('#viewer-status')).toContainText('checkpoints at once', {
     timeout: SLOW_MACHINE_TIMEOUT_MS,
   });
-  await expect(page.locator('#viewer-board')).toContainText('#1 ·');
+  await expect(page.locator('#viewer-board')).toContainText('Checkpoint');
   await expect
     .poll(() => readLanded(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(0);
@@ -71,11 +71,11 @@ test('the viewer switches to the obstacle arena, draws it, and cars land there',
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/viewer.html');
-  await expectArena(page, 'Flat arena');
+  await expectArena(page, 'flat arena');
 
   await page.locator('#arena-toggle').click();
 
-  await expectArena(page, 'Obstacle arena');
+  await expectArena(page, 'obstacle arena');
   await expect(page).toHaveURL(/arena=obstacles/);
   await expect
     .poll(async () => (await readViewer(page))?.courseShapeCount ?? 0)
@@ -91,11 +91,11 @@ test('?arena=obstacles opens on the obstacle arena and O goes back to flat', asy
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/viewer.html?arena=obstacles');
-  await expectArena(page, 'Obstacle arena');
+  await expectArena(page, 'obstacle arena');
 
   await page.keyboard.press('KeyO');
 
-  await expectArena(page, 'Flat arena');
+  await expectArena(page, 'flat arena');
   await expect.poll(async () => (await readViewer(page))?.courseShapeCount ?? -1).toBe(0);
   expect(consoleErrors).toEqual([]);
 });

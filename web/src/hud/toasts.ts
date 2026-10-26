@@ -1,7 +1,6 @@
-// Centre-screen toasts (SPEC §11.5): "SAVE" (or "FLIP SAVE" after the car went past
-// upside down) with the air used, "CRASH" with the cause,
-// and "NO AIR". It turns drained sim events into short messages (main.ts shows "NO AIR"
-// when the sim's out-of-air flag turns on); it never touches physics.
+// Centre-screen toasts (SPEC §11.5): "Saved" (or "Flip saved" after the car went past
+// upside down) with the air used, "Crashed" with the cause, and "Out of air". It turns
+// drained sim events into short messages; it never touches physics.
 import { FLOATS_PER_EVENT } from '../sim-events.ts';
 import { CrashCode, EventKind } from '../wasm/nl_wasm.js';
 
@@ -23,7 +22,7 @@ export interface Toasts {
   /** When to hide it, in `performance.now()` milliseconds. */
   hideAtMs: number;
   /**
-   * Whether "NO AIR" may show again. It re-arms only once the tank is full, so air
+   * Whether "Out of air" may show again. It re-arms only once the tank is full, so air
    * hovering around the empty mark does not flash the toast over and over.
    */
   noAirArmed: boolean;
@@ -48,15 +47,15 @@ export function toastForEvents(events: Float32Array, invertedTiltRad: number): s
     if (kind === EventKind.Save) {
       const airUsedKg = events[start + 2] ?? 0;
       const peakTiltRad = events[start + 3] ?? 0;
-      const label = peakTiltRad >= invertedTiltRad ? 'FLIP SAVE' : 'SAVE';
-      text = `${label} · ${airUsedKg.toFixed(1)} kg air`;
+      const label = peakTiltRad >= invertedTiltRad ? 'Flip saved' : 'Saved';
+      text = `${label} with ${airUsedKg.toFixed(1)} kg of air`;
     } else if (kind === EventKind.Crash) {
       const cause = CRASH_CAUSE_TEXT[events[start + 1] ?? 0] ?? '';
-      text = cause ? `CRASH · ${cause}` : 'CRASH';
+      text = cause ? `Crashed: ${cause}` : 'Crashed';
     } else if (kind === EventKind.CheckpointReached) {
-      text = 'CHECKPOINT';
+      text = 'Checkpoint';
     } else if (kind === EventKind.Finished) {
-      text = 'FINISH';
+      text = 'Finished';
     }
   }
   return text;
@@ -70,8 +69,8 @@ export function showToast(toasts: Toasts, text: string, nowMs: number): void {
 }
 
 /**
- * Shows "NO AIR" when the sim says the tank has run out, unless another toast is
- * showing (a SAVE or CRASH is bigger news). `airFraction` re-arms it once the tank is full.
+ * Shows "Out of air" when the sim says the tank has run out, unless another toast is
+ * showing (a save or crash is bigger news). `airFraction` re-arms it once the tank is full.
  */
 export function showNoAirIfNew(
   toasts: Toasts,
@@ -83,7 +82,7 @@ export function showNoAirIfNew(
     toasts.noAirArmed = true;
   }
   if (outOfAir && toasts.noAirArmed && toasts.element.hidden) {
-    showToast(toasts, 'NO AIR', nowMs);
+    showToast(toasts, 'Out of air', nowMs);
     toasts.noAirArmed = false;
   }
 }

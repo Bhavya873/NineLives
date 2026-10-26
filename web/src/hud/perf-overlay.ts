@@ -69,5 +69,5 @@ export function perfText(
   const fps = (frames * 1000) / windowMs;
   const msPerTick = ticks > 0 ? tickMs / ticks : 0;
   const msPerRender = frames > 0 ? renderMs / frames : 0;
-  return `${fps.toFixed(0)} fps · tick ${msPerTick.toFixed(2)} ms · render ${msPerRender.toFixed(1)} ms`;
+  return `${fps.toFixed(0)} fps, tick ${msPerTick.toFixed(2)} ms, render ${msPerRender.toFixed(1)} ms`;
 }

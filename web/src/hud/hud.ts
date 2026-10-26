@@ -93,7 +93,7 @@ export function updateHud(hud: Hud, values: HudValues): void {
  * themselves, so the controller is not shown. */
 export function statusText(values: HudValues): string {
   const mode = MODE_TEXT[values.mode] ?? '';
-  return [mode, courseText(values)].filter(Boolean).join(' · ');
+  return [mode, courseText(values)].filter(Boolean).join(', ');
 }
 
 /** A short note while something is unavailable: respawning, or why Hop won't fire. */
