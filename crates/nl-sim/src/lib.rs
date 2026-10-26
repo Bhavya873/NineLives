@@ -4,6 +4,7 @@
 //! events, observations and rewards are computed. Python (through `nl-py`) and
 //! the browser (through `nl-wasm`) both call into it.
 
+pub mod actuator_model;
 pub mod car;
 pub mod car_state;
 pub mod chaos;

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::modes::ModeParams;
 
 /// How much air is left and how much has been used.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct AirTank {
     air_kg: f32,
     air_used_kg: f32,
