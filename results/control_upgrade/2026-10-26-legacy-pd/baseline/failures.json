@@ -1,0 +1,3872 @@
+{
+ "note": "Episodes that did not succeed in the legacy PD baseline; pre-existing, recorded before any change.",
+ "by_cell": {
+  "A_arcade": [
+   {
+    "seed": 1500000,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500002,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500010,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500018,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500019,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500020,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500021,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500025,
+    "crash_cause": "stuck"
+   },
+   {
+    "seed": 1500028,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500038,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500039,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500041,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500045,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500046,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500047,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500048,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500049,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500050,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500055,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500073,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500075,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500076,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500081,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500085,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500089,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500093,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500095,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500096,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500099,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500102,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500103,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500107,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500112,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500114,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500118,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500119,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500124,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500128,
+    "crash_cause": "stuck"
+   },
+   {
+    "seed": 1500133,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500135,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500138,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500140,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500142,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500144,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500146,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500147,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500159,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500161,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500163,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500168,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500170,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500177,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500178,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500180,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500189,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500192,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500195,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500199,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500202,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500203,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500204,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500208,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500209,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500210,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500213,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500217,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500220,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500222,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500224,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500233,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500236,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500238,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500240,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500241,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500247,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500253,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500257,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500258,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500261,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500264,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500266,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500268,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500273,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500292,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500294,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500297,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500298,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500305,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500306,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500309,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500312,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500314,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500316,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500322,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500323,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500328,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500330,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500342,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500343,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500344,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500349,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500357,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500358,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500360,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500361,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500363,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500365,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500368,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500374,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500376,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500382,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500384,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500386,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500387,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500394,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500395,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500400,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500404,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500407,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500411,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500414,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500415,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500416,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500419,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500420,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500426,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500428,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500431,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500433,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500434,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500444,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500446,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500449,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500453,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500458,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500465,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500469,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500470,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500476,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500489,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500491,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500494,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500498,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500501,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500504,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500507,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500509,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500516,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500517,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500522,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500523,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500532,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500538,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500539,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500540,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500541,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500543,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500545,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500547,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500548,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500554,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500555,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500557,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500568,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500576,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500578,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500582,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500583,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500584,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500585,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500586,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500593,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500594,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500598,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500599,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500602,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500603,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500608,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500609,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500610,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500611,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500612,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500614,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500615,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500616,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500618,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500627,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500629,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500630,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500635,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500639,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500641,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500649,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500650,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500652,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500653,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500655,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500661,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500668,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500677,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500682,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500683,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500684,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500691,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500692,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500696,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500697,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500706,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500710,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500711,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500712,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500713,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500717,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500725,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500728,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500732,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500734,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500736,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500737,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500739,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500741,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500742,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500747,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500748,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500749,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500751,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500752,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500753,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500755,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500756,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500759,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500760,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500763,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500764,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500776,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500777,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500780,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500787,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500788,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500791,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500793,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500798,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500799,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500800,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500803,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500806,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500807,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500815,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500830,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500837,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500839,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500841,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500843,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500847,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500848,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500850,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500852,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500857,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500858,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500860,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500861,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500864,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500867,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500877,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500880,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500889,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500890,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500893,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500899,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500901,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500902,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500904,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500905,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500906,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500911,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500912,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500914,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500915,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500916,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500919,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500921,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500924,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500938,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500941,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500943,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500945,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500946,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500947,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500961,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500964,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500965,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500966,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500969,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500971,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500972,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500973,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500974,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500976,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500977,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500981,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500984,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500987,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500991,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500992,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500994,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500995,
+    "crash_cause": "upside_down"
+   }
+  ],
+  "A_realistic": [
+   {
+    "seed": 1500000,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500002,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500010,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500017,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500018,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500019,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500020,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500021,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500025,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500028,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500033,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500039,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500041,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500045,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500046,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500047,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500049,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500050,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500055,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500066,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500070,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500073,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500081,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500082,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500085,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500089,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500092,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500095,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500096,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500099,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500102,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500103,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500106,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500107,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500112,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500114,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500118,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500119,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500124,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500128,
+    "crash_cause": "stuck"
+   },
+   {
+    "seed": 1500131,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500133,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500135,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500138,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500140,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500142,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500146,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500147,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500159,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500161,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500166,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500168,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500170,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500177,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500178,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500180,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500189,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500192,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500195,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500199,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500202,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500203,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500204,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500209,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500210,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500211,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500217,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500220,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500222,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500231,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500233,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500236,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500237,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500240,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500241,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500247,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500253,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500255,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500257,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500258,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500261,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500264,
+    "crash_cause": "stuck"
+   },
+   {
+    "seed": 1500268,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500271,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500273,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500292,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500294,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500297,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500298,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500305,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500306,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500309,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500314,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500319,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500322,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500326,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500328,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500329,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500330,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500342,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500343,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500344,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500349,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500357,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500358,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500360,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500361,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500365,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500368,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500374,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500376,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500382,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500386,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500387,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500394,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500395,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500396,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500398,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500400,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500404,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500407,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500411,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500414,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500415,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500416,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500419,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500420,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500426,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500428,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500431,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500434,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500437,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500444,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500446,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500449,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500453,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500455,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500456,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500458,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500462,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500465,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500468,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500469,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500470,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500473,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500476,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500482,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500483,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500489,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500491,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500494,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500498,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500501,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500504,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500507,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500509,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500516,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500517,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500522,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500523,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500528,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500538,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500539,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500540,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500541,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500545,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500548,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500555,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500557,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500559,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500566,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500568,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500572,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500573,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500576,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500578,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500583,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500585,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500586,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500597,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500598,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500599,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500602,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500606,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500609,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500610,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500611,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500612,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500614,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500615,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500616,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500618,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500627,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500629,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500630,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500639,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500641,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500649,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500650,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500652,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500653,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500655,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500668,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500677,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500683,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500690,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500691,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500697,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500698,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500705,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500706,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500710,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500712,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500713,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500717,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500724,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500725,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500728,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500732,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500734,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500737,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500739,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500741,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500742,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500743,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500747,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500751,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500753,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500755,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500756,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500759,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500760,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500763,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500764,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500767,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500776,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500780,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500791,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500793,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500795,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500797,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500799,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500800,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500805,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500807,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500815,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500830,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500833,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500837,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500839,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500841,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500843,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500848,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500850,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500852,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500856,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500857,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500858,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500860,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500863,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500864,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500867,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500877,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500880,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500889,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500890,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500893,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500898,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500899,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500901,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500902,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500904,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500905,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500907,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500911,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500912,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500916,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500919,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500920,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500921,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500928,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500929,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500938,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500941,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500943,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500946,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500947,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500948,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500959,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500960,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500961,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500964,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500965,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500966,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500969,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500971,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500972,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500973,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500974,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500976,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500977,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500981,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500984,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500987,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500991,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500992,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500994,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500995,
+    "crash_cause": "upside_down"
+   }
+  ],
+  "B_arcade": [
+   {
+    "seed": 1500201,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500271,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500432,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500515,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500809,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500853,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500860,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500976,
+    "crash_cause": "hard_impact"
+   }
+  ],
+  "B_realistic": [
+   {
+    "seed": 1500368,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500453,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500491,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500541,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500687,
+    "crash_cause": "hard_impact"
+   }
+  ],
+  "C_arcade": [
+   {
+    "seed": 1500031,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500178,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500197,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500798,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500864,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500919,
+    "crash_cause": "hard_impact"
+   }
+  ],
+  "C_realistic": [],
+  "D_arcade": [
+   {
+    "seed": 1500006,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500034,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500082,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500112,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500164,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500204,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500277,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500328,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500413,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500468,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500471,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500485,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500601,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500672,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500716,
+    "crash_cause": "hard_impact"
+   }
+  ],
+  "D_realistic": [
+   {
+    "seed": 1500029,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500034,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500102,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500112,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500144,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500164,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500204,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500278,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500287,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500328,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500355,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500395,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500468,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500485,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500528,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500537,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500554,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500601,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500605,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500672,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500676,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500708,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500735,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500741,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500879,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500896,
+    "crash_cause": "hard_impact"
+   }
+  ],
+  "E_arcade": [
+   {
+    "seed": 1500006,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500010,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500018,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500019,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500020,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500025,
+    "crash_cause": "stuck"
+   },
+   {
+    "seed": 1500028,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500038,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500045,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500055,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500057,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500068,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500073,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500075,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500076,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500083,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500091,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500102,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500120,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500133,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500135,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500140,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500142,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500144,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500161,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500170,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500177,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500178,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500193,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500198,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500199,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500203,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500204,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500209,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500210,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500214,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500217,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500222,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500224,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500240,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500250,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500253,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500257,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500264,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500266,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500292,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500297,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500299,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500303,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500306,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500314,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500322,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500325,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500330,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500342,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500343,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500355,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500357,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500358,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500376,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500403,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500408,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500411,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500415,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500416,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500428,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500433,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500434,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500453,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500465,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500470,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500472,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500478,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500491,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500509,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500510,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500515,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500517,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500524,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500539,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500543,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500548,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500554,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500555,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500576,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500586,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500593,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500603,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500610,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500615,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500616,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500618,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500627,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500640,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500650,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500652,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500653,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500659,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500661,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500680,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500682,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500691,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500706,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500707,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500708,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500712,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500735,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500736,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500739,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500741,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500748,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500752,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500753,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500763,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500774,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500780,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500783,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500788,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500791,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500806,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500807,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500843,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500852,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500871,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500882,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500887,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500890,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500898,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500899,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500902,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500903,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500904,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500914,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500915,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500916,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500919,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500921,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500926,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500938,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500941,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500943,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500965,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500969,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500971,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500972,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500984,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500987,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500991,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500999,
+    "crash_cause": null
+   }
+  ],
+  "E_realistic": [
+   {
+    "seed": 1500006,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500010,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500018,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500019,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500020,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500025,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500028,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500033,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500045,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500055,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500068,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500070,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500073,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500082,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500089,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500091,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500102,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500131,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500135,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500140,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500142,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500161,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500164,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500170,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500177,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500178,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500199,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500203,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500204,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500209,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500210,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500214,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500215,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500217,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500222,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500240,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500253,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500257,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500258,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500264,
+    "crash_cause": "stuck"
+   },
+   {
+    "seed": 1500266,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500297,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500306,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500314,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500322,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500329,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500330,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500342,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500343,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500355,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500357,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500358,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500376,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500403,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500411,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500415,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500416,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500428,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500434,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500453,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500454,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500456,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500465,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500470,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500472,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500478,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500479,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500491,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500509,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500510,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500517,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500528,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500533,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500539,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500548,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500555,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500576,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500586,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500597,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500600,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500605,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500606,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500610,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500615,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500616,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500618,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500623,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500627,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500640,
+    "crash_cause": null
+   },
+   {
+    "seed": 1500650,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500652,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500653,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500659,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500690,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500691,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500698,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500705,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500706,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500708,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500712,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500724,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500735,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500739,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500741,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500753,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500763,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500780,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500791,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500797,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500805,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500807,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500833,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500843,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500871,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500882,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500890,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500898,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500899,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500902,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500904,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500905,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500916,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500919,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500921,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500926,
+    "crash_cause": "out_of_bounds"
+   },
+   {
+    "seed": 1500938,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500941,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500948,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500959,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500960,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500965,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500969,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500971,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500972,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500983,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500984,
+    "crash_cause": "hard_impact"
+   },
+   {
+    "seed": 1500987,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500991,
+    "crash_cause": "upside_down"
+   },
+   {
+    "seed": 1500999,
+    "crash_cause": null
+   }
+  ]
+ }
+}

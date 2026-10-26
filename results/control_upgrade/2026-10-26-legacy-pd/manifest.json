@@ -1,0 +1,142 @@
+{
+  "experiment_id": "2026-10-26-legacy-pd",
+  "purpose": "Legacy PD baseline before any actuator-aware allocation change (docs/control-upgrade-audit.md).",
+  "git_commit": "6d91dfb1d007f3d2b88a458bb04c1a3b56aac7e3",
+  "git_note": "Working tree = this commit plus docs/control-upgrade-audit.md (no code change).",
+  "config_hashes": {
+    "algorithm": "sha256",
+    "files": {
+      "configs/controllers.toml": "a52e0b2c3c130416fb40c1f5d50aabe2f701ad6f6b97e76943e60ab467fc07d4",
+      "configs/modes.toml": "95f9f603102cdf4add647fcb1463ae7fca95a7913b7811117805d714fa53c8e9",
+      "configs/reward.toml": "dea3caad9606774266d535c7befadede71ca4152355d2e8bc288233e0c1760fb",
+      "configs/scenarios.toml": "91b2c62ba52f3464ab478359d44aecadb935fa40ada287868f5089cb1ac0d291",
+      "configs/vehicle.toml": "dc2ec7df4c1cb30e39dd07ab9e25fbfec8e6c3410f77fac3ece551566985c4ce"
+    }
+  },
+  "controller": "legacy_pd",
+  "allocation_model": "legacy",
+  "stages": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "stage_f": "not run: the eval runner accepts stages A-E only",
+  "modes": [
+    "realistic",
+    "arcade"
+  ],
+  "scenario_seeds": {
+    "first": 1500000,
+    "episodes_per_cell": 1000,
+    "last": 1500999
+  },
+  "held_out_seeds": "untouched (3,000,000+ are reserved for the final test)",
+  "domain_randomization": false,
+  "build_target": "native release, aarch64-apple-darwin, cargo build --release -p nl-control --example eval",
+  "timing_method": "wall clock per cell (perl Time::HiRes around the eval process), 10 cells run 2 at a time (one stage, both modes, in parallel) on an Apple-silicon laptop; indicative only",
+  "command": "target/release/examples/eval --controller pd --stage <S> --mode <M> --episodes 1000 --seed 1500000 (run from a scratch directory)",
+  "cells": {
+    "A_arcade": {
+      "success_rate": 0.6940000057220459,
+      "crash_rate": 0.3050000071525574,
+      "save_rate": 0.6830000281333923,
+      "hard_landing_rate": 0.01899999938905239,
+      "air_per_save_kg": 44.75014114379883,
+      "touchdown_fall_p95_m_s": 9.466296195983887,
+      "touchdown_spin_p95_rad_s": 4.847504138946533,
+      "wall_s": 1.09
+    },
+    "A_realistic": {
+      "success_rate": 0.6919999718666077,
+      "crash_rate": 0.30799999833106995,
+      "save_rate": 0.6809999942779541,
+      "hard_landing_rate": 0.0,
+      "air_per_save_kg": 39.88050842285156,
+      "touchdown_fall_p95_m_s": 9.488997459411621,
+      "touchdown_spin_p95_rad_s": 4.90360164642334,
+      "wall_s": 1.1
+    },
+    "B_arcade": {
+      "success_rate": 0.9919999837875366,
+      "crash_rate": 0.00800000037997961,
+      "save_rate": 0.9919999837875366,
+      "hard_landing_rate": 0.0,
+      "air_per_save_kg": 24.111387252807617,
+      "touchdown_fall_p95_m_s": 1.0657448768615723,
+      "touchdown_spin_p95_rad_s": 2.0003604888916016,
+      "wall_s": 1.22
+    },
+    "B_realistic": {
+      "success_rate": 0.9950000047683716,
+      "crash_rate": 0.004999999888241291,
+      "save_rate": 0.9950000047683716,
+      "hard_landing_rate": 0.0,
+      "air_per_save_kg": 23.50749397277832,
+      "touchdown_fall_p95_m_s": 1.0689219236373901,
+      "touchdown_spin_p95_rad_s": 1.965277910232544,
+      "wall_s": 1.24
+    },
+    "C_arcade": {
+      "success_rate": 0.9940000176429749,
+      "crash_rate": 0.006000000052154064,
+      "save_rate": 0.9940000176429749,
+      "hard_landing_rate": 0.19499999284744263,
+      "air_per_save_kg": 22.94227409362793,
+      "touchdown_fall_p95_m_s": 1.1434904336929321,
+      "touchdown_spin_p95_rad_s": 0.00016360565496142954,
+      "wall_s": 2.67
+    },
+    "C_realistic": {
+      "success_rate": 1.0,
+      "crash_rate": 0.0,
+      "save_rate": 1.0,
+      "hard_landing_rate": 0.0,
+      "air_per_save_kg": 8.977023124694824,
+      "touchdown_fall_p95_m_s": 1.1434904336929321,
+      "touchdown_spin_p95_rad_s": 0.00016360565496142954,
+      "wall_s": 1.99
+    },
+    "D_arcade": {
+      "success_rate": 0.9850000143051147,
+      "crash_rate": 0.013000000268220901,
+      "save_rate": 0.9890000224113464,
+      "hard_landing_rate": 0.0729999989271164,
+      "air_per_save_kg": 24.800601959228516,
+      "touchdown_fall_p95_m_s": 1.1443787813186646,
+      "touchdown_spin_p95_rad_s": 2.2646188881481066e-05,
+      "wall_s": 18.37
+    },
+    "D_realistic": {
+      "success_rate": 0.9739999771118164,
+      "crash_rate": 0.019999999552965164,
+      "save_rate": 0.9900000095367432,
+      "hard_landing_rate": 0.0020000000949949026,
+      "air_per_save_kg": 24.228639602661133,
+      "touchdown_fall_p95_m_s": 1.1443787813186646,
+      "touchdown_spin_p95_rad_s": 2.2646188881481066e-05,
+      "wall_s": 18.33
+    },
+    "E_arcade": {
+      "success_rate": 0.8510000109672546,
+      "crash_rate": 0.1469999998807907,
+      "save_rate": 0.8489999771118164,
+      "hard_landing_rate": 0.10899999737739563,
+      "air_per_save_kg": 29.381168365478516,
+      "touchdown_fall_p95_m_s": 6.514270305633545,
+      "touchdown_spin_p95_rad_s": 3.656505823135376,
+      "wall_s": 7.21
+    },
+    "E_realistic": {
+      "success_rate": 0.8610000014305115,
+      "crash_rate": 0.13600000739097595,
+      "save_rate": 0.8659999966621399,
+      "hard_landing_rate": 0.0020000000949949026,
+      "air_per_save_kg": 23.922395706176758,
+      "touchdown_fall_p95_m_s": 6.566426753997803,
+      "touchdown_spin_p95_rad_s": 3.700984239578247,
+      "wall_s": 7.09
+    }
+  }
+}
