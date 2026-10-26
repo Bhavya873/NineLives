@@ -16,7 +16,6 @@ interface ViewerReading {
 }
 
 interface ViewerHook {
-  checkpoint: () => number;
   checkpointCount: () => number;
   landed: () => number;
   arena: () => string;
@@ -50,15 +49,16 @@ async function expectArena(page: Page, label: string): Promise<void> {
   });
 }
 
-test('the training viewer replays a checkpoint and cars land', async ({ page }) => {
+test('the training viewer flies every checkpoint at once and cars land', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
 
   await page.goto('/viewer.html');
 
-  await expect(page.locator('#viewer-status')).toContainText('checkpoint 1 of', {
+  await expect(page.locator('#viewer-status')).toContainText('checkpoints at once', {
     timeout: SLOW_MACHINE_TIMEOUT_MS,
   });
+  await expect(page.locator('#viewer-board')).toContainText('#1 ·');
   await expect
     .poll(() => readLanded(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(0);

@@ -1,8 +1,6 @@
 // Entry point for the web game. It wires the pieces together:
 // keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
-// Each piece lives in its own folder: input/, render/, hud/; the loop is in game-loop.ts.
 import controllersToml from '../../configs/controllers.toml?raw';
-import gauntletJson from '../../courses/gauntlet.json?raw';
 import modesToml from '../../configs/modes.toml?raw';
 import playgroundJson from '../../courses/playground.json?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
@@ -10,10 +8,11 @@ import vehicleToml from '../../configs/vehicle.toml?raw';
 import { Vector3 } from 'three';
 
 import { prefersReducedMotion, requireElement } from './dom.ts';
-import { createCourseSession, showCourse, showResultsWhenFinished } from './course-session.ts';
+import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import { createAirGauge, updateAirGauge } from './hud/air-gauge.ts';
 import { findHud, type HudValues, updateHud } from './hud/hud.ts';
+import { createLives, restartLives, updateLives } from './hud/lives.ts';
 import { createNozzleMap, updateNozzleMap } from './hud/nozzle-map.ts';
 import {
   createPerfOverlay,
@@ -21,14 +20,6 @@ import {
   recordTick,
   togglePerfOverlay,
 } from './hud/perf-overlay.ts';
-import { createHelpPanel, showHelpOnFirstPlay, toggleHelp } from './hud/help-panel.ts';
-import {
-  type ControllerName,
-  type CourseName,
-  createTitleScreen,
-  disableAiPicks,
-  showPicked,
-} from './hud/title-screen.ts';
 import {
   createToasts,
   showNoAirIfNew,
@@ -45,7 +36,6 @@ import {
   MANUAL_NOZZLE_COUNT,
   onKeyPress,
   readInputFrame,
-  bindTapButton,
   startKeyboard,
 } from './input/keyboard.ts';
 import { followCar, snapCamera, widenWithSpeed } from './render/chase-camera.ts';
@@ -107,74 +97,22 @@ const hudValues: HudValues = {
 async function start(): Promise<void> {
   await initWasm();
   checkWasmLayout();
-  // A new random seed each visit; it only affects Chaos knocks.
+  // A new random seed each visit; the game itself draws nothing from it.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
   const game = new Game(vehicleToml, modesToml, controllersToml, seed);
   onKeyPress('KeyM', () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
-  // SPEC §11.3: T cycles the controller; the sim owns the order (AI joins once loaded).
-  onKeyPress('KeyT', () => {
-    playerPicked = true;
-    waitingForPolicy = null;
-    game.cycle_controller();
-  });
-  // Hybrid is the default once the policy is in (DECISIONS 2026-10-21); the game starts
-  // with PD while it loads. A player who has picked a controller on the title screen, or
-  // pressed T, keeps their choice; an AI pick made before the policy loads waits for it.
-  let policyLoaded = false;
-  let playerPicked = false;
-  let waitingForPolicy: ControllerName | null = null;
-  const chooseController = (name: ControllerName) => {
-    playerPicked = true;
-    waitingForPolicy = null;
-    if ((name === 'ai' || name === 'hybrid') && !policyLoaded) {
-      waitingForPolicy = name;
-      return;
-    }
-    game.set_controller(name);
-  };
-  // H shows the key list; it also shows by itself for a few seconds when play first starts.
-  const help = createHelpPanel(requireElement('hud-help'));
-  onKeyPress('KeyH', () => toggleHelp(help));
-  const title = createTitleScreen(requireElement('title-screen'), window, {
-    chooseController,
-    chooseMode: (name) => game.set_mode(name),
-    chooseCourse: (name) => (name === 'gauntlet' ? startGauntlet() : startFreeDrive()),
-    chooseWind: (level) => setWind(level),
-    onHide: () => showHelpOnFirstPlay(help, prefersReducedMotion()),
-  });
-  // Marks the controller, mode, course and wind the game is really using.
-  const showCurrentPicks = () => {
-    const hud = game.hud();
-    showPicked(title, {
-      controller: controllerName(hud[HudField.Controller] ?? ControllerCode.Off),
-      mode: hud[HudField.Mode] === ModeCode.Arcade ? 'arcade' : 'realistic',
-      course: currentCourse,
-      wind: windLevel,
-    });
-  };
+  // The game always flies with its best controller: PD + AI (the Hybrid, DECISIONS
+  // 2026-10-21). PD flies alone while the policy loads, or if it fails to load.
   void loadPolicy(game).then((loaded) => {
-    policyLoaded = loaded;
-    if (!loaded) {
-      // An AI pick made while loading can't happen: say so instead of leaving it marked.
-      waitingForPolicy = null;
-      disableAiPicks(title);
-      showCurrentPicks();
-      return;
-    }
-    if (waitingForPolicy !== null) {
-      game.set_controller(waitingForPolicy);
-    } else if (!playerPicked && game.hud()[HudField.Controller] === ControllerCode.Pd) {
+    if (loaded) {
       game.set_controller('hybrid');
     }
   });
-  // Esc reopens the title screen: show what M and T have changed since.
-  onKeyPress('Escape', showCurrentPicks);
   const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
   onKeyPress('F3', () => togglePerfOverlay(perf));
-  bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
 
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),
@@ -210,11 +148,7 @@ async function start(): Promise<void> {
   };
   setWind(windLevel);
   onKeyPress('KeyV', () => setWind(nextWindLevel(windLevel)));
-  let currentCourse: CourseName = 'playground';
-  const course = createCourseSession(view.scene, view.ground, {
-    panel: requireElement('results'),
-    lines: requireElement('results-lines'),
-  });
+  const course = createCourseSession(view.scene, view.ground);
   /** Puts the drawn course in step with a fresh run (null: the open arena). */
   const startCourse = (shapesJson: string | null) => {
     showCourse(course, shapesJson);
@@ -222,13 +156,8 @@ async function start(): Promise<void> {
     snapViewToGame(game, frames, view, carPose);
     resetScreenEffects(effects);
   };
-  const startGauntlet = () => {
-    currentCourse = 'gauntlet';
-    startCourse(game.load_course(gauntletJson));
-  };
   // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
   const startFreeDrive = () => {
-    currentCourse = 'playground';
     if (params.get('world') === 'flat') {
       game.load_flat_ground();
       startCourse(null);
@@ -236,15 +165,29 @@ async function start(): Promise<void> {
       startCourse(game.load_course(playgroundJson));
     }
   };
-  // Enter starts (or restarts) the Gauntlet; F goes back to free driving.
-  onKeyPress('Enter', startGauntlet);
-  onKeyPress('NumpadEnter', startGauntlet);
-  onKeyPress('KeyF', startFreeDrive);
-  if (params.get('course') === 'gauntlet') {
-    startGauntlet();
-  } else {
+  startFreeDrive();
+  // Nine hearts, one lost per crash; at zero the game-over screen offers a restart.
+  const lives = createLives(
+    requireElement('hud-hearts'),
+    requireElement('game-over'),
+    requireElement('game-over-summary'),
+  );
+  // Restart: a fresh playground run, which also sets the sim's counts back to zero.
+  requireElement('restart').addEventListener('click', () => {
     startFreeDrive();
-  }
+    game.drain_events();
+    fillHudValues(game.hud(), hudValues);
+    restartLives(lives, hudValues);
+  });
+  // Esc pauses and resumes; nothing moves while paused or after the last life.
+  const pausedPanel = requireElement('paused');
+  let paused = false;
+  onKeyPress('Escape', () => {
+    if (!lives.over) {
+      paused = !paused;
+      pausedPanel.hidden = !paused;
+    }
+  });
   // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
   onKeyPress('KeyX', () => {
     game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
@@ -272,14 +215,17 @@ async function start(): Promise<void> {
       resetScreenEffects(effects);
     }
     const toast = toastForEvents(events, invertedTiltRad);
-    // Nothing covers the results screen; what happens after the finish doesn't count.
-    if (toast && !course.resultsShown) {
+    // Nothing covers the game-over screen.
+    if (toast && !lives.over) {
       showToast(toasts, toast, nowMs);
     }
   };
 
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
+      if (paused || lives.over) {
+        return;
+      }
       const tickStartMs = performance.now();
       frames.previousChassis = frames.latestChassis;
       frames.previousWheels = frames.latestWheels;
@@ -297,11 +243,10 @@ async function start(): Promise<void> {
       const frameS = (nowMs - lastRenderMs) / 1000;
       lastRenderMs = nowMs;
       // Events queue up in the sim, so reading them once per frame is enough.
-      // The HUD's save and crash counts update as events drain, so drain first; then
-      // put up the results before the events' toasts, so no FINISH toast covers them.
+      // The HUD's save and crash counts update as events drain, so drain first.
       const events = game.drain_events();
       fillHudValues(game.hud(), hudValues);
-      showResultsWhenFinished(course, hudValues);
+      updateLives(lives, hudValues, nowMs);
       reactToEvents(events, nowMs);
 
       // Valve lag already smooths the throttles, so one read per frame is enough.
@@ -385,23 +330,6 @@ function snapViewToGame(
   frames.previousWheels = frames.latestWheels = game.wheel_poses();
   placeCar(view, frames, 1, carPose);
   snapCamera(view.camera, carPose);
-}
-
-/** The title screen's name for a HUD controller code (Manual has none). */
-function controllerName(code: number): string {
-  switch (code) {
-    case ControllerCode.HybridAi:
-    case ControllerCode.HybridPd:
-      return 'hybrid';
-    case ControllerCode.Pd:
-      return 'pd';
-    case ControllerCode.Ai:
-      return 'ai';
-    case ControllerCode.Off:
-      return 'off';
-    default:
-      return 'manual';
-  }
 }
 
 /** Copies the values the HUD shows out of `Game.hud()`'s array into `out`. */

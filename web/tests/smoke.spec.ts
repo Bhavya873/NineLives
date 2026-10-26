@@ -19,8 +19,6 @@ interface DebugHook {
   controllerCode: () => number;
 }
 
-/** The wasm `ControllerCode.Ai` value (crates/nl-wasm). */
-const CONTROLLER_CODE_AI = 3;
 /** The wasm `ControllerCode.HybridPd` value: Hybrid, with PD in charge. */
 const CONTROLLER_CODE_HYBRID_PD = 5;
 
@@ -71,32 +69,16 @@ test('the game switches to Hybrid by itself once the policy has loaded', async (
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBe(CONTROLLER_CODE_HYBRID_PD);
-  await expect(page.locator('#hud-status')).toContainText('PD + AI · PD driving');
+  await expect(page.locator('#hud-status')).toHaveText('Realistic');
 });
 
-test('T reaches the AI once the policy has loaded, and a drop test runs clean', async ({
-  page,
-}) => {
+test('a drop test runs clean under the Hybrid', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/');
-  await expect.poll(() => readDebug(page, 'x'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).not.toBeNaN();
-
-  // The cycle is Off → PD → AI → Hybrid (SPEC §11.3), and the game moves to Hybrid once the
-  // policy loads in the background, so keep cycling until the sim reports the AI; never
-  // press T once it does.
   await expect
-    .poll(
-      async () => {
-        if ((await readControllerCode(page)) !== CONTROLLER_CODE_AI) {
-          await page.keyboard.press('KeyT');
-        }
-        return readControllerCode(page);
-      },
-      { timeout: SLOW_MACHINE_TIMEOUT_MS },
-    )
-    .toBe(CONTROLLER_CODE_AI);
-  await expect(page.locator('#hud-status')).toHaveText(/^AI · /);
+    .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBe(CONTROLLER_CODE_HYBRID_PD);
 
   await page.keyboard.press('KeyX');
   const dropTimeS = await readDebug(page, 'time');

@@ -1,9 +1,8 @@
-// The on-screen display's text (SPEC §11.5): the status line, a short alert, the speed
-// and the menu's stats line. The air gauge, nozzle map and toasts have their own files.
+// The on-screen display's text (SPEC §11.5): the status line, a short alert and the speed. The air gauge, nozzle map and toasts have their own files.
 // It reads plain numbers and writes text; it never touches physics.
 
 import { requireElement, setText } from '../dom.ts';
-import { ControllerCode, HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
+import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
 
@@ -22,16 +21,6 @@ const MODE_TEXT: Record<number, string> = {
   [ModeCode.Custom]: 'Custom',
 };
 
-/** Who fires the thrusters, by wasm `ControllerCode` value; "PD + AI" is the Hybrid. */
-const CONTROLLER_TEXT: Record<number, string> = {
-  [ControllerCode.Off]: 'Thrusters off',
-  [ControllerCode.Pd]: 'PD',
-  [ControllerCode.Ai]: 'AI',
-  [ControllerCode.Manual]: 'Manual (keys 1–0)',
-  [ControllerCode.HybridAi]: 'PD + AI · AI flying',
-  [ControllerCode.HybridPd]: 'PD + AI · PD driving',
-};
-
 /** The numbers the HUD shows, already read from the game. */
 export interface HudValues {
   speedMS: number;
@@ -48,7 +37,7 @@ export interface HudValues {
   crashed: boolean;
   /** Saves so far. */
   saves: number;
-  /** Crashes so far, shown as "Lives used". */
+  /** Crashes so far; each one costs a heart. */
   crashes: number;
   /** Simulated time since the game started. */
   timeS: number;
@@ -79,8 +68,6 @@ export interface Hud {
   speed: HTMLElement;
   status: HTMLElement;
   alert: HTMLElement;
-  /** The stats line on the menu. */
-  stats: HTMLElement;
 }
 
 /** Finds the HUD elements in the page. Throws if the page is missing one. */
@@ -89,7 +76,6 @@ export function findHud(): Hud {
     speed: requireElement('hud-speed-value'),
     status: requireElement('hud-status'),
     alert: requireElement('hud-alert'),
-    stats: requireElement('hud-stats'),
   };
 }
 
@@ -101,14 +87,13 @@ export function updateHud(hud: Hud, values: HudValues): void {
   const alert = alertText(values);
   setText(hud.alert, alert);
   hud.alert.hidden = alert === '';
-  setText(hud.stats, statsText(values));
 }
 
-/** The status line: who fires the thrusters, the mode and the course section. */
+/** The status line: the mode and the course section. The thrusters always fly
+ * themselves, so the controller is not shown. */
 export function statusText(values: HudValues): string {
-  const controller = CONTROLLER_TEXT[values.controller] ?? '';
   const mode = MODE_TEXT[values.mode] ?? '';
-  return [controller, mode, courseText(values)].filter(Boolean).join(' · ');
+  return [mode, courseText(values)].filter(Boolean).join(' · ');
 }
 
 /** A short note while something is unavailable: respawning, or why Hop won't fire. */
@@ -120,12 +105,6 @@ export function alertText(values: HudValues): string {
     return `Hop in ${values.hopCooldownS.toFixed(1)} s`;
   }
   return HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
-}
-
-/** The menu's stats line: saves, lives used and time. */
-export function statsText(values: HudValues): string {
-  const time = formatTime(values.timeS);
-  return `Saves ${values.saves} · Lives used ${values.crashes} · Time ${time}`;
 }
 
 /** The course section (SPEC §11.5), e.g. "Checkpoint 2/6"; empty on flat ground. */

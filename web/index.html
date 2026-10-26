@@ -17,10 +17,13 @@
         --text: #f2f5f8;
         --muted: rgb(242 245 248 / 62%);
         --accent: #e0542f;
-        --accent-soft: rgb(224 84 47 / 30%);
         --air: #8fd0ff;
         --danger: #ff5a4f;
         --link: #ffb59e;
+        --heart: #e8343a;
+        --heart-light: #ff8a8f;
+        --heart-edge: #3a0a0c;
+        --heart-lost: #2b2f36;
       }
       html,
       body {
@@ -56,43 +59,66 @@
         display: none !important;
       }
 
-      /* Top-left: what is flying the car, the mode and the course section. */
-      #hud-status {
+      /* Top-left: the nine hearts, what flies the car, and short notes. */
+      #hud-top-left {
+        position: fixed;
         left: var(--edge);
         top: var(--edge);
-        max-width: calc(100vw - 2 * var(--edge) - 120px);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        pointer-events: none;
+      }
+      #hud-top-left > .hud {
+        position: static;
+      }
+      #hud-hearts {
+        display: flex;
+        gap: 3px;
+      }
+      .heart svg {
+        display: block;
+        width: 27px;
+        height: 24px;
+      }
+      .heart .o {
+        fill: var(--heart-edge);
+      }
+      .heart .f {
+        fill: var(--heart);
+      }
+      .heart .h {
+        fill: var(--heart-light);
+      }
+      .heart.lost .f,
+      .heart.lost .h {
+        fill: var(--heart-lost);
+      }
+      #hud-status {
         font-size: 14px;
       }
-      /* Under the status: short-lived notes (Hop unavailable, respawning). */
       #hud-alert {
-        left: var(--edge);
-        top: 52px;
         font-size: 13px;
         color: #ffd9a8;
       }
-      /* Top-right: the keys hint, then the wind when there is any. */
-      #hud-hint {
+
+      /* Top-right: the keys, always on screen. */
+      #hud-keys {
         right: var(--edge);
         top: var(--edge);
-        border: 0;
-        background: none;
-        backdrop-filter: none;
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 2px 12px;
         font-size: 13px;
+      }
+      #hud-keys dt {
         color: var(--muted);
+        white-space: nowrap;
       }
-      #hud-wind {
-        right: var(--edge);
-        top: 48px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-      }
-      #hud-wind-arrow,
-      #hud-wind-arrow svg {
-        display: block;
-        width: 18px;
-        height: 18px;
+      #hud-keys dd {
+        margin: 0;
       }
 
       /* Bottom-left: the dashboard, with the nozzle map beside speed and air. */
@@ -169,61 +195,20 @@
         }
       }
 
-      /* Bottom-right: the Chaos knock, the only HUD piece that takes clicks. */
-      #chaos-button {
-        position: fixed;
+      /* Bottom-right: the wind, only when there is any. */
+      #hud-wind {
         right: var(--edge);
         bottom: var(--edge);
-        padding: 8px 16px;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        background: var(--panel);
-        color: var(--text);
-        font: inherit;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
       }
-      #chaos-button:hover {
-        border-color: var(--accent);
-      }
-
-      /* H: the full key list, centred; it shows for a few seconds at the start of play. */
-      #hud-help {
-        left: 50%;
-        top: 64px;
-        transform: translateX(-50%);
-        width: min(440px, calc(100vw - 2 * var(--edge)));
-        box-sizing: border-box;
-        padding: 14px 18px;
-        background: var(--panel-solid);
-        font-size: 14px;
-        transition: opacity 0.6s;
-      }
-      #hud-help.fading {
-        opacity: 0;
-      }
-      #hud-help h2 {
-        margin: 0 0 8px;
-        font-size: 15px;
-      }
-      #hud-help dl {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 4px 14px;
-        margin: 0;
-      }
-      #hud-help dt {
-        color: var(--muted);
-        white-space: nowrap;
-      }
-      #hud-help dd {
-        margin: 0;
-      }
-      #hud-help p {
-        margin: 10px 0 0;
-        font-size: 13px;
-        color: var(--muted);
+      #hud-wind-arrow,
+      #hud-wind-arrow svg {
+        display: block;
+        width: 18px;
+        height: 18px;
       }
 
       #hud-toast {
@@ -239,127 +224,87 @@
       #hud-perf {
         /* F3 (src/hud/perf-overlay.ts): fps and ms per tick and per frame. */
         right: var(--edge);
-        top: 88px;
+        top: 200px;
         font-size: 13px;
       }
-      #results {
+
+      /* Esc: the game stops until Esc again. */
+      #paused {
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
-        min-width: 260px;
-        padding: 18px 26px;
+        padding: 16px 28px;
         background: var(--panel-solid);
-        font-size: 18px;
         text-align: center;
       }
-      #results h2 {
-        margin: 0 0 10px;
+      #paused h2 {
+        margin: 0;
         font-size: 28px;
+        letter-spacing: 0.06em;
       }
-      #results-lines {
-        white-space: pre-line;
-        line-height: 1.5;
-      }
-      #results p {
-        margin: 12px 0 0;
+      #paused p {
+        margin: 6px 0 0;
         font-size: 14px;
         color: var(--muted);
       }
 
-      #title-screen {
-        /* The title screen (src/hud/title-screen.ts); unlike the HUD, it takes clicks. */
+      /* All nine lives gone: a black screen to restart from. */
+      #game-over {
         position: fixed;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        width: min(540px, calc(100vw - 2 * var(--edge)));
-        max-height: calc(100vh - 2 * var(--edge));
-        overflow-y: auto;
-        box-sizing: border-box;
-        padding: 22px 24px;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        background: var(--panel-solid);
-        line-height: 1.45;
-      }
-      #title-screen h1 {
-        margin: 0;
-        font-size: 38px;
-        letter-spacing: 0.04em;
-      }
-      #title-screen .pitch {
-        margin: 4px 0 14px;
-        color: var(--muted);
-      }
-      #title-screen .picker {
+        inset: 0;
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         align-items: center;
-        gap: 6px;
-        margin: 8px 0;
+        justify-content: center;
+        gap: 14px;
+        background: #000;
+        text-align: center;
       }
-      #title-screen .picker > span {
-        width: 80px;
-        font-size: 13px;
+      #game-over h2 {
+        margin: 0;
+        font-size: 44px;
+        letter-spacing: 0.06em;
+      }
+      #game-over p {
+        margin: 0;
         color: var(--muted);
       }
-      #title-screen button {
-        padding: 6px 12px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: rgb(255 255 255 / 4%);
+      #restart {
+        padding: 10px 34px;
+        border: 0;
+        border-radius: var(--radius);
+        background: var(--accent);
         color: var(--text);
         font: inherit;
-        font-size: 14px;
-        cursor: pointer;
-      }
-      #title-screen button:hover {
-        border-color: rgb(255 255 255 / 35%);
-      }
-      #title-screen button[aria-pressed='true'] {
-        border-color: var(--accent);
-        background: var(--accent-soft);
-      }
-      #title-screen button:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      #title-screen #title-play {
-        margin-top: 14px;
-        padding: 8px 30px;
-        border-color: var(--accent);
-        background: var(--accent);
         font-size: 18px;
         font-weight: 600;
-      }
-      #title-screen details {
-        margin-top: 12px;
-        font-size: 14px;
-      }
-      #title-screen summary {
         cursor: pointer;
       }
-      #title-screen a {
+      #game-over a {
         color: var(--link);
+        font-size: 14px;
       }
-      #title-screen .hint,
-      #hud-stats {
-        margin: 10px 0 0;
-        font-size: 13px;
-        color: var(--muted);
-      }
-      /* Phones: the Chaos button moves up out of the dashboard's way. */
-      @media (max-width: 520px) {
-        #chaos-button {
-          bottom: 128px;
+
+      /* Phones: the keys sit above the dashboard instead of beside the hearts. */
+      @media (max-width: 640px) {
+        #hud-keys {
+          top: auto;
+          right: auto;
+          left: var(--edge);
+          bottom: 132px;
+          font-size: 12px;
+        }
+        #hud-wind {
+          bottom: 132px;
+        }
+        .heart svg {
+          width: 20px;
+          height: 18px;
         }
       }
       @media (prefers-reduced-motion: reduce) {
         #hud-air.low #hud-air-fill {
           animation: none;
-        }
-        #hud-help {
-          transition: none;
         }
       }
     </style>
@@ -367,9 +312,29 @@
   <body>
     <div id="game"></div>
     <div id="g-blackout" hidden></div>
-    <div id="hud-status" class="hud">Realistic</div>
-    <div id="hud-alert" class="hud" hidden></div>
-    <div id="hud-hint" class="hud">H keys · Esc menu</div>
+    <div id="hud-top-left">
+      <div id="hud-hearts" aria-label="Lives"></div>
+      <div id="hud-status" class="hud">Realistic</div>
+      <div id="hud-alert" class="hud" hidden></div>
+    </div>
+    <dl id="hud-keys" class="hud" aria-label="Keys">
+      <dt>W S / ↑ ↓</dt>
+      <dd>drive · brake</dd>
+      <dt>A D / ← →</dt>
+      <dd>steer</dd>
+      <dt>Space</dt>
+      <dd>hop</dd>
+      <dt>Shift</dt>
+      <dd>boost</dd>
+      <dt>X</dt>
+      <dd>drop test</dd>
+      <dt>R</dt>
+      <dd>respawn</dd>
+      <dt>M · V</dt>
+      <dd>mode · wind</dd>
+      <dt>Esc</dt>
+      <dd>pause</dd>
+    </dl>
     <div id="hud-wind" class="hud" hidden>
       <span id="hud-wind-arrow">
         <svg viewBox="-12 -12 24 24" aria-hidden="true">
@@ -390,88 +355,18 @@
       </div>
     </div>
     <div id="hud-toast" class="hud" hidden></div>
-    <div id="results" class="hud" hidden>
-      <h2>Finished</h2>
-      <div id="results-lines"></div>
-      <p>Enter race again · F free drive</p>
-    </div>
-    <button id="chaos-button" type="button" title="A random knock (C)">Chaos</button>
     <div id="hud-perf" class="hud" hidden></div>
-    <section id="hud-help" class="hud" aria-label="Keys" hidden>
-      <h2>Keys</h2>
-      <dl>
-        <dt>W S / ↑ ↓</dt>
-        <dd>drive and brake</dd>
-        <dt>A D / ← →</dt>
-        <dd>steer</dd>
-        <dt>Space · Shift</dt>
-        <dd>hop · boost</dd>
-        <dt>T · M · V</dt>
-        <dd>thrusters · mode · wind</dd>
-        <dt>C · X · R</dt>
-        <dd>chaos knock · drop test · respawn</dd>
-        <dt>Enter · F</dt>
-        <dd>Gauntlet · free drive</dd>
-        <dt>H · Esc · F3</dt>
-        <dd>these keys · menu · fps</dd>
-      </dl>
-      <p>The tank slowly refills while the car is on its wheels (a game rule, not real physics).</p>
+    <section id="paused" class="hud" hidden>
+      <h2>Paused</h2>
+      <p>Esc to drive on</p>
     </section>
-    <section id="title-screen" aria-label="Nine Lives title screen">
-      <h1>Nine Lives</h1>
-      <p class="pitch">
-        Drive like you mean it. Ten cold-gas thrusters fire by themselves so the car always lands on
-        its wheels.
-      </p>
-      <div class="picker" role="group" aria-label="Thrusters">
-        <span>Thrusters</span>
-        <button type="button" data-controller="hybrid" aria-pressed="true">PD + AI</button>
-        <button type="button" data-controller="pd" aria-pressed="false">PD</button>
-        <button type="button" data-controller="ai" aria-pressed="false">AI</button>
-        <button type="button" data-controller="off" aria-pressed="false">Off</button>
-      </div>
-      <div class="picker" role="group" aria-label="Mode">
-        <span>Mode</span>
-        <button type="button" data-mode="realistic" aria-pressed="true">Realistic</button>
-        <button type="button" data-mode="arcade" aria-pressed="false">Arcade</button>
-      </div>
-      <div class="picker" role="group" aria-label="Course">
-        <span>Course</span>
-        <button type="button" data-course="playground" aria-pressed="true">Free drive</button>
-        <button type="button" data-course="gauntlet" aria-pressed="false">Gauntlet</button>
-      </div>
-      <div class="picker" role="group" aria-label="Wind">
-        <span>Wind</span>
-        <button type="button" data-wind="off" aria-pressed="true">Calm</button>
-        <button type="button" data-wind="breeze" aria-pressed="false">Breeze</button>
-        <button type="button" data-wind="storm" aria-pressed="false">Storm</button>
-      </div>
-      <details>
-        <summary>How it works</summary>
-        <p>
-          The car runs on one physics simulation, written in Rust, that is shared by the game and by
-          training. It has ten nozzles on a compressed-air tank: four lift the corners, four push
-          the sides and two fire backwards. In Realistic mode a full second of lift empties a third
-          of the tank.
-        </p>
-        <p>
-          A classical PD controller levels the car, brakes its fall and rights it on the ground. The
-          AI is a small neural network trained with PPO to save upsets: flips, rolls and tumbles
-          that PD cannot catch.
-        </p>
-        <p>
-          "PD + AI" gives the AI the nozzles only when the car tips past 60°, and hands them back to
-          PD once it is settled on its wheels. The AI was trained under that same rule, so it
-          practised exactly the flights it gets here.
-        </p>
-        <p>
-          Inspired by reporting on a real thruster-car demo in October 2026; the sources are in the
-          README. The <a href="./viewer.html">training viewer</a> replays the AI as it learned.
-        </p>
-      </details>
-      <button type="button" id="title-play">Play</button>
-      <p id="hud-stats"></p>
-      <p class="hint">Any driving key also starts. Esc brings this back.</p>
+    <section id="game-over" hidden>
+      <h2>Out of lives</h2>
+      <p id="game-over-summary"></p>
+      <button type="button" id="restart">Restart</button>
+      <a href="https://github.com/Bhavya873/NineLives" target="_blank" rel="noopener"
+        >How it works, on GitHub</a
+      >
     </section>
     <script type="module" src="/src/main.ts"></script>
   </body>

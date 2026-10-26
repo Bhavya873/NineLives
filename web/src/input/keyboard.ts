@@ -11,7 +11,6 @@ const STEER_LEFT_KEYS = ['KeyA', 'ArrowLeft'];
 const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
-const CHAOS_KEYS = ['KeyC'];
 const RESET_KEYS = ['KeyR'];
 
 /**
@@ -20,6 +19,7 @@ const RESET_KEYS = ['KeyR'];
  */
 export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
+/** Chaos knock: the sim still has it, but the game no longer binds a key to it. */
 export const BUTTON_CHAOS = 1 << 2;
 export const BUTTON_RESET = 1 << 3;
 /** Bit of the first manual nozzle button; nozzle `i` uses this bit + `i` (SPEC §11.3). */
@@ -31,7 +31,6 @@ export const MANUAL_NOZZLE_COUNT = 10;
 const BUTTON_KEYS: { bit: number; keys: string[] }[] = [
   { bit: BUTTON_HOP, keys: HOP_KEYS },
   { bit: BUTTON_BOOST, keys: BOOST_KEYS },
-  { bit: BUTTON_CHAOS, keys: CHAOS_KEYS },
   { bit: BUTTON_RESET, keys: RESET_KEYS },
 ];
 // Keys 1, 2, … 9, 0 fire nozzles 0 to 9 (the sim only listens under Manual).
@@ -48,7 +47,6 @@ const HANDLED_KEYS = [
   ...STEER_RIGHT_KEYS,
   ...HOP_KEYS,
   ...BOOST_KEYS,
-  ...CHAOS_KEYS,
   ...RESET_KEYS,
   // The performance overlay, not the browser's find-in-page.
   'F3',
@@ -65,17 +63,6 @@ let tappedButtons = 0;
 
 /** One-shot actions for single key presses (e.g. M toggles the mode), by key code. */
 const pressActions = new Map<string, () => void>();
-
-/**
- * Makes an on-screen button press `bit` for one frame, exactly like tapping its key.
- * It reacts on pointerdown and never takes focus, so Space (Hop) cannot "click" it.
- */
-export function bindTapButton(element: HTMLElement, bit: number): void {
-  element.addEventListener('pointerdown', (event) => {
-    event.preventDefault();
-    tappedButtons |= bit;
-  });
-}
 
 /** Runs `action` once each time `code` is pressed (holding the key does not repeat it). */
 export function onKeyPress(code: string, action: () => void): void {
