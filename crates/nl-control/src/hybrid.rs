@@ -9,8 +9,9 @@ use nl_sim::vehicle_config::VehicleConfig;
 
 use crate::{Ai, ControlCtx, Controller, Pd};
 
-/// When the gate switches, all read from vehicle.toml `[events]` (SPEC §7.9), so a
-/// trained policy is never judged under a gate tuned after it.
+/// When the gate switches, read from vehicle.toml `[events]` (SPEC §7.9), so a trained
+/// policy is never judged under a gate tuned after it. Only the hand-over tilt can be
+/// moved, by controllers.toml `[hybrid]`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HybridGateSettings {
     /// The AI takes over above this tilt, in degrees (`upset_tilt_deg`).
@@ -32,6 +33,18 @@ impl HybridGateSettings {
             release_tilt_deg: events.save_tilt_deg,
             release_spin_rad_s: events.save_max_spin_rad_s,
             release_hold_s: events.save_hold_s,
+        }
+    }
+
+    /// These settings with the AI taking over past `enter_tilt_deg` instead, if given
+    /// (controllers.toml `[hybrid]`).
+    pub fn with_enter_tilt(self, enter_tilt_deg: Option<f32>) -> HybridGateSettings {
+        match enter_tilt_deg {
+            Some(enter_tilt_deg) => HybridGateSettings {
+                enter_tilt_deg,
+                ..self
+            },
+            None => self,
         }
     }
 }
