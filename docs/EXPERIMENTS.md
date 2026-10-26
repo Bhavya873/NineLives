@@ -312,5 +312,5 @@ Results: `results/control_upgrade/2026-10-27-r3/` (manifest, per-cell summaries)
 
 - Stage C ties (100%) in every run. All other cells are lost: A by 3–4 points, B, D and E by 1–2, and F by 20–30 points (plain).
 - On Stage F the Hybrid seldom crashes. It fails on the landing heading: the median heading error is 11–19°, against PD's 1–2°, and a landing turned past 30° fails the episode. R1 failed Stage F the same way.
-- Outcome: the owner's rule (beat PD alone on every stage and mode) is not met. `models/policy.json` is unchanged and the game keeps PD alone. Following the night rules, I stopped after the one retry.
+- Outcome: the owner's rule (beat PD alone on every stage and mode) is not met. `models/policy.json` is unchanged. The game still flies the Hybrid with the shipped policy (`web/src/main.ts`). Switching it to PD alone, as the owner chose on 2026-10-26, is a web change left for the owner. Following the night rules, I stopped after the one retry.
 - Likely next step (needs the owner): give the AI a reason, or the information, to hold the heading through a flip, by changing the heading term of the reward or the observation. A longer run or more Stage F weight did not move the checkpoint eval. Another option is to raise the gate's hand-over tilt, so that the AI takes over only where the tuned PD fails.
