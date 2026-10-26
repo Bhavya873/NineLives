@@ -1,0 +1,31 @@
+{
+ "experiment_id": "2026-10-27-pd-cma-tune",
+ "purpose": "CMA-ES tune of PD's 11 gains plus the allocation's lag_compensation (how hard PD pushes, never when it acts), with a cost for bump air over 8 kg.",
+ "baseline": "candidates/repo.toml (claude/pd-model-fix: fixed PD, actuator-aware allocation at 0.5)",
+ "commit": "ba0b83ffe6202d7e14949baf85b1a54fdb5790d0",
+ "tuner": "python -m ninelives.tune_pd --generations 30 --popsize 12 --episodes 200 --sigma 0.25 --keep 5",
+ "tuning_seeds": {
+  "first": 2000000,
+  "episodes_per_cell": 200,
+  "cells": "A-F x both modes x plain/randomized (24)",
+  "fresh_seeds_each_generation": true
+ },
+ "validation_seeds": {
+  "first": 1500000,
+  "episodes_per_cell": 1000,
+  "cells": "A-F x both modes x plain/randomized (24)"
+ },
+ "held_out_seeds": "untouched (3,000,000+)",
+ "adoption_rule": "beats the repo on validation, no cell worse by more than about 1 point, bump air under 8 kg in both modes",
+ "chosen": "top4",
+ "why_chosen": "Passes every rule with no cell worse at all, the lowest-but-one bump air (6.22 kg) and moderate gains. 'mean' scored slightly higher under randomization (+5.20 vs +4.94) but sits at search edges (kv 19.4, kp_tumble 66, blend end at the 170 deg cap), stiff enough to risk thruster chatter.",
+ "wall_time": {
+  "tuning_s": 3020,
+  "validation_s": 553
+ },
+ "files": {
+  "validation_summary.json": "per-cell summaries for every candidate",
+  "candidates/*.toml": "each candidate's controllers.toml",
+  "tuning_log.txt": "best and repo score per generation (tuning objective)"
+ }
+}

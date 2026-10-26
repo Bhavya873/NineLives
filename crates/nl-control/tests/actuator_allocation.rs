@@ -76,11 +76,12 @@ fn torque_error(wanted: &Wrench, got: &Wrench) -> f32 {
 }
 
 #[test]
-fn the_repo_config_uses_the_actuator_aware_allocation_at_half_lag_compensation() {
+fn the_repo_config_uses_the_actuator_aware_allocation_at_the_tuned_lag_compensation() {
     let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
 
+    // CMA-ES picked 0.3572 alongside PD's gains (EXPERIMENTS 2026-10-27).
     assert_eq!(config.allocation.model, AllocationModel::ActuatorAware);
-    assert_eq!(config.allocation.lag_compensation, 0.5);
+    assert_eq!(config.allocation.lag_compensation, 0.3572);
 }
 
 #[test]

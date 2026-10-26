@@ -195,10 +195,10 @@ impl TrainingEnv {
         self.view
     }
 
-    /// The thrusters' state for the actuator predictor, as `Episode::actuator_state`
-    /// gives it (None under latency, or before the first `reset`).
+    /// The thrusters' state for the actuator-aware allocation, as eval reads it
+    /// (`Episode::actuator_state`): None with no running episode or under latency.
     pub fn actuator_state(&self) -> Option<ActuatorState> {
-        self.episode.as_ref()?.actuator_state()
+        self.episode.as_ref().and_then(Episode::actuator_state)
     }
 
     /// One control step with `throttles` (each in 0..1) given directly, e.g. PD's
