@@ -5,6 +5,7 @@
 //! `Manual`, the `Pd` baseline with its thruster allocation, `Ai`, the trained policy, and
 //! `Hybrid`, where the AI flies and PD drives.
 
+use nl_sim::actuator_model::ActuatorState;
 use nl_sim::car_state::CarState;
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::episode::Episode;
@@ -45,6 +46,9 @@ pub struct ControlCtx {
     pub state: CarState,
     /// The observation built from that state (SPEC §9.2); `Ai` reads it.
     pub observation: Observation,
+    /// The thrusters' own state, for the actuator-aware allocation; None where the
+    /// next command is not what the valves get (latency) or nobody filled it in.
+    pub actuators: Option<ActuatorState>,
 }
 
 impl ControlCtx {
@@ -56,6 +60,7 @@ impl ControlCtx {
             input,
             state,
             observation: observe(world, &state),
+            actuators: Some(world.actuator_state()),
         }
     }
 }
@@ -70,6 +75,7 @@ impl ControlCtx {
             input,
             state,
             observation,
+            actuators: episode.actuator_state(),
         }
     }
 }
@@ -81,6 +87,7 @@ impl Default for ControlCtx {
             input: InputFrame::default(),
             state: CarState::default(),
             observation: [0.0; OBS_DIM],
+            actuators: None,
         }
     }
 }

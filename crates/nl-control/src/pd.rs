@@ -10,7 +10,9 @@ use nl_sim::modes::ModeParams;
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
-use crate::allocation::Allocator;
+use nl_sim::actuator_model::ActuatorState;
+
+use crate::allocation::{ActuatorPlan, AllocationDiagnostics, AllocationModel, Allocator};
 use crate::config::{ControllersConfig, PdConfig};
 use crate::{ControlCtx, Controller};
 
@@ -30,8 +32,12 @@ pub struct Pd {
     /// Upward push of every nozzle at full throttle in a ×1 mode, along body +Y, in N.
     full_lift_n: f32,
     allocator: Allocator,
+    /// Which allocation `act` uses (`[allocation] model`).
+    allocation_model: AllocationModel,
     /// Last throttles, the warm start for the next allocation.
     throttles: [f32; NOZZLE_COUNT],
+    /// The actuator-aware allocation's report on its last solve; None with `legacy`.
+    last_allocation: Option<AllocationDiagnostics>,
 }
 
 impl Pd {
@@ -43,7 +49,9 @@ impl Pd {
             inertia_kg_m2: model.principal_inertia_kg_m2,
             full_lift_n: full_lift_n(&model.nozzle_wrenches),
             allocator: Allocator::new(&model.nozzle_wrenches, &config.allocation),
+            allocation_model: config.allocation.model,
             throttles: [0.0; NOZZLE_COUNT],
+            last_allocation: None,
         }
     }
 
@@ -274,20 +282,53 @@ fn full_lift_n(nozzle_wrenches: &[Wrench; NOZZLE_COUNT]) -> f32 {
     lift_n
 }
 
+impl Pd {
+    /// The actuator-aware allocation's report on its last solve; None with the legacy
+    /// allocation, or when there was nothing to solve.
+    pub fn last_allocation(&self) -> Option<&AllocationDiagnostics> {
+        self.last_allocation.as_ref()
+    }
+
+    /// Plans `wrench` with the actuator predictor and keeps its report. While the
+    /// interlock holds, the world would cut any throttles, so it plans none.
+    fn allocate_for_actuators(&mut self, wrench: Wrench, actuators: &ActuatorState) {
+        let iterations = if actuators.thrusters_locked() {
+            self.throttles = [0.0; NOZZLE_COUNT];
+            0
+        } else {
+            let idle = actuators.predict([0.0; NOZZLE_COUNT]);
+            let plan = ActuatorPlan::from_idle_prediction(&idle, actuators.controller_gain());
+            let scale = actuators.mode_thrust_scale();
+            self.allocator
+                .solve_actuator_aware(wrench, scale, &plan, &mut self.throttles);
+            self.allocator.iterations()
+        };
+        let prediction = actuators.predict(self.throttles);
+        self.last_allocation = Some(AllocationDiagnostics::new(wrench, &prediction, iterations));
+    }
+}
+
 impl Controller for Pd {
     fn reset(&mut self, _seed: u64) {
         self.throttles = [0.0; NOZZLE_COUNT];
+        self.last_allocation = None;
     }
 
     fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
         let wrench = self.wanted_wrench_for(&ctx.state, &ctx.input);
         if wrench == [0.0; WRENCH_SIZE] {
             self.throttles = [0.0; NOZZLE_COUNT];
-        } else {
+            return self.throttles;
+        }
+        match (self.allocation_model, &ctx.actuators) {
+            (AllocationModel::ActuatorAware, Some(actuators)) => {
+                self.allocate_for_actuators(wrench, actuators);
+            }
             // Plan with the mode's scale only: dividing by the tank gate would drive every
             // nozzle to full throttle as the tank runs dry (SPEC §7.5 fades it instead).
-            self.allocator
-                .solve(wrench, ctx.state.mode_thrust_scale, &mut self.throttles);
+            _ => self
+                .allocator
+                .solve(wrench, ctx.state.mode_thrust_scale, &mut self.throttles),
         }
         self.throttles
     }
