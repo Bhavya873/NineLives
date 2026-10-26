@@ -1,7 +1,7 @@
 //! Thruster signs in a running sim (SPEC §7.4, §12; golden rule 5). Each nozzle fires alone
 //! on a car hanging level, on its side, upside down and nose-down; the car must be pushed
-//! along the nozzle's world direction and turn as the SPEC §7.4 torque table says. This
-//! checks the body→world rotation that the level-car tests never exercise.
+//! along the nozzle's world direction and turn with the sign of its body torque, which
+//! thruster_signs.rs pins to the SPEC §7.4 table. This checks the body→world rotation.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]

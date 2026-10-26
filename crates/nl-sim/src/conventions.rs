@@ -41,6 +41,10 @@ pub const NOZZLE_NAMES: [&str; NOZZLE_COUNT] = [
 /// Wheel names in their fixed index order (SPEC §4).
 pub const WHEEL_NAMES: [&str; WHEEL_COUNT] = ["FL", "FR", "RL", "RR"];
 
+/// A car tipped past this from upright counts as turned over, in degrees (flip tests
+/// and the eval summary's `inversion_rate`).
+pub const INVERTED_TILT_DEG: f32 = 150.0;
+
 /// The gravity vector in the world frame, in m/s².
 pub fn gravity_vector() -> Vector {
     Vector::new(0.0, -GRAVITY_M_S2, 0.0)

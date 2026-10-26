@@ -89,7 +89,7 @@ fn the_summary_counts_rates_and_air_per_save() {
         crash_cause: (!success).then_some(CrashCause::HardImpact),
         air_used_kg: 100.0,
         air_used_in_saves_kg,
-        peak_tilt_deg: 0.0,
+        peak_tilt_deg: if success { 170.0 } else { 40.0 },
         touchdown_spin_rad_s: Some(1.0),
         touchdown_fall_m_s: Some(2.0),
         duration_s: 1.0,
@@ -105,6 +105,8 @@ fn the_summary_counts_rates_and_air_per_save() {
     assert_eq!(summary.success_rate, 0.5);
     assert_eq!(summary.save_rate, 0.5);
     assert_eq!(summary.crash_rate, 0.5);
+    // Only the 170° episode turned over.
+    assert_eq!(summary.inversion_rate, 0.5);
     // Only air spent in saved upsets counts, not the 200 kg used overall.
     assert_eq!(summary.air_per_save_kg, Some(40.0));
     assert_eq!(summary.touchdown_fall_median_m_s, Some(2.0));
