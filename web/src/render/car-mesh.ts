@@ -23,6 +23,7 @@ import {
   CABIN_PROFILE_M,
   LINER_PROFILE_M,
   bodyProfileM,
+  bodyTopM,
   extrudeProfile,
   warpToBodyShape,
 } from './car-shape.ts';
@@ -49,7 +50,7 @@ const glass = new MeshStandardMaterial({
   roughness: 0.12,
   metalness: 0.4,
 });
-/** Bumpers, skirts, wing and wheel wells. */
+/** Diffuser, skirts, intake and wheel wells. */
 const trim = new MeshStandardMaterial({ color: 0x23262b, flatShading: true, roughness: 0.75 });
 const headlight = new MeshStandardMaterial({
   color: 0xffffff,
@@ -99,8 +100,7 @@ const spokeGeometry = mergeOrThrow(
 const spoke = new MeshStandardMaterial({ color: 0x5a5f66, flatShading: true, metalness: 0.5 });
 
 /**
- * The car body: painted body (its first child, which the nozzle mounts attach to),
- * glass cabin, dark trim, and the head and tail lights.
+ * The car body: painted body, glass cabin, dark trim, and the head and tail lights.
  */
 export function buildCarBody(): Group {
   const body = new Group();
@@ -139,7 +139,9 @@ function roofPanel(): BufferGeometry {
 
 /** A wing mirror on each door, just ahead of the side window. */
 function wingMirrors(): BufferGeometry[] {
-  return [-1, 1].map((side) => boxAt([0.5, 0.27, side * 0.7], [0.6, 0.33, side * 0.85]));
+  // Standing on the body's top edge just ahead of the windscreen.
+  const footM = bodyTopM(0.55) - 0.01;
+  return [-1, 1].map((side) => boxAt([0.5, footM, side * 0.7], [0.6, footM + 0.06, side * 0.85]));
 }
 
 /** A slim dark intake low across the smooth, grille-less nose. */
@@ -169,12 +171,13 @@ function sideSkirts(): BufferGeometry[] {
 
 /** Two slim headlight strips laid on the sloping nose. */
 function headlights(): BufferGeometry[] {
-  // The nose slopes up from (2.08, 0.06) to (1.98, 0.15); lay the lamps along it.
-  const slopeRad = Math.atan2(0.09, 0.1);
+  // Lay the lamps along the sloping nose, read off the body's top edge around x = 2.03.
+  const centreXM = 2.03;
+  const slopeRad = Math.atan2(bodyTopM(centreXM - 0.05) - bodyTopM(centreXM + 0.05), 0.1);
   return [-1, 1].map((side) => {
     const lamp = new BoxGeometry(0.13, 0.022, 0.34);
     lamp.rotateZ(-slopeRad);
-    lamp.translate(2.03, 0.105, side * 0.58);
+    lamp.translate(centreXM, bodyTopM(centreXM), side * 0.58);
     return lamp;
   });
 }

@@ -1,10 +1,9 @@
-//! PD baseline tests (SPEC §8, §12): the allocation's answers stay in 0..1 and produce
-//! the wanted push, PD's torques have restoring signs, and PD saves a dropped car.
+//! PD baseline tests (SPEC §8, §12): PD's torques have restoring signs, and PD saves a
+//! dropped car. The allocation PD calls is tested in allocation.rs.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
-use nl_control::allocation::Allocator;
 use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
 use nl_control::{ControlCtx, Controller, Off, Pd};
 use nl_sim::car_state::{CarModel, CarState};
@@ -38,17 +37,6 @@ fn car_model() -> CarModel {
     new_world().car_model()
 }
 
-/// The push the throttles make: B·u, with B's columns the nozzle wrenches.
-fn produced_wrench(model: &CarModel, throttles: &[f32; NOZZLE_COUNT]) -> [f32; 6] {
-    let mut wrench = [0.0; 6];
-    for (nozzle, throttle) in throttles.iter().enumerate() {
-        for (total, push) in wrench.iter_mut().zip(model.nozzle_wrenches[nozzle]) {
-            *total += push * throttle;
-        }
-    }
-    wrench
-}
-
 /// Runs the world for `seconds` with `controller` at 60 Hz; returns every event.
 fn run_with(world: &mut World, controller: &mut dyn Controller, seconds: f32) -> Vec<SimEvent> {
     let mut events = Vec::new();
@@ -61,61 +49,6 @@ fn run_with(world: &mut World, controller: &mut dyn Controller, seconds: f32) ->
         events.extend(world.drain_events());
     }
     events
-}
-
-#[test]
-fn the_allocation_lifts_with_the_four_lift_nozzles_and_stays_in_bounds() {
-    let model = car_model();
-    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
-    let wanted = [0.0, 20000.0, 0.0, 0.0, 0.0, 0.0];
-    let mut throttles = [0.0; NOZZLE_COUNT];
-
-    // Warm-started over a few control steps, as in the game.
-    for _ in 0..10 {
-        allocator.solve(wanted, 1.0, &mut throttles);
-    }
-
-    assert!(
-        throttles
-            .iter()
-            .all(|throttle| (0.0..=1.0).contains(throttle))
-    );
-    let lift = produced_wrench(&model, &throttles)[1];
-    assert!(
-        (lift - 20000.0).abs() < 1000.0,
-        "lift {lift} N, throttles {throttles:?}"
-    );
-    assert!(
-        throttles[4..].iter().all(|throttle| *throttle < 0.05),
-        "{throttles:?}"
-    );
-}
-
-#[test]
-fn one_control_step_from_all_valves_shut_already_gives_most_of_a_braking_push() {
-    // Braking starts from shut valves (PD is off until the car leaves the ground),
-    // and the brake window lasts only a few control steps.
-    let model = car_model();
-    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
-    let brake_n = 1.5 * model.mass_kg * 9.81;
-    let mut throttles = [0.0; NOZZLE_COUNT];
-
-    allocator.solve([0.0, brake_n, 0.0, 0.0, 0.0, 0.0], 1.0, &mut throttles);
-
-    let lift = produced_wrench(&model, &throttles)[1];
-    assert!(lift > 0.9 * brake_n, "{lift} N of {brake_n} N");
-}
-
-#[test]
-fn a_push_no_nozzle_can_make_leaves_every_valve_shut() {
-    let model = car_model();
-    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
-    // Straight down: thrust is one-sided, nothing pushes the car down.
-    let mut throttles = [0.0; NOZZLE_COUNT];
-
-    allocator.solve([0.0, -20000.0, 0.0, 0.0, 0.0, 0.0], 1.0, &mut throttles);
-
-    assert_eq!(throttles, [0.0; NOZZLE_COUNT]);
 }
 
 #[test]
