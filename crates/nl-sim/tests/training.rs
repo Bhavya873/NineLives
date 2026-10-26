@@ -270,3 +270,19 @@ fn an_empty_or_weightless_stage_mix_is_refused() {
     assert!(env.set_stage_mix(Vec::new()).is_err());
     assert!(env.set_stage_mix(vec![choice(Stage::A, 0.0)]).is_err());
 }
+
+#[test]
+fn the_training_env_shows_controllers_the_same_actuator_state_as_the_episode() {
+    // PD's actuator-aware allocation plans with this; training must see what eval sees.
+    let seed = 11;
+    let mut env = TrainingEnv::new(config(), Stage::A);
+    let before_reset = env.actuator_state();
+    env.reset(seed).unwrap();
+    let level_zero_scenarios = scenarios().at_level(Stage::A, 0);
+    let plain = EpisodeVariation::none(&vehicle(), realistic());
+    let episode = Episode::start(&plain, &level_zero_scenarios, Stage::A, seed).unwrap();
+
+    assert!(before_reset.is_none());
+    assert!(env.actuator_state().is_some());
+    assert_eq!(env.actuator_state(), episode.actuator_state());
+}

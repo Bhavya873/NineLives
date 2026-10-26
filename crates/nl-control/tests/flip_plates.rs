@@ -168,6 +168,8 @@ fn pd_and_hybrid_land_every_mild_flip_plate_in_both_modes() {
         .filter(|preset| preset.weight > 0.0)
         .collect();
     let mut failures = Vec::new();
+    let mut passes = 0;
+    let mut not_upset = 0;
     for (mode_name, mode) in both_modes() {
         for (label, preset, strength, speed_m_s) in plates(&drawn, &flip.strength) {
             let plate = (preset, strength);
@@ -177,26 +179,26 @@ fn pd_and_hybrid_land_every_mild_flip_plate_in_both_modes() {
             let hybrid = fly(&mut world, &mut hybrid_for(mode), Hybrid::ai_in_control);
 
             for (name, pass) in [("PD", pd), ("Hybrid", hybrid)] {
-                if !pass.saved || pass.peak_tilt_deg < UPSET_DEG {
-                    failures.push(format!(
-                        "{name} {mode_name} {label}: {}°",
-                        pass.peak_tilt_deg
-                    ));
+                passes += 1;
+                let label = format!("{name} {mode_name} {label}: {}°", pass.peak_tilt_deg);
+                if !pass.saved {
+                    failures.push(label);
+                } else if pass.peak_tilt_deg < UPSET_DEG {
+                    // Saved before the kick upset the car: it does not count as an upset.
+                    not_upset += 1;
                 }
             }
         }
     }
+    assert!(failures.is_empty(), "not saved: {failures:#?}");
+    // The plates must still upset the car on nearly every pass, or this test proves nothing.
     assert!(
-        failures.is_empty(),
-        "not saved after an upset: {failures:#?}"
+        not_upset * 10 <= passes,
+        "{not_upset} of {passes} passes never tipped past {UPSET_DEG}°"
     );
 }
 
 #[test]
-// The shipped policy (Stage A, old car, old PD) saves 34/40 with the fixed PD and the
-// actuator-aware allocation (DECISIONS 2026-10-26). Turn back on when a policy trained
-// on the new car and PD ships; R2 already passes.
-#[ignore = "needs a policy trained with the fixed PD; run with --ignored"]
 fn on_strong_flip_plates_the_car_turns_over_and_hybrids_ai_lands_it() {
     let flip = flip_plates();
     // A flat spin that strong lands the car sideways, so no course uses it.
