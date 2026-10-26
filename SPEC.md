@@ -195,7 +195,8 @@ Pin the latest stable versions at scaffold time and record them in lockfiles (`C
 | Inertia | set explicitly ≈ (850, 3250, 2900) kg·m² for (roll X, yaw Y, pitch Z) *(start)*; a real car is not a uniform box |
 | Wheels | `DynamicRayCastVehicleController`, 4 suspension mounts at (±1.3, 0.0, ±0.85), direction −Y, axle ±Z, radius 0.34 m, rest length 0.3 m, max travel 0.2 m *(start)*. This gives a centre of mass ≈ 0.6 m above the ground and ≈ 0.15 m ground clearance at rest |
 | Suspension | stiffness, compression and relaxation damping, max force: tune for stable landings from 2 m drops |
-| Drive | AWD; engine force up to 3 kN per wheel *(start)*, about 0–100 km/h in 4.2 s; speed cap 55 m/s |
+| Drive | AWD; engine force up to 3 kN per wheel at low speed and at most 220 kW in total above that (force = power / speed), about 0–100 km/h in 4.6 s; speed cap 55 m/s (198 km/h) *(start)* |
+| Tyres | `friction_slip` 1.3: sporty road tyres, a full-lock circle peaks at about 1.13–1.2 g *(start)* |
 | Steering | max 0.5 rad at low speed, scaled down to 0.25 rad at 50 m/s; rate-limited to 3 rad/s |
 | Brakes | brake impulse per wheel *(start: tune)*; handbrake not needed |
 | Wheel contact | from each wheel's `raycast_info()`. Count a wheel as touching only if its ray hits **and** the car is upright enough (up·world_up > 0) so upward rays on an inverted car never count as contact. |
@@ -272,7 +273,7 @@ During a Hop the controller cannot reduce lift below `hop_ff`, but it can add up
 
 ### 7.8 Hop and Boost
 - **Hop** is allowed when ≥ 3 wheels touch, the cooldown has expired, and (Realistic) there is ≥ 30 kg of air. Otherwise the HUD shows why ("No air", "Cooldown").
-- **Boost** only fires while the button is held; it is allowed in the air too.
+- **Boost** only fires while the button is held; it is allowed in the air too. A speed limiter fades its feed-forward to zero between 50 and 60 m/s of forward speed (`drive.boost_max_speed_m_s`, `boost_fade_m_s`), so Boost can't push the car to rocket speeds (Arcade's unlimited air passed 860 km/h without it). The controller's own use of the boost nozzles is not limited.
 
 ### 7.9 Events *(req definitions; start thresholds)*
 - **Airborne start/end:** wheel-contact count goes to 0 (no wheel touches) / back above 0 (any wheel touches).

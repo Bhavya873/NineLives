@@ -30,7 +30,7 @@ use crate::course_build::{OBSTACLE_USER_DATA, build_course_shapes, shape_collide
 use crate::course_triggers::{CourseTriggers, TriggerAction};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::g_load::GLoad;
-use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
+use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
@@ -80,7 +80,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 16;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 17;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -280,7 +280,11 @@ impl World {
             self.knock();
         }
         // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
-        let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
+        let forward_speed_m_s = self.car.forward_speed_m_s(&self.physics);
+        let boost_share = boost_speed_share(&self.car.config().drive, forward_speed_m_s);
+        let feed_forward = self
+            .hop_boost
+            .feed_forward_throttles(&self.mode, boost_share);
         let controller = if self.thrusters_locked() {
             [0.0; NOZZLE_COUNT]
         } else {

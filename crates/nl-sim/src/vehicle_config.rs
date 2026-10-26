@@ -118,9 +118,17 @@ pub struct WheelConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DriveConfig {
+    /// The engine's push per wheel at low speed.
     pub max_engine_force_per_wheel_n: f32,
+    /// The engine's power over all four wheels; above about power / (4 × force) its
+    /// push falls as power / speed.
+    pub max_engine_power_w: f32,
     /// The engine stops pushing forward at this speed.
     pub max_speed_m_s: f32,
+    /// Boost fades out over the last `boost_fade_m_s` below this forward speed.
+    pub boost_max_speed_m_s: f32,
+    /// The speed band over which Boost fades out.
+    pub boost_fade_m_s: f32,
     /// The engine stops pushing backward at this speed.
     pub max_reverse_speed_m_s: f32,
     /// Brake impulse per wheel per physics step.
@@ -392,7 +400,10 @@ impl DriveConfig {
     fn check(&self) -> CheckResult {
         let engine_force_n = self.max_engine_force_per_wheel_n;
         must_not_be_negative("drive.max_engine_force_per_wheel_n", engine_force_n)?;
+        must_be_positive("drive.max_engine_power_w", self.max_engine_power_w)?;
         must_be_positive("drive.max_speed_m_s", self.max_speed_m_s)?;
+        must_be_positive("drive.boost_max_speed_m_s", self.boost_max_speed_m_s)?;
+        must_be_positive("drive.boost_fade_m_s", self.boost_fade_m_s)?;
         must_be_positive("drive.max_reverse_speed_m_s", self.max_reverse_speed_m_s)?;
         let brake_n_s = self.brake_impulse_per_wheel_n_s;
         must_not_be_negative("drive.brake_impulse_per_wheel_n_s", brake_n_s)?;
