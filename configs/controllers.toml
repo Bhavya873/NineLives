@@ -63,6 +63,6 @@ iterations = 30
 # "legacy" plans as if B·u happened at once. "actuator_aware" plans with the actuator
 # predictor (nl_sim::actuator_model): valve lag over the control interval, the Hop/Boost
 # throttles underneath and the interlock (docs/control-upgrade-audit.md).
-model = "legacy"
+model = "actuator_aware"
 # actuator_aware only: share of the valve lag made up within one control interval (0..1).
-lag_compensation = 1.0
+lag_compensation = 0.5
