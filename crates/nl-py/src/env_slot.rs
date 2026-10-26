@@ -164,8 +164,8 @@ pub(crate) fn controller_ctx(env: &TrainingEnv) -> ControlCtx {
         input: InputFrame::default(),
         state,
         observation,
-        // Training keeps the legacy allocation.
-        actuators: None,
+        // The same actuator state eval gives PD, so training sees the allocation it ships with.
+        actuators: env.actuator_state(),
     }
 }
 

@@ -6,6 +6,7 @@
 
 use serde::Serialize;
 
+use crate::actuator_model::ActuatorState;
 use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::driving_stages::{pick_weighted, stream_rng};
@@ -192,6 +193,12 @@ impl TrainingEnv {
     /// or `step` (the observation is the one that call returned).
     pub fn controller_view(&self) -> (CarState, Observation) {
         self.view
+    }
+
+    /// The thrusters' state for the actuator predictor, as `Episode::actuator_state`
+    /// gives it (None under latency, or before the first `reset`).
+    pub fn actuator_state(&self) -> Option<ActuatorState> {
+        self.episode.as_ref()?.actuator_state()
     }
 
     /// One control step with `throttles` (each in 0..1) given directly, e.g. PD's
