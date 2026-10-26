@@ -412,7 +412,7 @@ The loop (`web/src/game-loop.ts`) collects real time and spends it in fixed 1/12
 8 per frame. The renderer blends the last two physics poses, so motion is smooth at any frame
 rate. Rendering (`web/src/render`), input (`web/src/input`) and the HUD (`web/src/hud`) are
 separate modules. The look is a physics simulator's: a checkered floor, a gradient sky and fog.
-The game always flies with the Hybrid (PD while the policy loads), shows the keys at all times,
+The game flies PD alone (`?controller=hybrid` loads the policy and flies the Hybrid), shows the keys at all times,
 pauses on Esc, and gives the player nine lives, one lost per crash.
 
 The training viewer (`web/viewer.html`) builds one wasm `Crowd` per exported checkpoint and flies
@@ -425,6 +425,6 @@ plus a table of landings and crashes.
 |---|---|
 | Rust (`cargo test --workspace`) | sign tests for every nozzle force and torque, valve step response, tank flow, driving (acceleration, power limit, Boost limit, grip, braking), events, courses, observation layout and hash, reward terms, episode rules, PD and Hybrid on flip plates and courses, determinism, the golden trace, snapshot round trips |
 | Python (`pytest python/tests`) | the environment against Gymnasium's checker, config overrides, the curriculum, export parity |
-| Web (`npm run test:wasm`, Playwright) | the wasm golden trace, the Game API, HUD text and toasts; in a real browser: driving, the Hybrid switch, drop tests, pause, hearts, the training viewer in both arenas |
+| Web (`npm run test:wasm`, Playwright) | the wasm golden trace, the Game API, HUD text and toasts; in a real browser: driving, PD by default and the `?controller=hybrid` switch, drop tests, pause, hearts, the training viewer in both arenas |
 
 The lints are clippy with `-D warnings`, ruff, ESLint and Prettier.

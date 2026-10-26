@@ -19,8 +19,12 @@ interface DebugHook {
   controllerCode: () => number;
 }
 
+/** The wasm `ControllerCode.Pd` value: PD alone. */
+const CONTROLLER_CODE_PD = 2;
 /** The wasm `ControllerCode.HybridPd` value: Hybrid, with PD in charge. */
 const CONTROLLER_CODE_HYBRID_PD = 5;
+/** Sim seconds to wait before checking the game has not switched controller by itself. */
+const SETTLE_SIM_S = 3;
 
 /** The sim's current controller code (read straight from the game, not the HUD text,
  * which only updates on the next drawn frame). */
@@ -62,9 +66,25 @@ test('holding W drives the car forward without console errors', async ({ page })
   expect(consoleErrors).toEqual([]);
 });
 
-test('the game switches to Hybrid by itself once the policy has loaded', async ({ page }) => {
+test('the game flies PD alone by default', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   await page.goto('/');
+  await expect
+    .poll(() => readDebug(page, 'time'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .not.toBeNaN();
+  const startTimeS = await readDebug(page, 'time');
+
+  await expect
+    .poll(() => readDebug(page, 'time'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBeGreaterThan(startTimeS + SETTLE_SIM_S);
+
+  expect(await readControllerCode(page)).toBe(CONTROLLER_CODE_PD);
+  await expect(page.locator('#hud-status')).toHaveText('Realistic');
+});
+
+test('?controller=hybrid switches to Hybrid once the policy has loaded', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/?controller=hybrid');
 
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
@@ -75,7 +95,7 @@ test('the game switches to Hybrid by itself once the policy has loaded', async (
 test('a drop test runs clean under the Hybrid', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
-  await page.goto('/');
+  await page.goto('/?controller=hybrid');
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBe(CONTROLLER_CODE_HYBRID_PD);

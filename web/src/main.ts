@@ -104,13 +104,16 @@ async function start(): Promise<void> {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
-  // The game always flies with its best controller: PD + AI (the Hybrid, DECISIONS
-  // 2026-10-21). PD flies alone while the policy loads, or if it fails to load.
-  void loadPolicy(game).then((loaded) => {
-    if (loaded) {
-      game.set_controller('hybrid');
-    }
-  });
+  const params = new URLSearchParams(window.location.search);
+  // The game flies PD alone, its best controller on every stage (DECISIONS 2026-10-27).
+  // ?controller=hybrid loads the policy and flies PD + AI once it has loaded.
+  if (params.get('controller') === 'hybrid') {
+    void loadPolicy(game).then((loaded) => {
+      if (loaded) {
+        game.set_controller('hybrid');
+      }
+    });
+  }
   const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
   onKeyPress('F3', () => togglePerfOverlay(perf));
 
@@ -137,7 +140,6 @@ async function start(): Promise<void> {
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
-  const params = new URLSearchParams(window.location.search);
   const reducedMotion = prefersReducedMotion();
   const effects = createScreenEffects(view.scene, reducedMotion);
   // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
