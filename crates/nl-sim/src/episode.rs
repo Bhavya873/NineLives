@@ -13,6 +13,7 @@ use std::collections::VecDeque;
 use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 
+use crate::actuator_model::ActuatorState;
 use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
 use crate::course::CourseSpec;
@@ -251,6 +252,16 @@ impl Episode {
     /// The observation a controller sees now (see `controller_view`).
     pub fn observe(&mut self) -> Observation {
         self.controller_view().1
+    }
+
+    /// The thrusters' state for the actuator predictor, or None under latency: then the
+    /// valves get a command from earlier control steps, not the next one.
+    pub fn actuator_state(&self) -> Option<ActuatorState> {
+        if self.delayed_throttles.is_empty() {
+            Some(self.world.actuator_state())
+        } else {
+            None
+        }
     }
 
     /// The world, for controllers (`is_control_step`) and rendering.
