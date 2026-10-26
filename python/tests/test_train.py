@@ -451,6 +451,19 @@ def test_reward_overrides_replace_only_the_named_weights():
         override_reward_weights(toml, {"no_such_weight": 1.0})
 
 
+def test_reward_overrides_with_a_shape_prefix_replace_only_the_shape_entry():
+    from ninelives.sim_config import override_reward_weights
+
+    toml = "[weights]\nhard_landing = 1.0\n\n[shape]\nhard_landing = 7.0\n"
+
+    out = override_reward_weights(toml, {"shape.hard_landing": 3.0})
+
+    assert "[weights]\nhard_landing = 1.0" in out
+    assert "[shape]\nhard_landing = 3.0" in out
+    with pytest.raises(ValueError, match="not a \\[shape\\] entry"):
+        override_reward_weights(toml, {"shape.no_such_entry": 1.0})
+
+
 def test_validation_seeds_inside_the_test_range_are_refused(tmp_path):
     config = yaml.safe_load(small_config(tmp_path, 1024).read_text())
     config["checkpoint"]["eval_seed"] = 500
