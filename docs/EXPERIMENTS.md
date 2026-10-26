@@ -295,3 +295,22 @@ No training. Results: `results/control_upgrade/2026-10-27-pd-cma-tune/` (manifes
 - top4 per cell (plain, Realistic/Arcade): A 74.5/78.4 → 83.5/88.7, E 88.2/88.7 → 92.2/94.5, F 78.6/87.5 → 89.5/92.6, D 97.8/97.6 → 98.5/99.7; B and C unchanged or up. Arcade hard landings: C 13.5 → 0.0%, D 7.5 → 0.3%, E 10.4 → 0.4%, F 17.2 → 0.1%. Air per save 37.1 → 43.3 kg plain, 45.8 → 53.1 kg randomized; touchdown fall p95 3.41 → 2.78 m/s.
 - Committed `results/eval_pd_*` and `eval_hybrid_*` regenerated (seed 0, 1000 per cell): PD A 76.0/79.2 → 80.7/87.3%, E 89.6/88.7 → 91.1/92.9%, D 97.9/98.5 → 99.0/99.4%. The shipped policy's strong flip-plate test (ignored) passes again with this PD.
 - Next: R3, the Hybrid retrained on this PD.
+
+### 2026-10-27 — R3 and R3b: the Hybrid retrained over the tuned PD
+Results: `results/control_upgrade/2026-10-27-r3/` (manifest, per-cell summaries).
+- **R3:** `python -m ninelives.train --config configs/train/flight-r3.yaml --init-from runs/flight-r2/latest --run-id flight-r3`, seed 0, 50M steps, 73 min. It uses R2's setup: stages A/D/E/F at 0.2/0.15/0.2/0.45, randomized, lr 1e-4, with the tuned PD and the actuator-aware allocation underneath (training now gets the same thruster state as eval).
+- **R3b (the one approved retry):** `configs/train/flight-r3b.yaml`, warm start from R3 best, Stage F weight 0.7 (A/D/E 0.1 each), 50M steps, 48 min.
+- **Checkpoint eval** (200 per stage from 1,000,000, randomized Realistic) stayed flat for both runs: 82–85% from the first checkpoint on.
+- **Validation** (seeds 1,500,000+, 1000 per cell), mean success over 12 cells, plain / randomized:
+
+| Controller | Plain | Randomized | F Realistic / Arcade (plain) | Cells lost to PD (plain / rand.) |
+|---|---|---|---|---|
+| PD alone (tuned) | 94.84% | 88.74% | 89.5 / 92.6 | — |
+| Hybrid R3 best (32M) | 89.47% | 87.29% | 67.2 / 63.2 | 10 / 10 |
+| Hybrid R3 latest (50M) | 89.18% | 87.34% | 66.2 / 62.9 | 10 / 8 |
+| Hybrid R3b latest (50M) | 90.27% | 87.59% | 68.6 / 73.1 | 10 / 10 |
+
+- Stage C ties (100%) in every run. All other cells are lost: A by 3–4 points, B, D and E by 1–2, and F by 20–30 points (plain).
+- On Stage F the Hybrid seldom crashes. It fails on the landing heading: the median heading error is 11–19°, against PD's 1–2°, and a landing turned past 30° fails the episode. R1 failed Stage F the same way.
+- Outcome: the owner's rule (beat PD alone on every stage and mode) is not met. `models/policy.json` is unchanged. The game still flies the Hybrid with the shipped policy (`web/src/main.ts`). Switching it to PD alone, as the owner chose on 2026-10-26, is a web change left for the owner. Following the night rules, I stopped after the one retry.
+- Likely next step (needs the owner): give the AI a reason, or the information, to hold the heading through a flip, by changing the heading term of the reward or the observation. A longer run or more Stage F weight did not move the checkpoint eval. Another option is to raise the gate's hand-over tilt, so that the AI takes over only where the tuned PD fails.

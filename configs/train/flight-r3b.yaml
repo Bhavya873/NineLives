@@ -1,0 +1,46 @@
+# Flight training R3b (2026-10-27): the one approved R3 retry. R3 lost Stage F to the tuned
+# PD by 22-30 points (plain), so Stage F gets most of the practice. Otherwise as R3:
+#   python -m ninelives.train --config configs/train/flight-r3b.yaml \
+#       --init-from runs/flight-r3/best --run-id flight-r3b
+seed: 0
+mode: realistic        # with randomize_mode, each episode draws Realistic or Arcade (§9.8)
+controller: hybrid     # PD flies hidden until the gate hands over; each AI stretch is an episode
+stages: [A, D, E, F]   # B almost never upsets the car, so the gate would skip it all
+randomize: true
+total_steps: 50_000_000
+
+ppo:
+  n_envs: 64
+  n_steps: 512
+  batch_size: 4096
+  n_epochs: 10
+  learning_rate: 1.0e-4   # lower than base: a warm start refines, it doesn't relearn
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  net_arch: [128, 128]    # must match the warm-start checkpoint
+  activation: tanh
+  log_std_init: 0.0
+  initial_action_bias: -1.0
+
+normalize:
+  clip_obs: 10.0
+
+curriculum:
+  # The Hybrid checkpoint eval runs every stage at its hardest level, so training does too.
+  start_at_hardest: true
+  window: 500
+  advance_at: 0.85
+  promote_on: eval
+  # Stage F (strong flip plates) gets the most practice: it is where Hybrid trails PD.
+  stage_weights: {A: 0.1, D: 0.1, E: 0.1, F: 0.7}
+
+checkpoint:
+  every_steps: 2_000_000
+  eval_episodes: 200     # Hybrid episodes per stage on validation seeds
+  eval_seed: 1_000_000   # validation; the final test block is 3,000,000–3,000,999
+
+# Save quality reaches 0 at the success rule's 30° (reward.toml has 45°), as in R2.
+reward_overrides:
+  shape.save_heading_scale_deg: 30.0
