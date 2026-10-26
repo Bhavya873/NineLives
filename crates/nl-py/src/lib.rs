@@ -6,6 +6,7 @@ mod batched_sim;
 mod config;
 mod env_slot;
 mod eval;
+mod hybrid_pd;
 
 use nl_sim::conventions;
 use nl_sim::obs::{OBS_SPEC, obs_schema_hash};

@@ -16,6 +16,7 @@ from typing import Any
 
 from ninelives.run_files import DEFAULT_POLICY_PATH
 from ninelives.sim_config import REPO_ROOT, load_sim_config
+from ninelives.train_config import STAGE_NAMES
 from ninelives_sim import run_eval
 
 RESULTS_DIR = REPO_ROOT / "results"
@@ -30,13 +31,15 @@ def evaluate(
     policy: Path = DEFAULT_POLICY_PATH,
     randomize: bool = False,
     randomize_mode: bool = True,
+    policy_json: str | None = None,
 ) -> dict[str, Any]:
     """The eval report: settings, the SPEC §10 summary and every episode's row.
     `policy` is the exported policy file the AI and Hybrid controllers load; `randomize` gives
     every episode its own randomized car and world (SPEC §9.8); with
-    `randomize_mode=False` the mode stays `mode`'s preset (a per-mode policy)."""
-    needs_policy = controller in ("ai", "hybrid")
-    policy_json = policy.read_text() if needs_policy else None
+    `randomize_mode=False` the mode stays `mode`'s preset (a per-mode policy).
+    `policy_json` (the exported text) replaces the file, e.g. for a checkpoint in training."""
+    if policy_json is None and controller in ("ai", "hybrid"):
+        policy_json = policy.read_text()
     config = load_sim_config(mode, stage, randomize, randomize_mode=randomize_mode)
     report = json.loads(run_eval(controller, config, episodes, first_seed, policy_json))
     return {
@@ -79,7 +82,7 @@ def main(argv: list[str] | None = None) -> None:
     """The command line (see the module docstring)."""
     parser = argparse.ArgumentParser(description="Evaluate a controller on fixed seeds.")
     parser.add_argument("--controller", choices=["off", "pd", "ai", "hybrid"], required=True)
-    parser.add_argument("--stage", choices=["A", "B", "C", "D", "E"], default="A")
+    parser.add_argument("--stage", choices=STAGE_NAMES, default="A")
     parser.add_argument("--mode", choices=["realistic", "arcade"], default="realistic")
     parser.add_argument("--episodes", type=positive_int, default=1000)
     parser.add_argument("--seed", type=int, default=0, help="first episode seed")

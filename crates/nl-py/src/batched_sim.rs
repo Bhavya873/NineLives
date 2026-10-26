@@ -2,8 +2,7 @@
 //! call from Python. The worlds step in parallel with rayon while the GIL is released;
 //! everything crosses the boundary as numpy arrays (float32 observations, N × 41).
 
-use nl_control::config::ControllersConfig;
-use nl_control::{Pd, RESIDUAL_ACTION_COUNT, ResidualPd};
+use nl_control::{ControllerChoices, HybridSwitch, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::reward::RewardTerms;
@@ -17,7 +16,8 @@ use pyo3::types::PyDict;
 use rayon::prelude::*;
 
 use crate::config::{SimConfig, parse_sim_config, parse_stage};
-use crate::env_slot::{EnvSlot, SlotStep};
+use crate::env_slot::{EnvSlot, SlotControl, SlotStep};
+use crate::hybrid_pd::HybridPd;
 
 /// What `step` returns: observations, rewards, terminated, truncated, info.
 type StepReturn<'py> = (
@@ -50,7 +50,7 @@ impl BatchedSim {
             ));
         }
         let config = parse_sim_config(config_json).map_err(PyValueError::new_err)?;
-        let residual = residual_pd(&config)?;
+        let control = slot_control(&config)?;
         let gated = config.residual.is_some_and(|settings| settings.gated);
         let action_size = if gated {
             RESIDUAL_ACTION_COUNT
@@ -60,13 +60,12 @@ impl BatchedSim {
         let mut slots = Vec::with_capacity(n_envs);
         for index in 0..n_envs {
             let training = config.training.clone();
-            let slot_residual = residual.clone();
             slots.push(EnvSlot::new(
                 training,
                 config.stage,
                 seed,
                 index as u64,
-                slot_residual,
+                control.clone(),
             ));
         }
         Ok(BatchedSim {
@@ -136,13 +135,13 @@ impl BatchedSim {
         }
     }
 
-    /// How many curriculum levels `stage` ("A" to "E") has; the last is the full stage.
+    /// How many curriculum levels `stage` ("A" to "F") has; the last is the full stage.
     fn level_count(&self, stage: &str) -> PyResult<u32> {
         let stage = parse_stage(stage).map_err(PyValueError::new_err)?;
         Ok(self.scenarios.level_count(stage))
     }
 
-    /// Sets the stage ("A" to "E") and curriculum level for every environment's next
+    /// Sets the stage ("A" to "F") and curriculum level for every environment's next
     /// episode (SPEC §9.9); running episodes finish as they started.
     fn set_stage_and_level(&mut self, stage: &str, level: u32) -> PyResult<()> {
         let stage = parse_stage(stage).map_err(PyValueError::new_err)?;
@@ -224,18 +223,28 @@ impl BatchedSim {
 
 /// PD for the config's car with the config's residual scale, if residual control is on
 /// (one copy per environment, so each keeps its own warm start). Like eval, PD is built
-/// for the configured car and mode, not each episode's randomized one.
-fn residual_pd(config: &SimConfig) -> PyResult<Option<ResidualPd>> {
-    let Some(settings) = config.residual else {
-        return Ok(None);
-    };
-    let controllers = ControllersConfig::from_toml_str(&config.controllers_toml)
-        .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+/// How each environment applies the policy's action. PD (for residual control or behind
+/// the Hybrid gate) is built as the game and the eval runners build it: once, for the
+/// config's base car and mode, not each episode's randomized one.
+fn slot_control(config: &SimConfig) -> PyResult<SlotControl> {
+    if config.residual.is_none() && !config.hybrid {
+        return Ok(SlotControl::Direct);
+    }
     let training = &config.training;
-    let pd = Pd::for_vehicle(&training.vehicle, training.mode, &controllers);
-    let residual = ResidualPd::new(pd, settings)
+    let choices = ControllerChoices::from_configs(
+        &training.vehicle,
+        training.mode,
+        &config.controllers_toml,
+        None,
+    )
+    .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
+    let Some(settings) = config.residual else {
+        let switch = HybridSwitch::new(choices.pd, choices.hybrid_gate);
+        return Ok(SlotControl::Hybrid(HybridPd::new(switch)));
+    };
+    let residual = ResidualPd::new(choices.pd, settings)
         .map_err(|error| PyValueError::new_err(format!("BatchedSim: {error}")))?;
-    Ok(Some(residual))
+    Ok(SlotControl::Residual(residual))
 }
 
 /// Packs the per-environment results into SB3's (obs, reward, terminated, truncated,
@@ -261,10 +270,12 @@ fn step_return<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<StepReturn<
 }
 
 /// SPEC §9.1 `info`, one row per environment:
-/// - `done`: the row's episode ended this step (bool);
+/// - `done`: the row's episode (for the policy) ended this step (bool);
 /// - `terminal_obs`: that episode's last observation (N × 41; zeros where not done);
-/// - `episode`: that episode's row as a JSON object string (`FinishedEpisode`: the
-///   eval `EpisodeResult` fields plus `stage`, `level`, `control_steps`), else None;
+/// - `episode`: the row of a sim episode that ended as a JSON object string
+///   (`FinishedEpisode`: the eval `EpisodeResult` fields plus `stage`, `level`,
+///   `control_steps`), else None. Without Hybrid gating it comes exactly with `done`;
+///   with gating an episode can end under PD after the policy's last stretch;
 /// - `reward_terms`: this step's reward per term (N × `reward_term_names().len()`, in that order).
 fn info_dict<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<Bound<'py, PyDict>> {
     let count = steps.len();
@@ -272,9 +283,11 @@ fn info_dict<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<Bound<'py, Py
     let mut terminal_obs = vec![[0.0; OBS_DIM]; count];
     let mut episodes: Vec<Option<String>> = vec![None; count];
     for (row, step) in steps.iter().enumerate() {
-        if let Some((episode, last_observation)) = &step.finished {
+        if let Some(last_observation) = step.terminal_observation {
             done[row] = true;
-            terminal_obs[row] = *last_observation;
+            terminal_obs[row] = last_observation;
+        }
+        if let Some(episode) = &step.finished {
             episodes[row] = Some(episode_json(episode)?);
         }
     }

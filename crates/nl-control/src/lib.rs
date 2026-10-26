@@ -28,7 +28,7 @@ pub use controller_kind::{
     BuildControllerError, CONTROLLER_NAMES, CYCLE_NAMES, ControllerChoiceError, ControllerChoices,
     ControllerKind, build_controller,
 };
-pub use hybrid::{Hybrid, HybridGate, HybridGateSettings};
+pub use hybrid::{Hybrid, HybridGate, HybridGateSettings, HybridSwitch};
 pub use manual::Manual;
 pub use off::Off;
 pub use pd::Pd;

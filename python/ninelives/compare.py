@@ -4,8 +4,11 @@
 
 Both controllers must have been run on the same seeds (`ninelives.eval` or the Rust
 runner). Per stage and mode it prints success with a Wilson 95% interval, the episodes
-only one of them won, an exact McNemar p-value on those, and the bar's verdict: beat the
-baseline on A and E, stay within its interval where it succeeds at least 97% of the time.
+only one of them won, an exact McNemar p-value on those, each one's inversion rate (share
+of episodes past 150° of tilt, when the files carry it), and the bar's verdict: beat the
+baseline on A, E and F, stay within its interval where it succeeds at least 97% of the
+time. Stage F is newer than older results folders; without its files it shows as a
+failing row, so the bar never passes by its absence.
 """
 
 import argparse
@@ -17,11 +20,14 @@ from pathlib import Path
 from ninelives.sim_config import REPO_ROOT
 
 STAGES = ("A", "B", "C", "D", "E")
+# Older results lack these; a missing one shows as a failing row, never silently.
+NEWER_STAGES = ("F",)
 MODES = ("realistic", "arcade")
 # z for a two-sided 95% interval.
 Z_95 = 1.96
-# The candidate must beat the baseline on these stages (SPEC §10 M7 bar).
-MUST_BEAT_STAGES = ("A", "E")
+# The candidate must beat the baseline on these stages (SPEC §10 M7 bar; F is the flight
+# stage, where the AI does all the work).
+MUST_BEAT_STAGES = ("A", "E", "F")
 # Where the baseline succeeds this often, staying within its interval is enough.
 NEAR_PERFECT_SUCCESS = 0.97
 # Significance level for "beats".
@@ -96,23 +102,48 @@ def bar_verdict(stage: str, cell: PairedCell) -> str:
     return "FAIL: below the baseline's interval"
 
 
-def successes_by_seed(path: Path) -> dict[int, bool]:
-    """Each episode's success in an eval file, keyed by seed."""
+def read_report(path: Path) -> tuple[dict[int, bool], float | None]:
+    """An eval file's successes keyed by seed, and its share of episodes past 150° of
+    tilt (None if the file predates it)."""
     report = json.loads(path.read_text())
-    return {row["seed"]: bool(row["success"]) for row in report["episodes"]}
+    successes = {row["seed"]: bool(row["success"]) for row in report["episodes"]}
+    return successes, report.get("summary", {}).get("inversion_rate")
 
 
-def table_row(stage: str, mode: str, cell: PairedCell) -> str:
-    """One markdown table row for a cell."""
+def percent_or_dash(rate: float | None) -> str:
+    """A rate as a percentage, or a dash when unknown."""
+    return "—" if rate is None else f"{rate:.0%}"
+
+
+def table_row(
+    stage: str, mode: str, cell: PairedCell, inverted: tuple[float | None, float | None]
+) -> str:
+    """One markdown table row for a cell; `inverted` is each controller's inversion rate."""
     base_low, base_high = wilson_interval(cell.baseline_wins, cell.episodes)
     cand_low, cand_high = wilson_interval(cell.candidate_wins, cell.episodes)
     p = mcnemar_p(cell.only_baseline, cell.only_candidate)
+    base_inverted, cand_inverted = inverted
     return (
         f"| {stage} | {mode} | {cell.baseline_rate:.1%} [{base_low:.1%}–{base_high:.1%}] "
         f"| {cell.candidate_rate:.1%} [{cand_low:.1%}–{cand_high:.1%}] "
         f"| {cell.only_baseline} / {cell.only_candidate} | {p:.2g} "
+        f"| {percent_or_dash(base_inverted)} / {percent_or_dash(cand_inverted)} "
         f"| {bar_verdict(stage, cell)} |"
     )
+
+
+def missing_newer_stages(results_dir: Path, names: tuple[str, str], suffix: str) -> list[str]:
+    """The newer stages some of whose files are missing."""
+    missing = []
+    for stage in NEWER_STAGES:
+        files = [
+            results_dir / f"eval_{name}_{stage}_{mode}{suffix}.json"
+            for name in names
+            for mode in MODES
+        ]
+        if not all(path.exists() for path in files):
+            missing.append(stage)
+    return missing
 
 
 def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") -> list[str]:
@@ -120,17 +151,23 @@ def compare(results_dir: Path, baseline: str, candidate: str, suffix: str = "") 
     files in `results_dir` (`suffix` is `_dr` for randomized runs)."""
     lines = [
         f"| Stage | Mode | {baseline} | {candidate} | only {baseline} / only {candidate} "
-        "| McNemar p | M7 bar |",
-        "|---|---|---|---|---|---|---|",
+        "| McNemar p | inverted | M7 bar |",
+        "|---|---|---|---|---|---|---|---|",
     ]
-    for stage in STAGES:
+    missing = missing_newer_stages(results_dir, (baseline, candidate), suffix)
+    for stage in STAGES + NEWER_STAGES:
+        if stage in missing:
+            # A must-beat stage with no results must not pass the bar by being absent.
+            lines.append(f"| {stage} | both | missing eval files | | | | | FAIL: no results |")
+            continue
         for mode in MODES:
             stem = f"_{stage}_{mode}{suffix}.json"
-            cell = pair_successes(
-                successes_by_seed(results_dir / f"eval_{baseline}{stem}"),
-                successes_by_seed(results_dir / f"eval_{candidate}{stem}"),
+            baseline_wins, baseline_inverted = read_report(results_dir / f"eval_{baseline}{stem}")
+            candidate_wins, candidate_inverted = read_report(
+                results_dir / f"eval_{candidate}{stem}"
             )
-            lines.append(table_row(stage, mode, cell))
+            cell = pair_successes(baseline_wins, candidate_wins)
+            lines.append(table_row(stage, mode, cell, (baseline_inverted, candidate_inverted)))
     return lines
 
 

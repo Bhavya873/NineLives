@@ -18,6 +18,7 @@ use crate::checkpoint::Checkpoint;
 use crate::course_gen::{PieceCatalog, PieceCatalogError};
 use crate::driver_bot::DriverBotConfig;
 use crate::driving_stages::{ChaosStageConfig, CourseStageConfig, HopStageConfig};
+use crate::flight_stage::FlightStageConfig;
 use crate::obs::MAX_THRUST_SCALE;
 use crate::randomization::RandomizationConfig;
 use crate::wind::WindConfig;
@@ -42,13 +43,15 @@ pub enum Stage {
     D,
     /// A, C or D with Chaos knocks at random times.
     E,
+    /// The bot rolls the car onto a strong flip plate: a flight from the wheels.
+    F,
 }
 
 impl Stage {
     /// Every stage, in curriculum order.
-    pub const ALL: [Stage; 5] = [Stage::A, Stage::B, Stage::C, Stage::D, Stage::E];
+    pub const ALL: [Stage; 6] = [Stage::A, Stage::B, Stage::C, Stage::D, Stage::E, Stage::F];
 
-    /// "A" to "E" (either case), as on the eval runner's command line.
+    /// "A" to "F" (either case), as on the eval runner's command line.
     pub fn from_name(name: &str) -> Option<Stage> {
         match name {
             "A" | "a" => Some(Stage::A),
@@ -56,6 +59,7 @@ impl Stage {
             "C" | "c" => Some(Stage::C),
             "D" | "d" => Some(Stage::D),
             "E" | "e" => Some(Stage::E),
+            "F" | "f" => Some(Stage::F),
             _ => None,
         }
     }
@@ -147,6 +151,8 @@ pub struct ScenariosConfig {
     pub stage_d: CourseStageConfig,
     /// The `[stage_e]` section.
     pub stage_e: ChaosStageConfig,
+    /// The `[stage_f]` section.
+    pub stage_f: FlightStageConfig,
     /// The `[driver_bot]` section (SPEC §9.7).
     pub driver_bot: DriverBotConfig,
     /// The `[randomization]` section (SPEC §9.8).
@@ -240,7 +246,7 @@ impl ScenariosConfig {
     pub fn level_count(&self, stage: Stage) -> u32 {
         match stage {
             Stage::A => self.curriculum_a.levels,
-            Stage::B | Stage::C | Stage::D | Stage::E => 1,
+            Stage::B | Stage::C | Stage::D | Stage::E | Stage::F => 1,
         }
     }
 
@@ -251,6 +257,7 @@ impl ScenariosConfig {
             Stage::C => self.stage_c.time_limit_s,
             Stage::D => self.stage_d.time_limit_s,
             Stage::E => self.stage_e.time_limit_s,
+            Stage::F => self.stage_f.time_limit_s,
         }
     }
 
@@ -262,7 +269,7 @@ impl ScenariosConfig {
                 stage_a: self.stage_a_at_level(level),
                 ..self.clone()
             },
-            Stage::B | Stage::C | Stage::D | Stage::E => self.clone(),
+            Stage::B | Stage::C | Stage::D | Stage::E | Stage::F => self.clone(),
         }
     }
 
@@ -407,6 +414,8 @@ impl ScenariosConfig {
                 false,
             ),
             ("stage_e.knock_time_s", self.stage_e.knock_time_s, false),
+            ("stage_f.speed_m_s", self.stage_f.speed_m_s, false),
+            ("stage_f.strength", self.stage_f.strength, false),
             (
                 "driver_bot.target_speed_m_s",
                 self.driver_bot.target_speed_m_s,
@@ -472,6 +481,7 @@ impl ScenariosConfig {
             ),
             ("stage_c.spare_length_m", self.stage_c.spare_length_m),
             ("stage_c.run_out_m", self.stage_c.run_out_m),
+            ("stage_f.plate_ahead_m", self.stage_f.plate_ahead_m),
             (
                 "driver_bot.lookahead_per_speed_s",
                 bot.lookahead_per_speed_s,
@@ -498,6 +508,9 @@ impl ScenariosConfig {
             ("stage_c.time_limit_s", self.stage_c.time_limit_s),
             ("stage_d.time_limit_s", self.stage_d.time_limit_s),
             ("stage_e.time_limit_s", self.stage_e.time_limit_s),
+            ("stage_f.time_limit_s", self.stage_f.time_limit_s),
+            ("stage_f.half_width_m", self.stage_f.half_width_m),
+            ("stage_f.run_out_m", self.stage_f.run_out_m),
             ("stage_d.time_use_fraction", self.stage_d.time_use_fraction),
             (
                 "episode.max_landing_heading_error_deg",
@@ -542,6 +555,14 @@ impl ScenariosConfig {
             let rule = "three weights (A, C, D), none negative, not all zero";
             return bad("stage_e.base_stage_weights", rule);
         }
+        // The car starts on its wheels, so the success hold runs from t = 0: it must hit
+        // the plate (at the slowest speed) before a quiet car could succeed on the ground.
+        let slowest_m_s = self.stage_f.speed_m_s[0];
+        let half_hold_s = 0.5 * self.episode.success_hold_s;
+        if slowest_m_s <= 0.0 || self.stage_f.plate_ahead_m / slowest_m_s > half_hold_s {
+            let rule = "close enough that the slowest speed reaches the plate within half of episode.success_hold_s";
+            return bad("stage_f.plate_ahead_m", rule);
+        }
         if self.driver_bot.target_speed_m_s[0] <= 0.0 {
             let rule = "[low, high] with 0 < low ≤ high";
             return bad("driver_bot.target_speed_m_s", rule);
@@ -566,7 +587,7 @@ pub fn start_episode(
     let start = match stage {
         Stage::A => sample_drop(&config.stage_a, &mut rng),
         Stage::B => sample_tip_over(&config.stage_b, &mut rng),
-        Stage::C | Stage::D | Stage::E => {
+        Stage::C | Stage::D | Stage::E | Stage::F => {
             world.refill_tank();
             return Ok(());
         }

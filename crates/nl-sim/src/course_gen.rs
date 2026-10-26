@@ -148,6 +148,13 @@ pub struct FlipPreset {
     pub angular_n_m_s: [f32; 3],
 }
 
+/// One of `presets`, drawn by weight (Stage F and generated flip plates share it).
+pub(crate) fn pick_preset<'a>(presets: &'a [FlipPreset], rng: &mut ChaCha8Rng) -> &'a FlipPreset {
+    let weights: Vec<f32> = presets.iter().map(|preset| preset.weight).collect();
+    let indices: Vec<usize> = (0..presets.len()).collect();
+    &presets[pick_weighted(&indices, &weights, rng)]
+}
+
 impl FlipPreset {
     /// Every impulse is a finite number and the weight is finite and not negative.
     fn is_sane(&self) -> bool {
@@ -510,9 +517,7 @@ fn lay_piece(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> (Vec<P
         PieceTemplate::FlipPlate {
             strength, presets, ..
         } => {
-            let weights: Vec<f32> = presets.iter().map(|preset| preset.weight).collect();
-            let indices: Vec<usize> = (0..presets.len()).collect();
-            let preset = &presets[pick_weighted(&indices, &weights, rng)];
+            let preset = pick_preset(presets, rng);
             let plate = preset.kick_plate_at(pos, draw(rng, *strength));
             (vec![plate], KICK_PLATE_LENGTH_M)
         }

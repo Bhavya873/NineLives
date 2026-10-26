@@ -7,10 +7,16 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 
-from ninelives.rollout import evaluate_fixed_seeds, success_and_crash_rates
+from ninelives.rollout import (
+    checkpoint_policy_json,
+    evaluate_fixed_seeds,
+    evaluate_hybrid,
+    success_and_crash_rates,
+)
 from ninelives.run_files import RunState, record_progress, save_checkpoint
 from ninelives.train_config import TrainConfig
 
@@ -76,6 +82,8 @@ class RunCheckpointCallback(BaseCallback):
         self.wall_seconds_before = state.wall_seconds
         every = config.checkpoint_every_steps
         self.next_save = (state.steps // every + 1) * every
+        # A Hybrid run's policy JSON at the current checkpoint (None: not a Hybrid run).
+        self.policy_json: str | None = None
 
     def _on_step(self) -> bool:
         if self.num_timesteps >= self.next_save:
@@ -91,6 +99,9 @@ class RunCheckpointCallback(BaseCallback):
         self.record_progress(self.num_timesteps)
         numbered = self.run_dir / "checkpoints" / str(self.num_timesteps)
         save_checkpoint(numbered, self.model, normalizer)
+        # A Hybrid run scores the exported policy; export it once for every stage's eval.
+        if self.config.controller == "hybrid":
+            self.policy_json = checkpoint_policy_json(self.model, normalizer)
         if self.config.curriculum_promote_on == "eval":
             self.promote_from_eval(normalizer)
         stages = self.state.curriculum.unlocked_stages()
@@ -134,7 +145,16 @@ class RunCheckpointCallback(BaseCallback):
         self, normalizer: VecNormalize, stage: str, level: int, first_seed: int | None = None
     ) -> list[dict[str, Any]]:
         """`stage` at `level` on fixed seeds from `first_seed` (default: the
-        best-checkpoint eval seeds), acting deterministically."""
+        best-checkpoint eval seeds), acting deterministically. A Hybrid run is scored as
+        the shipped Hybrid controller, always at the stage's hardest level."""
+        if self.policy_json is not None:
+            return evaluate_hybrid(
+                self.policy_json,
+                episodes=self.config.eval_episodes,
+                first_seed=self.config.eval_seed if first_seed is None else first_seed,
+                mode=self.config.mode,
+                stage=stage,
+            )
         return evaluate_fixed_seeds(
             self.model,
             normalizer,
@@ -170,9 +190,41 @@ class RunCheckpointCallback(BaseCallback):
         record_progress(self.state, steps, self.wall_seconds_before, self.started_at)
 
 
+def controller_json(config: TrainConfig) -> str | None:
+    """The run's controller as the sim config wants it: "hybrid", or None (the policy
+    flies every step)."""
+    return "hybrid" if config.controller == "hybrid" else None
+
+
 def residual_json(config: TrainConfig) -> dict[str, object] | None:
     """The run's residual setting as the sim config wants it (None without one)."""
     return None if config.residual is None else config.residual.as_sim_json()
+
+
+class FiniteCheckCallback(BaseCallback):
+    """Stops training with a FloatingPointError at the first NaN or infinity in an
+    observation, a reward or (after each PPO update) a policy weight. train.py does not
+    save `latest/` after an error, so the last good checkpoint survives."""
+
+    def _on_step(self) -> bool:
+        for name in ("new_obs", "rewards"):
+            values = self.locals[name]
+            if not np.all(np.isfinite(values)):
+                raise FloatingPointError(f"training {name} hold NaN or infinity: {values}")
+        return True
+
+    def _on_rollout_start(self) -> None:
+        check_finite_weights(self.model)
+
+
+def check_finite_weights(model: BaseAlgorithm) -> None:
+    """Raises FloatingPointError naming the first policy parameter that is not finite."""
+    for name, parameter in model.policy.named_parameters():
+        if not bool(parameter.detach().isfinite().all()):
+            raise FloatingPointError(
+                f"policy weight {name} is NaN or infinite: training diverged; resume from the "
+                "last good latest/ with a lower learning rate"
+            )
 
 
 class TimeLimitCallback(BaseCallback):

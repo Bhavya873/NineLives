@@ -107,7 +107,8 @@ fn stage_names_read_either_case() {
     assert_eq!(Stage::from_name("B"), Some(Stage::B));
     assert_eq!(Stage::from_name("c"), Some(Stage::C));
     assert_eq!(Stage::from_name("E"), Some(Stage::E));
-    assert_eq!(Stage::from_name("F"), None);
+    assert_eq!(Stage::from_name("f"), Some(Stage::F));
+    assert_eq!(Stage::from_name("G"), None);
 }
 
 #[test]
@@ -125,4 +126,17 @@ fn a_driver_bot_turn_limit_of_zero_or_less_is_refused() {
             "{error}"
         );
     }
+}
+
+#[test]
+fn a_stage_f_plate_too_far_for_the_success_hold_is_refused() {
+    // 12 m at the slowest 10 m/s takes 1.2 s: a quiet car would "succeed" before the plate.
+    let broken = DEFAULT_SCENARIOS_TOML.replace("plate_ahead_m = 5.0", "plate_ahead_m = 12.0");
+
+    let error = ScenariosConfig::from_toml_str(&broken).unwrap_err();
+
+    assert!(
+        error.to_string().contains("stage_f.plate_ahead_m"),
+        "{error}"
+    );
 }

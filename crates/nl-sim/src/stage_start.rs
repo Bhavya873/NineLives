@@ -10,6 +10,7 @@ use crate::driver_bot::{Centerline, DriverBot, HopTrigger, has_hop_rows, row_hop
 use crate::driving_stages::{
     HopSetup, draw_chaos_plan, draw_hop_setup, draw_target_speed, hop_course,
 };
+use crate::flight_stage::{FlightSetup, draw_flight_setup, flight_course};
 use crate::hop_profile::HopProfile;
 use crate::randomization::EpisodeVariation;
 use crate::scenarios::{ScenariosConfig, Stage, start_episode};
@@ -30,6 +31,9 @@ pub(crate) enum Goal {
     SaveAfterHop,
     /// Cross the finish line (Stage D).
     ReachFinish,
+    /// Like `HoldOnWheels`, but a landing that turns the car too far from its take-off
+    /// heading fails the episode (Stage F).
+    LandAndHold,
 }
 
 /// Where a car row stands, as a box around the course's centre line that the car's
@@ -78,18 +82,21 @@ pub(crate) struct StagePlan {
     knock_steps: Vec<u64>,
     /// Stage C's draws and the car's hop prediction they were made with.
     hop: Option<(HopSetup, HopProfile)>,
+    /// Stage F's draws.
+    flight: Option<FlightSetup>,
     /// The episode's time limit, in s.
     time_limit_s: f32,
 }
 
 impl StagePlan {
-    /// The draws for an episode of `stage` from `seed`.
+    /// The draws for an episode of `stage` from `seed`. Stage F needs the flip plates
+    /// from pieces.json.
     pub(crate) fn draw(
         variation: &EpisodeVariation,
         scenarios: &ScenariosConfig,
         stage: Stage,
         seed: u64,
-    ) -> StagePlan {
+    ) -> Result<StagePlan, PlaceCarError> {
         let mut base = stage;
         let mut knock_steps = Vec::new();
         if stage == Stage::E {
@@ -105,13 +112,21 @@ impl StagePlan {
             let setup = draw_hop_setup(&scenarios.stage_c, clearance_m, vehicle, &profile, seed);
             hop = Some((setup, profile));
         }
-        StagePlan {
+        let mut flight = None;
+        if stage == Stage::F {
+            let plates = scenarios.piece_catalog()?.flip_plates().ok_or_else(|| {
+                PlaceCarError::BadCourse("pieces.json: Stage F needs a flip_plate".to_string())
+            })?;
+            flight = Some(draw_flight_setup(&scenarios.stage_f, &plates, seed));
+        }
+        Ok(StagePlan {
             stage,
             base,
             knock_steps,
             hop,
+            flight,
             time_limit_s: scenarios.time_limit_s(stage),
-        }
+        })
     }
 
     /// The episode's time limit, in s.
@@ -120,12 +135,16 @@ impl StagePlan {
     }
 
     /// The course this episode runs on when no course is given: None (flat ground) for
-    /// A and B, the Stage C track, or a generated Stage D course.
+    /// A and B, the Stage C track, the Stage F straight, or a generated Stage D course.
     pub(crate) fn course(
         &self,
         scenarios: &ScenariosConfig,
         seed: u64,
     ) -> Result<Option<CourseSpec>, PlaceCarError> {
+        if let Some(setup) = &self.flight {
+            let catalog = scenarios.piece_catalog()?;
+            return Ok(Some(flight_course(&scenarios.stage_f, catalog, setup)));
+        }
         match (self.base, &self.hop) {
             (Stage::A | Stage::B, _) => Ok(None),
             (_, Some((setup, _))) => {
@@ -149,12 +168,13 @@ pub(crate) fn begin_stage(
     course: Option<&CourseSpec>,
     seed: u64,
 ) -> Result<StageStart, PlaceCarError> {
-    let mut start = match (plan.base, &plan.hop) {
-        (Stage::A | Stage::B, _) => {
+    let mut start = match (plan.base, &plan.hop, &plan.flight) {
+        (_, _, Some(flight)) => begin_flight(world, variation, scenarios, flight, course, seed)?,
+        (Stage::A | Stage::B, _, _) => {
             start_episode(world, plan.base, scenarios, seed)?;
             no_driver(Goal::HoldOnWheels)
         }
-        (_, Some((setup, profile))) => {
+        (_, Some((setup, profile)), _) => {
             begin_hop(world, variation, scenarios, setup, profile, course, seed)?
         }
         _ => begin_course(world, variation, scenarios, plan, course, seed)?,
@@ -232,6 +252,29 @@ fn begin_course(
     roll_forward(world, 0.0)?;
     let bot = DriverBot::new(bot_config, vehicle, centerline, target_m_s, &triggers, seed);
     Ok(with_driver(Goal::ReachFinish, bot))
+}
+
+/// Stage F: the car rolls at the drawn speed towards the plate and the bot holds that
+/// speed along the course, so the driver's throttle and steer stay live through the flight.
+fn begin_flight(
+    world: &mut World,
+    variation: &EpisodeVariation,
+    scenarios: &ScenariosConfig,
+    setup: &FlightSetup,
+    course: Option<&CourseSpec>,
+    seed: u64,
+) -> Result<StageStart, PlaceCarError> {
+    let centerline = course.map_or(Centerline::along_x(), Centerline::of_course);
+    roll_forward(world, setup.speed_m_s)?;
+    let bot = DriverBot::new(
+        scenarios.driver_bot,
+        &variation.vehicle,
+        centerline,
+        setup.speed_m_s,
+        &[],
+        seed,
+    );
+    Ok(with_driver(Goal::LandAndHold, bot))
 }
 
 /// Keeps the car where the world put it (the course start), level and facing the
