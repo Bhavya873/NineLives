@@ -25,17 +25,20 @@ export const BODY_BEVEL_M = 0.05;
 
 /**
  * Top edge of the body seen from the left, as [x forward, y up] points from nose to
- * tail: a rounded nose, a bonnet rising to the windscreen, then a flat rear deck with a
- * small lip. The cabin sits on the deck between the windscreen base and the tail.
+ * tail, a low sports car: a low, smooth nose, a long bonnet
+ * sloping up to a set-back windscreen, a flat rear deck, and a ducktail lip in place of
+ * a wing. The bonnet stays above the side ports' tops (about 0.23 m) near the nose.
  */
 const BODY_TOP_EDGE_M: [number, number][] = [
-  [2.1, -0.02],
-  [2.07, 0.07],
-  [1.95, 0.15],
-  [1.5, 0.26],
-  [0.95, 0.29],
-  [-1.6, 0.3],
-  [-2.0, 0.31],
+  [2.1, -0.04],
+  [2.08, 0.06],
+  [1.98, 0.15],
+  [1.7, 0.23],
+  [1.3, 0.26],
+  [0.8, 0.27],
+  [-1.4, 0.29],
+  [-1.9, 0.32],
+  [-2.06, 0.33],
   [-2.1, 0.22],
 ];
 
@@ -66,18 +69,19 @@ export function bodyProfileM(): [number, number][] {
  */
 export const LINER_PROFILE_M: [number, number][] = [
   [1.9, 0.05],
-  [0.9, 0.24],
+  [0.9, 0.22],
   [-1.9, 0.24],
   [-1.9, BODY_BOTTOM_M],
   [1.9, BODY_BOTTOM_M],
 ];
 
-/** Cabin outline: raked windscreen, short roof, long fastback down to the deck. */
+/** Cabin outline: a low cabin with a steeply raked windscreen, a short roof and a long
+ * fastback down to the deck. */
 export const CABIN_PROFILE_M: [number, number][] = [
-  [0.95, 0.27],
-  [0.32, 0.52],
-  [-0.72, 0.52],
-  [-1.68, 0.28],
+  [0.8, 0.25],
+  [0.0, 0.47],
+  [-0.55, 0.47],
+  [-1.55, 0.29],
 ];
 
 /**

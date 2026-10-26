@@ -1,9 +1,10 @@
-// A generic low-poly sports car (SPEC §11.4: no brand shapes).
+// A generic low-poly sports car (SPEC §11.4: no brand shapes, names or logos).
 // The painted body, glass cabin and dark trim are side outlines (car-shape.ts) pushed out
-// across the car with bevelled edges, plus small boxes for lights, bumpers, skirts, a
-// front intake, wing mirrors and a rear wing. Parts that share a material are merged into one mesh, so each car costs a
-// handful of draw calls (the training viewer draws 64). The body group sits at the
-// car's centre of mass. Wheels are separate groups: the sim gives each its own pose.
+// across the car with bevelled edges, plus small boxes for lights, a rear diffuser,
+// skirts, a slim front intake and wing mirrors. Parts that share a material are merged
+// into one mesh, so each car costs a handful of draw calls (the training viewer draws
+// 64). The body group sits at the car's centre of mass. Wheels are separate groups: the
+// sim gives each its own pose.
 import {
   type BufferGeometry,
   BoxGeometry,
@@ -38,7 +39,8 @@ const LINER_WIDTH_M = 1.4;
 const paint = new MeshStandardMaterial({
   color: 0xe0542f,
   flatShading: true,
-  roughness: 0.45,
+  roughness: 0.4,
+  metalness: 0.15,
 });
 /** Tinted glass; light enough that the cabin still reads when the car is upside down. */
 const glass = new MeshStandardMaterial({
@@ -62,12 +64,12 @@ const taillight = new MeshStandardMaterial({
   flatShading: true,
 });
 const tyre = new MeshStandardMaterial({ color: 0x1b1b1b, flatShading: true, roughness: 0.9 });
-const rim = new MeshStandardMaterial({ color: 0xc8c8c8, flatShading: true, metalness: 0.6 });
+const rim = new MeshStandardMaterial({ color: 0x8a9099, flatShading: true, metalness: 0.7 });
 
 // One merged geometry per material, shared by every car built.
 const paintGeometry = mergeParts([
   extrudeProfile(bodyProfileM(), { widthM: BODY_WIDTH_M, bevelM: BODY_BEVEL_M, centreZM: 0 }),
-  ...roofAndPillars(),
+  roofPanel(),
   ...wingMirrors(),
 ]);
 const glassGeometry = mergeParts([
@@ -75,10 +77,9 @@ const glassGeometry = mergeParts([
 ]);
 const trimGeometry = mergeParts([
   extrudeProfile(LINER_PROFILE_M, { widthM: LINER_WIDTH_M, bevelM: 0, centreZM: 0 }),
-  ...bumpers(),
+  ...rearDiffuser(),
   ...sideSkirts(),
   ...frontIntake(),
-  ...rearWing(),
 ]);
 const headlightGeometry = mergeParts(headlights());
 const taillightGeometry = mergeParts(taillights());
@@ -131,39 +132,31 @@ export function buildWheel(): Group {
   return wheel;
 }
 
-/** A painted roof panel over the glass and a pillar on each side between the windows. */
-function roofAndPillars(): BufferGeometry[] {
-  const roof = boxAt([-0.74, 0.505, -0.64], [0.34, 0.545, 0.64]);
-  const parts = [roof];
-  for (const side of [-1, 1]) {
-    // The pillar behind the door window, splitting side glass from the rear quarter.
-    parts.push(boxAt([-0.5, 0.27, side * 0.62], [-0.4, 0.52, side * 0.72]));
-  }
-  return parts;
+/** A painted roof panel over the glass cabin's short roof. */
+function roofPanel(): BufferGeometry {
+  return boxAt([-0.57, 0.455, -0.6], [0.02, 0.49, 0.6]);
 }
 
 /** A wing mirror on each door, just ahead of the side window. */
 function wingMirrors(): BufferGeometry[] {
-  return [-1, 1].map((side) => boxAt([0.62, 0.3, side * 0.7], [0.74, 0.38, side * 0.86]));
+  return [-1, 1].map((side) => boxAt([0.5, 0.27, side * 0.7], [0.6, 0.33, side * 0.85]));
 }
 
-/** A dark intake across the lower nose, between the headlights' feet. */
+/** A slim dark intake low across the smooth, grille-less nose. */
 function frontIntake(): BufferGeometry[] {
-  return [boxAt([2.06, -0.13, -0.5], [2.125, -0.05, 0.5])];
+  return [boxAt([2.07, -0.12, -0.42], [2.125, -0.09, 0.42])];
 }
 
-/** Dark bumpers wrapping the lower nose and tail, following the cut-away underside. */
-function bumpers(): BufferGeometry[] {
-  const front: [number, number][] = [
-    [2.11, -0.03],
-    [2.11, -0.17],
-    [1.86, -0.34],
-    [1.84, -0.27],
-    [1.99, -0.1],
+/** A dark diffuser under the tail, following the cut-away underside. */
+function rearDiffuser(): BufferGeometry[] {
+  const outline: [number, number][] = [
+    [-1.99, -0.1],
+    [-1.84, -0.27],
+    [-1.86, -0.34],
+    [-2.11, -0.17],
+    [-2.11, -0.1],
   ];
-  const rear = front.map(([x, y]): [number, number] => [-x, y]);
-  const options = { widthM: BODY_WIDTH_M + 0.02, bevelM: 0.04, centreZM: 0 };
-  return [extrudeProfile(front, options), extrudeProfile(rear.reverse(), options)];
+  return [extrudeProfile(outline, { widthM: BODY_WIDTH_M + 0.02, bevelM: 0.04, centreZM: 0 })];
 }
 
 /** A dark sill along each side between the wheel arches. */
@@ -174,37 +167,21 @@ function sideSkirts(): BufferGeometry[] {
   );
 }
 
-/** A small rear wing on two posts, kept under the physics roof height (0.55 m). */
-function rearWing(): BufferGeometry[] {
-  const parts = [boxAt([-2.07, 0.44, -0.8], [-1.77, 0.48, 0.8])];
-  for (const side of [-1, 1]) {
-    parts.push(boxAt([-1.95, 0.28, side * 0.42], [-1.89, 0.45, side * 0.48]));
-    // End plates at the wing tips.
-    parts.push(boxAt([-2.07, 0.38, side * 0.8], [-1.8, 0.5, side * 0.82]));
-  }
-  return parts;
-}
-
-/** Two headlight strips laid on the sloping nose above the bumper. */
+/** Two slim headlight strips laid on the sloping nose. */
 function headlights(): BufferGeometry[] {
-  // The nose slopes up from (2.07, 0.07) to (1.95, 0.15); lay the lamps along it.
-  const slopeRad = Math.atan2(0.08, 0.12);
+  // The nose slopes up from (2.08, 0.06) to (1.98, 0.15); lay the lamps along it.
+  const slopeRad = Math.atan2(0.09, 0.1);
   return [-1, 1].map((side) => {
-    const lamp = new BoxGeometry(0.15, 0.03, 0.4);
+    const lamp = new BoxGeometry(0.13, 0.022, 0.34);
     lamp.rotateZ(-slopeRad);
-    lamp.translate(2.02, 0.115, side * 0.56);
+    lamp.translate(2.03, 0.105, side * 0.58);
     return lamp;
   });
 }
 
-/** Two taillight bars and a thin centre strip across the tail, between the nozzle plates. */
+/** One thin light bar across the whole tail, under the ducktail and above the rear ports. */
 function taillights(): BufferGeometry[] {
-  const parts: BufferGeometry[] = [];
-  for (const side of [-1, 1]) {
-    parts.push(boxAt([-2.115, 0.06, side * 0.58], [-2.08, 0.18, side * 0.84]));
-  }
-  parts.push(boxAt([-2.11, 0.13, -0.22], [-2.08, 0.16, 0.22]));
-  return parts;
+  return [boxAt([-2.115, 0.13, -0.8], [-2.085, 0.165, 0.8])];
 }
 
 /** A box spanning from corner `min` to corner `max`, in metres in the body frame. */

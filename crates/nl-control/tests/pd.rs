@@ -440,11 +440,9 @@ fn pd_saves_a_car_dropped_on_its_side_from_8_m_and_off_does_not() {
 #[test]
 fn pd_driving_over_bumps_uses_almost_no_air() {
     // The owner saw thrusters fire whenever a wheel left the ground on bumps.
-    let course = nl_sim::course::CourseSpec::from_json_str(
-        r#"{"version": 1, "name": "bumps", "start": {"pos": [0, 0.7, 0], "yaw": 0},
-        "bounds": {"min": [-50, -20, -30], "max": [300, 60, 30]},
-        "pieces": [{"type": "bumps", "pos": [30, 0, 0], "count": 8, "height": 0.4}]}"#,
-    )
+    let course = nl_sim::course::CourseSpec::from_json_str(include_str!(
+        "../../../courses/bumps-strip.json"
+    ))
     .unwrap();
     let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
     let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML).unwrap();
@@ -461,16 +459,9 @@ fn pd_driving_over_bumps_uses_almost_no_air() {
         ..InputFrame::default()
     };
 
-    for _ in 0..8 * PHYSICS_HZ as usize {
-        if world.is_control_step() {
-            let ctx = ControlCtx::for_world(&world, drive);
-            world.set_controller_throttles(pd.act(&ctx));
-        }
-        world.step(drive);
-    }
+    let used_kg = nl_control::eval::air_used_driving(&mut world, &mut pd, drive, 8.0);
 
     let x_m = world.chassis_pose().position_m[0];
-    let used_kg = world.air_used_kg();
     assert!(x_m > 80.0, "only reached x = {x_m} m ({used_kg} kg used)");
-    assert!(world.air_used_kg() < 8.0, "used {} kg", world.air_used_kg());
+    assert!(used_kg < 8.0, "used {used_kg} kg");
 }

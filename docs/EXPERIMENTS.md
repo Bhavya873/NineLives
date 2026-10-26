@@ -167,3 +167,89 @@ The unsettled cost kept the policy from ever settling quietly (it landed safely 
 - Charging sideways speed made it worse. Charging thrust while steady on the ground fixes driving (out of bounds 26% → 8–11%), but every variant breaks drops and tip-overs (A and B go to 0%, timing out).
 - No candidate met the round-4 rule (beat the start on D and E, lose ≤ 3 points on A, B and C). The 100M-step continuation was not run.
 - Next to investigate: why the ground-thrust cost stops A/B landings from succeeding even with the 0.02 deadband (likely a remaining trickle, or the cost firing during the landing itself).
+
+
+### 2026-10-19/20 — M7 rounds 5–6: three-approach batch, residual-100m, PD tuning
+
+**Round 5 batch** (owner's choice): three approaches in parallel, 25M steps each, scored on validation seeds from 1,500,000 (300 episodes per cell, Stage A at level 4), A–E in both modes. Rule: most cells beating PD wins; mean success breaks ties.
+
+| Run | Approach | Cells beating PD (of 10) | Realistic A / D / E | Arcade A / D / E |
+|---|---|---|---|---|
+| batch-ppo | PPO continued from m7-full-004 best, LR 1e-4, D/E-heavy weights | 2 | – | – |
+| batch-bc | behaviour cloning from PD, then PPO | 2 | – | – |
+| **batch-residual** | PD + 0.5 × policy action (head zeroed, so it starts as PD) | **3** | 68.3 / 95.7 / 81.7 | 74.7 / 84.3 / 76.7 |
+| PD (then) | – | – | 59.7 / 95.7 / 81.3 | 60.3 / 95.7 / 79.0 |
+
+**residual-100m:** `configs/train/residual.yaml` (worktree m7-residual, commit 87ece93), fresh, seed 0, 100M steps, all stages at their hardest level from the start (weights A .25 B .05 C .1 D .4 E .2), 2.3 h. Checkpoint evals (200 episodes per stage, seeds from 1,000,000) from TensorBoard:
+
+| Steps | A | B | C | D | E | Mean |
+|---|---|---|---|---|---|---|
+| 1M | 60.5% | 100% | 100% | 97.0% | 83.0% | **88.1% (best)** |
+| 21M | 62.0% | 100% | 100% | 89.0% | 80.0% | 86.2% |
+| 41M | 64.0% | 100% | 100% | 87.5% | 80.0% | 86.3% |
+| 61M | 61.5% | 100% | 100% | 84.5% | 78.5% | 84.9% |
+| 91M | 60.5% | 100% | 100% | 84.5% | 79.0% | 84.8% |
+
+Final checkpoint, validation (seeds from 1,000,000, 300 episodes): Realistic A 62.7, B 100, C 100, D 96.0, E 80.3; Arcade A 71.0, B 100, C 100, D 92.3, E 79.3. It beats the PD of the time on 4 of 10 cells: **bar not met**. Not exported.
+
+- **The residual never improved on PD.** The best checkpoint is the first (1M steps, nudges still near zero). Training gained at most 3–4 points on A and gave back 12 on D and 4 on E.
+- The batch's "3 cells vs 2" margin was inside 300-episode noise (±2.8 points standard error at 60%), so the batch picked a winner that didn't hold over a long run.
+- Round-6 diagnosis: the nudge was not divided by `thrust_scale` while PD's allocation is, which overshot in Arcade. The fixes, **R1** (`residual-r1.yaml`, force-scaled nudge) and **R2** (`residual-r2.yaml`, force-scaled + a learned gate), were **planned, not run** (commit c08f1b4): round 7 changed the sim first, and the owner then dropped residual as the main line (DECISIONS 2026-10-21).
+
+**PD tuning** (`python -m ninelives.tune_pd`, CMA-ES on tuning seeds ≥ 2,000,000, scored on A, D and E in both modes):
+
+| Version | Scored on | Result | Outcome |
+|---|---|---|---|
+| v1 | plain car only | huge gains, burned the tank; randomized D 93% → 40% | rejected (overfit) |
+| v2 | plain + randomized, fraction gains capped, pre-round-7 PD | 0.914 vs repo 0.847 on its own tuning seeds | never validated; obsolete after round 7's PD changes |
+| v3, v4 | round-7 PD | see the round-7 rows | – |
+
+**Repo PD on the round-7 sim** (untuned gains), validation seeds from 1,500,000, 300 episodes, no randomization: Realistic A 70, B 100, C 100, D 99, E 85; Arcade A 71, B 100, C 100, D 100, E 84. The M5 policy (stage-a-004) on test seeds: Stage A 81.0% Realistic, 87.8% Arcade. That passes the 80% Realistic stretch target, mostly thanks to the interlock and the chamfered underside.
+
+Conclusion (owner, 2026-10-21): one policy owning the nozzles through 45 s of driving keeps losing to PD on D/E, while the Stage-A-only policy is the best AI. Next round: **the AI flies, PD drives** (a `Hybrid` controller), paired-seed evals with confidence intervals, and a revised bar (DECISIONS).
+
+
+### 2026-10-21 — Hybrid with the M5 policy, no training (PR #44)
+
+The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-a-004, Stage A only) against repo-gains PD on the round-7 sim. Rust eval runner, validation seeds from 1,500,000, 1000 episodes per cell, no randomization; paired on the same seeds (Wilson 95% intervals, exact McNemar test). Test seeds 0–999 not used.
+
+**Gate v1: the AI takes over at take-off** (fewer than 3 wheels down, or tilt > 60°): **fails**. A 81.3 / 86.6 (PD 68.9 / 69.4), B within CI, but C 34.6 / 57.2 (PD 100 / 99.8: 602 runs out of bounds, median 191 kg air, the AI keeps firing after the hop), D 12.5 / 22.2 (PD 98.8 / 98.9; Off gets 24.7%: the policy has never flown an upright jump), E 45.8 / 49.1.
+
+**Gate v2: the AI takes over only past the upset tilt (60°)**, committed:
+
+| Stage | Realistic PD → Hybrid | Arcade PD → Hybrid | Only PD / only Hybrid succeeded (R; A) | Against the 2026-10-21 bar |
+|---|---|---|---|---|
+| A | 68.9 → **81.0** (p 4e-21) | 69.4 → **86.4** (p 2e-41) | 28 / 149; 10 / 180 | beats PD |
+| B | 99.4 → 99.5 | 99.4 → 99.7 | 5 / 6; 3 / 6 | within PD's CI |
+| C | 100 → 100 | 99.8 → 99.8 | 0 / 0; 0 / 0 | within PD's CI |
+| D | 98.8 → 98.7 | 98.9 → 98.7 | 1 / 0; 2 / 0 | within PD's CI |
+| E | 85.5 → **90.7** (p 6e-11) | 83.8 → **89.8** (p 6e-15) | 8 / 60; 4 / 64 | beats PD |
+
+- **Meets the M7 bar on all ten cells on validation, without training.** Confirmed on the test seeds (below).
+- Air per save is lower than PD's (A Realistic 35.2 vs 39.7 kg; Arcade 38.6 vs 44.9). Hard landings are a little higher on A (Realistic 4.4% vs 0%, Arcade 3.5% vs 2.0%); they still count as successes.
+- Lesson: the take-off gate handed the policy states it never trained on. Hand a learned controller only the states it was trained for, and leave the rest to the controller that already handles them.
+
+**Test seeds 0–999 (one-time, owner-approved), gate v2, 1000 episodes per cell; files `results/eval_hybrid_*` (PR #44), table from `python -m ninelives.compare --candidate hybrid`:**
+
+| Stage | Realistic PD → Hybrid | Arcade PD → Hybrid | Only PD / only Hybrid succeeded (R; A) | Against the 2026-10-21 bar |
+|---|---|---|---|---|
+| A | 67.0 → **81.0** (p 4e-24) | 69.2 → **87.6** (p 2e-43) | 33 / 173; 13 / 197 | beats PD |
+| B | 99.2 → 99.0 | 99.3 → 99.8 | 10 / 8; 2 / 7 | within PD's CI |
+| C | 100 → 100 | 99.6 → 99.6 | 0 / 0; 0 / 0 | within PD's CI |
+| D | 99.5 → 99.3 | 99.3 → 99.3 | 2 / 0; 0 / 0 | within PD's CI |
+| E | 86.8 → **90.7** (p 2e-6) | 85.4 → **90.6** (p 2e-13) | 14 / 53; 3 / 55 | beats PD |
+
+- **The M7 bar is met on all ten test cells.** The PD reruns matched the committed `results/eval_pd_*` files episode for episode.
+- Owner decision after the result: the game defaults to Hybrid once the policy loads (DECISIONS).
+
+### 2026-10-21 — Round 7: PD tuning v3 and v4 on the round-7 sim (CMA-ES, not adopted)
+`python -m ninelives.tune_pd --generations 20 --popsize 10` (20 × 10 candidates, 200 episodes per cell, tuning seeds from 2,000,000; A, D, E × both modes × plain/randomized). Each took about 3 h on 8 cores. Validated with 300 episodes per cell on seeds from 1,500,000, against the repo gains.
+
+| Run | What was tuned | Validation mean success | A | E | B | D | Air | Bumps strip (8 s) | Outcome |
+|---|---|---|---|---|---|---|---|---|---|
+| repo | — | 0.893 | 70/71 | 85/84 | 100 | 99/100 | — | 6.7 kg | bar |
+| v3 | every [pd] number except the air-control feel and the accel cap | 0.938 | +15 to +18 | +5 to +11 | −3 | −1 to −3 | +50–70% | 17.4 kg | rejected: brakes every fall over 0.4 m/s (`brake_speed_m_s` 4.0 → 0.39), fires on bumps, brakes fast falls too late (`brake_safety` 0.62) |
+| v4 | v3 minus the rules for when PD acts (brake speed and safety, upright alignment, quiet and lying thresholds) | 0.939 | +14 to +16 | +5 to +10 | −1 to −2 | 0 | +25–50% | 10.6 kg | not adopted (owner): still fires more over bumps; `brake_usable_fraction` 0.99 starts fast-fall braking lower |
+
+- Tuning on success alone moves PD toward firing more often; the search needs the owner's behaviour rules as constraints, not just as tests afterwards.
+- Next (owner's choice): v5 also freezes where braking starts (brake height, margin, usable fraction) and pays 0.05 success per kg past 8 kg over the bumps strip, in either mode.

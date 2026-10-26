@@ -21,6 +21,8 @@ interface DebugHook {
 
 /** The wasm `ControllerCode.Ai` value (crates/nl-wasm). */
 const CONTROLLER_CODE_AI = 3;
+/** The wasm `ControllerCode.HybridPd` value: Hybrid, with PD in charge. */
+const CONTROLLER_CODE_HYBRID_PD = 5;
 
 /** The sim's current controller code (read straight from the game, not the HUD text,
  * which only updates on the next drawn frame). */
@@ -62,6 +64,16 @@ test('holding W drives the car forward without console errors', async ({ page })
   expect(consoleErrors).toEqual([]);
 });
 
+test('the game switches to Hybrid by itself once the policy has loaded', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/');
+
+  await expect
+    .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBe(CONTROLLER_CODE_HYBRID_PD);
+  await expect(page.locator('#hud-status')).toContainText('Controller: Hybrid · PD');
+});
+
 test('T reaches the AI once the policy has loaded, and a drop test runs clean', async ({
   page,
 }) => {
@@ -70,8 +82,9 @@ test('T reaches the AI once the policy has loaded, and a drop test runs clean', 
   await page.goto('/');
   await expect.poll(() => readDebug(page, 'x'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).not.toBeNaN();
 
-  // PD (the start) → AI → Off (SPEC §11.3). The policy loads in the background, so keep cycling
-  // until the sim reports the AI; never press T once it does.
+  // The cycle is Off → PD → AI → Hybrid (SPEC §11.3), and the game moves to Hybrid once the
+  // policy loads in the background, so keep cycling until the sim reports the AI; never
+  // press T once it does.
   await expect
     .poll(
       async () => {

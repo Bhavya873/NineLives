@@ -555,7 +555,6 @@ impl World {
         self.events.crashed()
     }
 
-    /// Angle between the car's up axis and world up: 0 level, π upside down.
     /// True while the thruster interlock cuts the controller's throttles: the car is
     /// steady on the ground (`[thrusters.interlock]`: upright, low, not falling, barely
     /// turning). Hop and Boost feed-forward are never cut.
@@ -569,6 +568,7 @@ impl World {
         steady && height_above_ground_m(&self.physics, &self.car) <= lock.max_height_m
     }
 
+    /// Angle between the car's up axis and world up: 0 level, π upside down.
     pub fn tilt_rad(&self) -> f32 {
         // libm, not std: std's acos is the platform's and differs in the last bit between
         // macOS, Linux and wasm, and the event rules compare this angle (rule 2).
