@@ -1,8 +1,8 @@
-// The training viewer (SPEC §11.6, M6): a crowd of translucent cars replays the same Stage A
-// drops with checkpoint 1, 2, 3… of the newest training run, so you can watch the policy
-// improve. The sim (a wasm Crowd) flies every car; this page only draws them and counts
-// how the drops end, then moves on to the next checkpoint. The drops land on the flat
-// arena or, from M7, the obstacle arena (O key, the on-screen button or `?arena=obstacles`).
+// The training viewer (SPEC §11.6): every exported checkpoint of the newest training run
+// flies at once, one labelled row of translucent cars per checkpoint, all on the same Stage A
+// drops, so you can see the policy improve from row to row. The sim (one wasm Crowd per
+// checkpoint) flies every car; this page only draws them and counts how the drops end.
+// The drops land on the flat arena or the obstacle arena (O key, the button or `?arena=obstacles`).
 import { requireElement, setText } from '../dom.ts';
 import { startGameLoop } from '../game-loop.ts';
 import { FLOATS_PER_POSE } from '../render/pose-blend.ts';
@@ -18,35 +18,28 @@ import {
 } from './arena-choice.ts';
 import { createArenaView, showArena } from './arena-view.ts';
 import { type RunEntry, loadCheckpoint, loadNewestRun } from './checkpoints.ts';
-import { createCrowdView, updateCrowdView } from './crowd-view.ts';
+import { createCrowdView, updateCrowdRow } from './crowd-view.ts';
 
-/** Cars in the crowd (SPEC §11.6: about 64). */
-const CROWD_SIZE = 64;
-/** Drops use eval seeds 0…63, the same for every checkpoint, so they compare fairly. */
-const FIRST_SEED = 0n;
-/** How long the final picture stays before the next checkpoint starts, in seconds. */
+/** Cars per checkpoint: 8 checkpoints × 8 cars is SPEC §11.6's crowd of about 64. */
+const CARS_PER_CHECKPOINT = 8;
+/** How long the final picture stays before the next round of drops, in seconds. */
 const PAUSE_BETWEEN_S = 2.5;
 
-/** A checkpoint to show, and the arena to fly it in. */
-interface Request {
-  index: number;
-  arena: ArenaKind;
+/** One checkpoint's crowd and whether its drops are still flying. */
+interface Row {
+  crowd: Crowd;
+  running: boolean;
 }
 
-/** Where the viewer is: which checkpoint, its crowd, and when it finished. */
+/** Where the viewer is: the run, its checkpoints' policies and the current round. */
 interface ViewerState {
   run: RunEntry;
-  /** The arena the current crowd flies in (set only once that crowd exists). */
+  /** Each checkpoint's policy file text, in training order. */
+  policies: string[];
   arena: ArenaKind;
-  checkpoint: number;
-  crowd: Crowd | null;
-  running: boolean;
-  /** The request whose checkpoint file is being fetched; nothing advances meanwhile. */
-  loading: Request | null;
-  /** A request made while another was loading (the newest wins). */
-  queued: Request | null;
-  /** Why the last checkpoint could not be shown, if it could not. */
-  error: string | null;
+  /** Round 0, 1, 2…: each round flies a new block of drops. */
+  round: number;
+  rows: Row[];
   finishedAtMs: number | null;
 }
 
@@ -56,173 +49,166 @@ async function start(): Promise<void> {
     throw new Error('The wasm build and the viewer disagree on the pose layout');
   }
   const status = requireElement('viewer-status');
-  const run = await loadNewestRun();
   const toggle = requireElement('arena-toggle');
+  const run = await loadNewestRun();
+  const board = createBoard(requireElement('viewer-board'), run);
+  const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
   const arena = createArena(requireElement('viewer'));
   const arenaView = createArenaView(arena.scene, arena.camera, arena.ground);
-  const firstArena = arenaFromUrl(window.location.search);
   const state: ViewerState = {
     run,
-    arena: firstArena,
-    checkpoint: 0,
-    crowd: null,
-    running: false,
-    loading: null,
-    queued: null,
-    error: null,
+    policies,
+    arena: arenaFromUrl(window.location.search),
+    round: 0,
+    rows: [],
     finishedAtMs: null,
   };
-  await showCheckpoint(state, { index: 0, arena: firstArena });
+  startRound(state, state.arena, 0);
   // Wheels per car, read from the sim rather than assumed.
-  const wheelPoses = state.crowd ? (state.crowd as Crowd).wheel_poses().length : 0;
-  const wheelCount = wheelPoses / (CROWD_SIZE * FLOATS_PER_POSE);
-  const view = createCrowdView(arena.scene, CROWD_SIZE, wheelCount);
+  const wheelPoses = state.rows[0]?.crowd.wheel_poses().length ?? 0;
+  const wheelCount = wheelPoses / (CARS_PER_CHECKPOINT * FLOATS_PER_POSE);
+  const view = createCrowdView(arena.scene, rowLabels(run), CARS_PER_CHECKPOINT, wheelCount);
+  const switchArena = () => startRound(state, otherArena(state.arena), state.round);
   window.addEventListener('keydown', (event) => {
-    if (event.code === 'ArrowRight' || event.code === 'KeyN') {
-      stepCheckpoint(state, 1);
-    }
-    if (event.code === 'ArrowLeft' || event.code === 'KeyP') {
-      stepCheckpoint(state, -1);
-    }
     if (event.code === 'KeyO') {
-      switchArena(state);
+      switchArena();
     }
   });
-  toggle.addEventListener('click', () => switchArena(state));
+  toggle.addEventListener('click', switchArena);
 
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
-      if (state.crowd && state.running) {
-        state.running = state.crowd.step();
+      for (const row of state.rows) {
+        if (row.running) {
+          row.running = row.crowd.step();
+        }
       }
     },
     render: () => {
-      const crowd = state.crowd;
-      if (!crowd) {
-        return;
-      }
       if (arenaView.kind !== state.arena) {
         // Read the shapes only when the arena changes: each call copies them out of wasm.
-        showArena(arenaView, state.arena, crowd.course_shapes());
+        showArena(arenaView, state.arena, state.rows[0]?.crowd.course_shapes());
         view.spreadOnGrid = state.arena === 'flat';
         setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
       }
-      const outcomes = crowd.outcomes();
-      updateCrowdView(view, crowd.chassis_poses(), crowd.wheel_poses(), outcomes);
+      state.rows.forEach((row, index) => {
+        const outcomes = row.crowd.outcomes();
+        updateCrowdRow(view, index, row.crowd.chassis_poses(), row.crowd.wheel_poses(), outcomes);
+        const cells = board[index];
+        if (cells) {
+          setText(cells.landed, String(count(outcomes, CrowdOutcome.Landed)));
+          setText(cells.crashed, String(count(outcomes, CrowdOutcome.Crashed)));
+        }
+      });
       arena.renderer.render(arena.scene, arena.camera);
-      setText(status, statusText(state, outcomes));
-      advanceWhenDone(state);
+      setText(status, statusText(state));
+      nextRoundWhenDone(state);
     },
   });
 
   Object.assign(window, {
     ninelivesViewer: {
-      checkpoint: () => state.checkpoint,
-      checkpointCount: () => state.run.checkpoints.length,
-      landed: () => count(state.crowd?.outcomes(), CrowdOutcome.Landed),
+      checkpointCount: () => state.rows.length,
+      landed: () => totalLanded(state),
       arena: () => state.arena,
       courseShapeCount: () => arenaView.shapeCount,
     },
   });
 }
 
-/** The newest request: the one queued, else the one loading, else what is shown. */
-function latestRequest(state: ViewerState): Request {
-  return state.queued ?? state.loading ?? { index: state.checkpoint, arena: state.arena };
+/** Builds every checkpoint's crowd for round `round` in `arena`, replacing the old ones.
+ * On the flat arena every row flies the same drops, so rows compare fairly; on the shared
+ * obstacle course each row gets its own drops, so the cars do not sit on top of each other. */
+function startRound(state: ViewerState, arena: ArenaKind, round: number): void {
+  const rows = state.policies.length;
+  const roundSeed = BigInt(round * CARS_PER_CHECKPOINT * (arena === 'flat' ? 1 : rows));
+  // Build the new crowds first, so a bad file never leaves freed crowds behind.
+  const crowds = state.policies.map((policyJson, index) => {
+    const rowSeed = arena === 'flat' ? 0n : BigInt(index * CARS_PER_CHECKPOINT);
+    return newCrowd(arena, policyJson, roundSeed + rowSeed, CARS_PER_CHECKPOINT);
+  });
+  for (const row of state.rows) {
+    row.crowd.free();
+  }
+  state.rows = crowds.map((crowd) => ({ crowd, running: true }));
+  state.arena = arena;
+  state.round = round;
+  state.finishedAtMs = null;
+  // Keep the URL in step so a reload stays in this arena.
+  const search = searchWithArena(window.location.search, arena);
+  window.history.replaceState(null, '', `${window.location.pathname}${search}`);
 }
 
-/** Moves `step` checkpoints on from the newest request, in that request's arena. */
-function stepCheckpoint(state: ViewerState, step: number): void {
-  const latest = latestRequest(state);
-  void showCheckpoint(state, { index: latest.index + step, arena: latest.arena });
-}
-
-/** Replays the newest requested checkpoint in the other arena. */
-function switchArena(state: ViewerState): void {
-  const latest = latestRequest(state);
-  void showCheckpoint(state, { index: latest.index, arena: otherArena(latest.arena) });
-}
-
-/** Starts checkpoint `request.index` (wrapping round) on the same drops in
- * `request.arena`. The arena and the URL change only once the new crowd exists, so a
- * failed load leaves everything as it was. */
-async function showCheckpoint(state: ViewerState, request: Request): Promise<void> {
-  if (state.loading) {
-    // Remember the newest request; it runs as soon as the current load ends.
-    state.queued = request;
-    return;
-  }
-  const total = state.run.checkpoints.length;
-  const wrapped = ((request.index % total) + total) % total;
-  const entry = state.run.checkpoints[wrapped];
-  if (!entry) {
-    return;
-  }
-  state.loading = { index: wrapped, arena: request.arena };
-  try {
-    const policyJson = await loadCheckpoint(state.run, entry);
-    // Build the new crowd first, so a bad file never leaves a freed crowd behind.
-    const crowd = newCrowd(request.arena, policyJson, FIRST_SEED, CROWD_SIZE);
-    state.crowd?.free();
-    state.crowd = crowd;
-    state.arena = request.arena;
-    state.checkpoint = wrapped;
-    state.running = true;
-    state.finishedAtMs = null;
-    state.error = null;
-    // Keep the URL in step so a reload stays in this arena.
-    const search = searchWithArena(window.location.search, request.arena);
-    window.history.replaceState(null, '', `${window.location.pathname}${search}`);
-  } catch (error) {
-    // Keep showing the last crowd; auto-advance retries after the usual pause.
-    state.error = `Checkpoint ${wrapped + 1}: ${String(error)}`;
-    state.finishedAtMs = performance.now();
-  } finally {
-    state.loading = null;
-  }
-  const queued = state.queued;
-  state.queued = null;
-  if (queued !== null) {
-    await showCheckpoint(state, queued);
-  }
-}
-
-/** Once every drop has ended, waits a moment, then moves to the next checkpoint. */
-function advanceWhenDone(state: ViewerState): void {
-  if (state.running || state.loading) {
+/** Once every drop has ended, waits a moment, then flies the next round of drops. */
+function nextRoundWhenDone(state: ViewerState): void {
+  if (state.rows.some((row) => row.running)) {
     return;
   }
   const nowMs = performance.now();
   if (state.finishedAtMs === null) {
     state.finishedAtMs = nowMs;
   } else if (nowMs - state.finishedAtMs > PAUSE_BETWEEN_S * 1000) {
-    stepCheckpoint(state, 1);
+    startRound(state, state.arena, state.round + 1);
   }
 }
 
-/** "Obstacle arena · run stage-a-004 · checkpoint 3 of 8 · 18.0M steps · landed 40 · crashed 20 · flying 4". */
-function statusText(state: ViewerState, outcomes: Uint8Array): string {
-  if (state.error) {
-    return state.error;
+/** A checkpoint's training steps in millions, e.g. "16M". */
+function stepsText(steps: number): string {
+  return `${Number((steps / 1e6).toFixed(1))}M`;
+}
+
+/** Each checkpoint's label over its cars, e.g. "#3 (16M)". */
+function rowLabels(run: RunEntry): string[] {
+  return run.checkpoints.map((entry, index) => `#${index + 1} (${stepsText(entry.steps)})`);
+}
+
+/** The scoreboard cells a checkpoint's counts go in. */
+interface BoardCells {
+  landed: HTMLElement;
+  crashed: HTMLElement;
+}
+
+/** Fills `table` with one row per checkpoint and returns each row's count cells. */
+function createBoard(table: HTMLElement, run: RunEntry): BoardCells[] {
+  const header = table.insertAdjacentElement('beforeend', document.createElement('tr'));
+  for (const title of ['Checkpoint', 'Steps', 'Landed', 'Crashed']) {
+    const cell = document.createElement('th');
+    cell.textContent = title;
+    header?.appendChild(cell);
   }
-  const entry = state.run.checkpoints[state.checkpoint];
-  const millions = ((entry?.steps ?? 0) / 1e6).toFixed(1);
-  const total = state.run.checkpoints.length;
-  return [
-    arenaLabel(state.arena),
-    `run ${state.run.run_id}`,
-    `checkpoint ${state.checkpoint + 1} of ${total}`,
-    `${millions}M steps`,
-    `landed ${count(outcomes, CrowdOutcome.Landed)}`,
-    `crashed ${count(outcomes, CrowdOutcome.Crashed)}`,
-    `flying ${count(outcomes, CrowdOutcome.Running)}`,
-  ].join(' · ');
+  return run.checkpoints.map((entry, index) => {
+    const row = document.createElement('tr');
+    const cells = [`#${index + 1}`, stepsText(entry.steps), '0', '0'].map((text) => {
+      const cell = document.createElement('td');
+      cell.textContent = text;
+      row.appendChild(cell);
+      return cell;
+    });
+    table.appendChild(row);
+    return { landed: cells[2] as HTMLElement, crashed: cells[3] as HTMLElement };
+  });
+}
+
+/** "Run stage-a-004: 8 checkpoints at once, 8 drops each, flat arena, round 1". */
+function statusText(state: ViewerState): string {
+  const arena = arenaLabel(state.arena).toLowerCase();
+  const checkpoints = `${state.rows.length} checkpoints at once`;
+  return `Run ${state.run.run_id}: ${checkpoints}, ${CARS_PER_CHECKPOINT} drops each, ${arena}, round ${state.round + 1}`;
+}
+
+/** Cars landed so far, over every checkpoint. */
+function totalLanded(state: ViewerState): number {
+  let total = 0;
+  for (const row of state.rows) {
+    total += count(row.crowd.outcomes(), CrowdOutcome.Landed);
+  }
+  return total;
 }
 
 /** How many of `outcomes` equal `outcome`. */
-function count(outcomes: Uint8Array | undefined, outcome: CrowdOutcome): number {
+function count(outcomes: Uint8Array, outcome: CrowdOutcome): number {
   let total = 0;
-  for (const value of outcomes ?? []) {
+  for (const value of outcomes) {
     if (value === outcome) {
       total += 1;
     }

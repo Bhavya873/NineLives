@@ -4,9 +4,9 @@
 import { BackSide, BufferAttribute, Color, Mesh, MeshBasicMaterial, SphereGeometry } from 'three';
 
 /** Colour at and below the horizon; also the fog colour and the page background. */
-export const BACKDROP_HORIZON = '#121a24';
+export const BACKDROP_HORIZON = '#2a3d52';
 /** Colour straight overhead. */
-const BACKDROP_TOP = '#5a7ea3';
+const BACKDROP_TOP = '#6b90b5';
 /** Dome radius: inside the camera's far plane, far beyond the fog. */
 export const BACKDROP_RADIUS_M = 1500;
 /** How quickly the colour climbs from the horizon (below 1 brightens it sooner). */
