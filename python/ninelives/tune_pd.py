@@ -1,17 +1,19 @@
-"""Tunes PD's gains (configs/controllers.toml [pd]) with CMA-ES on tuning seeds (M7 round 6).
+"""Tunes PD's gains (configs/controllers.toml [pd], plus the allocation's
+lag_compensation) with CMA-ES on tuning seeds (M7 round 6; control upgrade 2026-10-26).
 
-    python -m ninelives.tune_pd --generations 20 --popsize 10 --out pd-tuned.toml
+    python -m ninelives.tune_pd --generations 30 --popsize 12 --keep 5 --out pd-tuned.toml
 
-Each candidate multiplies every tunable [pd] number (how hard PD acts, not when; see
+Each candidate multiplies every tunable number (how hard PD acts, not when; see
 `UNTUNED`) by exp(x) (so signs never flip) and is scored by PD's mean success over stages
-A, D and E in both modes, each on the plain car and with domain randomization (SPEC
-§9.8), run in Rust (`run_eval`), less a cost for air used over the bumps strip past its
-limit (owner, round 7: no firing whenever a wheel lifts). Scored on the plain car alone,
+A–F in both modes, each on the plain car and with domain randomization (SPEC §9.8), run
+in Rust (`run_eval`), less a cost for air used over the bumps strip past its limit
+(owner, round 7: no firing whenever a wheel lifts). Scored on the plain car alone,
 the search found huge gains that burned most of the tank and fell apart on randomized
 cars (D 93% → 40%), so the randomized episodes keep it honest.
 Every generation draws a fresh block of tuning seeds from 2,000,000 up, disjoint from the
 validation seeds (1,000,000+, 1,500,000+) and the test seeds (0–999), so the gains
-cannot fit one fixed set. Writes the best candidate's controllers.toml to `--out`.
+cannot fit one fixed set. Writes the best candidate's controllers.toml to `--out`, and
+with `--keep N` the next best and CMA-ES's final mean beside it, for validation.
 """
 
 import argparse
@@ -26,11 +28,11 @@ import cma
 from ninelives.sim_config import CONFIGS_DIR, REPO_ROOT, load_sim_config
 from ninelives_sim import driving_air_kg, run_eval
 
-# Stages where PD is not already perfect (B and C are at 100%), in both modes, on the
-# plain car and with domain randomization.
+# Every stage, in both modes, on the plain car and with domain randomization: B and C
+# are no longer at 100% on the new car, and F (strong flip plates) is where PD gains most.
 TUNING_CELLS = [
     (stage, mode, randomize)
-    for stage in "ADE"
+    for stage in "ABCDEF"
     for mode in ("realistic", "arcade")
     for randomize in (False, True)
 ]
@@ -40,8 +42,14 @@ FIRST_TUNING_SEED = 2_000_000
 FINAL_TEST_FIRST_SEED = 3_000_000
 # Gains controllers.toml requires to be fractions (an up alignment is a cosine; the others
 # are shares of lift or weight), capped just below 1.
-FRACTION_GAINS = ("ground_side_push",)
+FRACTION_GAINS = ("ground_side_push", "lag_compensation")
 MAX_FRACTION = 0.99
+# The [allocation] numbers tuned beside [pd] (none of its names is a [pd] name).
+TUNED_ALLOCATION = ("lag_compensation",)
+# PD blends from its upright to its tumble gains between these tilts; keep them apart.
+BLEND_START, BLEND_END = "tumble_blend_start_deg", "tumble_blend_end_deg"
+MIN_BLEND_WIDTH_DEG = 5.0
+MAX_BLEND_END_DEG = 170.0
 
 
 # Never tuned, so the search changes how hard PD acts but not when (round 7):
@@ -63,6 +71,7 @@ UNTUNED = (
     "brake_margin_m",
     "brake_usable_fraction",
     "lying_max_fall_speed_m_s",
+    "on_ground_height_m",
     "quiet_max_tilt_deg",
     "quiet_max_spin_rad_s",
 )
@@ -77,11 +86,32 @@ def pd_gains(controllers_toml: str) -> dict[str, float]:
 def with_pd_gains(controllers_toml: str, gains: dict[str, float]) -> str:
     """`controllers_toml` with each [pd] number replaced by `gains`; other sections and
     the comments are kept."""
-    head, pd_header, rest = controllers_toml.partition("[pd]")
-    pd_section, next_header, tail = rest.partition("\n[")
-    for name, value in gains.items():
-        pd_section = re.sub(rf"(?m)^{name} = .*$", f"{name} = {value:.4g}", pd_section)
-    return head + pd_header + pd_section + next_header + tail
+    return with_section_values(controllers_toml, "pd", gains)
+
+
+def with_section_values(controllers_toml: str, section: str, values: dict[str, float]) -> str:
+    """`controllers_toml` with each number of `[section]` named in `values` replaced."""
+    head, header, rest = controllers_toml.partition(f"[{section}]")
+    table, next_header, tail = rest.partition("\n[")
+    for name, value in values.items():
+        table = re.sub(rf"(?m)^{name} = .*$", f"{name} = {value:.4g}", table)
+    return head + header + table + next_header + tail
+
+
+def tunables(controllers_toml: str) -> dict[str, float]:
+    """Every tuned number: the [pd] gains, then `TUNED_ALLOCATION`."""
+    allocation = tomllib.loads(controllers_toml)["allocation"]
+    values = pd_gains(controllers_toml)
+    for name in TUNED_ALLOCATION:
+        values[name] = float(allocation[name])
+    return values
+
+
+def with_tunables(controllers_toml: str, values: dict[str, float]) -> str:
+    """`controllers_toml` with the [pd] and [allocation] numbers in `values` replaced."""
+    allocation = {name: values[name] for name in TUNED_ALLOCATION if name in values}
+    gains = {name: value for name, value in values.items() if name not in allocation}
+    return with_section_values(with_pd_gains(controllers_toml, gains), "allocation", allocation)
 
 
 def scaled_gains(base: dict[str, float], log_factors: list[float]) -> dict[str, float]:
@@ -92,6 +122,11 @@ def scaled_gains(base: dict[str, float], log_factors: list[float]) -> dict[str, 
     for name in FRACTION_GAINS:
         if name in gains:
             gains[name] = min(gains[name], MAX_FRACTION)
+    if BLEND_START in gains and BLEND_END in gains:
+        # Scaled apart, the band could close or flip; controllers.toml needs end > start.
+        lowest_end_deg = gains[BLEND_START] + MIN_BLEND_WIDTH_DEG
+        gains[BLEND_END] = min(max(gains[BLEND_END], lowest_end_deg), MAX_BLEND_END_DEG)
+        gains[BLEND_START] = min(gains[BLEND_START], gains[BLEND_END] - MIN_BLEND_WIDTH_DEG)
     return gains
 
 
@@ -146,28 +181,32 @@ def tuning_seeds_start(generation: int, episodes: int) -> int:
     return first_seed
 
 
-def tune(generations: int, popsize: int, episodes: int, sigma: float) -> str:
-    """Runs CMA-ES from the repo's gains; returns the controllers.toml of the candidate
-    that beat the repo's gains by the most on its generation's seeds (the repo's own
-    file if none did)."""
+def tune(generations: int, popsize: int, episodes: int, sigma: float) -> list[str]:
+    """Runs CMA-ES from the repo's gains. Returns controllers.tomls, best first: the
+    candidates that beat the repo's gains on their generation's seeds, by margin (the
+    repo's own file if none did), then CMA-ES's final mean."""
     base_toml = (CONFIGS_DIR / "controllers.toml").read_text()
-    base = pd_gains(base_toml)
+    base = tunables(base_toml)
     strategy = cma.CMAEvolutionStrategy([0.0] * len(base), sigma, {"popsize": popsize})
-    best_toml, best_margin = base_toml, 0.0
+    winners: list[tuple[float, str]] = []
     # Refuse a run whose last generation would reach the test block before it starts.
     tuning_seeds_start(generations - 1, episodes)
     for generation in range(generations):
         first_seed = tuning_seeds_start(generation, episodes)
         candidates = strategy.ask()
-        tomls = [with_pd_gains(base_toml, scaled_gains(base, list(x))) for x in candidates]
+        tomls = [with_tunables(base_toml, scaled_gains(base, list(x))) for x in candidates]
         scores = [score(text, episodes, first_seed) for text in tomls]
         strategy.tell(candidates, [-score for score in scores])
         repo_score = score(base_toml, episodes, first_seed)
-        top = max(range(len(scores)), key=lambda index: scores[index])
-        if scores[top] - repo_score > best_margin:
-            best_toml, best_margin = tomls[top], scores[top] - repo_score
-        print(f"generation {generation}: best {scores[top]:.3f}, repo {repo_score:.3f}", flush=True)
-    return best_toml
+        for text, candidate_score in zip(tomls, scores, strict=True):
+            if candidate_score > repo_score:
+                winners.append((candidate_score - repo_score, text))
+        top = max(scores)
+        print(f"generation {generation}: best {top:.3f}, repo {repo_score:.3f}", flush=True)
+    winners.sort(key=lambda winner: winner[0], reverse=True)
+    best_first = [text for _, text in winners] or [base_toml]
+    mean = list(strategy.result.xfavorite)
+    return best_first + [with_tunables(base_toml, scaled_gains(base, mean))]
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -177,10 +216,17 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--episodes", type=int, default=200, help="per stage and mode")
     parser.add_argument("--sigma", type=float, default=0.3, help="initial log-factor step")
     parser.add_argument("--out", type=Path, required=True, help="controllers.toml to write")
+    parser.add_argument(
+        "--keep", type=int, default=0, help="also write the next N best and the CMA-ES mean"
+    )
     args = parser.parse_args(argv)
-    best = tune(args.generations, args.popsize, args.episodes, args.sigma)
-    args.out.write_text(best)
-    print(f"wrote {args.out}:\n" + json.dumps(pd_gains(best), indent=2))
+    ranked = tune(args.generations, args.popsize, args.episodes, args.sigma)
+    args.out.write_text(ranked[0])
+    print(f"wrote {args.out}:\n" + json.dumps(tunables(ranked[0]), indent=2))
+    if args.keep > 0:
+        for rank, text in enumerate(ranked[1:-1][: args.keep], start=2):
+            args.out.with_name(f"{args.out.stem}-top{rank}.toml").write_text(text)
+        args.out.with_name(f"{args.out.stem}-mean.toml").write_text(ranked[-1])
 
 
 if __name__ == "__main__":

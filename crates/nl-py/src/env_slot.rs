@@ -157,15 +157,16 @@ pub(crate) fn start_env(env: &mut TrainingEnv, seed: u64) -> Result<Observation,
 }
 
 /// What a controller sees of `env` now: the noisy state and observation the policy
-/// acted on, with no driver input (as in eval).
+/// acted on and the thrusters' state, with no driver input (as in eval).
 pub(crate) fn controller_ctx(env: &TrainingEnv) -> ControlCtx {
     let (state, observation) = env.controller_view();
     ControlCtx {
         input: InputFrame::default(),
         state,
         observation,
-        // Training keeps the legacy allocation.
-        actuators: None,
+        // As eval's `ControlCtx::for_episode`, so a base PD plans with the same
+        // allocation the game and eval use.
+        actuators: env.actuator_state(),
     }
 }
 

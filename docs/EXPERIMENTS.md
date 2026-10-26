@@ -268,3 +268,30 @@ The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-
 - Stage F jumps from about 4% to 45–49% in the first 2M steps of gated training; A, D and E hold. Crashes fall steadily.
 - Training-episode success (AI stretches only, with exploration noise) sits at 45–48%.
 - Next: R1, 100M steps on the same config (`--run-id flight-r1`, commit a392011).
+
+## PD model fix, gain retune, R1/R2 scoring on the new car (2026-10-26)
+No training. Eval only, native release, no randomization. Results: `results/control_upgrade/2026-10-26-pd-model-fix/`.
+- Gain sweep on tuning seeds 2,000,000+ (300 per cell, A–F, both modes): kp 7–14 × kd 2.5–5, then tilt-blend bands. Best single pair kp 12 / kd 3.5 (89.6%) cost Stage D 2–4 points; scheduled gains (upright kp 7 / kd 4, tumble kp 12 / kd 3.5, blend 30–60°) 90.7% with D unchanged.
+- Validation (seeds 1,500,000+, 1000 per cell), mean success over 12 cells: old PD 86.74%, fixed PD 90.27%, fixed PD + actuator-aware allocation (`lag_compensation` 0.5) 90.77%.
+- Hybrid with the old PD on the new car: shipped policy 79.42% (Stage F 5–7%), R1 best 87.32%, R1 latest 87.50%, R2 best (4M) 88.00%, R2 latest (50M) 89.04%. R2 latest with the new PD: 89.13%. The Hybrid beats PD on A (+6) and E (+2–3) but loses on F (Realistic 64.7% vs 76.5%, Arcade 62.2% vs 84.7%).
+- Owner decision: ship the fixed PD alone (no Hybrid) and make actuator-aware allocation at `lag_compensation` 0.5 the default. Committed `results/eval_pd_*` and `eval_hybrid_*` regenerated with it (seed 0, 1000 per cell): PD A 66.8/68.7 → 76.0/79.2%, E 86.0/85.0 → 89.6/88.7% (Realistic/Arcade); other cells within 0.5 points.
+
+## PD CMA-ES tune (2026-10-27)
+No training. Results: `results/control_upgrade/2026-10-27-pd-cma-tune/` (manifest, every candidate's config, per-cell summaries).
+- Search: `python -m ninelives.tune_pd --generations 30 --popsize 12 --episodes 200 --sigma 0.25 --keep 5`, from the fixed PD with the actuator-aware allocation at 0.5. 12 numbers (PD's 11 gains plus `lag_compensation`); fresh tuning seeds from 2,000,000 each generation; 24 cells (A–F × both modes × plain/randomized); score = mean success − 0.05 per kg of bump air over 8 kg. Wall time 50 min on 8 cores. Objective: repo 0.79–0.81, best 0.88 (gen 0) → 0.918 (gen 29).
+- Validation, seeds 1,500,000+, 1000 per cell, mean success plain / randomized, bump air (worst mode):
+
+| Candidate | Plain | Randomized | Worst cell | Bump air |
+|---|---|---|---|---|
+| repo | 90.77% | 83.80% | — | 9.49 kg |
+| best | 93.79% | 87.46% | −0.2 | 6.40 kg |
+| top2 | 94.62% | 87.79% | −0.5 | 7.58 kg |
+| top3 | 94.10% | 87.24% | −0.3 | 5.82 kg |
+| **top4 (adopted)** | **94.84%** | **88.74%** | **0.0** | **6.22 kg** |
+| top5 | 93.95% | 86.97% | −1.1 | 7.23 kg |
+| top6 | 94.22% | 88.57% | −0.5 | 6.21 kg |
+| search mean | 94.78% | 89.00% | −0.2 | 6.82 kg |
+
+- top4 per cell (plain, Realistic/Arcade): A 74.5/78.4 → 83.5/88.7, E 88.2/88.7 → 92.2/94.5, F 78.6/87.5 → 89.5/92.6, D 97.8/97.6 → 98.5/99.7; B and C unchanged or up. Arcade hard landings: C 13.5 → 0.0%, D 7.5 → 0.3%, E 10.4 → 0.4%, F 17.2 → 0.1%. Air per save 37.1 → 43.3 kg plain, 45.8 → 53.1 kg randomized; touchdown fall p95 3.41 → 2.78 m/s.
+- Committed `results/eval_pd_*` and `eval_hybrid_*` regenerated (seed 0, 1000 per cell): PD A 76.0/79.2 → 80.7/87.3%, E 89.6/88.7 → 91.1/92.9%, D 97.9/98.5 → 99.0/99.4%. The shipped policy's strong flip-plate test (ignored) passes again with this PD.
+- Next: R3, the Hybrid retrained on this PD.

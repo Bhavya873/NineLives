@@ -398,3 +398,29 @@ fn pd_driving_over_bumps_uses_almost_no_air() {
     assert!(x_m > 80.0, "only reached x = {x_m} m ({used_kg} kg used)");
     assert!(used_kg < 8.0, "used {used_kg} kg");
 }
+
+/// A state tilted `tilt_deg` about the forward axis.
+fn tilted(tilt_deg: f32) -> CarState {
+    let tilt_rad = tilt_deg.to_radians();
+    CarState {
+        gravity_dir_body: [0.0, -tilt_rad.cos(), tilt_rad.sin()],
+        ..CarState::default()
+    }
+}
+
+#[test]
+fn pd_uses_its_upright_gains_near_level_and_its_tumble_gains_past_the_band() {
+    let config = controllers();
+    let pd = Pd::new(&car_model(), &config);
+    let start = config.pd.tumble_blend_start_deg;
+    let end = config.pd.tumble_blend_end_deg;
+
+    let near_level = pd.attitude_gains(&tilted(start - 5.0));
+    let halfway = pd.attitude_gains(&tilted((start + end) / 2.0));
+    let tumbling = pd.attitude_gains(&tilted(end + 30.0));
+
+    assert_eq!(near_level, (config.pd.kp, config.pd.kd));
+    assert_eq!(tumbling, (config.pd.kp_tumble, config.pd.kd_tumble));
+    let middle_kp = (config.pd.kp + config.pd.kp_tumble) / 2.0;
+    assert!((halfway.0 - middle_kp).abs() < 0.05, "{halfway:?}");
+}

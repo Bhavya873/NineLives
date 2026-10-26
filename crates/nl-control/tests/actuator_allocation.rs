@@ -1,7 +1,7 @@
 //! The actuator-aware allocation (`[allocation] model = "actuator_aware"`): PD plans its
 //! throttles with the actuator predictor, so the valve lag, the Hop/Boost throttles
-//! underneath and the interlock are part of the plan. The legacy allocation stays the
-//! default and must not change.
+//! underneath and the interlock are part of the plan. It is the repo default; the legacy
+//! allocation stays selectable and must not change.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
@@ -76,20 +76,22 @@ fn torque_error(wanted: &Wrench, got: &Wrench) -> f32 {
 }
 
 #[test]
-fn the_repo_config_keeps_the_legacy_allocation() {
+fn the_repo_config_uses_the_actuator_aware_allocation_at_the_tuned_lag_compensation() {
     let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
 
-    assert_eq!(config.allocation.model, AllocationModel::Legacy);
+    // CMA-ES picked 0.3572 alongside PD's gains (EXPERIMENTS 2026-10-27).
+    assert_eq!(config.allocation.model, AllocationModel::ActuatorAware);
+    assert_eq!(config.allocation.lag_compensation, 0.3572);
 }
 
 #[test]
-fn the_actuator_aware_model_is_picked_by_name_and_a_wrong_name_is_refused() {
-    let named = |name: &str| DEFAULT_CONTROLLERS_TOML.replace("model = \"legacy\"", name);
+fn the_legacy_model_is_picked_by_name_and_a_wrong_name_is_refused() {
+    let named = |name: &str| DEFAULT_CONTROLLERS_TOML.replace("model = \"actuator_aware\"", name);
 
-    let aware = ControllersConfig::from_toml_str(&named("model = \"actuator_aware\"")).unwrap();
+    let legacy = ControllersConfig::from_toml_str(&named("model = \"legacy\"")).unwrap();
     let wrong = ControllersConfig::from_toml_str(&named("model = \"fancy\""));
 
-    assert_eq!(aware.allocation.model, AllocationModel::ActuatorAware);
+    assert_eq!(legacy.allocation.model, AllocationModel::Legacy);
     assert!(wrong.unwrap_err().to_string().contains("fancy"));
 }
 
@@ -215,12 +217,14 @@ fn while_the_interlock_holds_actuator_aware_pd_fires_nothing_and_says_so() {
 }
 
 #[test]
-fn actuator_aware_pd_comes_closer_to_the_torque_it_asks_for_from_closed_valves() {
+fn fully_lag_compensating_pd_comes_closer_to_the_torque_it_asks_for_from_closed_valves() {
     let world = rolled_world();
     let ctx = ControlCtx::for_world(&world, InputFrame::default());
     let actuators = world.actuator_state();
     let mut legacy = pd(&world, AllocationModel::Legacy);
-    let mut aware = pd(&world, AllocationModel::ActuatorAware);
+    let mut config = controllers(AllocationModel::ActuatorAware);
+    config.allocation.lag_compensation = 1.0;
+    let mut aware = Pd::new(&world.car_model(), &config);
 
     let legacy_push = actuators.predict(legacy.act(&ctx)).mean_wrench;
     aware.act(&ctx);
