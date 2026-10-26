@@ -6,7 +6,8 @@
 //! (`--controller ai` or `hybrid` reads `--policy`, default models/policy.json; `--dr` turns on
 //! domain randomization, SPEC §9.8, and adds `_dr` to the file name; `--course <json>`
 //! runs the episodes on that course, e.g. courses/playground.json, and adds its file
-//! stem, e.g. `_playground`)
+//! stem, e.g. `_playground`; `--controllers <toml>` reads the controller settings from that
+//! file instead of configs/controllers.toml, e.g. to try `[allocation] model`)
 
 use std::error::Error;
 
@@ -32,6 +33,8 @@ struct Args {
     randomize: bool,
     /// A course JSON file to run the episodes on; None: flat ground.
     course: Option<String>,
+    /// A controllers.toml to use instead of the repo's; None: the repo's.
+    controllers: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -39,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML)?;
     let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?;
     let scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?;
-    let stage = Stage::from_name(&args.stage).ok_or("--stage must be A, B, C, D or E")?;
+    let stage = Stage::from_name(&args.stage).ok_or("--stage must be A, B, C, D, E or F")?;
     let mode = modes
         .by_name(&args.mode)
         .ok_or("--mode must be realistic or arcade")?;
@@ -117,12 +120,16 @@ fn build_named_controller(
             .map_err(|error| format!("--policy {}: {error}", args.policy))?;
         policy_json = Some(text);
     }
-    let controllers_toml = DEFAULT_CONTROLLERS_TOML;
+    let controllers_toml = match &args.controllers {
+        Some(path) => std::fs::read_to_string(path)
+            .map_err(|error| format!("--controllers {path}: {error}"))?,
+        None => DEFAULT_CONTROLLERS_TOML.to_string(),
+    };
     let controller = build_controller(
         &args.controller,
         vehicle,
         mode,
-        controllers_toml,
+        &controllers_toml,
         policy_json.as_deref(),
     )?;
     Ok(controller)
@@ -139,6 +146,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
         policy: "models/policy.json".to_string(),
         randomize: false,
         course: None,
+        controllers: None,
     };
     let mut words = std::env::args().skip(1);
     while let Some(name) = words.next() {
@@ -156,6 +164,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
             "--seed" => args.seed = whole_number(name, value)?,
             "--policy" => args.policy = value.clone(),
             "--course" => args.course = Some(value.clone()),
+            "--controllers" => args.controllers = Some(value.clone()),
             other => return Err(format!("unknown option {other}").into()),
         }
     }

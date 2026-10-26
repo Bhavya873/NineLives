@@ -263,6 +263,17 @@ tank runs dry.
 headroom, the tank gate, the interlock, the centre of mass under randomization). The legacy PD
 baseline that any change is judged against is in `results/control_upgrade/`.
 
+With `[allocation] model = "actuator_aware"` PD instead plans with the actuator predictor
+(`crates/nl-sim/src/actuator_model.rs`). `World::actuator_state` copies the valves, tank and
+Hop/Boost timers, and `ActuatorState::predict` steps those copies through the next two physics
+steps with the same functions as `World::step_car`. It returns the mean push about the true
+centre of mass, the Hop/Boost part of it, the saturated nozzles, the air used and the interlock.
+The allocation aims the interval's mean push at PD's wrench on top of Hop and Boost, and keeps
+each nozzle within the headroom they leave. `Pd::last_allocation` reports what PD asked for,
+what is predicted and the difference. Under latency (domain randomization) an episode passes no
+predictor, because the valves then get an older command, so PD falls back to the legacy
+allocation; training never passes it.
+
 ### 6.3 AI
 
 `Ai` (`ai.rs`) runs the exported policy on the observation and maps each action `a ∈ [−1, 1]` to
