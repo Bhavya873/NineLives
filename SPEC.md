@@ -343,7 +343,7 @@ pub trait Controller {
 1. **Off:** all zeros (feed-forward still works).
 2. **Manual** (debug only, not in the T cycle): keys map to individual nozzles at throttle 1.
 3. **Pd** (baseline):
-   - **Attitude:** the desired up direction in the body frame is `up_des = −g_dir_body`; the error axis is `e = (0,1,0) × up_des`; the desired torque is `τ = I · (kp·e − kd·ω)`, with kp = 8 and kd = 4 *(start)*.
+   - **Attitude:** the desired up direction in the body frame is `up_des = −g_dir_body`; the error axis is `e = (0,1,0) × up_des`; the desired torque is `τ = I · (kp·e − kd·ω)`, with `I` the body-axis inertia. The gains follow the tilt: kp = 7, kd = 4 below 30°, kp = 12, kd = 3.5 past 60°, blended linearly between *(start)*.
    - **Vertical, airborne and roughly upright (up·world_up > 0.7):** if downward speed > 4 m/s and height < max(3 m, 1.3 × the stopping distance + 1 m), command `F_y = m · (g + kv · (v_down − 1.5))`, with kv = 2. The stopping distance is (v_down² − 1.5²) / (2a), with a = 0.8 × full lift × the mode's thrust scale / m − g, so a fast fall brakes early enough to stop (a fixed 3 m start landed 10–15 m/s falls hard). Otherwise `F_y = 0` (saves air).
    - **Sideways, airborne and roughly upright:** `F_z = −m · kv_lateral · v_z` (body frame), kv_lateral = 1.5, so the side boosters cancel a slide before touchdown.
    - **Allocation:** solve `min ‖W(B·u − w)‖² + λ‖u‖²` subject to `0 ≤ u ≤ 1`, with `w = [0, F_y, 0, τx, τy, τz]` and `B` the 6×10 matrix scaled by max force. Use projected gradient descent (30 iterations, step `1/L`) or a small active-set NNLS. Torque weights are higher than force weights.

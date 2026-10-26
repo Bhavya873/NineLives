@@ -37,6 +37,15 @@ pub struct AllocationConfig {
     /// Which allocation to use; `legacy` when left out.
     #[serde(default)]
     pub model: AllocationModel,
+    /// Actuator-aware only: how much of the valve lag to make up for within one control
+    /// interval, 0..1. 1 asks the valves for the whole push now (lead), 0 plans as if they
+    /// opened at once (still with Hop/Boost headroom and the interlock). 1 when left out.
+    #[serde(default = "full_lag_compensation")]
+    pub lag_compensation: f32,
+}
+
+fn full_lag_compensation() -> f32 {
+    1.0
 }
 
 /// What the actuator predictor says about the next control interval, as the actuator-aware
@@ -124,6 +133,7 @@ pub struct Allocator {
     row_weights: [f32; WRENCH_SIZE],
     regularisation: f32,
     iterations: u32,
+    lag_compensation: f32,
     /// 1 / L, the gradient step, with L bounding the gradient's Lipschitz constant.
     step: f32,
 }
@@ -157,6 +167,7 @@ impl Allocator {
             row_weights,
             regularisation: config.regularisation,
             iterations: config.iterations,
+            lag_compensation: config.lag_compensation,
             step: 1.0 / (2.0 * (largest_eigenvalue_bound(&weighted_b) + config.regularisation)),
         }
     }
@@ -188,7 +199,10 @@ impl Allocator {
         throttles: &mut [f32; NOZZLE_COUNT],
     ) {
         let scale = positive_or_one(thrust_scale);
-        let gain = positive_or_one(plan.controller_gain);
+        // With compensation c, the lag counts as if the share seen this interval were
+        // 1 − c·(1 − gain) and only c of the open valves' carry-over is credited.
+        let compensation = self.lag_compensation;
+        let gain = positive_or_one(1.0 - compensation * (1.0 - plan.controller_gain));
         let mut target = [0.0; WRENCH_SIZE];
         for row in 0..WRENCH_SIZE {
             // What the valves already give beyond the Hop/Boost throttles, weighted.
@@ -198,7 +212,8 @@ impl Allocator {
                     plan.valve_openings_with_no_command[nozzle] - plan.mean_feed_forward[nozzle];
                 carried += self.weighted_b[row][nozzle] * beyond_feed_forward;
             }
-            target[row] = (self.row_weights[row] * wrench[row] / scale - carried) / gain;
+            let wanted = self.row_weights[row] * wrench[row] / scale;
+            target[row] = (wanted - compensation * carried) / gain;
         }
         let mut headroom = [1.0; NOZZLE_COUNT];
         for (room, feed_forward) in headroom.iter_mut().zip(plan.max_feed_forward) {

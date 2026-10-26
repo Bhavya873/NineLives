@@ -105,18 +105,18 @@ fn the_predicted_push_matches_how_the_car_accelerates_about_its_true_centre_of_m
         "lift {lift_accel_m_s2} m/s², predicted {predicted_lift_accel_m_s2}"
     );
     // Started still, so the spin after the interval is the torque's doing: pitch is +Z.
-    // The configured inertia, not `car_model`'s: that one lists Rapier's principal
-    // moments, which swap yaw and pitch (docs/control-upgrade-audit.md, finding 8).
-    let pitch_inertia_kg_m2 = config.chassis.inertia_kg_m2[2];
+    let pitch_inertia_kg_m2 = model.principal_inertia_kg_m2[2];
     let pitch_rate_rad_s = world.car_state().angular_velocity_body_rad_s[2];
     let predicted_pitch_rate_rad_s = prediction.mean_wrench[5] / pitch_inertia_kg_m2 * interval_s;
     assert!(
         (pitch_rate_rad_s / predicted_pitch_rate_rad_s - 1.0).abs() < 0.03,
         "pitch rate {pitch_rate_rad_s} rad/s, predicted {predicted_pitch_rate_rad_s}"
     );
-    // About the body origin (the allocation's model) the pitch torque would be bigger.
-    let origin_pitch_torque_n_m = model.nozzle_wrenches[L_FL][5];
-    assert!(prediction.mean_wrench[5] < origin_pitch_torque_n_m);
+    // The allocation's model takes the torque about the same point.
+    let model_pitch_torque_n_m = model.nozzle_wrenches[L_FL][5];
+    let mean_opening = prediction.mean_valve_openings[L_FL];
+    let predicted_full_n_m = prediction.mean_wrench[5] / mean_opening;
+    assert!((predicted_full_n_m / model_pitch_torque_n_m - 1.0).abs() < 1e-4);
 }
 
 #[test]

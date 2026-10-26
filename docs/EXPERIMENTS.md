@@ -268,3 +268,9 @@ The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-
 - Stage F jumps from about 4% to 45–49% in the first 2M steps of gated training; A, D and E hold. Crashes fall steadily.
 - Training-episode success (AI stretches only, with exploration noise) sits at 45–48%.
 - Next: R1, 100M steps on the same config (`--run-id flight-r1`, commit a392011).
+
+## PD model fix, gain retune, R1/R2 scoring on the new car (2026-10-26)
+No training. Eval only, native release, no randomization. Results: `results/control_upgrade/2026-10-26-pd-model-fix/`.
+- Gain sweep on tuning seeds 2,000,000+ (300 per cell, A–F, both modes): kp 7–14 × kd 2.5–5, then tilt-blend bands. Best single pair kp 12 / kd 3.5 (89.6%) cost Stage D 2–4 points; scheduled gains (upright kp 7 / kd 4, tumble kp 12 / kd 3.5, blend 30–60°) 90.7% with D unchanged.
+- Validation (seeds 1,500,000+, 1000 per cell), mean success over 12 cells: old PD 86.74%, fixed PD 90.27%, fixed PD + actuator-aware allocation (`lag_compensation` 0.5) 90.77%.
+- Hybrid with the old PD on the new car: shipped policy 79.42% (Stage F 5–7%), R1 best 87.32%, R1 latest 87.50%, R2 best (4M) 88.00%, R2 latest (50M) 89.04%. R2 latest with the new PD: 89.13%. The Hybrid beats PD on A (+6) and E (+2–3) but loses on F (Realistic 64.7% vs 76.5%, Arcade 62.2% vs 84.7%).

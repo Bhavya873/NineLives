@@ -3,8 +3,15 @@
 
 [pd]
 # Attitude: desired torque = inertia × (kp × error − kd × spin).
-kp = 8.0
+kp = 7.0
 kd = 4.0
+# Tumbling, PD pushes harder: past tumble_blend_end_deg of tilt it uses kp_tumble and
+# kd_tumble, and from tumble_blend_start_deg it blends there linearly. Tuned on seeds
+# 2,000,000+ (EXPERIMENTS 2026-10-26).
+kp_tumble = 12.0
+kd_tumble = 3.5
+tumble_blend_start_deg = 30.0
+tumble_blend_end_deg = 60.0
 # Vertical braking: only when airborne, roughly upright (up alignment above
 # upright_alignment), falling faster than brake_speed_m_s and low enough: below
 # brake_height_m, or below brake_safety × the stopping distance + brake_margin_m, where
@@ -57,3 +64,5 @@ iterations = 30
 # predictor (nl_sim::actuator_model): valve lag over the control interval, the Hop/Boost
 # throttles underneath and the interlock (docs/control-upgrade-audit.md).
 model = "legacy"
+# actuator_aware only: share of the valve lag made up within one control interval (0..1).
+lag_compensation = 1.0

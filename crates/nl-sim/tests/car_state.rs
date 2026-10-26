@@ -121,3 +121,47 @@ fn a_falling_car_reports_its_fall_speed_in_any_attitude() {
     assert!((state.falling_speed_m_s() - 6.0).abs() < 1e-4);
     assert_close(state.linear_velocity_body_m_s, [0.0, 0.0, 6.0]);
 }
+
+#[test]
+fn the_car_model_lists_inertia_in_body_axis_order_roll_yaw_pitch() {
+    // vehicle.toml gives roll (x), yaw (y), pitch (z); Rapier keeps its own principal-axis
+    // order, which once swapped yaw and pitch here (docs/control-upgrade-audit.md, 8).
+    let expected = common::vehicle().chassis.inertia_kg_m2;
+
+    let model = new_world().car_model();
+
+    for (axis, (got, want)) in model
+        .principal_inertia_kg_m2
+        .iter()
+        .zip(expected)
+        .enumerate()
+    {
+        assert!(
+            (got - want).abs() < 1e-2 * want,
+            "axis {axis}: {got} vs {want}"
+        );
+    }
+}
+
+#[test]
+fn nozzle_torques_are_about_the_true_centre_of_mass() {
+    // L_FL sits at x = 1.6 m and pushes up: its pitch torque (+Z) is lever x × force.
+    let mut config = common::vehicle();
+    config.chassis.center_of_mass_offset_m = [0.1, 0.0, 0.0];
+    let world = nl_sim::world::World::new_on_flat_ground(
+        &config,
+        common::realistic(),
+        nl_sim::world::DEFAULT_GROUND_FRICTION,
+        0,
+    );
+    let nozzle = &config.thrusters.nozzles[0];
+    let lever_x_m = nozzle.position_m[0] - 0.1;
+
+    let pitch_torque_n_m = world.car_model().nozzle_wrenches[0][5];
+
+    let expected_n_m = lever_x_m * nozzle.max_force_n;
+    assert!(
+        (pitch_torque_n_m - expected_n_m).abs() < 1.0,
+        "{pitch_torque_n_m} vs {expected_n_m}"
+    );
+}
