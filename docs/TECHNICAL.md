@@ -259,6 +259,10 @@ torque rows weighing more than force rows. The target is divided by the mode's t
 not by the tank gate: dividing by the fading gate would drive every nozzle to full throttle as the
 tank runs dry.
 
+`docs/control-upgrade-audit.md` lists what this allocation leaves out (valve lag, Hop and Boost
+headroom, the tank gate, the interlock, the centre of mass under randomization). The legacy PD
+baseline that any change is judged against is in `results/control_upgrade/`.
+
 ### 6.3 AI
 
 `Ai` (`ai.rs`) runs the exported policy on the observation and maps each action `a ∈ [−1, 1]` to
