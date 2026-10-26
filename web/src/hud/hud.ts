@@ -1,6 +1,5 @@
-// The on-screen display's text (SPEC §11.5): speed, mode, why Hop is unavailable, and
-// the top-right stats (saves, lives used, time, Hop cooldown). The air gauge, nozzle
-// map and toasts each have their own file in this folder.
+// The on-screen display's text (SPEC §11.5): the status line, a short alert, the speed
+// and the menu's stats line. The air gauge, nozzle map and toasts have their own files.
 // It reads plain numbers and writes text; it never touches physics.
 
 import { requireElement, setText } from '../dom.ts';
@@ -8,12 +7,12 @@ import { ControllerCode, HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
 
-/** What the HUD says when a Hop is unavailable, by wasm `HopBlocked` value. */
+/** What the alert says when a Hop is unavailable, by wasm `HopBlocked` value. */
 const HOP_BLOCKED_TEXT: Record<number, string> = {
   [HopBlocked.No]: '',
-  [HopBlocked.NotOnGround]: 'Hop: wheels off the ground',
-  [HopBlocked.Cooldown]: 'Hop: cooldown',
-  [HopBlocked.NoAir]: 'Hop: no air',
+  [HopBlocked.NotOnGround]: 'Hop needs the wheels down',
+  [HopBlocked.Cooldown]: 'Hop recharging',
+  [HopBlocked.NoAir]: 'Hop needs air',
 };
 
 /** Mode names, by wasm `ModeCode` value. */
@@ -23,14 +22,14 @@ const MODE_TEXT: Record<number, string> = {
   [ModeCode.Custom]: 'Custom',
 };
 
-/** Controller names, by wasm `ControllerCode` value. */
+/** Who fires the thrusters, by wasm `ControllerCode` value; "PD + AI" is the Hybrid. */
 const CONTROLLER_TEXT: Record<number, string> = {
-  [ControllerCode.Off]: 'Controller: Off',
-  [ControllerCode.Pd]: 'Controller: PD',
-  [ControllerCode.Ai]: 'Controller: AI',
-  [ControllerCode.Manual]: 'Controller: Manual (keys 1–0)',
-  [ControllerCode.HybridAi]: 'Controller: Hybrid · AI',
-  [ControllerCode.HybridPd]: 'Controller: Hybrid · PD',
+  [ControllerCode.Off]: 'Thrusters off',
+  [ControllerCode.Pd]: 'PD',
+  [ControllerCode.Ai]: 'AI',
+  [ControllerCode.Manual]: 'Manual (keys 1–0)',
+  [ControllerCode.HybridAi]: 'PD + AI · AI flying',
+  [ControllerCode.HybridPd]: 'PD + AI · PD driving',
 };
 
 /** The numbers the HUD shows, already read from the game. */
@@ -76,16 +75,20 @@ export interface HudValues {
 
 /** The HUD's elements, looked up once at start-up. */
 export interface Hud {
+  /** The speed number (its "km/h" unit is fixed in the page). */
   speed: HTMLElement;
   status: HTMLElement;
+  alert: HTMLElement;
+  /** The stats line on the menu. */
   stats: HTMLElement;
 }
 
 /** Finds the HUD elements in the page. Throws if the page is missing one. */
 export function findHud(): Hud {
   return {
-    speed: requireElement('hud-speed'),
+    speed: requireElement('hud-speed-value'),
     status: requireElement('hud-status'),
+    alert: requireElement('hud-alert'),
     stats: requireElement('hud-stats'),
   };
 }
@@ -93,28 +96,36 @@ export function findHud(): Hud {
 /** Updates the HUD from the game's latest values. */
 export function updateHud(hud: Hud, values: HudValues): void {
   const speedKmH = Math.abs(values.speedMS) * KM_PER_H_PER_M_PER_S;
-  setText(hud.speed, `${speedKmH.toFixed(0)} km/h`);
-
-  const hop = HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
-  const mode = MODE_TEXT[values.mode] ?? '';
-  const controller = CONTROLLER_TEXT[values.controller] ?? '';
-  const crash = values.crashed ? 'Respawning…' : '';
-  const course = courseText(values);
-  setText(hud.status, [mode, controller, course, hop, crash].filter(Boolean).join(' · '));
+  setText(hud.speed, speedKmH.toFixed(0));
+  setText(hud.status, statusText(values));
+  const alert = alertText(values);
+  setText(hud.alert, alert);
+  hud.alert.hidden = alert === '';
   setText(hud.stats, statsText(values));
 }
 
-/** The top-right lines: saves, lives used, time, and the Hop cooldown while it runs. */
-export function statsText(values: HudValues): string {
-  const lines = [
-    `Saves ${values.saves}`,
-    `Lives used ${values.crashes}`,
-    `Time ${formatTime(values.timeS)}`,
-  ];
-  if (values.hopCooldownS > 0) {
-    lines.push(`Hop in ${values.hopCooldownS.toFixed(1)} s`);
+/** The status line: who fires the thrusters, the mode and the course section. */
+export function statusText(values: HudValues): string {
+  const controller = CONTROLLER_TEXT[values.controller] ?? '';
+  const mode = MODE_TEXT[values.mode] ?? '';
+  return [controller, mode, courseText(values)].filter(Boolean).join(' · ');
+}
+
+/** A short note while something is unavailable: respawning, or why Hop won't fire. */
+export function alertText(values: HudValues): string {
+  if (values.crashed) {
+    return 'Respawning…';
   }
-  return lines.join('\n');
+  if (values.hopBlocked === HopBlocked.Cooldown && values.hopCooldownS > 0) {
+    return `Hop in ${values.hopCooldownS.toFixed(1)} s`;
+  }
+  return HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
+}
+
+/** The menu's stats line: saves, lives used and time. */
+export function statsText(values: HudValues): string {
+  const time = formatTime(values.timeS);
+  return `Saves ${values.saves} · Lives used ${values.crashes} · Time ${time}`;
 }
 
 /** The course section (SPEC §11.5), e.g. "Checkpoint 2/6"; empty on flat ground. */

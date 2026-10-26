@@ -21,6 +21,15 @@ const HEIGHT_ABOVE_M = 2.8;
 const LOOK_AT_HEIGHT_M = 0.8;
 /** How quickly the camera catches up, per second. Higher is stiffer. */
 const FOLLOW_RATE_PER_S = 4;
+/** Field of view at rest, in degrees (the camera is built with it). */
+const BASE_FOV_DEG = 60;
+/** Extra field of view at `FULL_FOV_SPEED_M_S` and above, in degrees. */
+const SPEED_FOV_EXTRA_DEG = 8;
+const FULL_FOV_SPEED_M_S = 40;
+/** How quickly the field of view follows the speed, per second. */
+const FOV_RATE_PER_S = 2;
+/** Smaller field-of-view changes than this are skipped, in degrees. */
+const FOV_STEP_DEG = 0.01;
 
 /** The direction the camera trails behind; kept when the car points straight up or down. */
 const heading = new Vector3(1, 0, 0);
@@ -56,6 +65,17 @@ export function followCar(
   const catchUp = 1 - Math.exp(-FOLLOW_RATE_PER_S * frameS);
   camera.position.lerp(wantedPosition, catchUp);
   lookAtCar(camera, car);
+}
+
+/** Widens the view a little with speed, eased, so going fast feels fast. */
+export function widenWithSpeed(camera: PerspectiveCamera, speedMS: number, frameS: number): void {
+  const share = Math.min(Math.abs(speedMS) / FULL_FOV_SPEED_M_S, 1);
+  const wantedDeg = BASE_FOV_DEG + SPEED_FOV_EXTRA_DEG * share;
+  const nextDeg = camera.fov + (wantedDeg - camera.fov) * (1 - Math.exp(-FOV_RATE_PER_S * frameS));
+  if (Math.abs(nextDeg - camera.fov) > FOV_STEP_DEG) {
+    camera.fov = nextDeg;
+    camera.updateProjectionMatrix();
+  }
 }
 
 /** Uses the car's nose direction flattened onto the ground as the heading. */

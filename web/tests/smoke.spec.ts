@@ -60,7 +60,7 @@ test('holding W drives the car forward without console errors', async ({ page })
   await page.keyboard.up('KeyW');
 
   expect(await readDebug(page, 'x')).toBeGreaterThan(startX + 5);
-  await expect(page.locator('#hud-speed')).not.toHaveText('0 km/h');
+  await expect(page.locator('#hud-speed-value')).not.toHaveText('0');
   expect(consoleErrors).toEqual([]);
 });
 
@@ -71,7 +71,7 @@ test('the game switches to Hybrid by itself once the policy has loaded', async (
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBe(CONTROLLER_CODE_HYBRID_PD);
-  await expect(page.locator('#hud-status')).toContainText('Controller: Hybrid · PD');
+  await expect(page.locator('#hud-status')).toContainText('PD + AI · PD driving');
 });
 
 test('T reaches the AI once the policy has loaded, and a drop test runs clean', async ({
@@ -96,7 +96,7 @@ test('T reaches the AI once the policy has loaded, and a drop test runs clean', 
       { timeout: SLOW_MACHINE_TIMEOUT_MS },
     )
     .toBe(CONTROLLER_CODE_AI);
-  await expect(page.locator('#hud-status')).toContainText('Controller: AI');
+  await expect(page.locator('#hud-status')).toHaveText(/^AI · /);
 
   await page.keyboard.press('KeyX');
   const dropTimeS = await readDebug(page, 'time');

@@ -21,8 +21,10 @@ import {
   recordTick,
   togglePerfOverlay,
 } from './hud/perf-overlay.ts';
+import { createHelpPanel, showHelpOnFirstPlay, toggleHelp } from './hud/help-panel.ts';
 import {
   type ControllerName,
+  type CourseName,
   createTitleScreen,
   disableAiPicks,
   showPicked,
@@ -46,7 +48,7 @@ import {
   bindTapButton,
   startKeyboard,
 } from './input/keyboard.ts';
-import { followCar, snapCamera } from './render/chase-camera.ts';
+import { followCar, snapCamera, widenWithSpeed } from './render/chase-camera.ts';
 import {
   cameraShake,
   createExplosion,
@@ -70,6 +72,7 @@ import {
   nextWindLevel,
   resetScreenEffects,
   startingWindLevel,
+  type WindLevel,
 } from './screen-effects.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
@@ -132,15 +135,25 @@ async function start(): Promise<void> {
     }
     game.set_controller(name);
   };
+  // H shows the key list; it also shows by itself for a few seconds when play first starts.
+  const help = createHelpPanel(requireElement('hud-help'));
+  onKeyPress('KeyH', () => toggleHelp(help));
   const title = createTitleScreen(requireElement('title-screen'), window, {
     chooseController,
     chooseMode: (name) => game.set_mode(name),
+    chooseCourse: (name) => (name === 'gauntlet' ? startGauntlet() : startFreeDrive()),
+    chooseWind: (level) => setWind(level),
+    onHide: () => showHelpOnFirstPlay(help, prefersReducedMotion()),
   });
-  // Marks the controller and mode the sim is really using.
+  // Marks the controller, mode, course and wind the game is really using.
   const showCurrentPicks = () => {
     const hud = game.hud();
-    const mode = hud[HudField.Mode] === ModeCode.Arcade ? 'arcade' : 'realistic';
-    showPicked(title, controllerName(hud[HudField.Controller] ?? ControllerCode.Off), mode);
+    showPicked(title, {
+      controller: controllerName(hud[HudField.Controller] ?? ControllerCode.Off),
+      mode: hud[HudField.Mode] === ModeCode.Arcade ? 'arcade' : 'realistic',
+      course: currentCourse,
+      wind: windLevel,
+    });
   };
   void loadPolicy(game).then((loaded) => {
     policyLoaded = loaded;
@@ -187,14 +200,17 @@ async function start(): Promise<void> {
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
   const params = new URLSearchParams(window.location.search);
-  const effects = createScreenEffects(view.scene, prefersReducedMotion());
+  const reducedMotion = prefersReducedMotion();
+  const effects = createScreenEffects(view.scene, reducedMotion);
   // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
   let windLevel = startingWindLevel(params);
-  game.set_wind_level(windLevel);
-  onKeyPress('KeyV', () => {
-    windLevel = nextWindLevel(windLevel);
-    game.set_wind_level(windLevel);
-  });
+  const setWind = (level: WindLevel) => {
+    windLevel = level;
+    game.set_wind_level(level);
+  };
+  setWind(windLevel);
+  onKeyPress('KeyV', () => setWind(nextWindLevel(windLevel)));
+  let currentCourse: CourseName = 'playground';
   const course = createCourseSession(view.scene, view.ground, {
     panel: requireElement('results'),
     lines: requireElement('results-lines'),
@@ -206,9 +222,13 @@ async function start(): Promise<void> {
     snapViewToGame(game, frames, view, carPose);
     resetScreenEffects(effects);
   };
-  const startGauntlet = () => startCourse(game.load_course(gauntletJson));
+  const startGauntlet = () => {
+    currentCourse = 'gauntlet';
+    startCourse(game.load_course(gauntletJson));
+  };
   // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
   const startFreeDrive = () => {
+    currentCourse = 'playground';
     if (params.get('world') === 'flat') {
       game.load_flat_ground();
       startCourse(null);
@@ -290,6 +310,9 @@ async function start(): Promise<void> {
       setCarVisible(view, !hudValues.crashed);
       updateFlames(flames, throttles);
       followCar(view.camera, carPose, frameS, hudValues.wheelsTouching === 0);
+      if (!reducedMotion) {
+        widenWithSpeed(view.camera, hudValues.speedMS, frameS);
+      }
       updateExplosion(explosion, frameS);
       // Shake only this frame's picture, so the camera's smoothing never sees it.
       view.camera.position.add(cameraShake(explosion, shake));

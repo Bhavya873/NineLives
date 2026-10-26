@@ -89,3 +89,27 @@ test('F3 shows the frame rate and milliseconds per tick', async ({ page }) => {
   await expect(perf).toContainText('fps', { timeout: SLOW_MACHINE_TIMEOUT_MS });
   await expect(perf).toContainText('tick');
 });
+
+test('the course and wind pickers start the Gauntlet and turn on the wind', async ({ page }) => {
+  await page.goto('/');
+  await waitForGame(page);
+
+  await page.locator('#title-screen button[data-course="gauntlet"]').click();
+  await page.locator('#title-screen button[data-wind="storm"]').click();
+
+  await expect(page.locator('#hud-status')).toContainText('Checkpoint 0/');
+  await expect(page.locator('#hud-wind')).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
+});
+
+test('the keys panel shows when play starts and H hides it', async ({ page }) => {
+  await page.goto('/');
+  await waitForGame(page);
+  const keys = page.locator('#hud-help');
+  await expect(keys).toBeHidden();
+
+  await page.locator('#title-play').click();
+  await expect(keys).toBeVisible();
+  await page.keyboard.press('KeyH');
+
+  await expect(keys).toBeHidden();
+});
