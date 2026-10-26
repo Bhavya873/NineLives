@@ -2,7 +2,7 @@
 
 A browser driving game where an AI fires a car's 10 cold-gas thrusters so it always lands on its wheels.
 
-Work in progress. `SPEC.md` describes what is being built, `docs/PLAN.md` describes the order it is built in.
+Work in progress. `SPEC.md` describes what is being built, `docs/PLAN.md` describes the order it is built in, and `docs/TECHNICAL.md` explains how it all works.
 
 ## Developer setup
 

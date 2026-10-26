@@ -13,7 +13,7 @@ use std::f32::consts::TAU;
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S, WHEEL_COUNT};
 use crate::input::InputFrame;
 use crate::thrusters::{Valves, apply_nozzle_forces};
-use crate::vehicle_config::{SteeringConfig, VehicleConfig};
+use crate::vehicle_config::{DriveConfig, SteeringConfig, VehicleConfig};
 use crate::world::Pose;
 
 /// Index of the front-left wheel. The front wheels (0 and 1) steer.
@@ -300,7 +300,7 @@ impl Car {
     /// -1..1. Pulling back brakes while rolling forward, and reverses once nearly stopped.
     fn engine_and_brake(&self, throttle_fraction: f32, forward_speed_m_s: f32) -> (f32, f32) {
         let drive = &self.config.drive;
-        let full_engine_n = drive.max_engine_force_per_wheel_n;
+        let full_engine_n = engine_force_limit_n(drive, forward_speed_m_s);
 
         if throttle_fraction > 0.0 {
             if forward_speed_m_s >= drive.max_speed_m_s {
@@ -322,6 +322,13 @@ impl Car {
 
         (0.0, drive.rolling_resistance_impulse_per_wheel_n_s)
     }
+}
+
+/// The most push one wheel's engine can give at `speed_m_s` (SPEC §7.3): the force
+/// limit at low speed, then the power shared over four wheels divided by the speed.
+pub(crate) fn engine_force_limit_n(drive: &DriveConfig, speed_m_s: f32) -> f32 {
+    let power_limited_n = drive.max_engine_power_w / (WHEEL_COUNT as f32 * speed_m_s.abs());
+    drive.max_engine_force_per_wheel_n.min(power_limited_n)
 }
 
 /// The largest steering angle allowed at `speed_m_s`: the low-speed limit when
@@ -440,5 +447,32 @@ mod tests {
     fn steering_limit_is_the_high_speed_value_at_and_above_high_speed() {
         assert_eq!(steering_limit_rad(&steering_config(), 40.0), 0.15);
         assert_eq!(steering_limit_rad(&steering_config(), 90.0), 0.15);
+    }
+
+    fn drive_config() -> DriveConfig {
+        DriveConfig {
+            max_engine_force_per_wheel_n: 3000.0,
+            max_engine_power_w: 240_000.0,
+            max_speed_m_s: 55.0,
+            boost_max_speed_m_s: 60.0,
+            boost_fade_m_s: 10.0,
+            max_reverse_speed_m_s: 8.0,
+            brake_impulse_per_wheel_n_s: 40.0,
+            rolling_resistance_impulse_per_wheel_n_s: 1.5,
+            reverse_below_speed_m_s: 0.5,
+        }
+    }
+
+    #[test]
+    fn engine_gives_its_full_force_at_low_speed() {
+        assert_eq!(engine_force_limit_n(&drive_config(), 0.0), 3000.0);
+        assert_eq!(engine_force_limit_n(&drive_config(), 10.0), 3000.0);
+    }
+
+    #[test]
+    fn engine_force_is_power_over_speed_at_high_speed() {
+        // 240 kW over four wheels at 40 m/s: 60 kW / 40 m/s = 1.5 kN per wheel.
+        assert_eq!(engine_force_limit_n(&drive_config(), 40.0), 1500.0);
+        assert_eq!(engine_force_limit_n(&drive_config(), -40.0), 1500.0);
     }
 }

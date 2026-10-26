@@ -47,17 +47,25 @@ suspension_stiffness_per_kg = 50.0
 suspension_compression_damping_per_kg = 3.5
 suspension_relaxation_damping_per_kg = 5.0
 max_suspension_force_n = 40000.0
-# Tyre grip: sideways grip is about friction_slip × g (a steady full-lock circle pulls
-# about 1.2–1.3 g at 1.4), and Rapier allows twice that for driving and braking forces.
+# Tyre grip: sporty road tyres on dry asphalt, a full-lock circle peaks at about
+# 1.13–1.2 g (1.4 gave 1.2–1.3 g). Lower is not yet safe: 1.2 dropped the shipped policy's
+# strong flip-plate saves below 90%, and 1.0 crashed PD on an Arcade hop landing.
+# Rapier allows twice that for driving and braking.
 # Measure changes with `cargo run --release -p nl-sim --example drive_feel`.
-friction_slip = 1.4
+friction_slip = 1.3
 side_friction_stiffness = 1.0
 
 [drive]
-# All-wheel drive. 3 kN per wheel gives 0–100 km/h in about 4.2 s and a long pull up
-# to the 55 m/s cap (about 33 m/s after 5 s), instead of hitting the cap almost at once.
+# All-wheel drive. Each wheel pushes up to 3 kN at low speed; above about 18 m/s the
+# engine's 220 kW (about 300 hp) limits the push to power / speed, as on a real car.
+# That gives 0–100 km/h in about 5 s and a long pull up to the 55 m/s (198 km/h) cap.
 max_engine_force_per_wheel_n = 3000.0
+max_engine_power_w = 220000.0
 max_speed_m_s = 55.0
+# Boost is a speed limiter's job, not a rocket: it fades out from 50 to 60 m/s
+# (216 km/h). Without it Arcade's double thrust and unlimited air passed 860 km/h.
+boost_max_speed_m_s = 60.0
+boost_fade_m_s = 10.0
 max_reverse_speed_m_s = 8.0
 # Brake impulse per wheel per physics step, in N·s.
 # 40 N·s × 120 steps/s × 4 wheels ≈ 19 kN, about 1.1 g of braking for 1800 kg.
