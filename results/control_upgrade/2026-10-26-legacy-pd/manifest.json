@@ -2,7 +2,7 @@
   "experiment_id": "2026-10-26-legacy-pd",
   "purpose": "Legacy PD baseline before any actuator-aware allocation change (docs/control-upgrade-audit.md).",
   "git_commit": "6d91dfb1d007f3d2b88a458bb04c1a3b56aac7e3",
-  "git_note": "Working tree = this commit plus docs/control-upgrade-audit.md (no code change).",
+  "git_note": "A-E run at the commit above plus docs/control-upgrade-audit.md; F run later with the actuator-aware code built in but model = \"legacy\", which gives byte-identical results on A-E (checked).",
   "config_hashes": {
     "algorithm": "sha256",
     "files": {
@@ -20,9 +20,9 @@
     "B",
     "C",
     "D",
-    "E"
+    "E",
+    "F"
   ],
-  "stage_f": "not run: the eval runner accepts stages A-E only",
   "modes": [
     "realistic",
     "arcade"
@@ -35,7 +35,7 @@
   "held_out_seeds": "untouched (3,000,000+ are reserved for the final test)",
   "domain_randomization": false,
   "build_target": "native release, aarch64-apple-darwin, cargo build --release -p nl-control --example eval",
-  "timing_method": "wall clock per cell (perl Time::HiRes around the eval process), 10 cells run 2 at a time (one stage, both modes, in parallel) on an Apple-silicon laptop; indicative only",
+  "timing_method": "wall clock per cell (perl Time::HiRes around the eval process); the two modes of a stage run in parallel on an Apple-silicon laptop; indicative only",
   "command": "target/release/examples/eval --controller pd --stage <S> --mode <M> --episodes 1000 --seed 1500000 (run from a scratch directory)",
   "cells": {
     "A_arcade": {
@@ -137,6 +137,26 @@
       "touchdown_fall_p95_m_s": 6.566426753997803,
       "touchdown_spin_p95_rad_s": 3.700984239578247,
       "wall_s": 7.09
+    },
+    "F_arcade": {
+      "success_rate": 0.7519999742507935,
+      "crash_rate": 0.2460000067949295,
+      "save_rate": 0.7540000081062317,
+      "hard_landing_rate": 0.2619999945163727,
+      "air_per_save_kg": 78.1669921875,
+      "touchdown_fall_p95_m_s": 1.1426738500595093,
+      "touchdown_spin_p95_rad_s": 0.00023379070626106113,
+      "wall_s": 2.13
+    },
+    "F_realistic": {
+      "success_rate": 0.6190000176429749,
+      "crash_rate": 0.367000013589859,
+      "save_rate": 0.6320000290870667,
+      "hard_landing_rate": 0.0010000000474974513,
+      "air_per_save_kg": 77.18505096435547,
+      "touchdown_fall_p95_m_s": 1.1426738500595093,
+      "touchdown_spin_p95_rad_s": 0.00023379070626106113,
+      "wall_s": 1.95
     }
   }
 }

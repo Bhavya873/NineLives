@@ -110,19 +110,26 @@ The order matters for any predictor, so here it is exactly:
    `6d91dfb` were older than the code (for example, PD D Realistic was committed at 99.5%,
    but the code before the drive change gives 98.1%). The new car changed every cell by
    1.1 points or less.
+8. **PD's model has the yaw and pitch inertia swapped.** `vehicle.toml` gives
+   `[850, 3250, 2900]` kg·m² (roll, yaw, pitch). `read_car_model` returns
+   `principal_inertia()`, which Rapier lists in its own principal-axis order:
+   `[850, 2900, 3250]`. So PD's attitude torque uses 3250 for pitch (12% too much) and 2900
+   for yaw (11% too little). Found by `tests/actuator_model.rs`, which measures the car's
+   real spin-up. It is left as it is, because fixing it changes the legacy controller.
 
 ## Baseline
 
 The legacy PD baseline is in `results/control_upgrade/2026-10-26-legacy-pd/`, with
-`manifest.json` holding the commit, config hashes, seeds and timing method. The eval
-runner has no Stage F (`Stage::from_name` accepts A–E), so the baseline covers A–E.
+`manifest.json` holding the commit, config hashes, seeds and timing method, and
+`baseline/failures.json` listing every seed that already fails. It covers stages A–F in
+both modes.
 
 Commands (from a scratch directory, because the runner writes `results/` into the current
 directory):
 
 ```bash
 cargo build --release -p nl-control --example eval
-for stage in A B C D E; do for mode in realistic arcade; do
+for stage in A B C D E F; do for mode in realistic arcade; do
   target/release/examples/eval --controller pd --stage $stage --mode $mode \
     --episodes 1000 --seed 1500000
 done; done
