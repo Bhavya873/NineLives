@@ -51,7 +51,12 @@ side_friction_stiffness = 1.0
 [drive]
 # All-wheel drive.
 max_engine_force_per_wheel_n = 6000.0
+# Added after the hash was recorded, set so they never act: no power limit and no Boost
+# limit, so the frozen car drives exactly as before.
+max_engine_power_w = 1.0e12
 max_speed_m_s = 45.0
+boost_max_speed_m_s = 1.0e6
+boost_fade_m_s = 1.0
 max_reverse_speed_m_s = 8.0
 # Brake impulse per wheel per physics step, in N·s.
 # 40 N·s × 120 steps/s × 4 wheels ≈ 19 kN, about 1.1 g of braking for 1800 kg.

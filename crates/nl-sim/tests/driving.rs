@@ -6,10 +6,10 @@
 
 mod common;
 
-use common::{new_world, vehicle};
+use common::{arcade, new_world, vehicle};
 use nl_sim::conventions::{PHYSICS_DT_S, PHYSICS_HZ};
-use nl_sim::input::InputFrame;
-use nl_sim::world::World;
+use nl_sim::input::{BUTTON_BOOST, InputFrame};
+use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
 const STEPS_PER_SECOND: usize = PHYSICS_HZ as usize;
 
@@ -280,4 +280,81 @@ fn pulling_back_from_standstill_reverses() {
     run(&mut world, throttle(-127), 2.0);
 
     assert!(world.forward_speed_m_s() < -1.0);
+}
+
+/// Average forward acceleration over one second of full throttle from `from_m_s`, in m/s².
+fn full_throttle_acceleration_m_s2(world: &mut World, from_m_s: f32) -> f32 {
+    accelerate_to(world, from_m_s);
+    let start_m_s = world.forward_speed_m_s();
+    run(world, throttle(127), 1.0);
+    world.forward_speed_m_s() - start_m_s
+}
+
+#[test]
+fn above_the_power_limit_acceleration_falls_with_speed() {
+    let mut slow_world = new_world();
+    let mut fast_world = new_world();
+
+    let slow_m_s2 = full_throttle_acceleration_m_s2(&mut slow_world, 5.0);
+    let fast_m_s2 = full_throttle_acceleration_m_s2(&mut fast_world, 40.0);
+
+    // SPEC §7.3: the engine gives at most `max_engine_power_w`, so its push is power / speed
+    // once that is below the force limit; at 40 m/s it is well under half the launch push.
+    assert!(slow_m_s2 > 5.0, "launch acceleration {slow_m_s2} m/s²");
+    assert!(
+        fast_m_s2 < 0.5 * slow_m_s2,
+        "acceleration at 40 m/s {fast_m_s2} m/s², at 5 m/s {slow_m_s2} m/s²"
+    );
+}
+
+#[test]
+fn boost_pushes_the_car_forward_at_low_speed() {
+    let mut plain_world = new_world();
+    let mut boost_world = new_world();
+    let mut boost_input = throttle(127);
+    boost_input.buttons = BUTTON_BOOST;
+
+    run(&mut plain_world, throttle(127), 2.0);
+    run(&mut boost_world, boost_input, 2.0);
+
+    assert!(boost_world.forward_speed_m_s() > plain_world.forward_speed_m_s() + 3.0);
+}
+
+#[test]
+fn boost_cannot_push_the_car_past_the_boost_speed_limit() {
+    let vehicle = vehicle();
+    let mut world = World::new_on_flat_ground(&vehicle, arcade(), DEFAULT_GROUND_FRICTION, 0);
+    let mut boost_input = throttle(127);
+    boost_input.buttons = BUTTON_BOOST;
+
+    run(&mut world, boost_input, 30.0);
+
+    // Arcade has double thrust and unlimited air: without the limit it passed 240 m/s.
+    let speed_m_s = world.forward_speed_m_s();
+    let limit_m_s = vehicle.drive.boost_max_speed_m_s;
+    assert!(
+        speed_m_s < limit_m_s + 1.0,
+        "speed after 30 s of Boost: {speed_m_s} m/s, limit {limit_m_s} m/s"
+    );
+}
+
+#[test]
+fn full_lock_at_20_m_s_corners_at_road_tyre_grip() {
+    let mut world = new_world();
+    accelerate_to(&mut world, 20.0);
+    let mut peak_lateral_g: f32 = 0.0;
+
+    // Hold full left lock with light throttle; lateral acceleration = yaw rate × speed.
+    for _ in 0..3 * STEPS_PER_SECOND {
+        world.step(throttle_and_steer(32, 127));
+        let yaw_rate_rad_s = world.angular_velocity_rad_s()[1].abs();
+        let lateral_g = yaw_rate_rad_s * world.forward_speed_m_s().abs() / 9.81;
+        peak_lateral_g = peak_lateral_g.max(lateral_g);
+    }
+
+    // Grip 1.3 holds about 1.14 g here; the old race-tyre grip (1.4) held 1.22 g.
+    assert!(
+        (0.8..1.18).contains(&peak_lateral_g),
+        "peak lateral {peak_lateral_g} g"
+    );
 }

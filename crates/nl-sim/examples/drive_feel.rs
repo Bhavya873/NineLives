@@ -1,5 +1,5 @@
-//! Measures how the car drives on flat ground: acceleration, top speed, braking and
-//! full-lock turns at 10, 20 and 30 m/s. Use it when tuning `[drive]`, `[steering]`
+//! Measures how the car drives on flat ground: acceleration, top speed (also with Boost
+//! held), braking and full-lock turns at 10, 20 and 30 m/s. Use it when tuning `[drive]`, `[steering]`
 //! and `[wheels]` in `configs/vehicle.toml`.
 //!
 //! Run with: `cargo run --release -p nl-sim --example drive_feel [-- path/to/vehicle.toml]`
@@ -7,8 +7,8 @@
 use std::error::Error;
 
 use nl_sim::conventions::PHYSICS_HZ;
-use nl_sim::input::InputFrame;
-use nl_sim::modes::{DEFAULT_MODES_TOML, ModesConfig};
+use nl_sim::input::{BUTTON_BOOST, InputFrame};
+use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 
@@ -57,6 +57,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         speed_after_s(&config, 5.0)
     );
     println!("  top speed         {:6.1} m/s", top_speed_m_s(&config));
+    let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?;
+    println!(
+        "  top with Boost    {:6.1} m/s Realistic, {:6.1} m/s Arcade",
+        top_speed_with_boost_m_s(&config, modes.realistic),
+        top_speed_with_boost_m_s(&config, modes.arcade)
+    );
     println!(
         "  brake 100-0 km/h  {:6.1} m",
         braking_distance_from_100_m(&config)
@@ -96,11 +102,28 @@ fn load_vehicle_config() -> Result<VehicleConfig, Box<dyn Error>> {
 /// A Realistic-mode car on flat ground, settled on its wheels for one second.
 fn settled_world(config: &VehicleConfig) -> Result<World, Box<dyn Error>> {
     let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?;
+    Ok(settled_world_in(config, modes.realistic))
+}
+
+/// A car in `mode` on flat ground, settled on its wheels for one second.
+fn settled_world_in(config: &VehicleConfig, mode: ModeParams) -> World {
     let seed = 1_000_000;
-    let mut world =
-        World::new_on_flat_ground(config, modes.realistic, DEFAULT_GROUND_FRICTION, seed);
+    let mut world = World::new_on_flat_ground(config, mode, DEFAULT_GROUND_FRICTION, seed);
     run(&mut world, InputFrame::default(), 1.0);
-    Ok(world)
+    world
+}
+
+/// Highest forward speed during a long full-throttle run with Boost held, in m/s.
+fn top_speed_with_boost_m_s(config: &VehicleConfig, mode: ModeParams) -> f32 {
+    let mut world = settled_world_in(config, mode);
+    let mut input = drive(127, 0);
+    input.buttons = BUTTON_BOOST;
+    let mut top_m_s: f32 = 0.0;
+    for _ in 0..seconds_to_steps(TOP_SPEED_RUN_S) {
+        world.step(input);
+        top_m_s = top_m_s.max(world.forward_speed_m_s());
+    }
+    top_m_s
 }
 
 fn seconds_to_steps(seconds: f32) -> usize {
