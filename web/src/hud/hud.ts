@@ -29,6 +29,8 @@ const CONTROLLER_TEXT: Record<number, string> = {
   [ControllerCode.Pd]: 'Controller: PD',
   [ControllerCode.Ai]: 'Controller: AI',
   [ControllerCode.Manual]: 'Controller: Manual (keys 1–0)',
+  [ControllerCode.HybridAi]: 'Controller: Hybrid · AI',
+  [ControllerCode.HybridPd]: 'Controller: Hybrid · PD',
 };
 
 /** The numbers the HUD shows, already read from the game. */

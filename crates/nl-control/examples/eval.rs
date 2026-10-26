@@ -3,7 +3,7 @@
 //!
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0
-//! (`--controller ai` reads `--policy`, default models/policy.json; `--dr` turns on
+//! (`--controller ai` or `hybrid` reads `--policy`, default models/policy.json; `--dr` turns on
 //! domain randomization, SPEC §9.8, and adds `_dr` to the file name; `--course <json>`
 //! runs the episodes on that course, e.g. courses/playground.json, and adds its file
 //! stem, e.g. `_playground`)
@@ -104,15 +104,15 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-/// The controller named by `--controller`: Off, PD built for this car, or the AI with
-/// the policy from `--policy` (read only when the AI is asked for).
+/// The controller named by `--controller`: Off, PD built for this car, or the AI or
+/// Hybrid with the policy from `--policy` (read only when one of those is asked for).
 fn build_named_controller(
     args: &Args,
     vehicle: &VehicleConfig,
     mode: ModeParams,
 ) -> Result<ControllerKind, Box<dyn Error>> {
     let mut policy_json = None;
-    if args.controller == "ai" {
+    if args.controller == "ai" || args.controller == "hybrid" {
         let text = std::fs::read_to_string(&args.policy)
             .map_err(|error| format!("--policy {}: {error}", args.policy))?;
         policy_json = Some(text);

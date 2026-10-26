@@ -107,6 +107,10 @@ pub enum ControllerCode {
     Pd = 2,
     /// The trained policy (SPEC §8).
     Ai = 3,
+    /// Hybrid with the AI flying the car (DECISIONS 2026-10-21).
+    HybridAi = 4,
+    /// Hybrid with PD in charge: the car is on its wheels.
+    HybridPd = 5,
 }
 
 /// The values `HudField.Mode` can take.
@@ -264,22 +268,27 @@ impl Game {
         Ok(())
     }
 
-    /// Chooses what fires the thrusters by name: "off", "pd", "ai" or "manual". Throws
-    /// on any other name, or on "ai" before a policy is loaded (`load_policy`). It takes
+    /// Chooses what fires the thrusters by name: "off", "pd", "ai", "manual" or
+    /// "hybrid". Throws on any other name, or on "ai" or "hybrid" before a policy is
+    /// loaded (`load_policy`). It takes
     /// over at the next control step.
     pub fn set_controller(&mut self, kind: &str) -> Result<(), JsError> {
         self.use_controller(ControllerKind::from_name(kind, &self.choices)?);
         Ok(())
     }
 
-    /// Loads the trained policy (the text of `models/policy.json`) for the "ai"
-    /// controller. Throws, naming the problem, if the file is not a policy or was
+    /// Loads the trained policy (the text of `models/policy.json`) for the "ai" and
+    /// "hybrid" controllers. Throws, naming the problem, if the file is not a policy or was
     /// trained on another observation layout (its schema hash differs, SPEC §9.12). A
-    /// running AI switches to the new policy straight away.
+    /// running AI or Hybrid switches to the new policy straight away.
     pub fn load_policy(&mut self, json: &str) -> Result<(), JsError> {
         self.choices.policy = Some(Arc::new(Policy::from_json(json)?));
-        if matches!(self.controller, ControllerKind::Ai(_)) {
-            self.use_controller(ControllerKind::from_name("ai", &self.choices)?);
+        if matches!(
+            self.controller,
+            ControllerKind::Ai(_) | ControllerKind::Hybrid(_)
+        ) {
+            let name = self.controller.name();
+            self.use_controller(ControllerKind::from_name(name, &self.choices)?);
         }
         Ok(())
     }
@@ -594,6 +603,8 @@ fn controller_code(controller: &ControllerKind) -> ControllerCode {
         ControllerKind::Pd(_) => ControllerCode::Pd,
         ControllerKind::Ai(_) => ControllerCode::Ai,
         ControllerKind::Manual(_) => ControllerCode::Manual,
+        ControllerKind::Hybrid(hybrid) if hybrid.ai_in_control() => ControllerCode::HybridAi,
+        ControllerKind::Hybrid(_) => ControllerCode::HybridPd,
     }
 }
 

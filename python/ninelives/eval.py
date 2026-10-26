@@ -32,10 +32,11 @@ def evaluate(
     randomize_mode: bool = True,
 ) -> dict[str, Any]:
     """The eval report: settings, the SPEC §10 summary and every episode's row.
-    `policy` is the exported policy file the AI controller loads; `randomize` gives
+    `policy` is the exported policy file the AI and Hybrid controllers load; `randomize` gives
     every episode its own randomized car and world (SPEC §9.8); with
     `randomize_mode=False` the mode stays `mode`'s preset (a per-mode policy)."""
-    policy_json = policy.read_text() if controller == "ai" else None
+    needs_policy = controller in ("ai", "hybrid")
+    policy_json = policy.read_text() if needs_policy else None
     config = load_sim_config(mode, stage, randomize, randomize_mode=randomize_mode)
     report = json.loads(run_eval(controller, config, episodes, first_seed, policy_json))
     return {
@@ -77,7 +78,7 @@ def positive_int(text: str) -> int:
 def main(argv: list[str] | None = None) -> None:
     """The command line (see the module docstring)."""
     parser = argparse.ArgumentParser(description="Evaluate a controller on fixed seeds.")
-    parser.add_argument("--controller", choices=["off", "pd", "ai"], required=True)
+    parser.add_argument("--controller", choices=["off", "pd", "ai", "hybrid"], required=True)
     parser.add_argument("--stage", choices=["A", "B", "C", "D", "E"], default="A")
     parser.add_argument("--mode", choices=["realistic", "arcade"], default="realistic")
     parser.add_argument("--episodes", type=positive_int, default=1000)

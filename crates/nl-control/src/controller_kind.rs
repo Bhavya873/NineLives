@@ -10,7 +10,7 @@ use nl_sim::modes::ModeParams;
 use nl_sim::vehicle_config::VehicleConfig;
 
 use crate::config::{ControllersConfig, ControllersConfigError};
-use crate::{Ai, ControlCtx, Controller, Manual, Off, Pd};
+use crate::{Ai, ControlCtx, Controller, Hybrid, HybridGateSettings, Manual, Off, Pd};
 
 /// Every controller there is. A plain enum rather than trait objects (CLAUDE.md: plain
 /// constructs). Each variant holds its controller, so controllers that keep state
@@ -26,14 +26,16 @@ pub enum ControllerKind {
     Ai(Box<Ai>),
     /// Debug: keys 1–0 fire nozzles 0–9.
     Manual(Manual),
+    /// The AI flies, PD drives (DECISIONS 2026-10-21). Boxed: it holds both.
+    Hybrid(Box<Hybrid>),
 }
 
 /// The names `from_name` accepts.
-pub const CONTROLLER_NAMES: [&str; 4] = ["off", "pd", "ai", "manual"];
+pub const CONTROLLER_NAMES: [&str; 5] = ["off", "pd", "ai", "manual", "hybrid"];
 
 /// The controllers the T key cycles through, in order (SPEC §11.3). Manual is left
 /// out: it stays a debug controller that only `set_controller("manual")` picks.
-pub const CYCLE_NAMES: [&str; 3] = ["off", "pd", "ai"];
+pub const CYCLE_NAMES: [&str; 4] = ["off", "pd", "ai", "hybrid"];
 
 /// What the named controllers are built from: PD for this car, and the loaded policy
 /// if there is one. The owner builds it once and never runs it.
@@ -41,9 +43,11 @@ pub const CYCLE_NAMES: [&str; 3] = ["off", "pd", "ai"];
 pub struct ControllerChoices {
     /// PD built for the car (`Pd::for_vehicle`).
     pub pd: Pd,
-    /// The AI's policy, shared by every AI built from these choices; "ai" cannot be
-    /// chosen without one.
+    /// The AI's policy, shared by every AI built from these choices; "ai" and "hybrid"
+    /// cannot be chosen without one.
     pub policy: Option<Arc<Policy>>,
+    /// When Hybrid hands the nozzles between PD and the AI (from vehicle.toml `[events]`).
+    pub hybrid_gate: HybridGateSettings,
 }
 
 impl ControllerChoices {
@@ -64,6 +68,7 @@ impl ControllerChoices {
         Ok(ControllerChoices {
             pd: Pd::for_vehicle(vehicle, mode, &controllers),
             policy,
+            hybrid_gate: HybridGateSettings::for_vehicle(vehicle),
         })
     }
 }
@@ -82,9 +87,9 @@ pub enum BuildControllerError {
     Choice(#[from] ControllerChoiceError),
 }
 
-/// The controller called `name` ("off", "pd", "ai" or "manual") for the car `vehicle`
-/// describes in `mode`. `policy_json` is read only for "ai", so a stale policy file
-/// never stops PD or Off from being built.
+/// The controller called `name` (see `CONTROLLER_NAMES`) for the car `vehicle`
+/// describes in `mode`. `policy_json` is read only for "ai" and "hybrid", so a stale
+/// policy file never stops PD or Off from being built.
 pub fn build_controller(
     name: &str,
     vehicle: &VehicleConfig,
@@ -92,7 +97,8 @@ pub fn build_controller(
     controllers_toml: &str,
     policy_json: Option<&str>,
 ) -> Result<ControllerKind, BuildControllerError> {
-    let policy_json = if name == "ai" { policy_json } else { None };
+    let needs_policy = name == "ai" || name == "hybrid";
+    let policy_json = if needs_policy { policy_json } else { None };
     let choices = ControllerChoices::from_configs(vehicle, mode, controllers_toml, policy_json)?;
     Ok(ControllerKind::from_name(name, &choices)?)
 }
@@ -104,9 +110,9 @@ pub enum ControllerChoiceError {
     #[error("unknown controller \"{name}\"; use one of: {}", CONTROLLER_NAMES.join(", "))]
     Unknown { name: String },
 
-    /// "ai" was asked for, but no policy is loaded.
-    #[error("the ai controller needs a policy; load models/policy.json first")]
-    NoPolicy,
+    /// "ai" or "hybrid" (`name`) was asked for, but no policy is loaded.
+    #[error("the {name} controller needs a policy; load models/policy.json first")]
+    NoPolicy { name: &'static str },
 }
 
 impl ControllerKind {
@@ -120,17 +126,25 @@ impl ControllerKind {
             "pd" => Ok(ControllerKind::Pd(Box::new(choices.pd.clone()))),
             "ai" => match &choices.policy {
                 Some(policy) => Ok(ControllerKind::Ai(Box::new(Ai::new(Arc::clone(policy))))),
-                None => Err(ControllerChoiceError::NoPolicy),
+                None => Err(ControllerChoiceError::NoPolicy { name: "ai" }),
             },
             "manual" => Ok(ControllerKind::Manual(Manual)),
+            "hybrid" => match &choices.policy {
+                Some(policy) => Ok(ControllerKind::Hybrid(Box::new(Hybrid::new(
+                    choices.pd.clone(),
+                    Ai::new(Arc::clone(policy)),
+                    choices.hybrid_gate,
+                )))),
+                None => Err(ControllerChoiceError::NoPolicy { name: "hybrid" }),
+            },
             other => Err(ControllerChoiceError::Unknown {
                 name: other.to_string(),
             }),
         }
     }
 
-    /// A fresh controller of the kind after this one in the T-key cycle (Off → PD → AI),
-    /// wrapping round; the AI is skipped while no policy is loaded. Manual, which is
+    /// A fresh controller of the kind after this one in the T-key cycle (Off → PD → AI →
+    /// Hybrid), wrapping round; the AI and Hybrid are skipped while no policy is loaded. Manual, which is
     /// not in the cycle, is followed by PD as if it were Off.
     pub fn next(&self, choices: &ControllerChoices) -> ControllerKind {
         let mut index = CYCLE_NAMES
@@ -152,6 +166,7 @@ impl ControllerKind {
             ControllerKind::Pd(_) => "pd",
             ControllerKind::Ai(_) => "ai",
             ControllerKind::Manual(_) => "manual",
+            ControllerKind::Hybrid(_) => "hybrid",
         }
     }
 }
@@ -164,6 +179,7 @@ impl Controller for ControllerKind {
             ControllerKind::Pd(controller) => controller.reset(seed),
             ControllerKind::Ai(controller) => controller.reset(seed),
             ControllerKind::Manual(controller) => controller.reset(seed),
+            ControllerKind::Hybrid(controller) => controller.reset(seed),
         }
     }
 
@@ -174,6 +190,7 @@ impl Controller for ControllerKind {
             ControllerKind::Pd(controller) => controller.act(ctx),
             ControllerKind::Ai(controller) => controller.act(ctx),
             ControllerKind::Manual(controller) => controller.act(ctx),
+            ControllerKind::Hybrid(controller) => controller.act(ctx),
         }
     }
 }
@@ -196,18 +213,19 @@ mod tests {
         ControllerChoices {
             pd: Pd::for_vehicle(&vehicle, mode, &config),
             policy: None,
+            hybrid_gate: HybridGateSettings::for_vehicle(&vehicle),
         }
     }
 
     #[test]
-    fn every_name_but_ai_is_accepted_and_named_back_without_a_policy() {
+    fn every_name_but_ai_and_hybrid_is_accepted_and_named_back_without_a_policy() {
         let choices = choices_without_policy();
         for name in CONTROLLER_NAMES {
             match ControllerKind::from_name(name, &choices) {
                 Ok(controller) => assert_eq!(controller.name(), name),
                 Err(error) => {
-                    assert_eq!(name, "ai");
-                    assert!(matches!(error, ControllerChoiceError::NoPolicy));
+                    assert!(name == "ai" || name == "hybrid");
+                    assert!(matches!(error, ControllerChoiceError::NoPolicy { .. }));
                 }
             }
         }
@@ -219,7 +237,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "unknown controller \"autopilot\"; use one of: off, pd, ai, manual"
+            "unknown controller \"autopilot\"; use one of: off, pd, ai, manual, hybrid"
         );
     }
 
