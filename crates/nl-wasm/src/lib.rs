@@ -11,7 +11,7 @@ use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind};
 use std::sync::Arc;
 
 use nl_policy::Policy;
-use nl_sim::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
+use nl_sim::conventions::{INVERTED_TILT_DEG, NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
@@ -492,6 +492,12 @@ impl Game {
     /// Number of floats per event in `drain_events` (4).
     pub fn floats_per_event() -> usize {
         FLOATS_PER_EVENT
+    }
+
+    /// The tilt, in degrees, past which the car counts as flipped (the eval's
+    /// inversion rate uses the same mark), so the HUD can call a save a flip save.
+    pub fn inverted_tilt_deg() -> f32 {
+        INVERTED_TILT_DEG
     }
 
     /// Bit of the first manual nozzle button; nozzle `i` uses this bit + `i`.

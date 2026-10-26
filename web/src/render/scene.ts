@@ -2,6 +2,7 @@
 // gradient backdrop, a blue-grey checkered floor and neutral light, like a physics
 // simulator's test arena, plus the car. Three.js objects only; no input or physics.
 import {
+  ACESFilmicToneMapping,
   CanvasTexture,
   Color,
   DirectionalLight,
@@ -10,7 +11,6 @@ import {
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
-  NearestFilter,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
@@ -26,12 +26,19 @@ import { blendPose, type BlendedPose, newBlendedPose } from './pose-blend.ts';
 
 const GROUND_SIZE_M = 4000;
 /** The floor starts fading into the backdrop here and is pure backdrop colour by the end. */
-const FOG_START_M = 120;
-const FOG_END_M = 700;
+const FOG_START_M = 90;
+const FOG_END_M = 650;
 /** Side of one floor square; big enough to read speed from at a glance. */
 const CHECKER_SIZE_M = 2;
-const CHECKER_LIGHT = '#3b5470';
-const CHECKER_DARK = '#22344a';
+/** Two close blues, so the floor reads as a surface rather than a chessboard. */
+const CHECKER_LIGHT = '#34495f';
+const CHECKER_DARK = '#2a3b4e';
+/** A thin lighter line along every square's edge: the arena's measuring grid. */
+const GRID_LINE = '#3c536d';
+/** Pixels per floor square in the texture; enough for a one-pixel grid line to stay thin. */
+const CHECKER_TEXTURE_PX = 64;
+/** Brightness after filmic tone mapping (1 keeps the scene's own light levels). */
+const EXPOSURE = 1.15;
 
 /** The arena every view draws into (see `createArena`). */
 export interface Arena {
@@ -115,6 +122,9 @@ export function createArena(container: HTMLElement): Arena {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
+  // Filmic tone mapping keeps bright flames and the sunlit car from clipping to white.
+  renderer.toneMapping = ACESFilmicToneMapping;
+  renderer.toneMappingExposure = EXPOSURE;
   container.appendChild(renderer.domElement);
 
   const scene = new Scene();
@@ -196,20 +206,31 @@ export function buildCheckerMaterial(widthM: number, depthM: number): MeshStanda
   return new MeshStandardMaterial({ map: buildCheckerTexture(widthM, depthM), roughness: 0.9 });
 }
 
-/** A 2×2 checker drawn once into a tiny canvas and tiled across `widthM` × `depthM`. */
+/** A 2×2 checker with grid lines, drawn once and tiled across `widthM` × `depthM`. */
 function buildCheckerTexture(widthM: number, depthM: number): CanvasTexture {
-  const texture = buildCanvasTexture(2, 2, (context) => {
+  const tilePx = 2 * CHECKER_TEXTURE_PX;
+  const texture = buildCanvasTexture(tilePx, tilePx, (context) => {
     context.fillStyle = CHECKER_LIGHT;
-    context.fillRect(0, 0, 2, 2);
+    context.fillRect(0, 0, tilePx, tilePx);
     context.fillStyle = CHECKER_DARK;
-    context.fillRect(0, 0, 1, 1);
-    context.fillRect(1, 1, 1, 1);
+    context.fillRect(0, 0, CHECKER_TEXTURE_PX, CHECKER_TEXTURE_PX);
+    context.fillRect(
+      CHECKER_TEXTURE_PX,
+      CHECKER_TEXTURE_PX,
+      CHECKER_TEXTURE_PX,
+      CHECKER_TEXTURE_PX,
+    );
+    // One line on the top and left edge of each square; tiling supplies the rest.
+    context.fillStyle = GRID_LINE;
+    context.fillRect(0, 0, tilePx, 1);
+    context.fillRect(0, CHECKER_TEXTURE_PX, tilePx, 1);
+    context.fillRect(0, 0, 1, tilePx);
+    context.fillRect(CHECKER_TEXTURE_PX, 0, 1, tilePx);
   });
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  // Sharp square edges up close; one texture tile is two squares.
-  texture.magFilter = NearestFilter;
+  // One texture tile is two squares; strong anisotropy keeps far squares from shimmering.
   texture.repeat.set(widthM / (2 * CHECKER_SIZE_M), depthM / (2 * CHECKER_SIZE_M));
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   return texture;
 }

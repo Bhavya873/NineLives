@@ -1,8 +1,6 @@
 // Entry point for the web game. It wires the pieces together:
 // keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
-// Each piece lives in its own folder: input/, render/, hud/; the loop is in game-loop.ts.
 import controllersToml from '../../configs/controllers.toml?raw';
-import gauntletJson from '../../courses/gauntlet.json?raw';
 import modesToml from '../../configs/modes.toml?raw';
 import playgroundJson from '../../courses/playground.json?raw';
 import vehicleToml from '../../configs/vehicle.toml?raw';
@@ -10,11 +8,18 @@ import vehicleToml from '../../configs/vehicle.toml?raw';
 import { Vector3 } from 'three';
 
 import { prefersReducedMotion, requireElement } from './dom.ts';
-import { createCourseSession, showCourse, showResultsWhenFinished } from './course-session.ts';
+import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import { createAirGauge, updateAirGauge } from './hud/air-gauge.ts';
 import { findHud, type HudValues, updateHud } from './hud/hud.ts';
+import { createLives, restartLives, updateLives } from './hud/lives.ts';
 import { createNozzleMap, updateNozzleMap } from './hud/nozzle-map.ts';
+import {
+  createPerfOverlay,
+  recordFrame,
+  recordTick,
+  togglePerfOverlay,
+} from './hud/perf-overlay.ts';
 import {
   createToasts,
   showNoAirIfNew,
@@ -31,10 +36,9 @@ import {
   MANUAL_NOZZLE_COUNT,
   onKeyPress,
   readInputFrame,
-  bindTapButton,
   startKeyboard,
 } from './input/keyboard.ts';
-import { followCar, snapCamera } from './render/chase-camera.ts';
+import { followCar, snapCamera, widenWithSpeed } from './render/chase-camera.ts';
 import {
   cameraShake,
   createExplosion,
@@ -58,6 +62,7 @@ import {
   nextWindLevel,
   resetScreenEffects,
   startingWindLevel,
+  type WindLevel,
 } from './screen-effects.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
@@ -92,23 +97,22 @@ const hudValues: HudValues = {
 async function start(): Promise<void> {
   await initWasm();
   checkWasmLayout();
-  // A new random seed each visit; it only affects Chaos knocks.
+  // A new random seed each visit; the game itself draws nothing from it.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
   const game = new Game(vehicleToml, modesToml, controllersToml, seed);
   onKeyPress('KeyM', () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
-  // SPEC §11.3: T cycles the controller; the sim owns the order (AI joins once loaded).
-  onKeyPress('KeyT', () => game.cycle_controller());
-  // Hybrid is the default once the policy is in (DECISIONS 2026-10-21); the game starts
-  // with PD while it loads, and a player who has already pressed T keeps their choice.
+  // The game always flies with its best controller: PD + AI (the Hybrid, DECISIONS
+  // 2026-10-21). PD flies alone while the policy loads, or if it fails to load.
   void loadPolicy(game).then((loaded) => {
-    if (loaded && game.hud()[HudField.Controller] === ControllerCode.Pd) {
+    if (loaded) {
       game.set_controller('hybrid');
     }
   });
-  bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
+  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
+  onKeyPress('F3', () => togglePerfOverlay(perf));
 
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),
@@ -134,18 +138,17 @@ async function start(): Promise<void> {
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
   const params = new URLSearchParams(window.location.search);
-  const effects = createScreenEffects(view.scene, prefersReducedMotion());
+  const reducedMotion = prefersReducedMotion();
+  const effects = createScreenEffects(view.scene, reducedMotion);
   // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
   let windLevel = startingWindLevel(params);
-  game.set_wind_level(windLevel);
-  onKeyPress('KeyV', () => {
-    windLevel = nextWindLevel(windLevel);
-    game.set_wind_level(windLevel);
-  });
-  const course = createCourseSession(view.scene, view.ground, {
-    panel: requireElement('results'),
-    lines: requireElement('results-lines'),
-  });
+  const setWind = (level: WindLevel) => {
+    windLevel = level;
+    game.set_wind_level(level);
+  };
+  setWind(windLevel);
+  onKeyPress('KeyV', () => setWind(nextWindLevel(windLevel)));
+  const course = createCourseSession(view.scene, view.ground);
   /** Puts the drawn course in step with a fresh run (null: the open arena). */
   const startCourse = (shapesJson: string | null) => {
     showCourse(course, shapesJson);
@@ -153,7 +156,6 @@ async function start(): Promise<void> {
     snapViewToGame(game, frames, view, carPose);
     resetScreenEffects(effects);
   };
-  const startGauntlet = () => startCourse(game.load_course(gauntletJson));
   // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
   const startFreeDrive = () => {
     if (params.get('world') === 'flat') {
@@ -163,15 +165,29 @@ async function start(): Promise<void> {
       startCourse(game.load_course(playgroundJson));
     }
   };
-  // Enter starts (or restarts) the Gauntlet; F goes back to free driving.
-  onKeyPress('Enter', startGauntlet);
-  onKeyPress('NumpadEnter', startGauntlet);
-  onKeyPress('KeyF', startFreeDrive);
-  if (params.get('course') === 'gauntlet') {
-    startGauntlet();
-  } else {
+  startFreeDrive();
+  // Nine hearts, one lost per crash; at zero the game-over screen offers a restart.
+  const lives = createLives(
+    requireElement('hud-hearts'),
+    requireElement('game-over'),
+    requireElement('game-over-summary'),
+  );
+  // Restart: a fresh playground run, which also sets the sim's counts back to zero.
+  requireElement('restart').addEventListener('click', () => {
     startFreeDrive();
-  }
+    game.drain_events();
+    fillHudValues(game.hud(), hudValues);
+    restartLives(lives, hudValues);
+  });
+  // Esc pauses and resumes; nothing moves while paused or after the last life.
+  const pausedPanel = requireElement('paused');
+  let paused = false;
+  onKeyPress('Escape', () => {
+    if (!lives.over) {
+      paused = !paused;
+      pausedPanel.hidden = !paused;
+    }
+  });
   // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
   onKeyPress('KeyX', () => {
     game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
@@ -181,6 +197,7 @@ async function start(): Promise<void> {
     resetScreenEffects(effects);
   });
   let lastRenderMs = performance.now();
+  const invertedTiltRad = (Game.inverted_tilt_deg() * Math.PI) / 180;
 
   /**
    * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
@@ -197,15 +214,19 @@ async function start(): Promise<void> {
       snapViewToGame(game, frames, view, carPose);
       resetScreenEffects(effects);
     }
-    const toast = toastForEvents(events);
-    // Nothing covers the results screen; what happens after the finish doesn't count.
-    if (toast && !course.resultsShown) {
+    const toast = toastForEvents(events, invertedTiltRad);
+    // Nothing covers the game-over screen.
+    if (toast && !lives.over) {
       showToast(toasts, toast, nowMs);
     }
   };
 
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
+      if (paused || lives.over) {
+        return;
+      }
+      const tickStartMs = performance.now();
       frames.previousChassis = frames.latestChassis;
       frames.previousWheels = frames.latestWheels;
       game.tick(readInputFrame());
@@ -215,17 +236,17 @@ async function start(): Promise<void> {
       if (game.is_crashed()) {
         crashPosition.fromArray(frames.latestChassis);
       }
+      recordTick(perf, performance.now() - tickStartMs);
     },
     render: (blend) => {
       const nowMs = performance.now();
       const frameS = (nowMs - lastRenderMs) / 1000;
       lastRenderMs = nowMs;
       // Events queue up in the sim, so reading them once per frame is enough.
-      // The HUD's save and crash counts update as events drain, so drain first; then
-      // put up the results before the events' toasts, so no FINISH toast covers them.
+      // The HUD's save and crash counts update as events drain, so drain first.
       const events = game.drain_events();
       fillHudValues(game.hud(), hudValues);
-      showResultsWhenFinished(course, hudValues);
+      updateLives(lives, hudValues, nowMs);
       reactToEvents(events, nowMs);
 
       // Valve lag already smooths the throttles, so one read per frame is enough.
@@ -234,6 +255,9 @@ async function start(): Promise<void> {
       setCarVisible(view, !hudValues.crashed);
       updateFlames(flames, throttles);
       followCar(view.camera, carPose, frameS, hudValues.wheelsTouching === 0);
+      if (!reducedMotion) {
+        widenWithSpeed(view.camera, hudValues.speedMS, frameS);
+      }
       updateExplosion(explosion, frameS);
       // Shake only this frame's picture, so the camera's smoothing never sees it.
       view.camera.position.add(cameraShake(explosion, shake));
@@ -254,6 +278,8 @@ async function start(): Promise<void> {
       updateNozzleMap(nozzleDots, throttles);
       updateToasts(toasts, nowMs);
       showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
+      const frameEndMs = performance.now();
+      recordFrame(perf, frameEndMs - nowMs, frameEndMs);
     },
   });
 
