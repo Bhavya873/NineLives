@@ -253,3 +253,18 @@ The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-
 
 - Tuning on success alone moves PD toward firing more often; the search needs the owner's behaviour rules as constraints, not just as tests afterwards.
 - Next (owner's choice): v5 also freezes where braking starts (brake height, margin, usable fraction) and pays 0.05 success per kg past 8 kg over the bumps strip, in either mode.
+
+### 2026-10-21 — Wrap-up: Stage F baseline and the Hybrid-gated pilot (flight-pilot)
+**Stage F baseline** (Rust eval runner, 200 validation episodes from 1,500,000, no randomization; Realistic / Arcade): Off 2% success, 98% crash, 100% inverted; PD 62% / 77% success, 37% / 23% crash, 69% / 45% inverted; Hybrid with stage-a-004 3.5% / 6.5% success, 86% / 76% crash. The Stage A policy never saw driver input in flight, and its back flips often land facing backwards (heading error 147–171°).
+
+**flight-pilot:** `python -m ninelives.train --config configs/train/flight.yaml --init-from runs/stage-a-004/best --run-id flight-pilot --total-steps 6_000_000` at commit 8c69eee, seed 0, 6M steps, about 15 min. Gated training (`controller: hybrid`), stages A/D/E/F at 0.2/0.15/0.2/0.45, randomized, lr 1e-4. Throughput 11.8k steps/s at first, 6.5k by the end (ungated runs: 21.5k): one slot's hidden PD stretch holds up the batch, acceptable at this budget.
+
+| Checkpoint | Hybrid eval success (200 validation episodes per stage from 1,000,000, Realistic) | A | D | E | F | Crash |
+|---|---|---|---|---|---|---|
+| 2M | 77.6% | 80.0 | 96.0 | 90.0 | 44.5 | 18.3% |
+| 4M | 77.7% | 76.5 | 96.0 | 89.5 | 49.0 | 16.5% |
+| 6M | 77.6% | 79.0 | 96.0 | 88.0 | 47.5 | 14.7% |
+
+- Stage F jumps from about 4% to 45–49% in the first 2M steps of gated training; A, D and E hold. Crashes fall steadily.
+- Training-episode success (AI stretches only, with exploration noise) sits at 45–48%.
+- Next: R1, 100M steps on the same config (`--run-id flight-r1`, commit a392011).

@@ -19,6 +19,7 @@ pub mod driver_bot;
 pub mod driving_stages;
 pub mod episode;
 pub mod events;
+pub mod flight_stage;
 pub mod g_load;
 pub mod golden_trace;
 pub mod hash;

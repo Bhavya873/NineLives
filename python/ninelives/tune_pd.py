@@ -35,6 +35,9 @@ TUNING_CELLS = [
     for randomize in (False, True)
 ]
 FIRST_TUNING_SEED = 2_000_000
+# The one-time final test block (3,000,000–3,000,999, DECISIONS 2026-10-21): tuning must
+# never touch it.
+FINAL_TEST_FIRST_SEED = 3_000_000
 # Gains controllers.toml requires to be fractions (an up alignment is a cosine; the others
 # are shares of lift or weight), capped just below 1.
 FRACTION_GAINS = ("ground_side_push",)
@@ -130,6 +133,19 @@ def mean_success(controllers_toml: str, episodes: int, first_seed: int) -> float
     return total / len(TUNING_CELLS)
 
 
+def tuning_seeds_start(generation: int, episodes: int) -> int:
+    """The first tuning seed of `generation`; refuses a block that would reach the final
+    test seeds."""
+    first_seed = FIRST_TUNING_SEED + generation * episodes
+    if first_seed + episodes > FINAL_TEST_FIRST_SEED:
+        raise ValueError(
+            f"tune_pd: generation {generation} with {episodes} episodes would use seeds "
+            f"up to {first_seed + episodes - 1}, inside the final test block "
+            f"({FINAL_TEST_FIRST_SEED:,}+); use fewer generations or episodes"
+        )
+    return first_seed
+
+
 def tune(generations: int, popsize: int, episodes: int, sigma: float) -> str:
     """Runs CMA-ES from the repo's gains; returns the controllers.toml of the candidate
     that beat the repo's gains by the most on its generation's seeds (the repo's own
@@ -138,8 +154,10 @@ def tune(generations: int, popsize: int, episodes: int, sigma: float) -> str:
     base = pd_gains(base_toml)
     strategy = cma.CMAEvolutionStrategy([0.0] * len(base), sigma, {"popsize": popsize})
     best_toml, best_margin = base_toml, 0.0
+    # Refuse a run whose last generation would reach the test block before it starts.
+    tuning_seeds_start(generations - 1, episodes)
     for generation in range(generations):
-        first_seed = FIRST_TUNING_SEED + generation * episodes
+        first_seed = tuning_seeds_start(generation, episodes)
         candidates = strategy.ask()
         tomls = [with_pd_gains(base_toml, scaled_gains(base, list(x))) for x in candidates]
         scores = [score(text, episodes, first_seed) for text in tomls]

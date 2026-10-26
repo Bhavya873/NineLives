@@ -105,12 +105,56 @@ impl HybridGate {
     }
 }
 
-/// The AI flies, PD drives: each control step the gate picks whose throttles go out.
-/// Both controllers run every step, so PD's warm start stays current for a hand-back.
+/// PD and the gate: each control step PD acts (so its warm start stays current for a
+/// hand-back), then the gate picks whether PD's throttles or the AI's go out. The game's
+/// `Hybrid` and Hybrid-gated training (nl-py) both switch through this, so training
+/// hands the AI exactly the steps the game does.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Hybrid {
+pub struct HybridSwitch {
     gate: HybridGate,
     pd: Pd,
+    pd_throttles: [f32; NOZZLE_COUNT],
+}
+
+impl HybridSwitch {
+    /// `pd` behind a gate with `settings`; PD has the nozzles.
+    pub fn new(pd: Pd, settings: HybridGateSettings) -> HybridSwitch {
+        HybridSwitch {
+            gate: HybridGate::new(settings),
+            pd,
+            pd_throttles: [0.0; NOZZLE_COUNT],
+        }
+    }
+
+    /// Back to PD in control for the episode with `seed`.
+    pub fn reset(&mut self, seed: u64) {
+        self.gate.reset();
+        self.pd.reset(seed);
+        self.pd_throttles = [0.0; NOZZLE_COUNT];
+    }
+
+    /// One control step: PD acts on `ctx`, then the gate updates. True when the AI has
+    /// the nozzles this step; otherwise send `pd_throttles()`.
+    pub fn decide(&mut self, ctx: &ControlCtx) -> bool {
+        self.pd_throttles = self.pd.act(ctx);
+        self.gate.update(&ctx.state)
+    }
+
+    /// PD's throttles from the last `decide`, each in [0, 1].
+    pub fn pd_throttles(&self) -> [f32; NOZZLE_COUNT] {
+        self.pd_throttles
+    }
+
+    /// True while the AI has the nozzles.
+    pub fn ai_in_control(&self) -> bool {
+        self.gate.ai_in_control()
+    }
+}
+
+/// The AI flies, PD drives: each control step the switch picks whose throttles go out.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Hybrid {
+    switch: HybridSwitch,
     ai: Ai,
 }
 
@@ -118,31 +162,28 @@ impl Hybrid {
     /// PD and the AI (both built for the car) behind a gate with `settings`.
     pub fn new(pd: Pd, ai: Ai, settings: HybridGateSettings) -> Hybrid {
         Hybrid {
-            gate: HybridGate::new(settings),
-            pd,
+            switch: HybridSwitch::new(pd, settings),
             ai,
         }
     }
 
     /// True while the AI has the nozzles, for the HUD.
     pub fn ai_in_control(&self) -> bool {
-        self.gate.ai_in_control()
+        self.switch.ai_in_control()
     }
 }
 
 impl Controller for Hybrid {
     fn reset(&mut self, seed: u64) {
-        self.gate.reset();
-        self.pd.reset(seed);
+        self.switch.reset(seed);
         self.ai.reset(seed);
     }
 
     fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
-        let pd_throttles = self.pd.act(ctx);
-        if self.gate.update(&ctx.state) {
+        if self.switch.decide(ctx) {
             self.ai.act(ctx)
         } else {
-            pd_throttles
+            self.switch.pd_throttles()
         }
     }
 }

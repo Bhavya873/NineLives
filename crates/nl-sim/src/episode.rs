@@ -154,14 +154,15 @@ pub struct Episode {
 impl Episode {
     /// A fresh world for `variation` (use `EpisodeVariation::none` for no randomization)
     /// with the car placed for `stage` from `seed`: flat ground for Stages A and B, the
-    /// Stage C hop track, or a generated Stage D course (Stage E: its base stage's).
+    /// Stage C hop track, a generated Stage D course (Stage E: its base stage's), or the
+    /// Stage F straight with its flip plate.
     pub fn start(
         variation: &EpisodeVariation,
         scenarios: &ScenariosConfig,
         stage: Stage,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
-        let plan = StagePlan::draw(variation, scenarios, stage, seed);
+        let plan = StagePlan::draw(variation, scenarios, stage, seed)?;
         if let Some(course) = plan.course(scenarios, seed)? {
             let world = Episode::world_on_course(variation, &course, seed);
             return Episode::begin(world, variation, scenarios, &plan, Some(&course), seed);
@@ -184,7 +185,7 @@ impl Episode {
         course: &CourseSpec,
         seed: u64,
     ) -> Result<Episode, PlaceCarError> {
-        let plan = StagePlan::draw(variation, scenarios, stage, seed);
+        let plan = StagePlan::draw(variation, scenarios, stage, seed)?;
         let world = Episode::world_on_course(variation, course, seed);
         Episode::begin(world, variation, scenarios, &plan, Some(course), seed)
     }
@@ -410,7 +411,7 @@ impl Episode {
         }
         let parked = self.held_on_wheels_long_enough() && self.quiet_long_enough();
         match self.stage.goal {
-            Goal::HoldOnWheels => parked,
+            Goal::HoldOnWheels | Goal::LandAndHold => parked,
             Goal::SaveAfterHop => {
                 self.tally.saves_after_hop > 0 && (parked || !self.stage.hold_after_knocks)
             }
@@ -494,7 +495,7 @@ impl Episode {
         }
     }
 
-    /// PLAN §3.3 on Stages C and D: a judged landing (a Save with a heading error) that
+    /// PLAN §3.3 on every goal but `HoldOnWheels` (Stages C, D and F): a judged landing (a Save with a heading error) that
     /// turned the car `max_landing_heading_error_deg` or more fails the episode.
     fn judge_landing_heading(&mut self, quality: &LandingQuality) {
         if self.stage.goal == Goal::HoldOnWheels {

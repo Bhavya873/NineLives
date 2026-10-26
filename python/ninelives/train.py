@@ -21,8 +21,10 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 from ninelives.callbacks import (
     CurriculumCallback,
+    FiniteCheckCallback,
     RunCheckpointCallback,
     TimeLimitCallback,
+    controller_json,
     residual_json,
 )
 from ninelives.curriculum import Curriculum
@@ -198,6 +200,11 @@ def train(argv: list[str] | None = None) -> RunState:
     config = load_train_config(args.config)
     if args.total_steps is not None:
         config.total_steps = args.total_steps
+    if args.keep_curriculum and config.controller == "hybrid":
+        raise SystemExit(
+            "--keep-curriculum cannot be used with controller: hybrid (it trains every stage "
+            "at its hardest level, the levels its checkpoints are scored on)"
+        )
     run_dir = args.runs_dir / args.run_id
     if not args.resume and (run_dir / "latest").exists():
         raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
@@ -210,6 +217,7 @@ def train(argv: list[str] | None = None) -> RunState:
         config.reward_overrides,
         residual_json(config),
         config.randomize_mode,
+        controller_json(config),
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)
@@ -224,7 +232,9 @@ def train(argv: list[str] | None = None) -> RunState:
     env.set_stage_mix(state.curriculum.mix())
     checkpoints = RunCheckpointCallback(state, run_dir, config)
     promote_from_training = config.curriculum_promote_on == "training"
+    # The finite check comes first, so a NaN step never reaches a checkpoint save.
     callbacks = [
+        FiniteCheckCallback(),
         CurriculumCallback(state, promote_from_training),
         checkpoints,
         TimeLimitCallback(args.max_minutes),
