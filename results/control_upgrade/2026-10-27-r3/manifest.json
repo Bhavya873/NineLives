@@ -1,0 +1,17 @@
+{
+ "experiment_id": "2026-10-27-r3",
+ "purpose": "R3: Hybrid retrained over the CMA-ES tuned PD (PR #56); R3b: the one approved retry with Stage F weight 0.7.",
+ "commit": "7299cb58373e5248da90a62c5876b609b7a104d1",
+ "runs": {
+  "flight-r3": "configs/train/flight-r3.yaml, warm start runs/flight-r2/latest, 50M steps, 05:12-06:25 (73 min)",
+  "flight-r3b": "configs/train/flight-r3b.yaml, warm start runs/flight-r3/best, 50M steps, 06:31-07:19 (48 min)"
+ },
+ "validation_seeds": {
+  "first": 1500000,
+  "episodes_per_cell": 1000,
+  "cells": "A-F x both modes x plain/randomized"
+ },
+ "held_out_seeds": "untouched (3,000,000+)",
+ "rule": "replace models/policy.json only if the Hybrid beats PD alone on every stage and mode",
+ "outcome": "not met: both runs lose 10 of 12 cells (C ties); shipped policy unchanged"
+}
