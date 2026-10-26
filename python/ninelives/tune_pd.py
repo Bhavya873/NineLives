@@ -2,9 +2,11 @@
 
     python -m ninelives.tune_pd --generations 20 --popsize 10 --out pd-tuned.toml
 
-Each candidate multiplies every [pd] number by exp(x) (so signs never flip) and is scored
-by PD's mean success over stages A, D and E in both modes, each on the plain car and with
-domain randomization (SPEC §9.8), run in Rust (`run_eval`). Scored on the plain car alone,
+Each candidate multiplies every tunable [pd] number (how hard PD acts, not when; see
+`UNTUNED`) by exp(x) (so signs never flip) and is scored by PD's mean success over stages
+A, D and E in both modes, each on the plain car and with domain randomization (SPEC
+§9.8), run in Rust (`run_eval`), less a cost for air used over the bumps strip past its
+limit (owner, round 7: no firing whenever a wheel lifts). Scored on the plain car alone,
 the search found huge gains that burned most of the tank and fell apart on randomized
 cars (D 93% → 40%), so the randomized episodes keep it honest.
 Every generation draws a fresh block of tuning seeds from 2,000,000 up, disjoint from the
@@ -21,8 +23,8 @@ from pathlib import Path
 
 import cma
 
-from ninelives.sim_config import CONFIGS_DIR, load_sim_config
-from ninelives_sim import run_eval
+from ninelives.sim_config import CONFIGS_DIR, REPO_ROOT, load_sim_config
+from ninelives_sim import driving_air_kg, run_eval
 
 # Stages where PD is not already perfect (B and C are at 100%), in both modes, on the
 # plain car and with domain randomization.
@@ -35,7 +37,7 @@ TUNING_CELLS = [
 FIRST_TUNING_SEED = 2_000_000
 # Gains controllers.toml requires to be fractions (an up alignment is a cosine; the others
 # are shares of lift or weight), capped just below 1.
-FRACTION_GAINS = ("brake_usable_fraction", "ground_side_push")
+FRACTION_GAINS = ("ground_side_push",)
 MAX_FRACTION = 0.99
 
 
@@ -44,7 +46,8 @@ MAX_FRACTION = 0.99
 # - the angular-acceleration cap that keeps the passenger g-load down;
 # - the rules for when PD acts at all. Tuned freely, v3 braked any fall faster than
 #   0.4 m/s and fired on bumps (17 kg over the bumps test; owner: it must not fire
-#   whenever a wheel lifts), and braked too late to stop a fast fall.
+#   whenever a wheel lifts), and braked too late to stop a fast fall. v4 kept those but
+#   raised brake_usable_fraction to 0.99, starting fast-fall braking lower.
 UNTUNED = (
     "air_yaw_rate_rad_s",
     "air_pitch_rad",
@@ -53,6 +56,9 @@ UNTUNED = (
     "upright_alignment",
     "brake_speed_m_s",
     "brake_safety",
+    "brake_height_m",
+    "brake_margin_m",
+    "brake_usable_fraction",
     "lying_max_fall_speed_m_s",
     "quiet_max_tilt_deg",
     "quiet_max_spin_rad_s",
@@ -86,6 +92,33 @@ def scaled_gains(base: dict[str, float], log_factors: list[float]) -> dict[str, 
     return gains
 
 
+# Air used driving 8 s over the bumps strip (the PD bumps test's course and limit):
+# a candidate pays for every kg past the limit, in either mode. v4 used 10.6 kg there
+# (the repo's PD 6.7) to gain 0.046 success; at 0.05 per kg that gain is cancelled.
+BUMPS_COURSE = REPO_ROOT / "courses" / "bumps-strip.json"
+BUMPS_SECONDS = 8.0
+BUMPS_AIR_LIMIT_KG = 8.0
+BUMPS_COST_PER_KG = 0.05
+
+
+def bumps_air_kg(controllers_toml: str) -> float:
+    """The most air PD uses over the bumps strip, Realistic or Arcade, in kg."""
+    course_json = BUMPS_COURSE.read_text()
+    worst_kg = 0.0
+    for mode in ("realistic", "arcade"):
+        config = json.loads(load_sim_config(mode))
+        config["controllers_toml"] = controllers_toml
+        used_kg = driving_air_kg("pd", json.dumps(config), course_json, BUMPS_SECONDS)
+        worst_kg = max(worst_kg, used_kg)
+    return worst_kg
+
+
+def score(controllers_toml: str, episodes: int, first_seed: int) -> float:
+    """Mean success over `TUNING_CELLS`, less the cost of air past the bumps limit."""
+    over_kg = max(0.0, bumps_air_kg(controllers_toml) - BUMPS_AIR_LIMIT_KG)
+    return mean_success(controllers_toml, episodes, first_seed) - BUMPS_COST_PER_KG * over_kg
+
+
 def mean_success(controllers_toml: str, episodes: int, first_seed: int) -> float:
     """PD's success rate over `TUNING_CELLS`, `episodes` per cell from `first_seed`."""
     total = 0.0
@@ -109,9 +142,9 @@ def tune(generations: int, popsize: int, episodes: int, sigma: float) -> str:
         first_seed = FIRST_TUNING_SEED + generation * episodes
         candidates = strategy.ask()
         tomls = [with_pd_gains(base_toml, scaled_gains(base, list(x))) for x in candidates]
-        scores = [mean_success(text, episodes, first_seed) for text in tomls]
+        scores = [score(text, episodes, first_seed) for text in tomls]
         strategy.tell(candidates, [-score for score in scores])
-        repo_score = mean_success(base_toml, episodes, first_seed)
+        repo_score = score(base_toml, episodes, first_seed)
         top = max(range(len(scores)), key=lambda index: scores[index])
         if scores[top] - repo_score > best_margin:
             best_toml, best_margin = tomls[top], scores[top] - repo_score

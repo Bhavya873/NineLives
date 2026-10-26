@@ -7,12 +7,15 @@
 
 use nl_control::ControllerKind;
 use nl_control::build_controller;
-use nl_control::eval::{run_episode, summarise};
+use nl_control::eval::{air_used_driving, run_episode, summarise};
 use nl_policy::Policy;
 use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::course::CourseSpec;
 use nl_sim::episode::EpisodeResult;
+use nl_sim::input::InputFrame;
 use nl_sim::obs::{OBS_DIM, Observation};
 use nl_sim::randomization::EpisodeVariation;
+use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -64,6 +67,49 @@ pub fn run_eval(
     let results = results.map_err(PyValueError::new_err)?;
     let report = serde_json::json!({ "summary": summarise(&results), "episodes": results });
     Ok(report.to_string())
+}
+
+/// Air used, in kg, by `controller` driving straight along `course_json` at half throttle
+/// for `seconds`, with the config's car and mode and no episode rules: how much it fires
+/// that the driver didn't need, e.g. over courses/bumps-strip.json (the PD tuner's check).
+#[pyfunction]
+#[pyo3(signature = (controller, config_json, course_json, seconds, policy_json=None))]
+pub fn driving_air_kg(
+    controller: &str,
+    config_json: &str,
+    course_json: &str,
+    seconds: f32,
+    policy_json: Option<&str>,
+) -> PyResult<f32> {
+    let config = parse_sim_config(config_json).map_err(PyValueError::new_err)?;
+    let training = &config.training;
+    let mut controller = build_controller(
+        controller,
+        &training.vehicle,
+        training.mode,
+        &config.controllers_toml,
+        policy_json,
+    )
+    .map_err(|error| PyValueError::new_err(format!("driving_air_kg: {error}")))?;
+    let course = CourseSpec::from_json_str(course_json)
+        .map_err(|error| PyValueError::new_err(format!("driving_air_kg: course: {error}")))?;
+    let mut world = World::new_on_course(
+        &training.vehicle,
+        training.mode,
+        &course,
+        DEFAULT_GROUND_FRICTION,
+        0,
+    );
+    let half_throttle = InputFrame {
+        throttle: 127,
+        ..InputFrame::default()
+    };
+    Ok(air_used_driving(
+        &mut world,
+        &mut controller,
+        half_throttle,
+        seconds,
+    ))
 }
 
 /// The policy's actions (each in −1..1) for N observations (N × 41 → N × 10).

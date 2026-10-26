@@ -12,6 +12,7 @@ import {
   evalEpisodes,
   newGame,
   policyJson,
+  tickMany,
 } from './load-wasm.mjs';
 
 test('the AI cannot be chosen until a policy is loaded, then it can', () => {
@@ -26,17 +27,41 @@ test('the AI cannot be chosen until a policy is loaded, then it can', () => {
   assert.equal(game.hud()[HudField.Controller], ControllerCode.Ai);
 });
 
-test('with a policy loaded, T cycles PD, AI, Off from the PD start', () => {
+test('with a policy loaded, T cycles PD, AI, Hybrid, Off from the PD start', () => {
   const game = newGame();
   game.load_policy(policyJson);
 
   const seen = [];
-  for (let press = 0; press < 3; press += 1) {
+  for (let press = 0; press < 4; press += 1) {
     game.cycle_controller();
     seen.push(game.hud()[HudField.Controller]);
   }
 
-  assert.deepEqual(seen, [ControllerCode.Ai, ControllerCode.Off, ControllerCode.Pd]);
+  assert.deepEqual(seen, [
+    ControllerCode.Ai,
+    ControllerCode.HybridPd,
+    ControllerCode.Off,
+    ControllerCode.Pd,
+  ]);
+});
+
+test('Hybrid leaves a parked car to PD and hands a tumbling car to the AI', () => {
+  const game = newGame();
+  game.load_policy(policyJson);
+  game.set_controller('hybrid');
+  tickMany(game, new Uint8Array(4), 2); // one control step
+  assert.equal(game.hud()[HudField.Controller], ControllerCode.HybridPd);
+
+  // Drop tests start at a random tilt; only one past the upset angle (60°) hands over.
+  const seen = new Set();
+  for (let seed = 0n; seed < 20n; seed += 1n) {
+    game.drop_test(seed);
+    tickMany(game, new Uint8Array(4), 2);
+    seen.add(game.hud()[HudField.Controller]);
+  }
+
+  assert.ok(seen.has(ControllerCode.HybridAi), 'a steep drop reached the AI');
+  assert.ok(seen.has(ControllerCode.HybridPd), 'a gentle drop stayed with PD');
 });
 
 test('a policy made for another observation layout is refused, naming the hash', () => {

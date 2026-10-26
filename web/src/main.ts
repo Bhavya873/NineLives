@@ -101,7 +101,13 @@ async function start(): Promise<void> {
   });
   // SPEC §11.3: T cycles the controller; the sim owns the order (AI joins once loaded).
   onKeyPress('KeyT', () => game.cycle_controller());
-  void loadPolicy(game);
+  // Hybrid is the default once the policy is in (DECISIONS 2026-10-21); the game starts
+  // with PD while it loads, and a player who has already pressed T keeps their choice.
+  void loadPolicy(game).then((loaded) => {
+    if (loaded && game.hud()[HudField.Controller] === ControllerCode.Pd) {
+      game.set_controller('hybrid');
+    }
+  });
   bindTapButton(requireElement('chaos-button'), BUTTON_CHAOS);
 
   const frames: PhysicsFrames = {

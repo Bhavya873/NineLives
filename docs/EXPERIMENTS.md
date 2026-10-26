@@ -241,3 +241,15 @@ The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-
 
 - **The M7 bar is met on all ten test cells.** The PD reruns matched the committed `results/eval_pd_*` files episode for episode.
 - Owner decision after the result: the game defaults to Hybrid once the policy loads (DECISIONS).
+### 2026-10-21 — Round 7: PD tuning v3 and v4 on the round-7 sim (CMA-ES, not adopted)
+`python -m ninelives.tune_pd --generations 20 --popsize 10` (20 × 10 candidates, 200 episodes per cell, tuning seeds from 2,000,000; A, D, E × both modes × plain/randomized). Each took about 3 h on 8 cores. Validated with 300 episodes per cell on seeds from 1,500,000, against the repo gains.
+
+| Run | What was tuned | Validation mean success | A | E | B | D | Air | Bumps strip (8 s) | Outcome |
+|---|---|---|---|---|---|---|---|---|---|
+| repo | — | 0.893 | 70/71 | 85/84 | 100 | 99/100 | — | 6.7 kg | bar |
+| v3 | every [pd] number except the air-control feel and the accel cap | 0.938 | +15 to +18 | +5 to +11 | −3 | −1 to −3 | +50–70% | 17.4 kg | rejected: brakes every fall over 0.4 m/s (`brake_speed_m_s` 4.0 → 0.39), fires on bumps, brakes fast falls too late (`brake_safety` 0.62) |
+| v4 | v3 minus the rules for when PD acts (brake speed and safety, upright alignment, quiet and lying thresholds) | 0.939 | +14 to +16 | +5 to +10 | −1 to −2 | 0 | +25–50% | 10.6 kg | not adopted (owner): still fires more over bumps; `brake_usable_fraction` 0.99 starts fast-fall braking lower |
+
+- Tuning on success alone moves PD toward firing more often; the search needs the owner's behaviour rules as constraints, not just as tests afterwards.
+- v5 also froze where braking starts (brake height, margin, usable fraction) and paid 0.05 success per kg past 8 kg over the bumps strip, in either mode. Validation mean 0.893 → 0.919: A +8 to +12, E +2 to +7, B and C level, D −2 (99 → 97 plain, 97 → 95 randomized), air +5–10%, bumps strip 7.9 kg; all tests pass with it.
+- **Decision (owner, 2026-10-21): keep the repo gains.** Under Hybrid the AI flies the upsets, where v5's gains are, and PD drives and lands upright jumps (Stage D), where v5 is worse. Hybrid already clears the M7 bar against the repo PD. v5's file is not committed; rerun with the same command if wanted.
