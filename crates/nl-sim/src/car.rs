@@ -130,6 +130,11 @@ impl Car {
         self.valves.effective_throttles()
     }
 
+    /// A copy of the valves, for the actuator predictor.
+    pub(crate) fn valves(&self) -> Valves {
+        self.valves
+    }
+
     /// Sets steering, engine force and brakes from the driver's input.
     fn apply_driver_input(&mut self, physics: &PhysicsWorld, input: InputFrame) {
         let forward_speed_m_s = self.forward_speed_m_s(physics);

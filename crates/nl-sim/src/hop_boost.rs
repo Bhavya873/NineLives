@@ -28,7 +28,7 @@ pub enum HopBlockedReason {
 }
 
 /// The state of the Hop and Boost buttons' effects.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct HopBoost {
     hop_time_left_s: f32,
     hop_cooldown_left_s: f32,
