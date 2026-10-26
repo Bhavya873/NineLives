@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::conventions::{NOZZLE_COUNT, ON_WHEELS_MIN_WHEELS};
 use crate::modes::ModeParams;
 use crate::thrusters::safe_throttle;
+use crate::vehicle_config::DriveConfig;
 
 /// Indices of the four lift nozzles (L_FL, L_FR, L_RL, L_RR).
 const LIFT_NOZZLES: [usize; 4] = [0, 1, 2, 3];
@@ -27,7 +28,7 @@ pub enum HopBlockedReason {
 }
 
 /// The state of the Hop and Boost buttons' effects.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct HopBoost {
     hop_time_left_s: f32,
     hop_cooldown_left_s: f32,
@@ -78,8 +79,13 @@ impl HopBoost {
         None
     }
 
-    /// The throttles Hop and Boost add this step, in nozzle order.
-    pub fn feed_forward_throttles(&self, mode: &ModeParams) -> [f32; NOZZLE_COUNT] {
+    /// The throttles Hop and Boost add this step, in nozzle order. `boost_share` (0..1,
+    /// from `boost_speed_share`) scales Boost down near the Boost speed limit.
+    pub fn feed_forward_throttles(
+        &self,
+        mode: &ModeParams,
+        boost_share: f32,
+    ) -> [f32; NOZZLE_COUNT] {
         let mut throttles = [0.0; NOZZLE_COUNT];
         if self.hop_active() {
             for nozzle in LIFT_NOZZLES {
@@ -88,7 +94,7 @@ impl HopBoost {
         }
         if self.boost_active {
             for nozzle in BOOST_NOZZLES {
-                throttles[nozzle] = mode.boost_ff;
+                throttles[nozzle] = mode.boost_ff * boost_share;
             }
         }
         throttles
@@ -130,6 +136,13 @@ pub fn combine_throttles(
     commanded
 }
 
+/// How much of the Boost throttle is left at `forward_speed_m_s` (SPEC §7.8): all of it
+/// below the fade band, fading linearly to none at `drive.boost_max_speed_m_s`.
+pub fn boost_speed_share(drive: &DriveConfig, forward_speed_m_s: f32) -> f32 {
+    let speed_left_m_s = drive.boost_max_speed_m_s - forward_speed_m_s;
+    (speed_left_m_s / drive.boost_fade_m_s).clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,7 +163,7 @@ mod tests {
 
         hop_boost.update(true, false, 4, 260.0, &mode, DT_S);
 
-        let throttles = hop_boost.feed_forward_throttles(&mode);
+        let throttles = hop_boost.feed_forward_throttles(&mode, 1.0);
         assert_eq!(&throttles[0..4], &[0.75; 4]);
         assert_eq!(&throttles[4..10], &[0.0; 6]);
     }
@@ -196,5 +209,33 @@ mod tests {
             commanded,
             [1.0, 0.75, 0.75, 0.85, 0.3, 0.0, 0.0, 0.0, 1.0, 1.0]
         );
+    }
+
+    fn drive_config() -> DriveConfig {
+        crate::vehicle_config::VehicleConfig::from_toml_str(
+            crate::vehicle_config::DEFAULT_VEHICLE_TOML,
+        )
+        .unwrap()
+        .drive
+    }
+
+    #[test]
+    fn boost_is_full_below_the_fade_band_and_gone_at_the_limit() {
+        let drive = drive_config();
+        let limit_m_s = drive.boost_max_speed_m_s;
+        assert_eq!(boost_speed_share(&drive, 0.0), 1.0);
+        assert_eq!(
+            boost_speed_share(&drive, limit_m_s - drive.boost_fade_m_s),
+            1.0
+        );
+        assert_eq!(boost_speed_share(&drive, limit_m_s), 0.0);
+        assert_eq!(boost_speed_share(&drive, limit_m_s + 50.0), 0.0);
+    }
+
+    #[test]
+    fn boost_is_half_in_the_middle_of_the_fade_band() {
+        let drive = drive_config();
+        let middle_m_s = drive.boost_max_speed_m_s - 0.5 * drive.boost_fade_m_s;
+        assert!((boost_speed_share(&drive, middle_m_s) - 0.5).abs() < 1e-6);
     }
 }

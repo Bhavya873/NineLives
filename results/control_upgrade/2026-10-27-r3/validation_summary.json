@@ -1,0 +1,682 @@
+{
+ "pd_tuned": {
+  "plain/A/arcade": {
+   "success_rate": 0.8870000243186951,
+   "crash_rate": 0.11299999803304672,
+   "hard_landing_rate": 0.0010000000474974513,
+   "landing_heading_error_median_deg": 2.540048599243164,
+   "air_per_save_kg": 59.39059829711914
+  },
+  "plain/A/realistic": {
+   "success_rate": 0.8349999785423279,
+   "crash_rate": 0.16500000655651093,
+   "hard_landing_rate": 0.0020000000949949026,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 49.33776092529297
+  },
+  "plain/B/arcade": {
+   "success_rate": 0.9940000176429749,
+   "crash_rate": 0.006000000052154064,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 32.15298080444336
+  },
+  "plain/B/realistic": {
+   "success_rate": 0.9950000047683716,
+   "crash_rate": 0.004999999888241291,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 25.380653381347656
+  },
+  "plain/C/arcade": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.22965478897094727,
+   "air_per_save_kg": 34.590538024902344
+  },
+  "plain/C/realistic": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.3614315092563629,
+   "air_per_save_kg": 9.509321212768555
+  },
+  "plain/D/arcade": {
+   "success_rate": 0.996999979019165,
+   "crash_rate": 0.003000000026077032,
+   "hard_landing_rate": 0.003000000026077032,
+   "landing_heading_error_median_deg": 0.09472551941871643,
+   "air_per_save_kg": 23.557104110717773
+  },
+  "plain/D/realistic": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.012000000104308128,
+   "hard_landing_rate": 0.004999999888241291,
+   "landing_heading_error_median_deg": 0.09241343289613724,
+   "air_per_save_kg": 23.046234130859375
+  },
+  "plain/E/arcade": {
+   "success_rate": 0.9449999928474426,
+   "crash_rate": 0.05400000140070915,
+   "hard_landing_rate": 0.004000000189989805,
+   "landing_heading_error_median_deg": 0.47054386138916016,
+   "air_per_save_kg": 34.070457458496094
+  },
+  "plain/E/realistic": {
+   "success_rate": 0.921999990940094,
+   "crash_rate": 0.07800000160932541,
+   "hard_landing_rate": 0.003000000026077032,
+   "landing_heading_error_median_deg": 0.40860283374786377,
+   "air_per_save_kg": 25.364273071289062
+  },
+  "plain/F/arcade": {
+   "success_rate": 0.9259999990463257,
+   "crash_rate": 0.04899999871850014,
+   "hard_landing_rate": 0.0010000000474974513,
+   "landing_heading_error_median_deg": 0.9290350675582886,
+   "air_per_save_kg": 105.94792938232422
+  },
+  "plain/F/realistic": {
+   "success_rate": 0.8949999809265137,
+   "crash_rate": 0.05900000035762787,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.8928204774856567,
+   "air_per_save_kg": 97.16841125488281
+  },
+  "dr/A/arcade": {
+   "success_rate": 0.8460000157356262,
+   "crash_rate": 0.15399999916553497,
+   "hard_landing_rate": 0.0010000000474974513,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 57.689300537109375
+  },
+  "dr/A/realistic": {
+   "success_rate": 0.8460000157356262,
+   "crash_rate": 0.15399999916553497,
+   "hard_landing_rate": 0.0010000000474974513,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 57.689300537109375
+  },
+  "dr/B/arcade": {
+   "success_rate": 0.9959999918937683,
+   "crash_rate": 0.004000000189989805,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 34.074562072753906
+  },
+  "dr/B/realistic": {
+   "success_rate": 0.9959999918937683,
+   "crash_rate": 0.004000000189989805,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 34.074562072753906
+  },
+  "dr/C/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.012000000104308128,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.0721884965896606,
+   "air_per_save_kg": 36.624114990234375
+  },
+  "dr/C/realistic": {
+   "success_rate": 0.9520000219345093,
+   "crash_rate": 0.04600000008940697,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.3007237911224365,
+   "air_per_save_kg": 47.655731201171875
+  },
+  "dr/D/arcade": {
+   "success_rate": 0.9520000219345093,
+   "crash_rate": 0.041999999433755875,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 0.8559268116950989,
+   "air_per_save_kg": 27.696334838867188
+  },
+  "dr/D/realistic": {
+   "success_rate": 0.9520000219345093,
+   "crash_rate": 0.041999999433755875,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 0.8559268116950989,
+   "air_per_save_kg": 27.696334838867188
+  },
+  "dr/E/arcade": {
+   "success_rate": 0.8859999775886536,
+   "crash_rate": 0.10999999940395355,
+   "hard_landing_rate": 0.007000000216066837,
+   "landing_heading_error_median_deg": 1.2734864950180054,
+   "air_per_save_kg": 35.147117614746094
+  },
+  "dr/E/realistic": {
+   "success_rate": 0.8740000128746033,
+   "crash_rate": 0.12300000339746475,
+   "hard_landing_rate": 0.007000000216066837,
+   "landing_heading_error_median_deg": 1.4336796998977661,
+   "air_per_save_kg": 37.310115814208984
+  },
+  "dr/F/arcade": {
+   "success_rate": 0.6819999814033508,
+   "crash_rate": 0.1420000046491623,
+   "hard_landing_rate": 0.0010000000474974513,
+   "landing_heading_error_median_deg": 9.80527114868164,
+   "air_per_save_kg": 120.82318878173828
+  },
+  "dr/F/realistic": {
+   "success_rate": 0.6819999814033508,
+   "crash_rate": 0.1420000046491623,
+   "hard_landing_rate": 0.0010000000474974513,
+   "landing_heading_error_median_deg": 9.80527114868164,
+   "air_per_save_kg": 120.82318878173828
+  }
+ },
+ "hybrid_r3_best_32M": {
+  "plain/A/arcade": {
+   "success_rate": 0.8560000061988831,
+   "crash_rate": 0.14399999380111694,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 25.720951080322266,
+   "air_per_save_kg": 39.658363342285156
+  },
+  "plain/A/realistic": {
+   "success_rate": 0.8069999814033508,
+   "crash_rate": 0.19300000369548798,
+   "hard_landing_rate": 0.017999999225139618,
+   "landing_heading_error_median_deg": 0.4030408561229706,
+   "air_per_save_kg": 36.338951110839844
+  },
+  "plain/B/arcade": {
+   "success_rate": 0.984000027179718,
+   "crash_rate": 0.01600000075995922,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 17.118728637695312
+  },
+  "plain/B/realistic": {
+   "success_rate": 0.9829999804496765,
+   "crash_rate": 0.017000000923871994,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.193464279174805
+  },
+  "plain/C/arcade": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.22965478897094727,
+   "air_per_save_kg": 34.590538024902344
+  },
+  "plain/C/realistic": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.3614315092563629,
+   "air_per_save_kg": 9.509321212768555
+  },
+  "plain/D/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.014999999664723873,
+   "hard_landing_rate": 0.003000000026077032,
+   "landing_heading_error_median_deg": 0.09389613568782806,
+   "air_per_save_kg": 23.275522232055664
+  },
+  "plain/D/realistic": {
+   "success_rate": 0.9760000109672546,
+   "crash_rate": 0.024000000208616257,
+   "hard_landing_rate": 0.004999999888241291,
+   "landing_heading_error_median_deg": 0.09097837656736374,
+   "air_per_save_kg": 22.803346633911133
+  },
+  "plain/E/arcade": {
+   "success_rate": 0.9279999732971191,
+   "crash_rate": 0.07000000029802322,
+   "hard_landing_rate": 0.006000000052154064,
+   "landing_heading_error_median_deg": 0.4664451479911804,
+   "air_per_save_kg": 30.123247146606445
+  },
+  "plain/E/realistic": {
+   "success_rate": 0.9139999747276306,
+   "crash_rate": 0.08500000089406967,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 0.4108281135559082,
+   "air_per_save_kg": 22.868392944335938
+  },
+  "plain/F/arcade": {
+   "success_rate": 0.6320000290870667,
+   "crash_rate": 0.017999999225139618,
+   "hard_landing_rate": 0.017000000923871994,
+   "landing_heading_error_median_deg": 14.405411720275879,
+   "air_per_save_kg": 65.84813690185547
+  },
+  "plain/F/realistic": {
+   "success_rate": 0.671999990940094,
+   "crash_rate": 0.05700000002980232,
+   "hard_landing_rate": 0.01899999938905239,
+   "landing_heading_error_median_deg": 18.56389808654785,
+   "air_per_save_kg": 61.26374053955078
+  },
+  "dr/A/arcade": {
+   "success_rate": 0.8410000205039978,
+   "crash_rate": 0.1589999943971634,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 40.922607421875
+  },
+  "dr/A/realistic": {
+   "success_rate": 0.8410000205039978,
+   "crash_rate": 0.1589999943971634,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 40.922607421875
+  },
+  "dr/B/arcade": {
+   "success_rate": 0.9909999966621399,
+   "crash_rate": 0.008999999612569809,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.549543380737305
+  },
+  "dr/B/realistic": {
+   "success_rate": 0.9909999966621399,
+   "crash_rate": 0.008999999612569809,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.549543380737305
+  },
+  "dr/C/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.012000000104308128,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.0721884965896606,
+   "air_per_save_kg": 36.624114990234375
+  },
+  "dr/C/realistic": {
+   "success_rate": 0.9520000219345093,
+   "crash_rate": 0.04600000008940697,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.3007237911224365,
+   "air_per_save_kg": 47.655731201171875
+  },
+  "dr/D/arcade": {
+   "success_rate": 0.9319999814033508,
+   "crash_rate": 0.06300000101327896,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 0.836825966835022,
+   "air_per_save_kg": 27.17774200439453
+  },
+  "dr/D/realistic": {
+   "success_rate": 0.9319999814033508,
+   "crash_rate": 0.06300000101327896,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 0.836825966835022,
+   "air_per_save_kg": 27.17774200439453
+  },
+  "dr/E/arcade": {
+   "success_rate": 0.8809999823570251,
+   "crash_rate": 0.11400000005960464,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 1.3043686151504517,
+   "air_per_save_kg": 31.747989654541016
+  },
+  "dr/E/realistic": {
+   "success_rate": 0.8690000176429749,
+   "crash_rate": 0.12700000405311584,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 1.4816843271255493,
+   "air_per_save_kg": 33.89753723144531
+  },
+  "dr/F/arcade": {
+   "success_rate": 0.6299999952316284,
+   "crash_rate": 0.03799999877810478,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 20.65247344970703,
+   "air_per_save_kg": 67.11257934570312
+  },
+  "dr/F/realistic": {
+   "success_rate": 0.6299999952316284,
+   "crash_rate": 0.03799999877810478,
+   "hard_landing_rate": 0.012000000104308128,
+   "landing_heading_error_median_deg": 20.65247344970703,
+   "air_per_save_kg": 67.11257934570312
+  }
+ },
+ "hybrid_r3_latest_50M": {
+  "plain/A/arcade": {
+   "success_rate": 0.8510000109672546,
+   "crash_rate": 0.14900000393390656,
+   "hard_landing_rate": 0.006000000052154064,
+   "landing_heading_error_median_deg": 2.540048599243164,
+   "air_per_save_kg": 39.71767807006836
+  },
+  "plain/A/realistic": {
+   "success_rate": 0.7960000038146973,
+   "crash_rate": 0.20399999618530273,
+   "hard_landing_rate": 0.01899999938905239,
+   "landing_heading_error_median_deg": 1.1722208261489868,
+   "air_per_save_kg": 36.332923889160156
+  },
+  "plain/B/arcade": {
+   "success_rate": 0.9869999885559082,
+   "crash_rate": 0.013000000268220901,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 17.237289428710938
+  },
+  "plain/B/realistic": {
+   "success_rate": 0.9900000095367432,
+   "crash_rate": 0.009999999776482582,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.792835235595703
+  },
+  "plain/C/arcade": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.22965478897094727,
+   "air_per_save_kg": 34.590538024902344
+  },
+  "plain/C/realistic": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.3614315092563629,
+   "air_per_save_kg": 9.509321212768555
+  },
+  "plain/D/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.014999999664723873,
+   "hard_landing_rate": 0.003000000026077032,
+   "landing_heading_error_median_deg": 0.09389613568782806,
+   "air_per_save_kg": 23.275522232055664
+  },
+  "plain/D/realistic": {
+   "success_rate": 0.9760000109672546,
+   "crash_rate": 0.024000000208616257,
+   "hard_landing_rate": 0.004999999888241291,
+   "landing_heading_error_median_deg": 0.09097837656736374,
+   "air_per_save_kg": 22.803346633911133
+  },
+  "plain/E/arcade": {
+   "success_rate": 0.9210000038146973,
+   "crash_rate": 0.07699999958276749,
+   "hard_landing_rate": 0.007000000216066837,
+   "landing_heading_error_median_deg": 0.4666028320789337,
+   "air_per_save_kg": 30.060888290405273
+  },
+  "plain/E/realistic": {
+   "success_rate": 0.9039999842643738,
+   "crash_rate": 0.0949999988079071,
+   "hard_landing_rate": 0.013000000268220901,
+   "landing_heading_error_median_deg": 0.4108694791793823,
+   "air_per_save_kg": 22.76102638244629
+  },
+  "plain/F/arcade": {
+   "success_rate": 0.6290000081062317,
+   "crash_rate": 0.019999999552965164,
+   "hard_landing_rate": 0.02500000037252903,
+   "landing_heading_error_median_deg": 13.878166198730469,
+   "air_per_save_kg": 64.80907440185547
+  },
+  "plain/F/realistic": {
+   "success_rate": 0.6620000004768372,
+   "crash_rate": 0.05000000074505806,
+   "hard_landing_rate": 0.019999999552965164,
+   "landing_heading_error_median_deg": 18.812150955200195,
+   "air_per_save_kg": 60.823020935058594
+  },
+  "dr/A/arcade": {
+   "success_rate": 0.8479999899864197,
+   "crash_rate": 0.15199999511241913,
+   "hard_landing_rate": 0.009999999776482582,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 41.0816535949707
+  },
+  "dr/A/realistic": {
+   "success_rate": 0.8479999899864197,
+   "crash_rate": 0.15199999511241913,
+   "hard_landing_rate": 0.009999999776482582,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 41.0816535949707
+  },
+  "dr/B/arcade": {
+   "success_rate": 0.9890000224113464,
+   "crash_rate": 0.010999999940395355,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.673070907592773
+  },
+  "dr/B/realistic": {
+   "success_rate": 0.9890000224113464,
+   "crash_rate": 0.010999999940395355,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.673070907592773
+  },
+  "dr/C/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.012000000104308128,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.0721884965896606,
+   "air_per_save_kg": 36.624114990234375
+  },
+  "dr/C/realistic": {
+   "success_rate": 0.9520000219345093,
+   "crash_rate": 0.04600000008940697,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.3007237911224365,
+   "air_per_save_kg": 47.655731201171875
+  },
+  "dr/D/arcade": {
+   "success_rate": 0.9319999814033508,
+   "crash_rate": 0.06199999898672104,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 0.836825966835022,
+   "air_per_save_kg": 27.186603546142578
+  },
+  "dr/D/realistic": {
+   "success_rate": 0.9319999814033508,
+   "crash_rate": 0.06199999898672104,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 0.836825966835022,
+   "air_per_save_kg": 27.186603546142578
+  },
+  "dr/E/arcade": {
+   "success_rate": 0.8790000081062317,
+   "crash_rate": 0.11599999666213989,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 1.3031022548675537,
+   "air_per_save_kg": 31.733003616333008
+  },
+  "dr/E/realistic": {
+   "success_rate": 0.8669999837875366,
+   "crash_rate": 0.1289999932050705,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 1.460850477218628,
+   "air_per_save_kg": 33.885101318359375
+  },
+  "dr/F/arcade": {
+   "success_rate": 0.6299999952316284,
+   "crash_rate": 0.04500000178813934,
+   "hard_landing_rate": 0.014000000432133675,
+   "landing_heading_error_median_deg": 20.428409576416016,
+   "air_per_save_kg": 66.18111419677734
+  },
+  "dr/F/realistic": {
+   "success_rate": 0.6299999952316284,
+   "crash_rate": 0.04500000178813934,
+   "hard_landing_rate": 0.014000000432133675,
+   "landing_heading_error_median_deg": 20.428409576416016,
+   "air_per_save_kg": 66.18111419677734
+  }
+ },
+ "hybrid_r3b_latest_50M": {
+  "plain/A/arcade": {
+   "success_rate": 0.8560000061988831,
+   "crash_rate": 0.14399999380111694,
+   "hard_landing_rate": 0.004999999888241291,
+   "landing_heading_error_median_deg": 18.424530029296875,
+   "air_per_save_kg": 40.28440856933594
+  },
+  "plain/A/realistic": {
+   "success_rate": 0.8080000281333923,
+   "crash_rate": 0.19200000166893005,
+   "hard_landing_rate": 0.01600000075995922,
+   "landing_heading_error_median_deg": 3.5788803100585938,
+   "air_per_save_kg": 36.139892578125
+  },
+  "plain/B/arcade": {
+   "success_rate": 0.9800000190734863,
+   "crash_rate": 0.019999999552965164,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 19.13994598388672
+  },
+  "plain/B/realistic": {
+   "success_rate": 0.9819999933242798,
+   "crash_rate": 0.017999999225139618,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 20.98698616027832
+  },
+  "plain/C/arcade": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.22965478897094727,
+   "air_per_save_kg": 34.590538024902344
+  },
+  "plain/C/realistic": {
+   "success_rate": 1.0,
+   "crash_rate": 0.0,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 0.3614315092563629,
+   "air_per_save_kg": 9.509321212768555
+  },
+  "plain/D/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.014999999664723873,
+   "hard_landing_rate": 0.003000000026077032,
+   "landing_heading_error_median_deg": 0.09389613568782806,
+   "air_per_save_kg": 23.275522232055664
+  },
+  "plain/D/realistic": {
+   "success_rate": 0.9760000109672546,
+   "crash_rate": 0.024000000208616257,
+   "hard_landing_rate": 0.004999999888241291,
+   "landing_heading_error_median_deg": 0.09097837656736374,
+   "air_per_save_kg": 22.803346633911133
+  },
+  "plain/E/arcade": {
+   "success_rate": 0.9200000166893005,
+   "crash_rate": 0.07800000160932541,
+   "hard_landing_rate": 0.007000000216066837,
+   "landing_heading_error_median_deg": 0.4666028320789337,
+   "air_per_save_kg": 30.12574577331543
+  },
+  "plain/E/realistic": {
+   "success_rate": 0.9079999923706055,
+   "crash_rate": 0.09099999815225601,
+   "hard_landing_rate": 0.007000000216066837,
+   "landing_heading_error_median_deg": 0.4157460629940033,
+   "air_per_save_kg": 22.691986083984375
+  },
+  "plain/F/arcade": {
+   "success_rate": 0.7310000061988831,
+   "crash_rate": 0.02800000086426735,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 10.958915710449219,
+   "air_per_save_kg": 63.80986785888672
+  },
+  "plain/F/realistic": {
+   "success_rate": 0.6859999895095825,
+   "crash_rate": 0.05400000140070915,
+   "hard_landing_rate": 0.026000000536441803,
+   "landing_heading_error_median_deg": 18.50259017944336,
+   "air_per_save_kg": 58.62586212158203
+  },
+  "dr/A/arcade": {
+   "success_rate": 0.8299999833106995,
+   "crash_rate": 0.17000000178813934,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 41.111331939697266
+  },
+  "dr/A/realistic": {
+   "success_rate": 0.8299999833106995,
+   "crash_rate": 0.17000000178813934,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 3.0931756496429443,
+   "air_per_save_kg": 41.111331939697266
+  },
+  "dr/B/arcade": {
+   "success_rate": 0.984000027179718,
+   "crash_rate": 0.014999999664723873,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 20.126752853393555
+  },
+  "dr/B/realistic": {
+   "success_rate": 0.984000027179718,
+   "crash_rate": 0.014999999664723873,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": null,
+   "air_per_save_kg": 20.126752853393555
+  },
+  "dr/C/arcade": {
+   "success_rate": 0.9850000143051147,
+   "crash_rate": 0.012000000104308128,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.0721884965896606,
+   "air_per_save_kg": 36.624114990234375
+  },
+  "dr/C/realistic": {
+   "success_rate": 0.9520000219345093,
+   "crash_rate": 0.04600000008940697,
+   "hard_landing_rate": 0.0,
+   "landing_heading_error_median_deg": 1.3007237911224365,
+   "air_per_save_kg": 47.655731201171875
+  },
+  "dr/D/arcade": {
+   "success_rate": 0.9330000281333923,
+   "crash_rate": 0.06199999898672104,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 0.836825966835022,
+   "air_per_save_kg": 27.176788330078125
+  },
+  "dr/D/realistic": {
+   "success_rate": 0.9330000281333923,
+   "crash_rate": 0.06199999898672104,
+   "hard_landing_rate": 0.010999999940395355,
+   "landing_heading_error_median_deg": 0.836825966835022,
+   "air_per_save_kg": 27.176788330078125
+  },
+  "dr/E/arcade": {
+   "success_rate": 0.8730000257492065,
+   "crash_rate": 0.12099999934434891,
+   "hard_landing_rate": 0.009999999776482582,
+   "landing_heading_error_median_deg": 1.3031022548675537,
+   "air_per_save_kg": 31.759408950805664
+  },
+  "dr/E/realistic": {
+   "success_rate": 0.8610000014305115,
+   "crash_rate": 0.1340000033378601,
+   "hard_landing_rate": 0.009999999776482582,
+   "landing_heading_error_median_deg": 1.460850477218628,
+   "air_per_save_kg": 33.9184455871582
+  },
+  "dr/F/arcade": {
+   "success_rate": 0.6729999780654907,
+   "crash_rate": 0.050999999046325684,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 17.529640197753906,
+   "air_per_save_kg": 65.00672912597656
+  },
+  "dr/F/realistic": {
+   "success_rate": 0.6729999780654907,
+   "crash_rate": 0.050999999046325684,
+   "hard_landing_rate": 0.008999999612569809,
+   "landing_heading_error_median_deg": 17.529640197753906,
+   "air_per_save_kg": 65.00672912597656
+  }
+ }
+}

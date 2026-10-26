@@ -25,22 +25,57 @@ export const BODY_BEVEL_M = 0.05;
 
 /**
  * Top edge of the body seen from the left, as [x forward, y up] points from nose to
- * tail, a low sports car: a low, smooth nose, a long bonnet
- * sloping up to a set-back windscreen, a flat rear deck, and a ducktail lip in place of
- * a wing. The bonnet stays above the side ports' tops (about 0.23 m) near the nose.
+ * tail: a low, smooth nose, a long bonnet sloping up to a set-back windscreen, a flat
+ * rear deck, and a ducktail lip in place of a wing. Over the front side ports (x 1.4 m)
+ * the edge sits at about 0.28 m, so its 0.05 m rounding stays above the ports' tops
+ * (0.23 m).
  */
 const BODY_TOP_EDGE_M: [number, number][] = [
   [2.1, -0.04],
   [2.08, 0.06],
-  [1.98, 0.15],
-  [1.7, 0.23],
-  [1.3, 0.26],
-  [0.8, 0.27],
+  [1.98, 0.16],
+  [1.7, 0.27],
+  [1.3, 0.29],
+  [0.8, 0.295],
   [-1.4, 0.29],
   [-1.9, 0.32],
   [-2.06, 0.33],
   [-2.1, 0.22],
 ];
+
+/**
+ * Height of the body's top edge at `xM` metres forward, read off `BODY_TOP_EDGE_M` by
+ * straight lines between its points. Lamps, mirrors and side ports are placed from it.
+ */
+export function bodyTopM(xM: number): number {
+  let front = BODY_TOP_EDGE_M[0];
+  for (const back of BODY_TOP_EDGE_M.slice(1)) {
+    if (front && xM <= front[0] && xM >= back[0]) {
+      const along = (front[0] - xM) / (front[0] - back[0]);
+      return front[1] + (back[1] - front[1]) * along;
+    }
+    front = back;
+  }
+  throw new Error(`car-shape.ts: x = ${xM} m is off the car (the body runs from -2.1 to 2.1 m)`);
+}
+
+/**
+ * Height of the flank's bottom edge at `xM` metres forward: the top of the wheel arch
+ * where there is one, else the floor. Only for the middle of the car (|x| ≤ 1.8 m),
+ * before the nose and tail undersides are cut away.
+ */
+export function flankBottomM(xM: number): number {
+  if (Math.abs(xM) > 1.8) {
+    throw new Error(`car-shape.ts: flankBottomM covers |x| ≤ 1.8 m, got ${xM} m`);
+  }
+  for (const centreXM of ARCH_CENTRES_X_M) {
+    const offsetM = xM - centreXM;
+    if (Math.abs(offsetM) < ARCH_RADIUS_M) {
+      return ARCH_CENTRE_Y_M + Math.sqrt(ARCH_RADIUS_M ** 2 - offsetM ** 2);
+    }
+  }
+  return BODY_BOTTOM_M;
+}
 
 /**
  * Lower outline from tail to nose: the tail and nose undersides are cut away like the
@@ -78,7 +113,7 @@ export const LINER_PROFILE_M: [number, number][] = [
 /** Cabin outline: a low cabin with a steeply raked windscreen, a short roof and a long
  * fastback down to the deck. */
 export const CABIN_PROFILE_M: [number, number][] = [
-  [0.8, 0.25],
+  [0.8, 0.28],
   [0.0, 0.47],
   [-0.55, 0.47],
   [-1.55, 0.29],

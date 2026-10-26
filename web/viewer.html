@@ -10,7 +10,7 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #121a24;
+        background: #2a3d52;
         font-family: system-ui, sans-serif;
       }
       #viewer {
@@ -28,6 +28,20 @@
       }
       #viewer-status {
         top: 16px;
+      }
+      #viewer-board {
+        top: 56px;
+        border-spacing: 14px 3px;
+        font-variant-numeric: tabular-nums;
+      }
+      #viewer-board th {
+        color: #a9b6c4;
+        font-weight: 500;
+        text-align: left;
+      }
+      #viewer-board td:nth-child(n + 2),
+      #viewer-board th:nth-child(n + 2) {
+        text-align: right;
       }
       #viewer-help {
         bottom: 16px;
@@ -52,10 +66,11 @@
   <body>
     <div id="viewer"></div>
     <div id="viewer-status" class="panel">Loading checkpoints…</div>
+    <table id="viewer-board" class="panel"></table>
     <button id="arena-toggle" class="panel" type="button">Switch arena</button>
     <div id="viewer-help" class="panel">
-      64 cars, the same 64 drops, one checkpoint at a time · → / N next · ← / P previous · O flat /
-      obstacle arena · faded cars crashed · <a href="./">back to the game</a>
+      Each row of cars is one checkpoint, flying the same drops. Faded cars crashed. O switches
+      arena. <a href="./">Back to the game</a>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>
   </body>

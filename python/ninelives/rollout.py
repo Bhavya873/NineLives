@@ -3,9 +3,11 @@
 Training uses it to keep the best checkpoint (SPEC §9.10): every episode starts from a
 known seed, and the policy acts deterministically on observations normalized with the
 run's VecNormalize statistics. Each result is BatchedSim's episode row (SPEC §10 fields).
-A residual run's policy is scored the way it trained: as PD plus its residual.
+A residual run's policy is scored the way it trained: as PD plus its residual; a Hybrid
+run's as the shipped Hybrid controller.
 """
 
+import json
 from typing import Any
 
 import numpy as np
@@ -13,8 +15,25 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
 
 from ninelives.env import finished_episode
+from ninelives.eval import evaluate
+from ninelives.export import export_policy
 from ninelives.sim_config import load_sim_config
 from ninelives_sim import BatchedSim
+
+
+def checkpoint_policy_json(model: PPO, normalizer: VecNormalize) -> str:
+    """The model exported as the policy JSON the game loads (export it once per checkpoint)."""
+    return json.dumps(export_policy(model, normalizer, "checkpoint-eval"))
+
+
+def evaluate_hybrid(
+    policy_json: str, episodes: int, first_seed: int, mode: str, stage: str
+) -> list[dict[str, Any]]:
+    """Scores the policy as it ships (DECISIONS 2026-10-21, D4): run by the Rust Hybrid
+    controller (PD until the gate hands over), the code the game and the eval runner use.
+    Each stage runs at its hardest level; rows in seed order."""
+    report = evaluate("hybrid", stage, mode, episodes, first_seed, policy_json=policy_json)
+    return report["episodes"]
 
 
 def evaluate_fixed_seeds(

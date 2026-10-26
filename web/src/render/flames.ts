@@ -13,12 +13,14 @@ import {
 } from 'three';
 
 import type { NozzlePlace } from '../nozzle-layout.ts';
-import { buildNozzlePort, portPositionM } from './nozzle-ports.ts';
+import { SIDE_PORT_RADIUS_M, buildNozzlePort, portPositionM, portSurface } from './nozzle-ports.ts';
 
 /** Flame length at full throttle. */
 const FLAME_MAX_LENGTH_M = 1.4;
-/** Flame radius at the port; just wider than the 0.06 m port, so it reads as a jet. */
+/** Flame radius at a lift or tail port; just wider than the 0.06 m port, so it reads as a jet. */
 const FLAME_RADIUS_M = 0.08;
+/** Flame radius at a side port, in the same proportion to the smaller port. */
+const SIDE_FLAME_RADIUS_M = SIDE_PORT_RADIUS_M * 1.3;
 /** Below this throttle the flame is hidden rather than drawn as a sliver. */
 const FLAME_MIN_THROTTLE = 0.02;
 const FLAME_MAX_OPACITY = 0.85;
@@ -37,13 +39,15 @@ const CONE_AXIS = new Vector3(0, 1, 0);
 export function createFlames(carBody: Group, nozzles: NozzlePlace[]): Flame[] {
   // A unit-length cone with its wide base at the nozzle and its tip along +Y, so
   // scaling Y by the flame length stretches it away from the car.
-  const flameGeometry = new ConeGeometry(FLAME_RADIUS_M, 1, 12, 1, true).translate(0, 0.5, 0);
+  const flameGeometry = unitCone(FLAME_RADIUS_M);
+  const sideFlameGeometry = unitCone(SIDE_FLAME_RADIUS_M);
 
   const flames: Flame[] = [];
   const exhaust = new Vector3();
   for (const place of nozzles) {
     // The flame starts at the port's outer face and points along the exhaust.
-    const flame = new Mesh(flameGeometry, buildFlameMaterial());
+    const geometry = portSurface(place) === 'side' ? sideFlameGeometry : flameGeometry;
+    const flame = new Mesh(geometry, buildFlameMaterial());
     flame.position.fromArray(portPositionM(place));
     flame.quaternion.setFromUnitVectors(CONE_AXIS, exhaust.fromArray(place.exhaust));
     flame.visible = false;
@@ -67,6 +71,11 @@ export function updateFlames(flames: Flame[], throttles: Float32Array): void {
       flame.material.opacity = throttle * FLAME_MAX_OPACITY;
     }
   }
+}
+
+/** An open cone 1 m long with a `radiusM` base at the origin and its tip along +Y. */
+function unitCone(radiusM: number): ConeGeometry {
+  return new ConeGeometry(radiusM, 1, 12, 1, true).translate(0, 0.5, 0);
 }
 
 /** Additive and see-through, so overlapping flames glow brighter like gas jets. */

@@ -8,7 +8,7 @@ const MARGIN_M = 0.4;
 /** A dot never fades out completely, so idle nozzles still show where they are. */
 const IDLE_OPACITY = 0.25;
 /** Map scale; the same on both axes so the car is not stretched. */
-const PIXELS_PER_M = 26;
+const PIXELS_PER_M = 20;
 /** Glow steps; coarse enough that most frames write nothing. */
 const OPACITY_STEPS = 20;
 

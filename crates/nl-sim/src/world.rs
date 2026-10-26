@@ -13,6 +13,7 @@ use rand_chacha::ChaCha8Rng;
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::actuator_model::ActuatorState;
 use crate::car::Car;
 use crate::car_state::{
     CarModel, CarState, TERRAIN_PROBE_COUNT, Touchdown, height_above_ground_m, read_car_model,
@@ -30,10 +31,11 @@ use crate::course_build::{OBSTACLE_USER_DATA, build_course_shapes, shape_collide
 use crate::course_triggers::{CourseTriggers, TriggerAction};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::g_load::GLoad;
-use crate::hop_boost::{HopBlockedReason, HopBoost, combine_throttles};
+use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
+use crate::thrusters::full_throttle_force_body_n;
 use crate::vehicle_config::VehicleConfig;
 use crate::wind::{Wind, WindLevelConfig};
 
@@ -80,7 +82,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 16;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 17;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -280,7 +282,11 @@ impl World {
             self.knock();
         }
         // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
-        let feed_forward = self.hop_boost.feed_forward_throttles(&self.mode);
+        let forward_speed_m_s = self.car.forward_speed_m_s(&self.physics);
+        let boost_share = boost_speed_share(&self.car.config().drive, forward_speed_m_s);
+        let feed_forward = self
+            .hop_boost
+            .feed_forward_throttles(&self.mode, boost_share);
         let controller = if self.thrusters_locked() {
             [0.0; NOZZLE_COUNT]
         } else {
@@ -688,6 +694,36 @@ impl World {
     /// The car's mass, inertia and what each nozzle can push (for PD's allocation).
     pub fn car_model(&self) -> CarModel {
         read_car_model(&self.physics, &self.car)
+    }
+
+    /// A copy of everything that decides what the nozzles push next, for predicting a
+    /// control interval (`ActuatorState::predict`). Reading it changes nothing.
+    pub fn actuator_state(&self) -> ActuatorState {
+        let config = self.car.config();
+        let body = &self.physics.bodies[self.car.chassis];
+        let centre_of_mass_m = body.mass_properties().local_mprops.local_com;
+        let mut full_push_body_n = [[0.0; 3]; NOZZLE_COUNT];
+        let mut lever_body_m = [[0.0; 3]; NOZZLE_COUNT];
+        for (index, nozzle) in config.thrusters.nozzles.iter().enumerate() {
+            full_push_body_n[index] = full_throttle_force_body_n(nozzle).to_array();
+            lever_body_m[index] =
+                (Vector::from_array(nozzle.position_m) - centre_of_mass_m).to_array();
+        }
+        let forward_speed_m_s = self.car.forward_speed_m_s(&self.physics);
+        ActuatorState {
+            valves: self.car.valves(),
+            hop_boost: self.hop_boost,
+            tank: self.tank,
+            mode: self.mode,
+            boost_held: self.previous_input.is_pressed(BUTTON_BOOST),
+            boost_share: boost_speed_share(&config.drive, forward_speed_m_s),
+            wheels_down: self.wheels_touching_count(),
+            thrusters_locked: self.thrusters_locked(),
+            valve_time_constant_s: config.thrusters.valve_time_constant_s,
+            exhaust_speed_m_s: config.thrusters.exhaust_speed_m_s,
+            full_push_body_n,
+            lever_body_m,
+        }
     }
 
     /// True when the next `step` starts a control step: controllers run at 60 Hz, once

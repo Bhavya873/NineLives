@@ -106,6 +106,18 @@ pub enum PieceTemplate {
         angular_roll_n_m_s: [f32; 2],
         run_out_m: f32,
     },
+    /// A flip plate: a kick plate with one of the named `presets`, its impulses scaled by
+    /// a drawn `strength`. It throws the car into a front or back flip, a barrel roll, a
+    /// flat spin or onto its roof, so the thrusters must save it (a jump).
+    /// `strong_strength` is not drawn here: hand-made courses and Stage F use it for
+    /// flips the thrusters can't stop before the car is upside down.
+    FlipPlate {
+        weight: f32,
+        strength: [f32; 2],
+        strong_strength: f32,
+        presets: Vec<FlipPreset>,
+        run_out_m: f32,
+    },
     /// A halfpipe to drive through.
     Halfpipe {
         weight: f32,
@@ -119,6 +131,58 @@ pub enum PieceTemplate {
         height_m: [f32; 2],
         run_out_m: f32,
     },
+}
+
+/// One named flip-plate kick. Both impulses are in the world frame, so they suit a course
+/// running along +X, as every generated course does.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FlipPreset {
+    /// What the kick does, e.g. "front_flip".
+    pub name: String,
+    /// Its relative chance on a generated course; 0 keeps it for hand-made courses.
+    pub weight: f32,
+    /// Linear impulse, in N·s.
+    pub impulse_n_s: [f32; 3],
+    /// Angular impulse, in N·m·s (X rolls right, Y yaws left, Z pitches the nose up).
+    pub angular_n_m_s: [f32; 3],
+}
+
+/// One of `presets`, drawn by weight (Stage F and generated flip plates share it).
+pub(crate) fn pick_preset<'a>(presets: &'a [FlipPreset], rng: &mut ChaCha8Rng) -> &'a FlipPreset {
+    let weights: Vec<f32> = presets.iter().map(|preset| preset.weight).collect();
+    let indices: Vec<usize> = (0..presets.len()).collect();
+    &presets[pick_weighted(&indices, &weights, rng)]
+}
+
+impl FlipPreset {
+    /// Every impulse is a finite number and the weight is finite and not negative.
+    fn is_sane(&self) -> bool {
+        let values = self.impulse_n_s.iter().chain(&self.angular_n_m_s);
+        let impulses_finite = values.into_iter().all(|value| value.is_finite());
+        impulses_finite && self.weight.is_finite() && self.weight >= 0.0
+    }
+
+    /// The kick plate piece at `pos` with this preset's impulses times `strength`.
+    pub fn kick_plate_at(&self, pos: [f32; 3], strength: f32) -> PieceSpec {
+        PieceSpec::KickPlate {
+            pos,
+            yaw: 0.0,
+            impulse: self.impulse_n_s.map(|value| value * strength),
+            angular: self.angular_n_m_s.map(|value| value * strength),
+        }
+    }
+}
+
+/// The flip plate settings from pieces.json, for tests, courses and Stage F.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FlipPlates {
+    /// Every named kick.
+    pub presets: Vec<FlipPreset>,
+    /// The strength range generated courses draw from (mild: the thrusters stop the flip).
+    pub strength: [f32; 2],
+    /// The strength of a strong plate, which turns the car over even with the thrusters on.
+    pub strong_strength: f32,
 }
 
 /// Why pieces.json could not be used.
@@ -137,6 +201,26 @@ impl PieceCatalog {
         let catalog: PieceCatalog = serde_json::from_str(text)?;
         catalog.check()?;
         Ok(catalog)
+    }
+
+    /// The first flip plate template's presets and strengths, if there is one.
+    pub fn flip_plates(&self) -> Option<FlipPlates> {
+        for piece in &self.pieces {
+            if let PieceTemplate::FlipPlate {
+                strength,
+                strong_strength,
+                presets,
+                ..
+            } = piece
+            {
+                return Some(FlipPlates {
+                    presets: presets.clone(),
+                    strength: *strength,
+                    strong_strength: *strong_strength,
+                });
+            }
+        }
+        None
     }
 
     /// The built-in pieces.json, read once.
@@ -177,7 +261,7 @@ impl PieceCatalog {
         for (index, piece) in self.pieces.iter().enumerate() {
             if !piece.has_sane_numbers() {
                 return Err(PieceCatalogError::Bad(format!(
-                    "piece {index}: weights and run-outs must be zero or more, and ranges [low, high] with 0 ≤ low ≤ high"
+                    "piece {index}: weights and run-outs must be zero or more, ranges [low, high] with 0 ≤ low ≤ high, and a flip plate needs presets with finite impulses and at least one weight above zero"
                 )));
             }
             total_weight += piece.weight();
@@ -199,6 +283,7 @@ impl PieceTemplate {
             | PieceTemplate::Corkscrew { weight, .. }
             | PieceTemplate::Bumps { weight, .. }
             | PieceTemplate::KickPlate { weight, .. }
+            | PieceTemplate::FlipPlate { weight, .. }
             | PieceTemplate::Halfpipe { weight, .. }
             | PieceTemplate::Wall { weight, .. } => *weight,
         }
@@ -213,6 +298,7 @@ impl PieceTemplate {
             | PieceTemplate::Corkscrew { run_out_m, .. }
             | PieceTemplate::Bumps { run_out_m, .. }
             | PieceTemplate::KickPlate { run_out_m, .. }
+            | PieceTemplate::FlipPlate { run_out_m, .. }
             | PieceTemplate::Halfpipe { run_out_m, .. }
             | PieceTemplate::Wall { run_out_m, .. } => *run_out_m,
         }
@@ -225,6 +311,7 @@ impl PieceTemplate {
             PieceTemplate::Ramp { .. }
                 | PieceTemplate::RampGap { .. }
                 | PieceTemplate::Corkscrew { .. }
+                | PieceTemplate::FlipPlate { .. }
                 | PieceTemplate::Wall { .. }
         )
     }
@@ -274,6 +361,18 @@ impl PieceTemplate {
                 angular_roll_n_m_s,
                 ..
             } => vec![*impulse_up_n_s, *impulse_side_n_s, *angular_roll_n_m_s],
+            PieceTemplate::FlipPlate {
+                strength,
+                strong_strength,
+                presets,
+                ..
+            } => {
+                let total_weight: f32 = presets.iter().map(|preset| preset.weight).sum();
+                if !presets.iter().all(FlipPreset::is_sane) || total_weight <= 0.0 {
+                    return false;
+                }
+                vec![*strength, [*strong_strength, *strong_strength]]
+            }
             PieceTemplate::Halfpipe {
                 radius_m, length_m, ..
             } => vec![*radius_m, *length_m],
@@ -415,6 +514,13 @@ fn lay_piece(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> (Vec<P
             )],
             KICK_PLATE_LENGTH_M,
         ),
+        PieceTemplate::FlipPlate {
+            strength, presets, ..
+        } => {
+            let preset = pick_preset(presets, rng);
+            let plate = preset.kick_plate_at(pos, draw(rng, *strength));
+            (vec![plate], KICK_PLATE_LENGTH_M)
+        }
         PieceTemplate::Halfpipe {
             radius_m, length_m, ..
         } => {

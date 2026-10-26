@@ -54,6 +54,112 @@ def test_a_resumed_run_carries_on_from_its_saved_step_and_level(tmp_path):
     assert state.curriculum.levels["A"] >= 2
 
 
+def hybrid_config(tmp_path: Path, total_steps: int) -> Path:
+    """The small config trained under the Hybrid gate on Stages A and F."""
+    config = yaml.safe_load(small_config(tmp_path, total_steps).read_text())
+    config["controller"] = "hybrid"
+    config["stages"] = ["A", "F"]
+    config["curriculum"]["stage_weights"] = {"A": 0.5, "F": 0.5}
+    config["curriculum"]["start_at_hardest"] = True
+    path = tmp_path / "hybrid.yaml"
+    path.write_text(yaml.safe_dump(config))
+    return path
+
+
+def test_a_hybrid_smoke_run_trains_under_the_gate_and_keeps_a_best_checkpoint(tmp_path):
+    state = run(tmp_path, hybrid_config(tmp_path, 20_000))
+
+    assert state.steps >= 20_000
+    assert (tmp_path / "smoke" / "best" / "model.zip").is_file()
+    # The best checkpoint was scored by the Rust Hybrid eval, so it has a real rate.
+    assert 0.0 <= state.best_eval_success <= 1.0
+
+
+def test_a_hybrid_run_that_climbs_a_curriculum_is_refused(tmp_path):
+    path = hybrid_config(tmp_path, 1024)
+    config = yaml.safe_load(path.read_text())
+    config["curriculum"]["start_at_hardest"] = False
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match="start_at_hardest"):
+        run(tmp_path, path)
+
+
+@pytest.mark.parametrize(
+    ("ppo_change", "stages", "message"),
+    [
+        ({"activation": "relu"}, None, "tanh"),
+        ({}, ["D"], "almost never tip"),
+    ],
+)
+def test_a_hybrid_config_that_could_not_train_or_score_is_refused(
+    tmp_path, ppo_change, stages, message
+):
+    path = hybrid_config(tmp_path, 1024)
+    config = yaml.safe_load(path.read_text())
+    config["ppo"].update(ppo_change)
+    if stages is not None:
+        config["stages"] = stages
+        config["curriculum"]["stage_weights"] = {stage: 1.0 for stage in stages}
+    path.write_text(yaml.safe_dump(config))
+
+    with pytest.raises(ValueError, match=message):
+        run(tmp_path, path)
+
+
+def test_a_hybrid_run_cannot_carry_over_a_curriculum(tmp_path):
+    run(tmp_path, small_config(tmp_path, 2048))
+    checkpoint = tmp_path / "smoke" / "latest"
+    config = hybrid_config(tmp_path, 1024)
+    args = ["--config", str(config), "--run-id", "hybrid", "--runs-dir", str(tmp_path)]
+
+    with pytest.raises(SystemExit, match="keep-curriculum"):
+        train([*args, "--init-from", str(checkpoint), "--keep-curriculum"])
+
+
+def policy_weights(model_zip: Path) -> object:
+    """Every policy parameter of a saved model, as one flat tensor."""
+    import torch
+    from stable_baselines3 import PPO
+
+    model = PPO.load(model_zip, device="cpu")
+    return torch.nn.utils.parameters_to_vector(model.policy.parameters())
+
+
+def test_two_runs_from_the_same_seed_learn_the_same_weights(tmp_path):
+    import torch
+
+    config = small_config(tmp_path, 4096)
+    for run_id in ("first", "second"):
+        train(["--config", str(config), "--run-id", run_id, "--runs-dir", str(tmp_path)])
+
+    first = policy_weights(tmp_path / "first" / "latest" / "model.zip")
+    second = policy_weights(tmp_path / "second" / "latest" / "model.zip")
+    assert torch.equal(first, second)
+
+
+def test_a_policy_weight_that_turns_nan_stops_training():
+    import torch
+    from stable_baselines3 import PPO
+
+    from ninelives.callbacks import check_finite_weights
+
+    model = PPO("MlpPolicy", "Pendulum-v1", device="cpu")
+    check_finite_weights(model)
+    with torch.no_grad():
+        model.policy.action_net.bias[0] = float("nan")
+
+    with pytest.raises(FloatingPointError, match="action_net.bias"):
+        check_finite_weights(model)
+
+
+def test_the_time_limit_stops_early_and_still_saves_latest(tmp_path):
+    state = run(tmp_path, small_config(tmp_path, 1_000_000), "--max-minutes", "0")
+
+    assert state.steps < 1_000_000
+    assert (tmp_path / "smoke" / "latest" / "model.zip").is_file()
+
+
 def test_starting_over_an_existing_run_is_refused(tmp_path):
     config = small_config(tmp_path, 1024)
     run(tmp_path, config)
@@ -345,6 +451,19 @@ def test_reward_overrides_replace_only_the_named_weights():
         override_reward_weights(toml, {"no_such_weight": 1.0})
 
 
+def test_reward_overrides_with_a_shape_prefix_replace_only_the_shape_entry():
+    from ninelives.sim_config import override_reward_weights
+
+    toml = "[weights]\nhard_landing = 1.0\n\n[shape]\nhard_landing = 7.0\n"
+
+    out = override_reward_weights(toml, {"shape.hard_landing": 3.0})
+
+    assert "[weights]\nhard_landing = 1.0" in out
+    assert "[shape]\nhard_landing = 3.0" in out
+    with pytest.raises(ValueError, match="not a \\[shape\\] entry"):
+        override_reward_weights(toml, {"shape.no_such_entry": 1.0})
+
+
 def test_validation_seeds_inside_the_test_range_are_refused(tmp_path):
     config = yaml.safe_load(small_config(tmp_path, 1024).read_text())
     config["checkpoint"]["eval_seed"] = 500
@@ -384,3 +503,13 @@ def test_keep_curriculum_carries_over_the_checkpoints_unlocked_stages(tmp_path):
     result = train([*args, "--init-from", str(source), "--keep-curriculum"])
 
     assert result.curriculum.unlocked == 2
+
+
+def test_the_shipped_flight_config_trains_under_the_gate_from_the_hardest_level():
+    from ninelives.train_config import load_train_config
+
+    config = load_train_config(CONFIGS_DIR / "train" / "flight.yaml")
+
+    assert config.controller == "hybrid"
+    assert config.curriculum_start_at_hardest
+    assert "F" in config.stages

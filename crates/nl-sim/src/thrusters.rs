@@ -12,7 +12,7 @@ use crate::conventions::NOZZLE_COUNT;
 use crate::vehicle_config::{NozzleConfig, ThrusterConfig};
 
 /// The valves' current openings: the "effective throttles" (SPEC §7.7).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Valves {
     effective_throttles: [f32; NOZZLE_COUNT],
 }
@@ -76,7 +76,8 @@ pub fn apply_nozzle_forces(
         if throttle <= 0.0 {
             continue;
         }
-        let force_body_n = full_throttle_force_body_n(nozzle) * (throttle * thrust_scale);
+        let force_body_n =
+            scaled_push_n(full_throttle_force_body_n(nozzle), throttle, thrust_scale);
         total_force_n += force_body_n.length();
         // Rotate the push and its point from the body frame into the world frame.
         let force_world_n = pose.rotation * force_body_n;
@@ -95,8 +96,15 @@ pub fn nozzle_force_and_torque_at_full_throttle(nozzle: &NozzleConfig) -> (Vecto
     (force_n, torque_n_m)
 }
 
+/// A nozzle's push at `throttle` (valve opening) with every push multiplied by
+/// `thrust_scale`, from its full-throttle push. The world and the actuator predictor both
+/// use it, so they compute the same bits.
+pub(crate) fn scaled_push_n(full_push_n: Vector, throttle: f32, thrust_scale: f32) -> Vector {
+    full_push_n * (throttle * thrust_scale)
+}
+
 /// One nozzle's push at full throttle in Realistic mode, in the body frame.
-fn full_throttle_force_body_n(nozzle: &NozzleConfig) -> Vector {
+pub(crate) fn full_throttle_force_body_n(nozzle: &NozzleConfig) -> Vector {
     Vector::from_array(nozzle.direction) * nozzle.max_force_n
 }
 

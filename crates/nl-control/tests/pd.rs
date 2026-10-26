@@ -1,10 +1,9 @@
-//! PD baseline tests (SPEC §8, §12): the allocation's answers stay in 0..1 and produce
-//! the wanted push, PD's torques have restoring signs, and PD saves a dropped car.
+//! PD baseline tests (SPEC §8, §12): PD's torques have restoring signs, and PD saves a
+//! dropped car. The allocation PD calls is tested in allocation.rs.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
 #![allow(clippy::unwrap_used)]
 
-use nl_control::allocation::Allocator;
 use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
 use nl_control::{ControlCtx, Controller, Off, Pd};
 use nl_sim::car_state::{CarModel, CarState};
@@ -38,17 +37,6 @@ fn car_model() -> CarModel {
     new_world().car_model()
 }
 
-/// The push the throttles make: B·u, with B's columns the nozzle wrenches.
-fn produced_wrench(model: &CarModel, throttles: &[f32; NOZZLE_COUNT]) -> [f32; 6] {
-    let mut wrench = [0.0; 6];
-    for (nozzle, throttle) in throttles.iter().enumerate() {
-        for (total, push) in wrench.iter_mut().zip(model.nozzle_wrenches[nozzle]) {
-            *total += push * throttle;
-        }
-    }
-    wrench
-}
-
 /// Runs the world for `seconds` with `controller` at 60 Hz; returns every event.
 fn run_with(world: &mut World, controller: &mut dyn Controller, seconds: f32) -> Vec<SimEvent> {
     let mut events = Vec::new();
@@ -61,61 +49,6 @@ fn run_with(world: &mut World, controller: &mut dyn Controller, seconds: f32) ->
         events.extend(world.drain_events());
     }
     events
-}
-
-#[test]
-fn the_allocation_lifts_with_the_four_lift_nozzles_and_stays_in_bounds() {
-    let model = car_model();
-    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
-    let wanted = [0.0, 20000.0, 0.0, 0.0, 0.0, 0.0];
-    let mut throttles = [0.0; NOZZLE_COUNT];
-
-    // Warm-started over a few control steps, as in the game.
-    for _ in 0..10 {
-        allocator.solve(wanted, 1.0, &mut throttles);
-    }
-
-    assert!(
-        throttles
-            .iter()
-            .all(|throttle| (0.0..=1.0).contains(throttle))
-    );
-    let lift = produced_wrench(&model, &throttles)[1];
-    assert!(
-        (lift - 20000.0).abs() < 1000.0,
-        "lift {lift} N, throttles {throttles:?}"
-    );
-    assert!(
-        throttles[4..].iter().all(|throttle| *throttle < 0.05),
-        "{throttles:?}"
-    );
-}
-
-#[test]
-fn one_control_step_from_all_valves_shut_already_gives_most_of_a_braking_push() {
-    // Braking starts from shut valves (PD is off until the car leaves the ground),
-    // and the brake window lasts only a few control steps.
-    let model = car_model();
-    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
-    let brake_n = 1.5 * model.mass_kg * 9.81;
-    let mut throttles = [0.0; NOZZLE_COUNT];
-
-    allocator.solve([0.0, brake_n, 0.0, 0.0, 0.0, 0.0], 1.0, &mut throttles);
-
-    let lift = produced_wrench(&model, &throttles)[1];
-    assert!(lift > 0.9 * brake_n, "{lift} N of {brake_n} N");
-}
-
-#[test]
-fn a_push_no_nozzle_can_make_leaves_every_valve_shut() {
-    let model = car_model();
-    let allocator = Allocator::new(&model.nozzle_wrenches, &controllers().allocation);
-    // Straight down: thrust is one-sided, nothing pushes the car down.
-    let mut throttles = [0.0; NOZZLE_COUNT];
-
-    allocator.solve([0.0, -20000.0, 0.0, 0.0, 0.0, 0.0], 1.0, &mut throttles);
-
-    assert_eq!(throttles, [0.0; NOZZLE_COUNT]);
 }
 
 #[test]
@@ -464,4 +397,30 @@ fn pd_driving_over_bumps_uses_almost_no_air() {
     let x_m = world.chassis_pose().position_m[0];
     assert!(x_m > 80.0, "only reached x = {x_m} m ({used_kg} kg used)");
     assert!(used_kg < 8.0, "used {used_kg} kg");
+}
+
+/// A state tilted `tilt_deg` about the forward axis.
+fn tilted(tilt_deg: f32) -> CarState {
+    let tilt_rad = tilt_deg.to_radians();
+    CarState {
+        gravity_dir_body: [0.0, -tilt_rad.cos(), tilt_rad.sin()],
+        ..CarState::default()
+    }
+}
+
+#[test]
+fn pd_uses_its_upright_gains_near_level_and_its_tumble_gains_past_the_band() {
+    let config = controllers();
+    let pd = Pd::new(&car_model(), &config);
+    let start = config.pd.tumble_blend_start_deg;
+    let end = config.pd.tumble_blend_end_deg;
+
+    let near_level = pd.attitude_gains(&tilted(start - 5.0));
+    let halfway = pd.attitude_gains(&tilted((start + end) / 2.0));
+    let tumbling = pd.attitude_gains(&tilted(end + 30.0));
+
+    assert_eq!(near_level, (config.pd.kp, config.pd.kd));
+    assert_eq!(tumbling, (config.pd.kp_tumble, config.pd.kd_tumble));
+    let middle_kp = (config.pd.kp + config.pd.kp_tumble) / 2.0;
+    assert!((halfway.0 - middle_kp).abs() < 0.05, "{halfway:?}");
 }

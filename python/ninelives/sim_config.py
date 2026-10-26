@@ -21,13 +21,16 @@ def load_sim_config(
     reward_overrides: dict[str, float] | None = None,
     residual: dict[str, object] | None = None,
     randomize_mode: bool = True,
+    controller: str | None = None,
 ) -> str:
     """The sim config JSON for `mode` ("realistic" or "arcade") and `stage`; `randomize`
     turns on SPEC §9.8 domain randomization for BatchedSim episodes (training only);
-    `reward_overrides` replaces `[weights]` values of reward.toml (e.g. for an ablation);
+    `reward_overrides` replaces `[weights]` values of reward.toml (e.g. for an ablation;
+    `shape.<name>` names a `[shape]` value);
     `residual` (`{"base": "pd", "scale": …}`) makes BatchedSim add the action to PD's
     throttles (`ResidualSettings.as_sim_json`); `randomize_mode=False` keeps `mode`'s
-    preset under randomization, for a policy trained for one mode."""
+    preset under randomization, for a policy trained for one mode; `controller="hybrid"`
+    trains under the game's Hybrid gate (PD flies until the gate hands over)."""
     if not CONFIGS_DIR.is_dir():
         raise FileNotFoundError(
             f"configs folder not found at {CONFIGS_DIR}: install ninelives from the repo "
@@ -49,17 +52,27 @@ def load_sim_config(
     }
     if residual is not None:
         config["residual"] = residual
+    if controller is not None:
+        config["controller"] = controller
     return json.dumps(config)
 
 
 def override_reward_weights(reward_toml: str, overrides: dict[str, float]) -> str:
-    """reward.toml's text with each `[weights]` entry named in `overrides` set to the
-    new value. Rust still checks every weight; a name that isn't a weight is an error."""
-    head, separator, rest = reward_toml.partition("[weights]")
-    weights, next_header, tail = rest.partition("\n[")
+    """reward.toml's text with each entry named in `overrides` set to the new value.
+    A plain name is a `[weights]` entry; `shape.<name>` is a `[shape]` entry. Rust still
+    checks every value; a name that isn't in its table is an error."""
     for name, value in overrides.items():
-        pattern = re.compile(rf"^{re.escape(name)}\s*=.*$", re.MULTILINE)
-        weights, count = pattern.subn(f"{name} = {value!r}", weights)
-        if count != 1:
-            raise ValueError(f"reward_overrides: `{name}` is not a [weights] entry of reward.toml")
-    return head + separator + weights + next_header + tail
+        section, _, key = name.rpartition(".")
+        reward_toml = set_table_entry(reward_toml, section or "weights", key, value)
+    return reward_toml
+
+
+def set_table_entry(toml: str, section: str, key: str, value: float) -> str:
+    """`toml` with `key` in the `[section]` table set to `value`."""
+    head, separator, rest = toml.partition(f"[{section}]")
+    table, next_header, tail = rest.partition("\n[")
+    pattern = re.compile(rf"^{re.escape(key)}\s*=.*$", re.MULTILINE)
+    table, count = pattern.subn(f"{key} = {value!r}", table)
+    if not separator or count != 1:
+        raise ValueError(f"reward_overrides: `{key}` is not a [{section}] entry of reward.toml")
+    return head + separator + table + next_header + tail

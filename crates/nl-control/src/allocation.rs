@@ -2,9 +2,25 @@
 //! force and torque on the car. Thrust is one-sided, so this is a bounded least-squares
 //! problem: minimise |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1, solved by projected gradient
 //! descent, warm-started from the previous answer.
+//!
+//! The actuator-aware model (`model = "actuator_aware"`) solves the same problem for the
+//! push the valves will really make over the next control interval: they lag, the Hop and
+//! Boost throttles sit underneath, and only the headroom above those is the controller's.
 
+use nl_sim::actuator_model::IntervalPrediction;
 use nl_sim::car_state::{FORCE_ROWS, WRENCH_SIZE, Wrench};
 use nl_sim::conventions::NOZZLE_COUNT;
+
+/// Which allocation PD uses (`[allocation] model`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationModel {
+    /// Plan as if `B·u` happened at once (the original allocation).
+    #[default]
+    Legacy,
+    /// Plan with the actuator predictor (`nl_sim::actuator_model`).
+    ActuatorAware,
+}
 
 /// How the allocation trades accuracy against effort (`[allocation]` in controllers.toml).
 #[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
@@ -18,6 +34,94 @@ pub struct AllocationConfig {
     pub regularisation: f32,
     /// Projected-gradient steps per control step.
     pub iterations: u32,
+    /// Which allocation to use; `legacy` when left out.
+    #[serde(default)]
+    pub model: AllocationModel,
+    /// Actuator-aware only: how much of the valve lag to make up for within one control
+    /// interval, 0..1. 1 asks the valves for the whole push now (lead), 0 plans as if they
+    /// opened at once (still with Hop/Boost headroom and the interlock). 1 when left out.
+    #[serde(default = "full_lag_compensation")]
+    pub lag_compensation: f32,
+}
+
+fn full_lag_compensation() -> f32 {
+    1.0
+}
+
+/// What the actuator predictor says about the next control interval, as the actuator-aware
+/// solve needs it (all per nozzle, in nozzle order, 0..1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ActuatorPlan {
+    /// Mean valve opening over the interval if the controller asked for nothing.
+    pub valve_openings_with_no_command: [f32; NOZZLE_COUNT],
+    /// Mean Hop/Boost throttle over the interval.
+    pub mean_feed_forward: [f32; NOZZLE_COUNT],
+    /// Largest Hop/Boost throttle in the interval.
+    pub max_feed_forward: [f32; NOZZLE_COUNT],
+    /// Share of a throttle change that shows in the interval's mean opening.
+    pub controller_gain: f32,
+}
+
+impl ActuatorPlan {
+    /// The plan from a prediction with no controller command (`ActuatorState::predict`
+    /// of all zeros) and `ActuatorState::controller_gain`.
+    pub fn from_idle_prediction(idle: &IntervalPrediction, controller_gain: f32) -> ActuatorPlan {
+        ActuatorPlan {
+            valve_openings_with_no_command: idle.mean_valve_openings,
+            mean_feed_forward: idle.mean_feed_forward,
+            max_feed_forward: idle.max_feed_forward,
+            controller_gain,
+        }
+    }
+}
+
+/// What one actuator-aware allocation asked for and what the predictor says it gets.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AllocationDiagnostics {
+    /// The wrench PD asked for, body frame, in N and N·m.
+    pub requested_wrench: Wrench,
+    /// The controller's predicted share of the push over the interval: the predicted
+    /// mean wrench minus the Hop/Boost part, about the true centre of mass.
+    pub predicted_wrench: Wrench,
+    /// `predicted_wrench − requested_wrench`.
+    pub residual_wrench: Wrench,
+    /// Nozzles whose Hop/Boost plus controller throttle was clamped at 1.
+    pub saturated: [bool; NOZZLE_COUNT],
+    /// Air the interval is predicted to use, in kg.
+    pub air_used_kg: f32,
+    /// The tank gate at the end of the interval, 0..1.
+    pub tank_gate: f32,
+    /// The interlock cut the controller's throttles, so nothing was solved.
+    pub thrusters_locked: bool,
+    /// Projected-gradient steps taken.
+    pub iterations: u32,
+}
+
+impl AllocationDiagnostics {
+    /// The report for `requested` given the predictor's view of the chosen throttles.
+    pub fn new(
+        requested: Wrench,
+        prediction: &IntervalPrediction,
+        iterations: u32,
+    ) -> AllocationDiagnostics {
+        let mut predicted_wrench = [0.0; WRENCH_SIZE];
+        let mut residual_wrench = [0.0; WRENCH_SIZE];
+        for row in 0..WRENCH_SIZE {
+            predicted_wrench[row] =
+                prediction.mean_wrench[row] - prediction.feed_forward_wrench[row];
+            residual_wrench[row] = predicted_wrench[row] - requested[row];
+        }
+        AllocationDiagnostics {
+            requested_wrench: requested,
+            predicted_wrench,
+            residual_wrench,
+            saturated: prediction.saturated,
+            air_used_kg: prediction.air_used_kg,
+            tank_gate: prediction.final_tank_gate,
+            thrusters_locked: prediction.thrusters_locked,
+            iterations,
+        }
+    }
 }
 
 /// The allocation problem for one car: `B` with its rows already weighted.
@@ -29,6 +133,7 @@ pub struct Allocator {
     row_weights: [f32; WRENCH_SIZE],
     regularisation: f32,
     iterations: u32,
+    lag_compensation: f32,
     /// 1 / L, the gradient step, with L bounding the gradient's Lipschitz constant.
     step: f32,
 }
@@ -62,6 +167,7 @@ impl Allocator {
             row_weights,
             regularisation: config.regularisation,
             iterations: config.iterations,
+            lag_compensation: config.lag_compensation,
             step: 1.0 / (2.0 * (largest_eigenvalue_bound(&weighted_b) + config.regularisation)),
         }
     }
@@ -70,20 +176,70 @@ impl Allocator {
     /// when every nozzle's push is multiplied by `thrust_scale`.
     pub fn solve(&self, wrench: Wrench, thrust_scale: f32, throttles: &mut [f32; NOZZLE_COUNT]) {
         // Weaker thrust means a bigger throttle for the same push: aim at wrench / scale.
-        let scale = if thrust_scale > 0.0 {
-            thrust_scale
-        } else {
-            1.0
-        };
+        let scale = positive_or_one(thrust_scale);
         let mut target = [0.0; WRENCH_SIZE];
         for row in 0..WRENCH_SIZE {
             target[row] = self.row_weights[row] * wrench[row] / scale;
         }
+        self.descend(&target, &[1.0; NOZZLE_COUNT], throttles);
+    }
+
+    /// Like `solve`, but for the push `plan` says the valves will make over the next
+    /// control interval. The interval's mean opening is the no-command opening plus
+    /// `controller_gain × u`, and the controller is asked for `wrench` on top of the
+    /// Hop/Boost throttles (counted once, at their mean), so it aims at
+    /// `B·u = (wrench / scale − B·(no-command opening − feed-forward)) / gain`, with each
+    /// nozzle held to the headroom `1 − max feed-forward`. Like `solve`, it plans with the
+    /// mode's scale and not the tank gate.
+    pub fn solve_actuator_aware(
+        &self,
+        wrench: Wrench,
+        thrust_scale: f32,
+        plan: &ActuatorPlan,
+        throttles: &mut [f32; NOZZLE_COUNT],
+    ) {
+        let scale = positive_or_one(thrust_scale);
+        // With compensation c, the lag counts as if the share seen this interval were
+        // 1 − c·(1 − gain) and only c of the open valves' carry-over is credited.
+        let compensation = self.lag_compensation;
+        let gain = positive_or_one(1.0 - compensation * (1.0 - plan.controller_gain));
+        let mut target = [0.0; WRENCH_SIZE];
+        for row in 0..WRENCH_SIZE {
+            // What the valves already give beyond the Hop/Boost throttles, weighted.
+            let mut carried = 0.0;
+            for nozzle in 0..NOZZLE_COUNT {
+                let beyond_feed_forward =
+                    plan.valve_openings_with_no_command[nozzle] - plan.mean_feed_forward[nozzle];
+                carried += self.weighted_b[row][nozzle] * beyond_feed_forward;
+            }
+            let wanted = self.row_weights[row] * wrench[row] / scale;
+            target[row] = (wanted - compensation * carried) / gain;
+        }
+        let mut headroom = [1.0; NOZZLE_COUNT];
+        for (room, feed_forward) in headroom.iter_mut().zip(plan.max_feed_forward) {
+            *room = (1.0 - feed_forward).max(0.0);
+        }
+        self.descend(&target, &headroom, throttles);
+    }
+
+    /// Projected-gradient steps per solve.
+    pub fn iterations(&self) -> u32 {
+        self.iterations
+    }
+
+    /// Projected gradient toward the weighted `target`, keeping each throttle in
+    /// `0..=upper[nozzle]`.
+    fn descend(
+        &self,
+        target: &[f32; WRENCH_SIZE],
+        upper: &[f32; NOZZLE_COUNT],
+        throttles: &mut [f32; NOZZLE_COUNT],
+    ) {
         for _ in 0..self.iterations {
-            let residual = self.residual(throttles, &target);
+            let residual = self.residual(throttles, target);
             for (nozzle, throttle) in throttles.iter_mut().enumerate() {
                 let gradient = self.gradient(&residual, *throttle, nozzle);
-                *throttle = (*throttle - self.step * gradient).clamp(0.0, 1.0);
+                *throttle = (*throttle - self.step * gradient).clamp(0.0, upper[nozzle]);
             }
         }
     }
@@ -132,6 +288,11 @@ fn largest_eigenvalue_bound(weighted_b: &[[f32; NOZZLE_COUNT]; WRENCH_SIZE]) -> 
         largest = largest.max(row_sum);
     }
     largest
+}
+
+/// `value` if it is positive, else 1 (a scale or gain of 0 would divide by zero).
+fn positive_or_one(value: f32) -> f32 {
+    if value > 0.0 { value } else { 1.0 }
 }
 
 /// The largest |value| any nozzle has in one wrench row.
