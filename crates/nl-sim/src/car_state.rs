@@ -177,19 +177,26 @@ fn horizontal_heading(rotation: &Rotation) -> Vector {
 /// Reads the car's mass, inertia and nozzle pushes.
 pub(crate) fn read_car_model(physics: &PhysicsWorld, car: &Car) -> CarModel {
     let body = &physics.bodies[car.chassis];
-    // The body and roof boxes are symmetric about the body axes, so the principal
-    // axes are the body axes.
-    let inertia = body.mass_properties().local_mprops.principal_inertia();
+    let mass_properties = &body.mass_properties().local_mprops;
+    // The body axes are the principal axes, but `principal_inertia()` lists the moments
+    // in Rapier's own axis order (it swapped yaw and pitch), so read the body-frame
+    // inertia matrix's diagonal instead.
+    let inertia = mass_properties.reconstruct_inertia_matrix();
+    let inertia_body_kg_m2 = [inertia.x_axis.x, inertia.y_axis.y, inertia.z_axis.z];
+    let centre_of_mass_m = mass_properties.local_com;
     let mut nozzle_wrenches = [[0.0; WRENCH_SIZE]; NOZZLE_COUNT];
     for (index, nozzle) in car.config().thrusters.nozzles.iter().enumerate() {
-        let (force_n, torque_n_m) = nozzle_force_and_torque_at_full_throttle(nozzle);
+        let (force_n, _) = nozzle_force_and_torque_at_full_throttle(nozzle);
+        // Rapier turns a push into torque about the true centre of mass.
+        let lever_m = Vector::from_array(nozzle.position_m) - centre_of_mass_m;
+        let torque_n_m = lever_m.cross(force_n);
         let [fx, fy, fz] = force_n.to_array();
         let [tx, ty, tz] = torque_n_m.to_array();
         nozzle_wrenches[index] = [fx, fy, fz, tx, ty, tz];
     }
     CarModel {
         mass_kg: body.mass(),
-        principal_inertia_kg_m2: inertia.to_array(),
+        principal_inertia_kg_m2: inertia_body_kg_m2,
         nozzle_wrenches,
     }
 }

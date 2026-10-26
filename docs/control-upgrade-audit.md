@@ -115,7 +115,9 @@ The order matters for any predictor, so here it is exactly:
    `principal_inertia()`, which Rapier lists in its own principal-axis order:
    `[850, 2900, 3250]`. So PD's attitude torque uses 3250 for pitch (12% too much) and 2900
    for yaw (11% too little). Found by `tests/actuator_model.rs`, which measures the car's
-   real spin-up. It is left as it is, because fixing it changes the legacy controller.
+   real spin-up. **Fixed on `claude/pd-model-fix`**, together with finding 1 (torques now
+   about the true centre of mass), and PD's gains retuned for the corrected model
+   (`results/control_upgrade/2026-10-26-pd-model-fix/`).
 
 ## Baseline
 

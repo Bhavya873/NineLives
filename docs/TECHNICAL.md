@@ -234,12 +234,15 @@ allocation turn it into throttles. It stays silent while the car drives on its w
 
 - **Attitude.** With `a` the body axis that should point up (body +Y, tipped by any pitch wish)
   and `up_des = −g_dir_body`, the error is `e = a × up_des`. The wanted angular acceleration is
-  `α = kp·e − kd·(ω − ω_wish)`, capped at 25 rad/s² for the passenger, and the torque is `I·α`.
+  `α = kp·e − kd·(ω − ω_wish)`, capped at 25 rad/s² for the passenger, and the torque is `I·α`,
+  with `I` the body-axis inertia. The gains follow the tilt: one pair while roughly upright,
+  a stiffer pair once tumbling, blended linearly in between (`tumble_blend_start_deg` to
+  `tumble_blend_end_deg`).
   Near upside down the cross product has no direction, so PD picks a roll. A car already spinning
   towards upright fast enough to make it the long way round is allowed to continue.
 - **Vertical braking.** When falling faster than 4 m/s and lower than `max(3 m, 1.3·d_stop + 1 m)`,
-  with `d_stop = (v² − 1.5²) / (2a)` and `a` the net braking acceleration available, it asks for
-  `F_y = m(g + kv(v_down − 1.5))`.
+  with `d_stop = (v² − v_t²) / (2a)`, `v_t` the target descent speed and `a` the net braking
+  acceleration available, it asks for `F_y = m(g + kv(v_down − v_t))`.
 - **Sideways damping.** `F_z = −m · kv_lat · v_z` before touchdown.
 - **On the ground, tipped over.** Roll torque times a ground gain, plus a side-booster push, to
   roll back onto the wheels.
@@ -272,7 +275,13 @@ The allocation aims the interval's mean push at PD's wrench on top of Hop and Bo
 each nozzle within the headroom they leave. `Pd::last_allocation` reports what PD asked for,
 what is predicted and the difference. Under latency (domain randomization) an episode passes no
 predictor, because the valves then get an older command, so PD falls back to the legacy
-allocation; training never passes it.
+allocation. Training hands PD the same state (`TrainingEnv::actuator_state`), so a Hybrid or
+residual policy learns over the PD the game ships.
+
+PD's numbers and `lag_compensation` are tuned together by `python -m ninelives.tune_pd`, a
+CMA-ES search over how hard PD pushes (never when it acts) on tuning seeds 2,000,000+, scored
+on success with a cost for air used over the bumps strip; candidates are then checked on the
+validation seeds (`docs/EXPERIMENTS.md`, 2026-10-27).
 
 ### 6.3 AI
 

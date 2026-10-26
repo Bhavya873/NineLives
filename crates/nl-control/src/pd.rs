@@ -154,6 +154,7 @@ impl Pd {
         }
         let spin = state.angular_velocity_body_rad_s;
         let wished_spin = [0.0, wish.yaw_rate_rad_s, 0.0];
+        let (kp, kd) = self.attitude_gains(state);
         let mut accel = [0.0; 3];
         for axis in 0..3 {
             let mut damped_spin = spin[axis] - wished_spin[axis];
@@ -162,7 +163,7 @@ impl Pd {
                 error[axis] = -error[axis];
                 damped_spin = 0.0;
             }
-            accel[axis] = self.config.kp * error[axis] - self.config.kd * damped_spin;
+            accel[axis] = kp * error[axis] - kd * damped_spin;
         }
         let accel = cap_length(accel, self.config.max_angular_accel_rad_s2);
         let mut torque = [0.0; 3];
@@ -170,6 +171,20 @@ impl Pd {
             torque[axis] = self.inertia_kg_m2[axis] * accel[axis];
         }
         torque
+    }
+
+    /// The attitude gains (kp, kd) for the car's tilt: the near-upright pair up to
+    /// `tumble_blend_start_deg`, the tumble pair past `tumble_blend_end_deg`, and a
+    /// straight-line blend between.
+    pub fn attitude_gains(&self, state: &CarState) -> (f32, f32) {
+        let config = &self.config;
+        // libm keeps the angle identical on every platform (CLAUDE.md rule 2).
+        let tilt_deg = libm::acosf(state.up_alignment().clamp(-1.0, 1.0)).to_degrees();
+        let band_deg = config.tumble_blend_end_deg - config.tumble_blend_start_deg;
+        let share = ((tilt_deg - config.tumble_blend_start_deg) / band_deg).clamp(0.0, 1.0);
+        let kp = config.kp + (config.kp_tumble - config.kp) * share;
+        let kd = config.kd + (config.kd_tumble - config.kd) * share;
+        (kp, kd)
     }
 
     /// True when the car spins about a roll or pitch axis away from the short way up

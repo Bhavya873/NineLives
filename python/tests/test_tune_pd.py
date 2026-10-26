@@ -14,8 +14,10 @@ from ninelives.tune_pd import (
     main,
     pd_gains,
     scaled_gains,
+    tunables,
     tuning_seeds_start,
     with_pd_gains,
+    with_tunables,
 )
 
 REPO_TOML = (CONFIGS_DIR / "controllers.toml").read_text()
@@ -82,3 +84,30 @@ def test_a_tuning_run_too_long_for_the_seed_range_is_refused_before_it_starts():
     # Refused at once: no generation runs (each would take minutes).
     with pytest.raises(ValueError, match="final test block"):
         tune(generations=1001, popsize=2, episodes=1000, sigma=0.1)
+
+
+def test_the_lag_compensation_is_tuned_beside_pd_and_written_into_allocation():
+    values = tunables(REPO_TOML)
+    values["lag_compensation"] = 0.75
+    values["kp"] = 8.0
+
+    text = with_tunables(REPO_TOML, values)
+
+    assert tunables(text)["lag_compensation"] == 0.75
+    assert pd_gains(text)["kp"] == 8.0
+    assert "lag_compensation" not in pd_gains(text)
+
+
+def test_scaling_keeps_the_tumble_blend_band_open_and_in_order():
+    base = tunables(REPO_TOML)
+    log_factors = [0.0] * len(base)
+    # Start pushed past end: 30° × e ≈ 82° against 60°.
+    log_factors[list(base).index("tumble_blend_start_deg")] = 1.0
+
+    gains = scaled_gains(base, log_factors)
+
+    assert gains["tumble_blend_end_deg"] - gains["tumble_blend_start_deg"] >= 5.0
+
+
+def test_when_pd_counts_the_car_as_lying_on_the_ground_is_never_tuned():
+    assert "on_ground_height_m" not in pd_gains(REPO_TOML)

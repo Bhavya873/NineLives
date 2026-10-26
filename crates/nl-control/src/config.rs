@@ -12,10 +12,20 @@ pub const DEFAULT_CONTROLLERS_TOML: &str = include_str!("../../../configs/contro
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PdConfig {
-    /// Attitude gain on the tilt error (1/s²).
+    /// Attitude gain on the tilt error near upright (1/s²).
     pub kp: f32,
-    /// Attitude damping on the spin (1/s).
+    /// Attitude damping on the spin near upright (1/s).
     pub kd: f32,
+    /// Attitude gain once tilted past `tumble_blend_end_deg` (1/s²): a tumbling car needs
+    /// a firmer push than a car finishing a jump, which a high gain unsettles.
+    pub kp_tumble: f32,
+    /// Attitude damping once tilted past `tumble_blend_end_deg` (1/s).
+    pub kd_tumble: f32,
+    /// Below this tilt (degrees) PD uses `kp`/`kd`; from here to `tumble_blend_end_deg`
+    /// the gains slide linearly to `kp_tumble`/`kd_tumble`.
+    pub tumble_blend_start_deg: f32,
+    /// See `tumble_blend_start_deg`, in degrees; must be larger.
+    pub tumble_blend_end_deg: f32,
     /// Braking only happens while the car's up axis points at least this far up.
     pub upright_alignment: f32,
     /// Braking always starts by this height (the floor of the stopping-distance rule).
@@ -100,6 +110,10 @@ impl ControllersConfig {
         let fields = [
             ("pd.kp", pd.kp),
             ("pd.kd", pd.kd),
+            ("pd.kp_tumble", pd.kp_tumble),
+            ("pd.kd_tumble", pd.kd_tumble),
+            ("pd.tumble_blend_start_deg", pd.tumble_blend_start_deg),
+            ("pd.tumble_blend_end_deg", pd.tumble_blend_end_deg),
             ("pd.upright_alignment", pd.upright_alignment),
             ("pd.brake_height_m", pd.brake_height_m),
             ("pd.brake_safety", pd.brake_safety),
@@ -136,6 +150,19 @@ impl ControllersConfig {
             ("pd.brake_usable_fraction", pd.brake_usable_fraction),
             ("pd.ground_side_push", pd.ground_side_push),
         ];
+        if pd.tumble_blend_end_deg <= pd.tumble_blend_start_deg {
+            return Err(ControllersConfigError::NotPositive {
+                field: "pd.tumble_blend_end_deg - pd.tumble_blend_start_deg",
+                value: pd.tumble_blend_end_deg - pd.tumble_blend_start_deg,
+            });
+        }
+        let lag_compensation = allocation.lag_compensation;
+        if !(0.0..=1.0).contains(&lag_compensation) {
+            return Err(ControllersConfigError::NotFraction {
+                field: "allocation.lag_compensation",
+                value: lag_compensation,
+            });
+        }
         for (field, value) in fractions {
             if value > 1.0 {
                 return Err(ControllersConfigError::NotFraction { field, value });

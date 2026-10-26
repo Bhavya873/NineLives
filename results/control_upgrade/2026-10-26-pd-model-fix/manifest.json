@@ -1,0 +1,295 @@
+{
+ "experiment_id": "2026-10-26-pd-model-fix",
+ "purpose": "Fix PD model (body-axis inertia, torques about the true centre of mass), retune attitude gains with a tilt schedule, re-score the actuator-aware allocation, score R1/R2 under the Hybrid.",
+ "baseline": "results/control_upgrade/2026-10-26-legacy-pd",
+ "tuning_seeds": {
+  "first": 2000000,
+  "episodes_per_cell": 300,
+  "stages": "A-F",
+  "modes": "both"
+ },
+ "validation_seeds": {
+  "first": 1500000,
+  "episodes_per_cell": 1000
+ },
+ "held_out_seeds": "untouched (3,000,000+)",
+ "domain_randomization": false,
+ "tuning_mean_success": {
+  "sweep6/up_kp7.0_kd4.0": 0.9069,
+  "sweep6/up_kp8.0_kd5.0": 0.905,
+  "sweep5/band_30_60": 0.9047,
+  "sweep6/up_kp8.0_kd4.0": 0.9047,
+  "sweep6/up_kp9.0_kd4.5": 0.9033,
+  "sweep4/aware_c1": 0.9014,
+  "sweep5/band_30_90": 0.9008,
+  "sweep5/band_45_90": 0.9006,
+  "sweep5/band_20_45": 0.8997,
+  "sweep4/aware_c0.5": 0.8981,
+  "sweep3/kp12_kd3.5": 0.8961,
+  "sweep4/aware_c0": 0.8953,
+  "sweep3/kp14_kd3.5": 0.8931,
+  "sweep5/band_60_120": 0.8931,
+  "sweep3/kp11_kd3.5": 0.8928,
+  "sweep3/kp14_kd3": 0.8892,
+  "sweep3/kp12_kd3": 0.8833,
+  "sweep2/kp10_kd3.5": 0.8828,
+  "sweep3/kp10_kd3.5": 0.8828,
+  "sweep3/kp11_kd3": 0.8803,
+  "sweep/kp9_kd3.5": 0.8778,
+  "sweep3/kp10_kd3": 0.8769,
+  "sweep2/kp10_kd4": 0.8742,
+  "sweep2/kp10_kd4.5": 0.8717,
+  "sweep2/kp10_kd5": 0.8686,
+  "sweep3/kp12_kd2.5": 0.8678,
+  "sweep/kp9_kd4": 0.8672,
+  "sweep3/kp11_kd2.5": 0.8661,
+  "sweep/kp9_kd4.5": 0.8653,
+  "sweep/kp8_kd3.5": 0.8644,
+  "sweep3/kp10_kd2.5": 0.8636,
+  "sweep3/kp14_kd2.5": 0.8636,
+  "sweep/kp9_kd5": 0.8617,
+  "sweep2/oldmodel_kp8_kd4": 0.8589,
+  "sweep/kp8_kd4": 0.8581,
+  "sweep2/fixed_kp8_kd4": 0.8581,
+  "sweep/kp8_kd4.5": 0.8514,
+  "sweep/kp7_kd3.5": 0.8489,
+  "sweep/kp8_kd5": 0.8472,
+  "sweep/kp7_kd4": 0.8419,
+  "sweep/kp7_kd4.5": 0.8389,
+  "sweep/kp7_kd5": 0.8281
+ },
+ "chosen": {
+  "kp": 7.0,
+  "kd": 4.0,
+  "kp_tumble": 12.0,
+  "kd_tumble": 3.5,
+  "tumble_blend_start_deg": 30.0,
+  "tumble_blend_end_deg": 60.0
+ },
+ "validation": {
+  "fixed_legacy": {
+   "A_arcade": {
+    "success_rate": 0.7789999842643738,
+    "crash_rate": 0.22100000083446503,
+    "hard_landing_rate": 0.01899999938905239,
+    "air_per_save_kg": 46.2724494934082
+   },
+   "A_realistic": {
+    "success_rate": 0.753000020980835,
+    "crash_rate": 0.24699999392032623,
+    "hard_landing_rate": 0.0010000000474974513,
+    "air_per_save_kg": 41.30369567871094
+   },
+   "B_arcade": {
+    "success_rate": 0.9919999837875366,
+    "crash_rate": 0.00800000037997961,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 22.393699645996094
+   },
+   "B_realistic": {
+    "success_rate": 0.9860000014305115,
+    "crash_rate": 0.014000000432133675,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 21.315290451049805
+   },
+   "C_arcade": {
+    "success_rate": 0.9959999918937683,
+    "crash_rate": 0.004000000189989805,
+    "hard_landing_rate": 0.18400000035762787,
+    "air_per_save_kg": 22.96939468383789
+   },
+   "C_realistic": {
+    "success_rate": 1.0,
+    "crash_rate": 0.0,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 8.999713897705078
+   },
+   "D_arcade": {
+    "success_rate": 0.9739999771118164,
+    "crash_rate": 0.014999999664723873,
+    "hard_landing_rate": 0.09000000357627869,
+    "air_per_save_kg": 24.78378677368164
+   },
+   "D_realistic": {
+    "success_rate": 0.9810000061988831,
+    "crash_rate": 0.012000000104308128,
+    "hard_landing_rate": 0.004000000189989805,
+    "air_per_save_kg": 24.605323791503906
+   },
+   "E_arcade": {
+    "success_rate": 0.875,
+    "crash_rate": 0.11999999731779099,
+    "hard_landing_rate": 0.11400000005960464,
+    "air_per_save_kg": 29.5555419921875
+   },
+   "E_realistic": {
+    "success_rate": 0.8840000033378601,
+    "crash_rate": 0.11299999803304672,
+    "hard_landing_rate": 0.003000000026077032,
+    "air_per_save_kg": 24.39930534362793
+   },
+   "F_arcade": {
+    "success_rate": 0.847000002861023,
+    "crash_rate": 0.1459999978542328,
+    "hard_landing_rate": 0.22499999403953552,
+    "air_per_save_kg": 84.91616821289062
+   },
+   "F_realistic": {
+    "success_rate": 0.7649999856948853,
+    "crash_rate": 0.22200000286102295,
+    "hard_landing_rate": 0.004000000189989805,
+    "air_per_save_kg": 79.51715087890625
+   }
+  },
+  "fixed_aware05": {
+   "A_arcade": {
+    "success_rate": 0.7839999794960022,
+    "crash_rate": 0.2160000056028366,
+    "hard_landing_rate": 0.010999999940395355,
+    "air_per_save_kg": 48.7722282409668
+   },
+   "A_realistic": {
+    "success_rate": 0.7450000047683716,
+    "crash_rate": 0.2549999952316284,
+    "hard_landing_rate": 0.006000000052154064,
+    "air_per_save_kg": 41.716827392578125
+   },
+   "B_arcade": {
+    "success_rate": 0.9929999709129333,
+    "crash_rate": 0.007000000216066837,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 25.02452850341797
+   },
+   "B_realistic": {
+    "success_rate": 0.9950000047683716,
+    "crash_rate": 0.004999999888241291,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 21.062103271484375
+   },
+   "C_arcade": {
+    "success_rate": 0.9909999966621399,
+    "crash_rate": 0.008999999612569809,
+    "hard_landing_rate": 0.13500000536441803,
+    "air_per_save_kg": 24.197153091430664
+   },
+   "C_realistic": {
+    "success_rate": 1.0,
+    "crash_rate": 0.0,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 9.37215518951416
+   },
+   "D_arcade": {
+    "success_rate": 0.9760000109672546,
+    "crash_rate": 0.012000000104308128,
+    "hard_landing_rate": 0.07500000298023224,
+    "air_per_save_kg": 25.450712203979492
+   },
+   "D_realistic": {
+    "success_rate": 0.9779999852180481,
+    "crash_rate": 0.013000000268220901,
+    "hard_landing_rate": 0.003000000026077032,
+    "air_per_save_kg": 24.876201629638672
+   },
+   "E_arcade": {
+    "success_rate": 0.8870000243186951,
+    "crash_rate": 0.10899999737739563,
+    "hard_landing_rate": 0.10400000214576721,
+    "air_per_save_kg": 31.14786720275879
+   },
+   "E_realistic": {
+    "success_rate": 0.8820000290870667,
+    "crash_rate": 0.11500000208616257,
+    "hard_landing_rate": 0.004999999888241291,
+    "air_per_save_kg": 24.61492156982422
+   },
+   "F_arcade": {
+    "success_rate": 0.875,
+    "crash_rate": 0.11800000071525574,
+    "hard_landing_rate": 0.1720000058412552,
+    "air_per_save_kg": 89.68628692626953
+   },
+   "F_realistic": {
+    "success_rate": 0.7860000133514404,
+    "crash_rate": 0.1979999989271164,
+    "hard_landing_rate": 0.003000000026077032,
+    "air_per_save_kg": 79.46778869628906
+   }
+  },
+  "hybrid_r2_latest_old_pd": {
+   "A_arcade": {
+    "success_rate": 0.8650000095367432,
+    "crash_rate": 0.13500000536441803,
+    "hard_landing_rate": 0.026000000536441803,
+    "air_per_save_kg": 37.97346115112305
+   },
+   "A_realistic": {
+    "success_rate": 0.8149999976158142,
+    "crash_rate": 0.1850000023841858,
+    "hard_landing_rate": 0.019999999552965164,
+    "air_per_save_kg": 36.014827728271484
+   },
+   "B_arcade": {
+    "success_rate": 0.9850000143051147,
+    "crash_rate": 0.014999999664723873,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 17.54496192932129
+   },
+   "B_realistic": {
+    "success_rate": 0.9940000176429749,
+    "crash_rate": 0.006000000052154064,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 18.74091339111328
+   },
+   "C_arcade": {
+    "success_rate": 0.9940000176429749,
+    "crash_rate": 0.006000000052154064,
+    "hard_landing_rate": 0.19499999284744263,
+    "air_per_save_kg": 22.94227409362793
+   },
+   "C_realistic": {
+    "success_rate": 1.0,
+    "crash_rate": 0.0,
+    "hard_landing_rate": 0.0,
+    "air_per_save_kg": 8.977023124694824
+   },
+   "D_arcade": {
+    "success_rate": 0.9789999723434448,
+    "crash_rate": 0.020999999716877937,
+    "hard_landing_rate": 0.07000000029802322,
+    "air_per_save_kg": 24.61048126220703
+   },
+   "D_realistic": {
+    "success_rate": 0.9670000076293945,
+    "crash_rate": 0.029999999329447746,
+    "hard_landing_rate": 0.0020000000949949026,
+    "air_per_save_kg": 24.053930282592773
+   },
+   "E_arcade": {
+    "success_rate": 0.9079999923706055,
+    "crash_rate": 0.09099999815225601,
+    "hard_landing_rate": 0.11100000143051147,
+    "air_per_save_kg": 28.568912506103516
+   },
+   "E_realistic": {
+    "success_rate": 0.9089999794960022,
+    "crash_rate": 0.08799999952316284,
+    "hard_landing_rate": 0.010999999940395355,
+    "air_per_save_kg": 23.450740814208984
+   },
+   "F_arcade": {
+    "success_rate": 0.621999979019165,
+    "crash_rate": 0.00800000037997961,
+    "hard_landing_rate": 0.035999998450279236,
+    "air_per_save_kg": 66.0551528930664
+   },
+   "F_realistic": {
+    "success_rate": 0.6470000147819519,
+    "crash_rate": 0.09300000220537186,
+    "hard_landing_rate": 0.01899999938905239,
+    "air_per_save_kg": 61.12452697753906
+   }
+  }
+ },
+ "git_branch": "claude/pd-model-fix",
+ "build_target": "native release, aarch64-apple-darwin"
+}
