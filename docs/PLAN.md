@@ -72,6 +72,7 @@ The events, rules and terms live only in `nl-sim` (golden rule 1). Python and th
 - Up to 3 runs, each logged in EXPERIMENTS; then stop for review gate 2 regardless. Walls stay out of generated courses for now.
 - If it passes: re-export `models/policy.json` and the viewer checkpoints, and regenerate all `results/`; clips per stage plus a Gauntlet run in the PR.
 - **Outcome (2026-10-19):** not met after 3 runs (EXPERIMENTS m7-full-001…003). The fixes found are kept; the next run's approach is the owner's call at gate 2.
+- **Revised bar (2026-10-21, owner):** the AI, run as the `Hybrid` controller (the AI flies, PD drives), beats PD on A and E and stays within PD's 95% confidence interval on B, C and D, in both modes; decisions use paired seeds and ≥ 1000 episodes (DECISIONS 2026-10-21). Rounds 5–6 are in EXPERIMENTS.
 
 ---
 
