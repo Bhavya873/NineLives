@@ -314,3 +314,18 @@ Results: `results/control_upgrade/2026-10-27-r3/` (manifest, per-cell summaries)
 - On Stage F the Hybrid seldom crashes. It fails on the landing heading: the median heading error is 11–19°, against PD's 1–2°, and a landing turned past 30° fails the episode. R1 failed Stage F the same way.
 - Outcome: the owner's rule (beat PD alone on every stage and mode) is not met. `models/policy.json` is unchanged. The game still flies the Hybrid with the shipped policy (`web/src/main.ts`). Switching it to PD alone, as the owner chose on 2026-10-26, is a web change left for the owner. Following the night rules, I stopped after the one retry.
 - Likely next step (needs the owner): give the AI a reason, or the information, to hold the heading through a flip, by changing the heading term of the reward or the observation. A longer run or more Stage F weight did not move the checkpoint eval. Another option is to raise the gate's hand-over tilt, so that the AI takes over only where the tuned PD fails.
+
+### 2026-10-27 — Hybrid hand-over tilt (Q4c): eval only, no training
+Results: `results/control_upgrade/2026-10-27-gate-tilt/`. New optional setting `[hybrid] enter_tilt_deg` in controllers.toml (left out: the car's 60° upset angle, as before). Seeds 1,500,000+, 1000 per cell, A–F × both modes × plain/randomized, 22 min. Mean success, plain / randomized:
+
+| Policy | 60° (before) | 90° | 120° | 150° |
+|---|---|---|---|---|
+| Shipped (Stage A) | — | 81.41 / 79.49 | 84.45 / 81.74 | 88.09 / 83.83 |
+| R2 latest | — | 90.70 / 87.98 | 91.99 / **89.43** | 92.76 / 89.61 |
+| R3b latest | 90.27 / 87.59 | 91.18 / 88.58 | 92.51 / 89.21 | 93.08 / 89.24 |
+| PD alone (tuned) | 94.84 / 88.74 | | | |
+
+- A later hand-over helps every policy: PD keeps the upsets it saves well.
+- None beats PD on every cell. R2 at 120° wins every randomized cell (89.43% against 88.74%) but loses plain Stage F by 11–19 points, and A and E Arcade by 1–3 points. The best plain result, R3b at 150°, still trails by 1.8 points.
+- The policies were trained only under randomization and do relatively better there. In plain runs they still land Stage F turned.
+- Outcome: the repo default stays at 60° (the setting is unused) and the game keeps PD alone. Next, if approved: Q4a, the yaw error from take-off in the observation, trained with plain episodes as well as randomized ones.

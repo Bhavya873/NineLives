@@ -75,12 +75,24 @@ pub struct PdConfig {
     pub quiet_max_spin_rad_s: f32,
 }
 
+/// The Hybrid's gate, `[hybrid]` in controllers.toml. Optional: left out, the gate uses
+/// the car's upset and save thresholds (`HybridGateSettings::for_vehicle`).
+#[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HybridConfig {
+    /// The AI takes over only past this tilt, in degrees (0..=180); None uses the car's
+    /// upset angle.
+    pub enter_tilt_deg: Option<f32>,
+}
+
 /// Everything in controllers.toml.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ControllersConfig {
     pub pd: PdConfig,
     pub allocation: AllocationConfig,
+    #[serde(default)]
+    pub hybrid: HybridConfig,
 }
 
 /// Why controllers.toml could not be used.
@@ -94,6 +106,11 @@ pub enum ControllersConfigError {
 
     #[error("controllers.toml: `{field}` must be between 0 and 1, but it is {value}")]
     NotFraction { field: &'static str, value: f32 },
+
+    #[error(
+        "controllers.toml: `{field}` must be above 0 and at most 180 degrees, but it is {value}"
+    )]
+    NotTilt { field: &'static str, value: f32 },
 }
 
 impl ControllersConfig {
@@ -167,6 +184,14 @@ impl ControllersConfig {
             if value > 1.0 {
                 return Err(ControllersConfigError::NotFraction { field, value });
             }
+        }
+        if let Some(value) = self.hybrid.enter_tilt_deg
+            && !(value > 0.0 && value <= 180.0)
+        {
+            return Err(ControllersConfigError::NotTilt {
+                field: "hybrid.enter_tilt_deg",
+                value,
+            });
         }
         Ok(())
     }

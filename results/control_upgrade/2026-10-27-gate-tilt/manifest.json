@@ -1,0 +1,13 @@
+{
+ "experiment_id": "2026-10-27-gate-tilt",
+ "purpose": "Owner Q4c: the Hybrid hands over to the AI only past 90/120/150 deg ([hybrid] enter_tilt_deg), with the shipped policy, R2 latest and R3b latest, against the tuned PD alone.",
+ "commit": "7f30d1a5bbfc1751d708c8389c83a6a9bc554fd2",
+ "validation_seeds": {
+  "first": 1500000,
+  "episodes_per_cell": 1000,
+  "cells": "A-F x both modes x plain/randomized"
+ },
+ "held_out_seeds": "untouched (3,000,000+)",
+ "wall_time_s": 1322,
+ "outcome": "no setting beats PD on every cell; best plain R3b@150 93.08% vs PD 94.84%; R2@120 wins every randomized cell (89.43 vs 88.74) but loses F plain by 11-19 points"
+}
