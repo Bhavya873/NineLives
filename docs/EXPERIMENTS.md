@@ -369,3 +369,10 @@ Results: `results/baseline_2026-10/` (48 files, README there). PD and Hybrid, st
 - **Means over the 12 cells:** PD 94.84% plain / 88.74% randomized; Hybrid with the 120° hand-over 94.93% / 92.14%. These equal the R4 validation rows, which checks that the new `--out` and hash fields changed nothing about the episodes.
 - **Every file records** `physics_hash`, `controller_config_hash`, `policy_hash` and `git_sha` (DECISIONS 2026-10-29), so the new-physics results in G2 and later can be told apart from this baseline.
 - **Not recorded yet:** the speed sweep (R2's tool is not on main) and the viewer landing rates.
+
+### 2026-10-29 — R2: drive values, suspension limit and per-piece speed survival
+Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_load` (nl-sim examples) and `speed_sweep` (nl-control example); read-only diagnostics in `nl-sim/src/diagnostics.rs`. Results: `results/baseline_2026-10/speed_sweep.*` (today's physics) and `results/speed_sweep_drive_candidate.*`.
+- **Drive:** 7200 N per wheel, 800 kW, speed cap 103 m/s (boost 110) and `friction_slip` 1.9 give 0–100 km/h in 1.98 s (today 4.58 s) and a 103 m/s top speed, steady at 100 m/s.
+- **Suspension limit:** the stock car's body first touches at a design load of 3.8 g (last clean run 3.4 g; the contract assumed 3 g). A bump stop starting at 0.14 m with rate 300/s² lifts the clean load to 4.2 g with 0.087 m of rebound, which cuts the 200 km/h ramp-entry radius from 158 m to about 99 m.
+- **Speed sweep (today's physics):** 1,295 crashes in 16,320 runs; concave bottoming 598, bump faces 413, floor contact after flight 244, gap too slow 40. Only `bumps_0.2`, the halfpipe and the barrel flips never crash. The stronger drive barely changes this (1,239 crashes), so survival is a geometry, suspension and crash-rule problem.
+
