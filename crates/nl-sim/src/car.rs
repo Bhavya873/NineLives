@@ -367,6 +367,7 @@ fn build_chassis_body(
         .rotation(Vector::new(0.0, yaw_rad, 0.0))
         .additional_mass_properties(mass_properties)
         .can_sleep(false)
+        .ccd_enabled(chassis.ccd_enabled)
 }
 
 /// The main body box, centred on the centre of mass, with its bottom front and rear

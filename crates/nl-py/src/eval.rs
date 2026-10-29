@@ -69,7 +69,7 @@ pub fn run_eval(
     Ok(report.to_string())
 }
 
-/// Air used, in kg, by `controller` driving straight along `course_json` at half throttle
+/// Air used, in kg, by `controller` driving straight along `course_json` at about 40% throttle
 /// for `seconds`, with the config's car and mode and no episode rules: how much it fires
 /// that the driver didn't need, e.g. over courses/bumps-strip.json (the PD tuner's check).
 #[pyfunction]
@@ -100,14 +100,17 @@ pub fn driving_air_kg(
         DEFAULT_GROUND_FRICTION,
         0,
     );
-    let half_throttle = InputFrame {
-        throttle: 127,
+    // 52 of 127: about the old car's full-throttle push (G2 raised the engine force 2.4x), so
+    // the car meets a bumps strip at the speed this check was written for. At full throttle
+    // Arcade PD uses 21 kg there; the PD retune (G3) decides how to treat the fast case.
+    let pedal = InputFrame {
+        throttle: 52,
         ..InputFrame::default()
     };
     Ok(air_used_driving(
         &mut world,
         &mut controller,
-        half_throttle,
+        pedal,
         seconds,
     ))
 }

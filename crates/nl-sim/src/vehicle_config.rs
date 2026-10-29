@@ -70,6 +70,15 @@ pub struct ChassisConfig {
     /// and departure angles). [0, 0] (the default) keeps a plain box.
     #[serde(default)]
     pub underside_chamfer_m: [f32; 2],
+    /// Continuous collision detection on the chassis, so a car at 100 m/s cannot tunnel
+    /// through a thin piece. The wheel rays do not depend on it. On by default; the
+    /// switch exists so tests can show that the wheels hold without CCD.
+    #[serde(default = "default_ccd_enabled")]
+    pub ccd_enabled: bool,
+}
+
+fn default_ccd_enabled() -> bool {
+    true
 }
 
 /// Air resistance on the body. See `[air_drag]`.
@@ -619,7 +628,7 @@ mod tests {
 
     #[test]
     fn an_infinite_speed_limit_is_rejected() {
-        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 55.0", "max_speed_m_s = inf");
+        let broken = DEFAULT_VEHICLE_TOML.replace("max_speed_m_s = 103.0", "max_speed_m_s = inf");
 
         let error = VehicleConfig::from_toml_str(&broken).unwrap_err();
 
