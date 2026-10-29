@@ -14,6 +14,9 @@ inertia_kg_m2 = [850.0, 3250.0, 2900.0]
 # Bottom front and rear edges cut away, [length, rise] in m: the nose and tail clear
 # ramp and halfpipe curves (approach and departure angles of about 27°).
 underside_chamfer_m = [0.6, 0.3]
+# Continuous collision detection on the chassis: at 100 m/s the car moves 0.83 m per
+# physics step, more than the 0.1 m roof box is thick. The wheel rays do not depend on it.
+ccd_enabled = true
 
 [air_drag]
 # SPEC §7.2: drag force along each body axis = -0.5 · air density · drag area · |v| · v,
@@ -47,24 +50,26 @@ suspension_stiffness_per_kg = 50.0
 suspension_compression_damping_per_kg = 3.5
 suspension_relaxation_damping_per_kg = 5.0
 max_suspension_force_n = 40000.0
-# Tyre grip: sporty road tyres on dry asphalt, a full-lock circle peaks at about
-# 1.13–1.2 g (1.4 gave 1.2–1.3 g). Lower is not yet safe: 1.2 dropped the shipped policy's
-# strong flip-plate saves below 90%, and 1.0 crashed PD on an Arcade hop landing.
+# Tyre grip: raised from 1.3 to 1.9 with the stronger drive (R2a, docs/research/
+# speed-survival.md): the launch needs about 25 kN of traction (1.4 g and more). It also
+# raises lateral grip (1.28 g to 1.67 g at 100 m/s, small steer); PD needs a retune (G3).
 # Rapier allows twice that for driving and braking.
 # Measure changes with `cargo run --release -p nl-sim --example drive_feel`.
-friction_slip = 1.3
+friction_slip = 1.9
 side_friction_stiffness = 1.0
 
 [drive]
-# All-wheel drive. Each wheel pushes up to 3 kN at low speed; above about 18 m/s the
-# engine's 220 kW (about 300 hp) limits the push to power / speed, as on a real car.
-# That gives 0–100 km/h in about 5 s and a long pull up to the 55 m/s (198 km/h) cap.
-max_engine_force_per_wheel_n = 3000.0
-max_engine_power_w = 220000.0
-max_speed_m_s = 55.0
-# Boost is a speed limiter's job, not a rocket: it fades out from 50 to 60 m/s
-# (216 km/h). Without it Arcade's double thrust and unlimited air passed 860 km/h.
-boost_max_speed_m_s = 60.0
+# All-wheel drive. Each wheel pushes up to 7.2 kN at low speed; above about 28 m/s the
+# engine's 800 kW (about 1070 hp) limits the push to power / speed, as on a real car.
+# That gives 0-100 km/h in about 2 s (R2a) and a pull to the 103 m/s (371 km/h) cap
+# in about 16 s. Drag at 103 m/s is about 3.8 kN, so the cap is a speed limiter, not drag.
+max_engine_force_per_wheel_n = 7200.0
+max_engine_power_w = 800000.0
+max_speed_m_s = 103.0
+# Boost is a speed limiter's job, not a rocket: it fades out over boost_fade_m_s below
+# boost_max_speed_m_s (110 m/s, 396 km/h). Without it Arcade's double thrust and unlimited
+# air passed 860 km/h.
+boost_max_speed_m_s = 110.0
 boost_fade_m_s = 10.0
 max_reverse_speed_m_s = 8.0
 # Brake impulse per wheel per physics step, in N·s.

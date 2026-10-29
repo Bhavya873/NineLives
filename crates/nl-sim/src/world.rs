@@ -86,7 +86,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 18;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 19;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
