@@ -330,6 +330,20 @@ Results: `results/control_upgrade/2026-10-27-gate-tilt/`. New optional setting `
 - The policies were trained only under randomization and do relatively better there. In plain runs they still land Stage F turned.
 - Outcome: the repo default stays at 60° (the setting is unused) and the game keeps PD alone. Next, if approved: Q4a, the yaw error from take-off in the observation, trained with plain episodes as well as randomized ones.
 
+### 2026-10-27 — Stunt budget (research R1): measurement only, no training
+`cargo run --release -p nl-control --example stunt_budget` (about 1 s). Results: `results/stunt_budget.json`; write-up and proposed `[stunt]` defaults in `docs/research/stunt-planning.md`. Real actuator-aware allocator and World, seed 0, full tank.
+- **Reachable α:** Realistic pitch 13.2 rad/s² (40 kg/s air), roll 28.7 (53 kg/s); Arcade exactly ×2. Asking for zero net force (PD weights) costs nothing against torque-only weights.
+- **Full turn, Brake → PD, until landable:** Realistic flip at 5 rad/s coast takes 1.55 s and 28 kg; barrel 1.28 s and 18 kg. Arcade flip 1.33 s, barrel at 6 rad/s 0.98 s.
+- **PD-only catch** (PD takes over at the coast rate) is 0.5–1.1 s slower and uses up to 2× the air except for Realistic flips ≤ 5 rad/s. A director-owned Brake phase is proposed.
+- **A fixed brake lead stops short at ≥ 6 rad/s** (+0.6 s of PD). The planner needs a per-tick switching-curve brake.
+- **Playground airtime (nozzles off), 15/20/25/30 m/s:**
+  - 15 m 22° ramps: 1.40/1.78/2.15/2.56 s;
+  - 28° ramp: 1.72/2.18/2.65/3.05 s;
+  - 15° ramps: at most 1.75 s.
+- **Landing air with PD:** 6–57 kg.
+- **The thruster interlock never held after AirborneStart.**
+- **PD crashes (HardImpact) on landing:** ramps #1 at 25/30, #3/#9/#24 at 30, and #22 at 20 m/s. A G2 survival-contract issue.
+- **Notes:** Realistic flips fit only the 22° ramps at ≥ 25 m/s or the 28° ramp at ≥ 20 m/s, with a 0.3 s margin.
 ### 2026-10-27 — R4: the Hybrid retrained on observation v2 (heading from take-off)
 Results: `results/control_upgrade/2026-10-27-r4/` (manifest, per-cell summaries).
 - **Run:** `PYTHONPATH=python python -m ninelives.train --config configs/train/flight-r4.yaml --run-id flight-r4`, seed 0, 100M steps, 2 h 12 min. A fresh start (the input grew to 43 values), stages A/D/E/F at 0.2/0.15/0.2/0.45, half the episodes plain and half randomized (`randomize_share` 0.5), lr 3e-4, with the tuned PD and actuator-aware allocation underneath.
