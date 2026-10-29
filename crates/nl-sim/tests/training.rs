@@ -12,7 +12,8 @@ use nl_sim::episode::{Episode, EpisodeStatus};
 use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::training::{
-    StageChoice, StepOutcome, TrainingConfig, TrainingEnv, throttles_from_action,
+    StageChoice, StepOutcome, TrainingConfig, TrainingEnv, randomizes_episode,
+    throttles_from_action,
 };
 
 /// All valves shut: the policy action −1 on every nozzle.
@@ -25,6 +26,7 @@ fn config() -> TrainingConfig {
         scenarios: scenarios(),
         reward: reward(),
         randomize: false,
+        randomize_share: 1.0,
     }
 }
 
@@ -285,4 +287,32 @@ fn the_training_env_shows_controllers_the_same_actuator_state_as_the_episode() {
     assert!(before_reset.is_none());
     assert!(env.actuator_state().is_some());
     assert_eq!(env.actuator_state(), episode.actuator_state());
+}
+
+#[test]
+fn with_a_randomize_share_of_half_about_half_the_training_episodes_are_randomized() {
+    let randomized = (0..2000_u64)
+        .filter(|seed| randomizes_episode(true, 0.5, *seed))
+        .count();
+
+    assert!((800..1200).contains(&randomized), "{randomized} of 2000");
+}
+
+#[test]
+fn a_randomize_share_of_1_or_0_randomizes_every_or_no_episode() {
+    for seed in 0..200_u64 {
+        assert!(randomizes_episode(true, 1.0, seed));
+        assert!(!randomizes_episode(true, 0.0, seed));
+        assert!(!randomizes_episode(false, 1.0, seed));
+    }
+}
+
+#[test]
+fn whether_an_episode_is_randomized_depends_only_on_its_seed() {
+    for seed in 0..200_u64 {
+        assert_eq!(
+            randomizes_episode(true, 0.5, seed),
+            randomizes_episode(true, 0.5, seed)
+        );
+    }
 }

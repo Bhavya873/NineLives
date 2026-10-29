@@ -22,10 +22,10 @@ def test_the_single_env_passes_gymnasiums_env_checker():
     check_env(NineLivesEnv(), skip_render_check=True)
 
 
-def test_the_observation_layout_comes_from_rust_with_41_values():
-    assert len(obs_spec()) == 41
+def test_the_observation_layout_comes_from_rust_with_43_values():
+    assert len(obs_spec()) == 43
     assert len(obs_schema_hash()) == 16
-    assert NineLivesEnv().observation_space.shape == (41,)
+    assert NineLivesEnv().observation_space.shape == (43,)
 
 
 def test_a_batch_of_four_matches_four_single_sims_until_each_first_episode_ends():
@@ -70,7 +70,7 @@ def test_an_ended_env_restarts_and_hands_back_its_last_observation():
 
     row = int(np.flatnonzero(dones)[0])
     info = infos[row]
-    assert info["terminal_observation"].shape == (41,)
+    assert info["terminal_observation"].shape == (43,)
     # The returned observation is the new episode's first one, not the old last one.
     assert not np.array_equal(info["terminal_observation"], obs[row])
     episode = info["nl_episode"]

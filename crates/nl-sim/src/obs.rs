@@ -1,4 +1,4 @@
-//! The observation the AI sees (SPEC §9.2): 41 numbers in a fixed order, defined here
+//! The observation the AI sees (SPEC §9.2): 43 numbers in a fixed order, defined here
 //! and nowhere else. Python, the policy exporter and the browser read this layout
 //! through `OBS_SPEC` and check `obs_schema_hash` before trusting a policy
 //! (CLAUDE.md golden rule 4). Any change to the names, their order or their ranges
@@ -8,8 +8,8 @@ use crate::car_state::{CarState, MAX_HEIGHT_M, TERRAIN_PROBE_CAP_M};
 use crate::hash::{FNV_OFFSET_BASIS, fnv1a_add_bytes};
 use crate::world::World;
 
-/// How many numbers an observation holds (SPEC §9.2, v1).
-pub const OBS_DIM: usize = 41;
+/// How many numbers an observation holds (SPEC §9.2, v2: v1's 41 plus the heading error).
+pub const OBS_DIM: usize = 43;
 
 /// One observation: `OBS_DIM` numbers in `OBS_SPEC` order.
 pub type Observation = [f32; OBS_DIM];
@@ -102,6 +102,10 @@ pub const OBS_SPEC: [ObsField; OBS_DIM] = [
     field("prev_action.s_rr", 0.0, 1.0),
     field("prev_action.b_l", 0.0, 1.0),
     field("prev_action.b_r", 0.0, 1.0),
+    // 41–42: how far the nose has yawed from the take-off heading, as sin and cos
+    // (positive sin: turned left); both 0 with no heading to keep (DECISIONS 2026-10-27).
+    field("heading_error.sin", -1.0, 1.0),
+    field("heading_error.cos", -1.0, 1.0),
 ];
 
 /// A short fingerprint of the layout: FNV-1a (64-bit) over every field's name, low and
@@ -139,6 +143,7 @@ pub fn observe(world: &World, state: &CarState) -> Observation {
     writer.put(input.steer_fraction());
     writer.put_all(&world.terrain_probe_heights_m());
     writer.put_all(&world.controller_throttles());
+    writer.put_all(&world.heading_error_sin_cos());
     debug_assert_eq!(writer.next_index, OBS_DIM, "observe filled the wrong count");
     writer.observation
 }

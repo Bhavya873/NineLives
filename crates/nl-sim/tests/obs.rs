@@ -1,4 +1,4 @@
-//! Observation tests (SPEC §9.2, §12): the layout has 41 uniquely named values, its hash
+//! Observation tests (SPEC §9.2, §12): the layout has 43 uniquely named values, its hash
 //! is pinned, and the values describe the car the way their names say.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.
@@ -6,8 +6,9 @@
 
 mod common;
 
-use common::{LEVEL, UPSIDE_DOWN, new_world, run_and_collect};
+use common::{LEVEL, UPSIDE_DOWN, buttons, new_world, run_and_collect};
 use nl_sim::car_state::TERRAIN_PROBE_DISTANCES_M;
+use nl_sim::input::BUTTON_HOP;
 use nl_sim::input::InputFrame;
 use nl_sim::obs::{OBS_DIM, OBS_SPEC, Observation, obs_schema_hash, observe};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
@@ -26,8 +27,8 @@ fn value(observation: &Observation, name: &str) -> f32 {
 }
 
 #[test]
-fn the_layout_has_41_uniquely_named_values() {
-    assert_eq!(OBS_DIM, 41);
+fn the_layout_has_43_uniquely_named_values() {
+    assert_eq!(OBS_DIM, 43);
     for (index, field) in OBS_SPEC.iter().enumerate() {
         for other in &OBS_SPEC[index + 1..] {
             assert_ne!(field.name, other.name);
@@ -47,6 +48,8 @@ fn the_layout_follows_the_spec_row_order() {
     assert_eq!(index_of("terrain_probe.2m"), 26);
     assert_eq!(index_of("prev_action.l_fl"), 31);
     assert_eq!(index_of("prev_action.b_r"), 40);
+    assert_eq!(index_of("heading_error.sin"), 41);
+    assert_eq!(index_of("heading_error.cos"), 42);
 }
 
 #[test]
@@ -64,7 +67,7 @@ fn terrain_probe_names_match_their_distances() {
 fn the_schema_hash_is_pinned() {
     // If this fails you changed the observation layout: every exported policy is now
     // stale. Update the pinned value on purpose and log it in docs/DECISIONS.md.
-    assert_eq!(obs_schema_hash(), "16d2f5faa7964d05");
+    assert_eq!(obs_schema_hash(), "9cfb7c4a8a03a228");
 }
 
 #[test]
@@ -122,6 +125,45 @@ fn a_car_lifted_off_the_ground_reads_no_contact_before_the_next_step() {
         let compression = value(&observation, &format!("suspension_compression.{wheel}"));
         assert_eq!(compression, 0.0);
     }
+}
+
+#[test]
+fn a_car_on_its_wheels_has_no_heading_to_keep() {
+    let mut world = new_world();
+    run_and_collect(&mut world, 1.0);
+
+    let observation = observe(&world, &world.car_state());
+
+    assert_eq!(value(&observation, "heading_error.sin"), 0.0);
+    assert_eq!(value(&observation, "heading_error.cos"), 0.0);
+}
+
+#[test]
+fn a_car_turning_in_the_air_after_a_hop_reads_its_heading_error() {
+    // The sign is pinned in landing.rs; here a real take-off from the wheels must feed
+    // it: settled on its wheels, the car hops while two opposite side boosters yaw it.
+    let mut world = new_world();
+    run_and_collect(&mut world, 1.0);
+    let mut yaw_throttles = [0.0; 10];
+    yaw_throttles[index_of("prev_action.s_fl") - index_of("prev_action.l_fl")] = 1.0;
+    yaw_throttles[index_of("prev_action.s_rr") - index_of("prev_action.l_fl")] = 1.0;
+
+    let mut peak_sin = 0.0_f32;
+    let mut unit_length = true;
+    for _ in 0..60 {
+        world.set_controller_throttles(yaw_throttles);
+        world.step(buttons(BUTTON_HOP));
+        let observation = observe(&world, &world.car_state());
+        let sin = value(&observation, "heading_error.sin");
+        let cos = value(&observation, "heading_error.cos");
+        if sin != 0.0 || cos != 0.0 {
+            unit_length &= (sin * sin + cos * cos - 1.0).abs() < 1e-3;
+        }
+        peak_sin = peak_sin.max(sin.abs());
+    }
+
+    assert!(peak_sin > 0.01, "the heading error never moved: {peak_sin}");
+    assert!(unit_length, "a heading error that is not a unit vector");
 }
 
 #[test]

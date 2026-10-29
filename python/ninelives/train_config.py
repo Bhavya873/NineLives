@@ -76,6 +76,8 @@ class TrainConfig:
     randomize: bool
     # False keeps `mode`'s preset under randomization: a policy for one mode (round 7).
     randomize_mode: bool
+    # With randomize, the share of episodes randomized; the rest run plain (R4).
+    randomize_share: float
     total_steps: int
     ppo: PpoSettings
     clip_obs: float
@@ -119,6 +121,7 @@ def load_train_config(path: Path) -> TrainConfig:
             },
             randomize=strict_bool("randomize", raw["randomize"]),
             randomize_mode=strict_bool("randomize_mode", raw.get("randomize_mode", True)),
+            randomize_share=share_of_episodes(raw.get("randomize_share", 1.0)),
             total_steps=int(raw["total_steps"]),
             ppo=read_ppo(raw["ppo"]),
             clip_obs=float(raw["normalize"]["clip_obs"]),
@@ -294,3 +297,11 @@ def check_stages(path: Path, config: TrainConfig) -> None:
                 f"{path}: curriculum.stage_weights needs a weight above 0 for stage {stage} "
                 "(leave a stage out of `stages` instead of giving it weight 0)"
             )
+
+
+def share_of_episodes(value: object) -> float:
+    """`randomize_share` as a number from 0 to 1, or an error saying what is wrong."""
+    share = float(value)  # type: ignore[arg-type]
+    if not 0.0 <= share <= 1.0:
+        raise ValueError(f"randomize_share must be between 0 and 1, not {value!r}")
+    return share

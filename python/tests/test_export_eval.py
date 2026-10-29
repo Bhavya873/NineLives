@@ -14,7 +14,9 @@ from ninelives.eval import RESULTS_DIR, evaluate, write_report
 from ninelives.export import evenly_spaced, export_policy
 from ninelives.export import main as export_main
 from ninelives.run_files import save_checkpoint
-from ninelives_sim import obs_schema_hash, policy_actions
+from ninelives_sim import obs_schema_hash, obs_spec, policy_actions
+
+OBS_DIM = len(obs_spec())
 
 PARITY_TOLERANCE = 1e-4
 
@@ -46,7 +48,7 @@ def random_policy() -> tuple[PPO, VecNormalize]:
 
 def random_observations(count: int) -> np.ndarray:
     rng = np.random.default_rng(1)
-    return rng.normal(0.0, 3.0, size=(count, 41)).astype(np.float32)
+    return rng.normal(0.0, 3.0, size=(count, OBS_DIM)).astype(np.float32)
 
 
 def test_the_rust_forward_pass_matches_sb3_on_1000_observations():
@@ -68,7 +70,7 @@ def test_the_export_carries_the_schema_hash_and_the_layer_shapes():
 
     assert policy["obs_schema_hash"] == obs_schema_hash()
     shapes = [(layer["in"], layer["out"], layer["act"]) for layer in policy["layers"]]
-    assert shapes == [(41, 128, "tanh"), (128, 128, "tanh"), (128, 10, "none")]
+    assert shapes == [(OBS_DIM, 128, "tanh"), (128, 128, "tanh"), (128, 10, "none")]
 
 
 def test_the_python_eval_reproduces_the_rust_eval_runners_rows():

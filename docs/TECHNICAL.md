@@ -311,7 +311,7 @@ physics files: the TOML texts are passed in as one JSON config.
 
 ### 7.2 Observation
 
-41 values, defined once in `crates/nl-sim/src/obs.rs` (`OBS_SPEC`), each clamped to a stated
+43 values, defined once in `crates/nl-sim/src/obs.rs` (`OBS_SPEC`), each clamped to a stated
 range:
 
 | Index | Content |
@@ -326,6 +326,7 @@ range:
 | 24–25 | driver throttle and steer |
 | 26–30 | terrain height 2–10 m ahead along the heading |
 | 31–40 | the previous commanded throttles |
+| 41–42 | the heading error: sin and cos of the nose's yaw from the take-off heading, both 0 with no heading to keep (`landing::heading_error_sin_cos`) |
 
 The schema hash is FNV-1a 64 over every field's name and range. The trainer, the exporter and the
 browser all check it before trusting a policy.
