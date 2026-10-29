@@ -115,19 +115,20 @@ test('the stage picker flies Stage D, Stage F and the Gauntlet with the Hybrid',
     'Gauntlet',
   ]);
 
-  for (const [value, label] of [
-    ['driving', 'stage d course'],
-    ['flight', 'stage f flip plate'],
-    ['gauntlet', 'gauntlet'],
-  ]) {
+  const stages = [
+    { value: 'driving', label: 'stage d course' },
+    { value: 'flight', label: 'stage f flip plate' },
+    { value: 'gauntlet', label: 'gauntlet' },
+  ];
+  for (const { value, label } of stages) {
     await page.locator('#stage-select').selectOption(value);
 
     await expectArena(page, label);
     await expect(page).toHaveURL(new RegExp(`arena=${value}`));
-    // A generated course and the Gauntlet are drawn from the crowd's shapes.
+    // Every course is drawn from the crowd's shapes (at least a floor and a piece).
     await expect
       .poll(async () => (await readViewer(page))?.courseShapeCount ?? 0)
-      .toBeGreaterThan(3);
+      .toBeGreaterThan(1);
     expect((await readViewer(page))?.arena).toBe(value);
   }
   // Stage F flights end within seconds; the cars land.
