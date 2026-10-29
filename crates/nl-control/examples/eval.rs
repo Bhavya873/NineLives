@@ -7,9 +7,14 @@
 //! domain randomization, SPEC §9.8, and adds `_dr` to the file name; `--course <json>`
 //! runs the episodes on that course, e.g. courses/playground.json, and adds its file
 //! stem, e.g. `_playground`; `--controllers <toml>` reads the controller settings from that
-//! file instead of configs/controllers.toml, e.g. to try `[allocation] model`)
+//! file instead of configs/controllers.toml, e.g. to try `[allocation] model`; `--out <dir>`
+//! writes there instead of `results`)
+//!
+//! Every file also records `physics_hash`, `controller_config_hash`, `policy_hash` (null
+//! without a policy) and `git_sha`, so a result can be matched to the settings it ran on.
 
 use std::error::Error;
+use std::process::Command;
 
 use nl_control::ControllerKind;
 use nl_control::build_controller;
@@ -18,6 +23,7 @@ use nl_control::eval::{run_episode, run_episode_on_course, summarise};
 use nl_sim::course::CourseSpec;
 use nl_sim::episode::EpisodeResult;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
+use nl_sim::provenance::{default_physics_hash, text_hash};
 use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
@@ -35,6 +41,17 @@ struct Args {
     course: Option<String>,
     /// A controllers.toml to use instead of the repo's; None: the repo's.
     controllers: Option<String>,
+    /// The folder the results file goes in.
+    out: String,
+}
+
+/// What ties a results file to the settings and policy it ran on (plan G1).
+struct Provenance {
+    physics_hash: String,
+    controller_config_hash: String,
+    /// None when the controller loads no policy.
+    policy_hash: Option<String>,
+    git_sha: String,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -47,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .by_name(&args.mode)
         .ok_or("--mode must be realistic or arcade")?;
 
-    let mut controller = build_named_controller(&args, &vehicle, mode)?;
+    let (mut controller, provenance) = build_named_controller(&args, &vehicle, mode)?;
     let randomization = args.randomize.then_some(&scenarios.randomization);
     let course = match &args.course {
         Some(path) => Some(CourseSpec::from_json_str(&std::fs::read_to_string(path)?)?),
@@ -68,11 +85,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
         results.push(result);
     }
-    write_report(&args, &results)
+    write_report(&args, &results, &provenance)
 }
 
 /// Prints the summary and writes it, with every episode, to the results file.
-fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Error>> {
+fn write_report(
+    args: &Args,
+    results: &[EpisodeResult],
+    provenance: &Provenance,
+) -> Result<(), Box<dyn Error>> {
     let summary = summarise(results);
     let stage_name = args.stage.to_uppercase();
     let report = serde_json::json!({
@@ -82,10 +103,14 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
         "first_seed": args.seed,
         "randomized": args.randomize,
         "course": args.course,
+        "physics_hash": provenance.physics_hash,
+        "controller_config_hash": provenance.controller_config_hash,
+        "policy_hash": provenance.policy_hash,
+        "git_sha": provenance.git_sha,
         "summary": summary,
         "episodes": results,
     });
-    std::fs::create_dir_all("results")?;
+    std::fs::create_dir_all(&args.out)?;
     let mut suffix = String::new();
     if let Some(path) = &args.course {
         let stem = std::path::Path::new(path)
@@ -97,8 +122,8 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
         suffix.push_str("_dr");
     }
     let path = format!(
-        "results/eval_{}_{}_{}{suffix}.json",
-        args.controller, stage_name, args.mode
+        "{}/eval_{}_{}_{}{suffix}.json",
+        args.out, args.controller, stage_name, args.mode
     );
     // Compact: 1000 per-episode rows pretty-printed are several hundred KB per file.
     std::fs::write(&path, serde_json::to_string(&report)?)?;
@@ -108,12 +133,13 @@ fn write_report(args: &Args, results: &[EpisodeResult]) -> Result<(), Box<dyn Er
 }
 
 /// The controller named by `--controller`: Off, PD built for this car, or the AI or
-/// Hybrid with the policy from `--policy` (read only when one of those is asked for).
+/// Hybrid with the policy from `--policy` (read only when one of those is asked for), and
+/// the fingerprints of the settings and policy it was built from.
 fn build_named_controller(
     args: &Args,
     vehicle: &VehicleConfig,
     mode: ModeParams,
-) -> Result<ControllerKind, Box<dyn Error>> {
+) -> Result<(ControllerKind, Provenance), Box<dyn Error>> {
     let mut policy_json = None;
     if args.controller == "ai" || args.controller == "hybrid" {
         let text = std::fs::read_to_string(&args.policy)
@@ -132,7 +158,37 @@ fn build_named_controller(
         &controllers_toml,
         policy_json.as_deref(),
     )?;
-    Ok(controller)
+    let provenance = Provenance {
+        physics_hash: default_physics_hash(),
+        controller_config_hash: text_hash(&[&controllers_toml]),
+        policy_hash: policy_json.as_deref().map(|text| text_hash(&[text])),
+        git_sha: git_sha(),
+    };
+    Ok((controller, provenance))
+}
+
+/// The commit the run was made from, with "-dirty" if configs or code differ from it
+/// (then the commit alone cannot reproduce the run); "unknown" outside a checkout. The same
+/// rule as `ninelives.export.git_sha`.
+fn git_sha() -> String {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(args)
+            .current_dir(&root)
+            .output()
+            .ok()
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    };
+    let sha = git(&["rev-parse", "HEAD"]).filter(|sha| !sha.is_empty());
+    let Some(sha) = sha else {
+        return "unknown".to_string();
+    };
+    let changed = git(&["status", "--porcelain", "--", "configs", "crates", "python"]);
+    match changed {
+        Some(changed) if !changed.is_empty() => format!("{sha}-dirty"),
+        _ => sha,
+    }
 }
 
 /// Reads `--name value` pairs; anything missing gets the default shown in the header.
@@ -147,6 +203,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
         randomize: false,
         course: None,
         controllers: None,
+        out: "results".to_string(),
     };
     let mut words = std::env::args().skip(1);
     while let Some(name) = words.next() {
@@ -165,6 +222,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
             "--policy" => args.policy = value.clone(),
             "--course" => args.course = Some(value.clone()),
             "--controllers" => args.controllers = Some(value.clone()),
+            "--out" => args.out = value.clone(),
             other => return Err(format!("unknown option {other}").into()),
         }
     }

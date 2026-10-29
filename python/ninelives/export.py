@@ -11,7 +11,6 @@ to `web/public/checkpoints/<run-id>/<n>.json` (under 3 MB together).
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
 from torch import nn
 
+from ninelives.provenance import git_sha
 from ninelives.run_files import DEFAULT_POLICY_PATH, load_model_and_normalizer
 from ninelives.sim_config import REPO_ROOT
 from ninelives_sim import obs_schema_hash, policy_format
@@ -81,25 +81,6 @@ def rounded(values: list[float], digits: int | None) -> list[float]:
     if digits is None:
         return values
     return [float(f"{value:.{digits}g}") for value in values]
-
-
-def git_sha() -> str:
-    """The commit the export was made from, with "-dirty" if configs or code differ from
-    it (then the commit alone cannot reproduce the run); "unknown" outside a checkout."""
-    try:
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True, text=True
-        )
-        changed = subprocess.run(
-            ["git", "status", "--porcelain", "--", "configs", "crates", "python"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return "unknown"
-    sha = head.stdout.strip() or "unknown"
-    return f"{sha}-dirty" if changed.stdout.strip() else sha
 
 
 def evenly_spaced(items: list[Path], count: int) -> list[Path]:

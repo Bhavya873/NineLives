@@ -30,6 +30,7 @@ pub mod input;
 pub mod landing;
 pub mod modes;
 pub mod obs;
+pub mod provenance;
 pub mod randomization;
 pub mod reward;
 pub mod scenarios;

@@ -5,7 +5,9 @@
 
 Episodes run in Rust (`ninelives_sim.run_eval`, the same code as the Rust eval runner),
 so the numbers match it exactly. Writes `results/eval_<controller>_<stage>_<mode>.json`
-(summary plus one row per episode) and a `.csv` of the rows.
+(summary plus one row per episode) and a `.csv` of the rows; `--out <dir>` writes there
+instead. Every report also carries `physics_hash`, `controller_config_hash`, `policy_hash`
+(None without a policy) and `git_sha`, so a result can be matched to the settings it ran on.
 """
 
 import argparse
@@ -14,6 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ninelives.provenance import provenance
 from ninelives.run_files import DEFAULT_POLICY_PATH
 from ninelives.sim_config import REPO_ROOT, load_sim_config
 from ninelives.train_config import STAGE_NAMES
@@ -48,6 +51,7 @@ def evaluate(
         "mode": mode,
         "first_seed": first_seed,
         "randomized": randomize,
+        **provenance(config, policy_json),
         "summary": report["summary"],
         "episodes": report["episodes"],
     }
@@ -91,6 +95,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--keep-mode", action="store_true", help="with --dr, keep the mode's preset"
     )
+    parser.add_argument(
+        "--out", type=Path, default=RESULTS_DIR, help="the folder to write the results in"
+    )
     args = parser.parse_args(argv)
     report = evaluate(
         args.controller,
@@ -103,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
         not args.keep_mode,
     )
     print(json.dumps(report["summary"], indent=2))
-    print(f"wrote {write_report(report)}")
+    print(f"wrote {write_report(report, args.out)}")
 
 
 if __name__ == "__main__":

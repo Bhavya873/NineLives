@@ -11,10 +11,13 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 from ninelives.env import NineLivesVecEnv
 from ninelives.eval import RESULTS_DIR, evaluate, write_report
+from ninelives.eval import main as eval_main
 from ninelives.export import evenly_spaced, export_policy
 from ninelives.export import main as export_main
-from ninelives.run_files import save_checkpoint
-from ninelives_sim import obs_schema_hash, obs_spec, policy_actions
+from ninelives.provenance import provenance
+from ninelives.run_files import DEFAULT_POLICY_PATH, save_checkpoint
+from ninelives.sim_config import load_sim_config
+from ninelives_sim import obs_schema_hash, obs_spec, policy_actions, text_hash
 
 OBS_DIM = len(obs_spec())
 
@@ -123,6 +126,45 @@ def test_eval_with_domain_randomization_changes_the_episodes_and_the_file_name(t
 
     assert plain["episodes"] != randomized["episodes"]
     assert write_report(randomized, tmp_path).name == "eval_pd_A_realistic_dr.json"
+
+
+def test_an_eval_report_carries_the_hashes_that_tie_it_to_its_settings():
+    report = evaluate("pd", "A", "realistic", episodes=2, first_seed=0)
+
+    assert len(report["physics_hash"]) == 16
+    assert len(report["controller_config_hash"]) == 16
+    assert report["policy_hash"] is None
+    assert report["git_sha"]
+
+
+def test_a_hybrid_report_hashes_the_policy_files_text():
+    report = evaluate("hybrid", "A", "realistic", episodes=1, first_seed=0)
+
+    assert report["policy_hash"] == text_hash([DEFAULT_POLICY_PATH.read_text()])
+
+
+def test_a_changed_setting_changes_only_the_hash_it_belongs_to():
+    sim_config = load_sim_config("realistic", "A")
+    base = provenance(sim_config, None)
+
+    physics = json.loads(sim_config)
+    physics["vehicle_toml"] += "\n# edited"
+    controllers = json.loads(sim_config)
+    controllers["controllers_toml"] += "\n# edited"
+    after_physics = provenance(json.dumps(physics), None)
+    after_controllers = provenance(json.dumps(controllers), None)
+
+    assert after_physics["physics_hash"] != base["physics_hash"]
+    assert after_physics["controller_config_hash"] == base["controller_config_hash"]
+    assert after_controllers["controller_config_hash"] != base["controller_config_hash"]
+    assert after_controllers["physics_hash"] == base["physics_hash"]
+
+
+def test_the_eval_command_writes_into_the_folder_given_by_out(tmp_path):
+    eval_main(["--controller", "pd", "--episodes", "2", "--out", str(tmp_path)])
+
+    written = json.loads((tmp_path / "eval_pd_A_realistic.json").read_text())
+    assert written["physics_hash"] and written["summary"]["episodes"] == 2
 
 
 def test_viewer_checkpoints_end_on_the_shipped_policy(tmp_path, monkeypatch):
