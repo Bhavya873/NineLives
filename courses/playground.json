@@ -18,6 +18,9 @@
     { "type": "landing_pad", "pos": [345, 0, 0] },
     { "type": "wall", "pos": [420, 0, 0], "height": 3, "with_ramp": true },
 
+    { "type": "half_loop", "pos": [240, 0, 50], "radius": 6, "width": 8 },
+    { "type": "landing_pad", "pos": [238, 0, 50], "yaw": 180 },
+
     { "type": "halfpipe", "pos": [-40, 0, 80], "yaw": -90, "radius": 5, "length": 40 },
     { "type": "halfpipe", "pos": [0, 0, 80], "yaw": -90, "radius": 6, "length": 40 },
     { "type": "halfpipe", "pos": [40, 0, 80], "yaw": -90, "radius": 8, "length": 40 },

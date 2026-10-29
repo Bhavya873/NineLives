@@ -42,6 +42,13 @@ pub const WALL_RAMP_GAP_M: f32 = 2.0;
 const HALFPIPE_FLOOR_WIDTH_M: f32 = 4.0;
 const HALFPIPE_WALL_THICKNESS_M: f32 = 0.3;
 const HALFPIPE_ARC_SEGMENTS: usize = 16;
+/// Half loop: the road shell is this thick, and the half circle has this many facets.
+const HALF_LOOP_THICKNESS_M: f32 = 0.3;
+const HALF_LOOP_ARC_SEGMENTS: usize = 48;
+/// The half loop's road is slick where the body scrapes it. A circular loop pulls about
+/// 6 g at the bottom, past what the suspension holds, so the body rides on the road; at
+/// ground friction 1.0 that rubbing stopped the car on the wall instead of at the top.
+const HALF_LOOP_FRICTION: f32 = 0.1;
 /// Markings: landing pads, kick plates and the checkpoint/finish lines, in m along the
 /// course; drawn this thick above the floor.
 const LANDING_PAD_LENGTH_M: f32 = 20.0;
@@ -112,6 +119,9 @@ pub struct CourseShape {
     pub pose: Pose,
     /// False for markings the car drives over without touching.
     pub solid: bool,
+    /// Its own friction where the car's body scrapes it; None uses the course's.
+    #[serde(skip)]
+    pub friction: Option<f32>,
 }
 
 /// How long a row of `count` parked cars is along the course, gaps included, in m.
@@ -168,7 +178,7 @@ pub fn shape_collider(shape: &CourseShape, friction: f32) -> Option<ColliderBuil
     Some(
         builder
             .position(shape.pose.to_rapier())
-            .friction(friction)
+            .friction(shape.friction.unwrap_or(friction))
             .user_data(user_data),
     )
 }
@@ -272,6 +282,12 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             radius,
             length,
         } => halfpipe(at(*pos, *yaw), *radius, *length),
+        PieceSpec::HalfLoop {
+            pos,
+            yaw,
+            radius,
+            width,
+        } => half_loop(at(*pos, *yaw), *radius, *width),
         PieceSpec::Bumps {
             pos,
             yaw,
@@ -374,6 +390,41 @@ fn halfpipe(frame: PieceFrame, radius: f32, length: f32) -> Vec<CourseShape> {
         shapes.push(frame.mesh(Surface::Ramp, loft(&section(0.0), &section(length))));
     }
     shapes
+}
+
+/// The first half of a loop along local +X: one smooth shell of
+/// `HALF_LOOP_ARC_SEGMENTS` facets whose inner face is a half circle of `radius` around
+/// (0, `radius`), from flush with the floor at x = 0 to upside down at the top.
+fn half_loop(frame: PieceFrame, radius: f32, width: f32) -> Vec<CourseShape> {
+    let section = |z: f32| {
+        // Lower chain: the shell's outer face; upper chain (reversed): the road.
+        let mut points = half_loop_arc(z, radius, radius + HALF_LOOP_THICKNESS_M);
+        let mut road = half_loop_arc(z, radius, radius);
+        road.reverse();
+        points.extend(road);
+        points
+    };
+    // Lofted toward −Z, so the facets face outward as the halfpipe's do.
+    let mut road = frame.mesh(
+        Surface::Ramp,
+        loft(&section(width / 2.0), &section(-width / 2.0)),
+    );
+    road.friction = Some(HALF_LOOP_FRICTION);
+    vec![road]
+}
+
+/// Points at `z` on a half circle of `arc_radius` around (0, `radius`), from straight
+/// below the centre (the bottom) up the +X side to straight above it, as (x, y, z).
+fn half_loop_arc(z: f32, radius: f32, arc_radius: f32) -> Vec<[f32; 3]> {
+    let step_rad = std::f32::consts::PI / HALF_LOOP_ARC_SEGMENTS as f32;
+    let mut points = Vec::new();
+    for segment in 0..=HALF_LOOP_ARC_SEGMENTS {
+        let angle_rad = segment as f32 * step_rad;
+        let x = arc_radius * libm::sinf(angle_rad);
+        let y = radius - arc_radius * libm::cosf(angle_rad);
+        points.push([x, y, z]);
+    }
+    points
 }
 
 /// Points at `x` on an arc of `arc_radius` around the halfpipe wall's centre (`radius`
@@ -579,6 +630,7 @@ impl PieceFrame {
             geometry,
             pose: Pose::new(position, rotation),
             solid: true,
+            friction: None,
         }
     }
 }
@@ -591,5 +643,6 @@ fn floor_box(centre_m: [f32; 3], half_extents_m: [f32; 3]) -> CourseShape {
         geometry: ShapeGeometry::Box { half_extents_m },
         pose: Pose::new(Vector::from_array(centre_m), Rotation::IDENTITY),
         solid: true,
+        friction: None,
     }
 }
