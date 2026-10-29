@@ -152,6 +152,19 @@ pub struct Episode {
     noise_rng: ChaCha8Rng,
 }
 
+/// The course `Episode::start` would run `stage` on from `seed`, as a spec the web can
+/// draw: None for flat-ground stages (A and B), the Stage C hop track, the Stage F
+/// straight with its flip plate, or the generated Stage D course (Stage E: the A, C or D
+/// it builds on). Pass it to `start_on_course` to fly the same course again.
+pub fn course_for_stage(
+    variation: &EpisodeVariation,
+    scenarios: &ScenariosConfig,
+    stage: Stage,
+    seed: u64,
+) -> Result<Option<CourseSpec>, PlaceCarError> {
+    StagePlan::draw(variation, scenarios, stage, seed)?.course(scenarios, seed)
+}
+
 impl Episode {
     /// A fresh world for `variation` (use `EpisodeVariation::none` for no randomization)
     /// with the car placed for `stage` from `seed`: flat ground for Stages A and B, the

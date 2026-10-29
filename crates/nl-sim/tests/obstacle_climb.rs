@@ -116,8 +116,10 @@ fn a_car_driven_across_a_halfpipe_rides_up_past_the_top_of_the_wall() {
     }
 }
 
-/// The largest tilt from upright, in degrees, of a full-throttle run at `speed_m_s` from
+/// The largest tilt from upright, in degrees, of a run at `speed_m_s` from
 /// x = −10 along +X over `piece`, for four seconds or until the car crashes.
+/// The fast roadster would pull 20 m/s up to 40 m/s on the piece at full throttle, so the
+/// run holds the entry speed.
 fn peak_tilt_deg(piece: &str, speed_m_s: f32) -> f32 {
     let course = course_with(piece);
     let mut world =
@@ -125,13 +127,14 @@ fn peak_tilt_deg(piece: &str, speed_m_s: f32) -> f32 {
     world
         .place_car([-10.0, 0.62, 0.0], LEVEL, [speed_m_s, 0.0, 0.0], [0.0; 3])
         .unwrap();
-    let full_throttle = InputFrame {
-        throttle: 127,
-        ..InputFrame::default()
-    };
     let mut peak_tilt_rad = 0.0_f32;
     for _ in 0..STEPS {
-        world.step(full_throttle);
+        let error_m_s = speed_m_s - world.forward_speed_m_s();
+        let throttle = (error_m_s * 0.5).clamp(-1.0, 1.0) * 127.0;
+        world.step(InputFrame {
+            throttle: throttle.round() as i8,
+            ..InputFrame::default()
+        });
         peak_tilt_rad = peak_tilt_rad.max(world.tilt_rad());
         if world.is_crashed() {
             break;
@@ -150,7 +153,9 @@ fn a_car_driven_over_a_corkscrew_is_tilted_but_not_crashed() {
             r#"{{"type": "corkscrew", "pos": [20, 0, 0], "length": 15.5, "width": 4,
             "angle_deg": 8, "bank_deg": 8, "side": "{side}"}}"#
         );
-        for speed_m_s in [15.0, 20.0] {
+        // Grip 1.9 keeps the tyres on the ramp longer: at 15 m/s the roll is now 66°, at
+        // 20 and 25 m/s it is 101° and 130° (it was past 90° from 15 m/s with grip 1.3).
+        for speed_m_s in [20.0, 25.0] {
             let tilt_deg = peak_tilt_deg(&piece, speed_m_s);
 
             assert!(

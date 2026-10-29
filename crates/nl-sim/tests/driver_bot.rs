@@ -243,3 +243,67 @@ fn a_hop_has_no_window_above_its_apex() {
     assert!(profile.clear_window(apex_m + 0.1).is_none());
     assert!(below.from_s < below.until_s);
 }
+
+/// Drives the real bot (the repo's wobble and jerks on) along +X from a 1.5 m offset, from
+/// rest, for `seconds` on the 4 km flat ground. Returns (final speed, largest sideways
+/// distance from the line after the first 5 s, largest tilt in degrees, crashed).
+fn drive_bot_on_flat_ground(target_m_s: f32, seed: u64, seconds: f32) -> (f32, f32, f32, bool) {
+    let mut world =
+        World::new_on_flat_ground(&vehicle(), realistic(), DEFAULT_GROUND_FRICTION, seed);
+    world
+        .place_car(
+            [-1900.0, 0.62, 1.5],
+            [0.0, 0.0, 0.0, 1.0],
+            [0.0; 3],
+            [0.0; 3],
+        )
+        .unwrap();
+    let mut driver = DriverBot::new(
+        scenarios().driver_bot,
+        &vehicle(),
+        Centerline::along_x(),
+        target_m_s,
+        &[],
+        seed,
+    );
+    let steps = (seconds * PHYSICS_HZ as f32) as usize;
+    let (mut max_off_m, mut max_tilt_deg) = (0.0_f32, 0.0_f32);
+    for step in 0..steps {
+        world.step(driver.input(&BotView::of(&world)));
+        max_tilt_deg = max_tilt_deg.max(world.tilt_rad().to_degrees());
+        if step > 5 * PHYSICS_HZ as usize {
+            max_off_m = max_off_m.max(world.chassis_pose().position_m[2].abs());
+        }
+    }
+    (
+        world.forward_speed_m_s(),
+        max_off_m,
+        max_tilt_deg,
+        world.is_crashed(),
+    )
+}
+
+#[test]
+fn the_bot_holds_its_speed_and_line_up_to_200_km_h() {
+    // G2: the roadster drive pulls 0-200 km/h in under 5 s. The bot's P control, pursuit
+    // and grip-safe turn limit must hold at every speed up to 55.6 m/s (200 km/h).
+    for target_m_s in [10.0, 30.0, 45.0, 55.6] {
+        for seed in 0..3 {
+            let (speed_m_s, off_m, tilt_deg, crashed) =
+                drive_bot_on_flat_ground(target_m_s, seed, 20.0);
+            assert!(!crashed, "{target_m_s} m/s seed {seed}: crashed");
+            assert!(
+                (speed_m_s - target_m_s).abs() < 1.0,
+                "{target_m_s} m/s seed {seed}: speed {speed_m_s}"
+            );
+            assert!(
+                off_m < 2.0,
+                "{target_m_s} m/s seed {seed}: {off_m} m off the line"
+            );
+            assert!(
+                tilt_deg < 15.0,
+                "{target_m_s} m/s seed {seed}: tilt {tilt_deg}"
+            );
+        }
+    }
+}

@@ -93,15 +93,17 @@ The drive model (`Car::engine_and_brake` and `engine_force_limit_n` in `car.rs`,
 `configs/vehicle.toml`):
 
 - All-wheel drive. Each wheel's engine force is the throttle times
-  `min(max_engine_force_per_wheel_n, max_engine_power_w / (4 · |v|))`: 3 kN per wheel at low
-  speed, then constant power (220 kW) above about 18 m/s, so acceleration falls with speed as in
-  a real car. The engine stops pushing at 55 m/s (198 km/h).
+  `min(max_engine_force_per_wheel_n, max_engine_power_w / (4 · |v|))`: 7.2 kN per wheel at low
+  speed, then constant power (800 kW) above about 28 m/s, so acceleration falls with speed as in
+  a real car. The engine stops pushing at 103 m/s (371 km/h), reached in about 16 s; 0–100 km/h
+  takes 2.0 s (research R2a). Boost fades out below 110 m/s: with Arcade's double thrust and
+  unlimited air the car tops out at 108.7 m/s (391 km/h).
 - Pulling back brakes while rolling forward and reverses below 0.5 m/s (reverse is capped at
   8 m/s). Braking is an impulse per wheel per step, about 1.1 g in total.
 - With no pedal pressed, a small brake impulse (about 0.04 g) stands in for rolling resistance and
   engine braking.
-- Tyre grip is Rapier's `friction_slip` (1.3, sporty road tyres on dry asphalt: a full-lock
-  circle peaks at about 1.13–1.2 g). Rapier's raycast wheels do not read collider friction, so the ground's
+- Tyre grip is Rapier's `friction_slip` (1.9, raised from 1.3 for the 2 s launch: a full-lock
+  circle at 20 m/s peaks at about 1.57 g, and lateral grip at 100 m/s is about 1.67 g). Rapier's raycast wheels do not read collider friction, so the ground's
   friction coefficient only matters when the body itself scrapes.
 - Steering turns the front wheels only, at most 3 rad/s, within a limit that shrinks from 0.5 rad
   when stopped to 0.25 rad at 50 m/s.
@@ -110,6 +112,14 @@ Air drag acts along each body axis, `F_i = −0.5 · ρ · CdA_i · |v_air| · v
 the velocity through the (possibly windy) air in the body frame and CdA = 0.6, 8.0 and 5.5 m² for
 front, top and side. It acts at a centre of pressure behind and above the centre of mass, so a
 side wind turns the nose into the wind and leans the car downwind.
+
+The chassis has Rapier continuous collision detection (`chassis.ccd_enabled`, on): at 100 m/s the
+car moves 0.83 m per physics step, more than the roof box is thick. The wheels are raycasts, so
+their contact does not depend on CCD; `tests/roadster_drive.rs` checks that all four rays hold at
+100 m/s over floor seams and a ramp's kinks with CCD off and on, and that CCD stops a car at a wall.
+`cargo run --release -p nl-sim --example drive_target` measures the roadster targets (0–100 km/h,
+top speed, steering and lateral grip at 50–100 m/s, wheel stability at 100 m/s), and the driver bot
+holds speed and line up to 55.6 m/s (`tests/driver_bot.rs`).
 
 `cargo run --release -p nl-sim --example drive_feel` prints the 0–100 km/h time, top speed (also
 with Boost held, per mode), braking distance and full-lock turn behaviour, for tuning these values.
@@ -443,8 +453,13 @@ The game flies PD alone (`?controller=hybrid` loads the policy and flies the Hyb
 pauses on Esc, and gives the player nine lives, one lost per crash.
 
 The training viewer (`web/viewer.html`) builds one wasm `Crowd` per exported checkpoint and flies
-them all at once on the same Stage A drops: one labelled row of translucent cars per checkpoint,
-plus a table of landings and crashes.
+them all at once on the same episodes: one labelled row of translucent cars per checkpoint,
+plus a table of landings and crashes. Every car is flown by the Hybrid (`build_controller("hybrid", ...)`,
+the hand-over from `controllers.toml`) with the checkpoint as its AI. `Crowd::for_stage` covers Stage A
+drops (flat and the obstacle arena), Stage D and F on a generated course (`episode::course_for_stage`, one
+course per crowd, drawn from `course_shapes()`) and the Gauntlet; a stage picker (or `?arena=`) chooses.
+`cargo run --release -p nl-wasm --example viewer_rates` flies the same crowds natively and records the
+landing rates (`results/baseline_2026-10/viewer_landing_rates.json`).
 
 ## 10. Testing
 

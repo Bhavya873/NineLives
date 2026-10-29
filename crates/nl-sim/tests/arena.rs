@@ -18,6 +18,8 @@ use rapier3d::prelude::Vector;
 
 /// The viewer's 64 drops use eval seeds 0–63 (SPEC §11.6).
 const VIEWER_SEEDS: std::ops::Range<u64> = 0..64;
+/// Farthest any obstacle's far corner may be from the arena centre, in m.
+const MAX_OBSTACLE_REACH_M: f32 = 40.0;
 /// Farthest any part of the car reaches from its centre of mass, horizontally, in m
 /// (half of its 4.5 m length plus its overhang, rounded up generously).
 const CAR_REACH_M: f32 = 3.5;
@@ -91,6 +93,67 @@ fn the_arena_parses_and_has_ramps_and_blocks_but_no_lines() {
     assert!(count(Surface::Obstacle) >= 10, "blocks, bumps and walls");
     assert_eq!(count(Surface::Floor), 1, "one floor, no gaps");
     assert_eq!(count(Surface::Checkpoint) + count(Surface::Finish), 0);
+}
+
+/// True if the horizontal footprints of `a` and `b` overlap (separating-axis test on the
+/// corner points, so it is exact for the convex pieces here).
+fn footprints_overlap(a: &[Vector], b: &[Vector]) -> bool {
+    let flat = |points: &[Vector]| -> Vec<[f32; 2]> { points.iter().map(|p| [p.x, p.z]).collect() };
+    let (a, b) = (flat(a), flat(b));
+    // Every direction between two points of one shape includes its edge directions.
+    let axes: Vec<[f32; 2]> = [&a, &b]
+        .into_iter()
+        .flat_map(|points| {
+            points.iter().flat_map(|p| {
+                points.iter().filter_map(|q| {
+                    let (dx, dz) = (q[0] - p[0], q[1] - p[1]);
+                    let length = (dx * dx + dz * dz).sqrt();
+                    (length > 1e-3).then(|| [-dz / length, dx / length])
+                })
+            })
+        })
+        .collect();
+    let range = |points: &[[f32; 2]], axis: [f32; 2]| {
+        let values = points.iter().map(|p| p[0] * axis[0] + p[1] * axis[1]);
+        let min = values.clone().fold(f32::INFINITY, f32::min);
+        let max = values.fold(f32::NEG_INFINITY, f32::max);
+        (min, max)
+    };
+    axes.iter().all(|axis| {
+        let (a_min, a_max) = range(&a, *axis);
+        let (b_min, b_max) = range(&b, *axis);
+        a_min < b_max && b_min < a_max
+    })
+}
+
+#[test]
+fn the_obstacles_sit_inside_the_drop_zone_and_none_overlap() {
+    let obstacles = obstacles();
+
+    // Stage A drops first touch the ground within about 15 m of the centre (90% of 256
+    // seeds; farthest 31 m), so the obstacles are pulled in to within 40 m (far corners) to be met.
+    for shape in &obstacles {
+        let corners = world_corners(shape);
+        let reach_m = corners
+            .iter()
+            .map(|corner| (corner.x * corner.x + corner.z * corner.z).sqrt())
+            .fold(0.0, f32::max);
+        assert!(
+            reach_m < MAX_OBSTACLE_REACH_M,
+            "piece {:?} reaches {reach_m:.1} m from the centre",
+            shape.piece
+        );
+    }
+    for (index, first) in obstacles.iter().enumerate() {
+        for second in &obstacles[index + 1..] {
+            assert!(
+                !footprints_overlap(&world_corners(first), &world_corners(second)),
+                "pieces {:?} and {:?} overlap",
+                first.piece,
+                second.piece
+            );
+        }
+    }
 }
 
 #[test]

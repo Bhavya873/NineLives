@@ -368,7 +368,7 @@ Results: `results/control_upgrade/2026-10-27-r4/` (manifest, per-cell summaries)
 Results: `results/baseline_2026-10/` (48 files, README there). PD and Hybrid, stages A–F, both modes, plain and `--dr`, 1000 episodes each from seed 1,500,000 (`cargo run --release -p nl-control --example eval -- … --out results/baseline_2026-10`, about 1 minute on 6 cores).
 - **Means over the 12 cells:** PD 94.84% plain / 88.74% randomized; Hybrid with the 120° hand-over 94.93% / 92.14%. These equal the R4 validation rows, which checks that the new `--out` and hash fields changed nothing about the episodes.
 - **Every file records** `physics_hash`, `controller_config_hash`, `policy_hash` and `git_sha` (DECISIONS 2026-10-29), so the new-physics results in G2 and later can be told apart from this baseline.
-- **Not recorded yet:** the speed sweep (R2's tool is not on main) and the viewer landing rates.
+- **Not recorded here yet:** the speed sweep (R2's tool is not on main). The viewer landing rates are in the D1 entry below.
 
 ### 2026-10-29 — R2: drive values, suspension limit and per-piece speed survival
 Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_load` (nl-sim examples) and `speed_sweep` (nl-control example); read-only diagnostics in `nl-sim/src/diagnostics.rs`. Results: `results/baseline_2026-10/speed_sweep.*` (today's physics) and `results/speed_sweep_drive_candidate.*`.
@@ -384,3 +384,31 @@ Tools: `suspension_load` (bump stop re-measured: last clean 4.21 g at 30 m/s, fi
 - The residual is a spurious Rapier contact: at touchdown the car's rear corner gets a horizontal normal (0.87, -0.07, 0.49) with a reported 45 m/s, and the solver turns it into a 14 rad/s yaw. Chassis CCD (`claude/roadster-drive`) may remove it.
 - `pd_driving_over_bumps_uses_almost_no_air` kept passing once bumps became longer; with the old 5 m bumps and the stop the PD used 5 to 13 kg depending on the stop's rate (chaotic, no trend).
 - Golden trace: hash only; trajectory unchanged (frozen car, flat ground).
+### 2026-10-29 — D1: the viewer flies the Hybrid; viewer landing rates (G1)
+Results: `results/baseline_2026-10/viewer_landing_rates.json`; reproduce with `cargo run --release -p nl-wasm --example viewer_rates -- --checkpoints web/public/checkpoints --out results/baseline_2026-10/viewer_landing_rates.json`. The viewer's `Crowd` now flies the Hybrid (controllers.toml hand-over 120°) with each checkpoint as its AI; before, it flew the raw policy. The example drives that same crowd natively: 8 checkpoints of `flight-r4`, Realistic, 64 cars per stage from seed 0 (crowds of 8, so Stage D and F use 8 generated courses), physics hash `db310175722eef10`, controller hash `dd24c53fe5654c16`.
+
+| Checkpoint (steps) | A flat | Arena | D | F | Gauntlet |
+|---|---|---|---|---|---|
+| 1 (2M) | 71.9% | 40.6% | 98.4% | 3.1% | 82.8% |
+| 2 (16M) | 81.3% | 51.6% | 98.4% | 48.4% | 82.8% |
+| 3 (30M) | 85.9% | 51.6% | 98.4% | 62.5% | 82.8% |
+| 4 (46M) | 82.8% | 54.7% | 98.4% | 65.6% | 82.8% |
+| 5 (60M) | 82.8% | 57.8% | 98.4% | 70.3% | 82.8% |
+| 6 (74M) | 81.3% | 56.3% | 98.4% | 73.4% | 82.8% |
+| 7 (88M) | 78.1% | 57.8% | 98.4% | 82.8% | 82.8% |
+| 8 (90M) | 81.3% | 53.1% | 98.4% | 79.7% | 82.8% |
+
+- **Landed** is the viewer's count: the episode succeeded, or on a drop it timed out after a save without crashing. The JSON also has crashed and still-flying counts (the arena leaves 5–7 cars of 64 stuck on a ramp or block until the time limit).
+- **The seeds 0–63 drops are harder than the validation block:** Stage A flat lands 81% with checkpoint 8, where the 1000-seed validation shows about 95% (the Hybrid eval on seeds 0–63 gives the same 52 of 64, so the crowd and the eval agree; a test pins it).
+- **D and the Gauntlet do not move with the checkpoint:** PD drives and flies, and the results are identical at every checkpoint, so the AI never took over. Stage F improves with training (3% to 80%): the plates tip the car, so the AI flies.
+- **The arena is hard on purpose:** with the pieces pulled in to 6–32 m from the centre (D1), drops meet ramps, rows and walls, and landings fall by 25–30 points against flat ground.
+
+### 2026-10-29 — G2 drive: the roadster values and CCD
+PR `claude/roadster-drive`. Values from R2a candidate B (`configs/vehicle.toml`), all measured with `drive_target`:
+- **0–100 km/h 1.98 s** (4.58 s before), 0–200 km/h 4.72 s, **top speed 103.0 m/s** after 16.1 s, peak 1.63 g, launch traction share 0.78; steady at 100 m/s on flat ground, floor seams and a 3° ramp (all four rays down every step, no body touch). Lateral grip 1.59–1.67 g at 100 m/s.
+- **CCD:** identical results with CCD off and on on every wheel-contact run (flat, seams, ramp kinks) at 100 m/s; CCD only matters for the body, and it stops a 100 m/s car at a wall. The speed sweep has the same 1,239 crashes with CCD on as R2's candidate run without it.
+- **Arcade (double thrust, unlimited air) with Boost held:** 108.7 m/s (391 km/h), under the 110 m/s boost limit; without Boost 103 m/s. The boost fade keeps it bounded (it passed 860 km/h without it). Realistic with Boost 107.4 m/s until the tank runs dry, then 103.
+- **Driver bot:** holds the target speed (within 1 m/s) and stays within 2 m of the line at 10, 30, 45 and 55.6 m/s over 3 seeds with no crash (at 30 and 55.6 m/s: under 0.2 m off, tilt under 2°). No change to the bot was needed.
+- **Speed sweep** (`results/speed_sweep_after_drive.*`, repo config, PD, 20 seeds): **1,239 crashes in 16,320 runs** against 1,295 for the baseline (concave bottoming 609, bump faces 394, floor contact 193, gap 40, landing slam 2, other impact 1). The drive alone does not fix survival: that is G2 pieces and the bump stop.
+- **Golden trace:** hash `130c64934abbb1e0` (main after A1) → `621afc64dc3f1fc1`, final position unchanged (418.54468, 0.5930893, −124.57887). The trace runs on a frozen car with its own drive; the hash moves because the snapshot now holds `ccd_enabled` and the chassis has CCD.
+- **Tests adjusted:** 0–100 km/h range, lateral-g window at 20 m/s, power-limit test (now at 80 m/s), Boost test (long runway, bounded and above the cap), Stage C seed (87 → 49), corkscrew speeds (20 and 25 m/s, entry speed held), PD bump-strip test and the PD tuner's `driving_air_kg` check (both at 40% throttle: at full throttle Arcade PD burns 21 kg over the bumps strip against the 8 kg limit; for G3). `eval_pd_A_realistic` regenerated (success 80.7% → 82.1%); G3 regenerates all `eval_*`.

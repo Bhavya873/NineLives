@@ -18,4 +18,15 @@ Regenerate one file (from the repo root; `--dr` for randomized):
 
 `speed_sweep.json` and `.csv`: the per-piece speed sweep under the same physics (16,320 runs, 1295 crashes), with its cause table in `docs/research/speed-survival.md`.
 
-Not here yet: the viewer landing rates.
+`viewer_landing_rates.json`: the **viewer landing rates**. Each of the 8 shipped viewer checkpoints
+(`web/public/checkpoints/flight-r4`, 2M to 90M steps) flies 64 Realistic cars (seeds 0 to 63, crowds of 8
+as the viewer shows them) on each stage the viewer covers, through the same wasm `Crowd` (the Hybrid, 120°
+hand-over, the checkpoint as its AI), counted as landed / crashed / still flying. Stage A flat: 72% landed at
+2M steps, 78-86% from 16M on (checkpoint 3 best, 86%). Arena (obstacles pulled into the drop zone): 41% at
+2M, 52-58% after (6-7 cars end stuck on a piece). Stage D: 98% at every checkpoint (PD drives, the AI never
+takes over). Stage F: 3% at 2M, 48% at 16M, 83% at 88M and 80% at 90M. Gauntlet: 83% at every checkpoint
+(PD again). The file records `physics_hash`, `controller_config_hash`, each checkpoint's `policy_hash` and
+`git_sha` like the eval files. Regenerate it (from the repo root):
+
+    cargo run --release -p nl-wasm --example viewer_rates -- \
+      --checkpoints web/public/checkpoints --out results/baseline_2026-10/viewer_landing_rates.json
