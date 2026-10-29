@@ -15,6 +15,9 @@ roof_half_extents_m = [1.2, 0.05, 0.8]
 # Moments of inertia about the body axes: roll (X), yaw (Y), pitch (Z), in kg·m².
 # Set by hand because a real car is not a uniform box.
 inertia_kg_m2 = [850.0, 3250.0, 2900.0]
+# Continuous collision detection on the chassis (G2 drive). The frozen drive values below
+# stay as recorded; only this switch was added, together with the re-recorded hash.
+ccd_enabled = true
 
 [air_drag]
 # Drag force = -0.5 · air density · drag area · |v| · v  (SPEC §7.2), per body axis.

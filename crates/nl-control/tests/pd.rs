@@ -387,8 +387,11 @@ fn pd_driving_over_bumps_uses_almost_no_air() {
         0,
     );
     let mut pd = Pd::new(&world.car_model(), &controllers());
+    // About 40% throttle: the engine's push then matches the old car's full throttle, so the
+    // car meets the bumps at the speed this test was written for (about 20-25 m/s). At full
+    // throttle the 2 s launch hits them above 35 m/s and PD flies a crash (G3 retunes PD).
     let drive = InputFrame {
-        throttle: 127,
+        throttle: 52,
         ..InputFrame::default()
     };
 

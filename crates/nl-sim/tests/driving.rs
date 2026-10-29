@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{arcade, new_world, vehicle};
+use common::{LEVEL, arcade, new_world, vehicle};
 use nl_sim::conventions::{PHYSICS_DT_S, PHYSICS_HZ};
 use nl_sim::input::{BUTTON_BOOST, InputFrame};
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
@@ -103,17 +103,17 @@ fn speed_stays_under_the_limit() {
 }
 
 #[test]
-fn zero_to_100_km_h_takes_about_four_seconds() {
+fn zero_to_100_km_h_takes_about_two_seconds() {
     let mut world = new_world();
     run(&mut world, InputFrame::default(), 1.0);
     let start_s = world.time_s();
 
     accelerate_to(&mut world, 100.0 / 3.6);
 
-    // The tuned feel (DECISIONS 2026-10-19): brisk, but not a rocket.
+    // The fast roadster (research R2a, DECISIONS 2026-10-29): 1.98 s measured.
     let elapsed_s = world.time_s() - start_s;
     assert!(
-        (3.5..5.0).contains(&elapsed_s),
+        (1.7..=2.05).contains(&elapsed_s),
         "0-100 km/h took {elapsed_s} s"
     );
 }
@@ -296,14 +296,15 @@ fn above_the_power_limit_acceleration_falls_with_speed() {
     let mut fast_world = new_world();
 
     let slow_m_s2 = full_throttle_acceleration_m_s2(&mut slow_world, 5.0);
-    let fast_m_s2 = full_throttle_acceleration_m_s2(&mut fast_world, 40.0);
+    let fast_m_s2 = full_throttle_acceleration_m_s2(&mut fast_world, 80.0);
 
     // SPEC §7.3: the engine gives at most `max_engine_power_w`, so its push is power / speed
-    // once that is below the force limit; at 40 m/s it is well under half the launch push.
+    // once that is below the force limit (above 28 m/s for 800 kW); at 80 m/s it is well under
+    // half the launch push.
     assert!(slow_m_s2 > 5.0, "launch acceleration {slow_m_s2} m/s²");
     assert!(
         fast_m_s2 < 0.5 * slow_m_s2,
-        "acceleration at 40 m/s {fast_m_s2} m/s², at 5 m/s {slow_m_s2} m/s²"
+        "acceleration at 80 m/s {fast_m_s2} m/s², at 5 m/s {slow_m_s2} m/s²"
     );
 }
 
@@ -324,17 +325,31 @@ fn boost_pushes_the_car_forward_at_low_speed() {
 fn boost_cannot_push_the_car_past_the_boost_speed_limit() {
     let vehicle = vehicle();
     let mut world = World::new_on_flat_ground(&vehicle, arcade(), DEFAULT_GROUND_FRICTION, 0);
+    // The flat ground is 4 km long: start at its far end so 24 s at 100 m/s stays on it.
+    world
+        .place_car([-1950.0, 0.62, 0.0], LEVEL, [0.0; 3], [0.0; 3])
+        .unwrap();
     let mut boost_input = throttle(127);
     boost_input.buttons = BUTTON_BOOST;
 
-    run(&mut world, boost_input, 30.0);
+    let mut fastest_m_s: f32 = 0.0;
+    for _ in 0..24 * STEPS_PER_SECOND {
+        world.step(boost_input);
+        fastest_m_s = fastest_m_s.max(world.forward_speed_m_s());
+    }
 
-    // Arcade has double thrust and unlimited air: without the limit it passed 240 m/s.
-    let speed_m_s = world.forward_speed_m_s();
+    // Arcade has double thrust and unlimited air: without the fade it passed 240 m/s with
+    // the old 55 m/s car. Measured with the roadster drive: 108.7 m/s (391 km/h), above the
+    // 103 m/s cap (so Boost does something) and under the 110 m/s boost limit.
+    let cap_m_s = vehicle.drive.max_speed_m_s;
     let limit_m_s = vehicle.drive.boost_max_speed_m_s;
     assert!(
-        speed_m_s < limit_m_s + 1.0,
-        "speed after 30 s of Boost: {speed_m_s} m/s, limit {limit_m_s} m/s"
+        fastest_m_s > cap_m_s + 2.0,
+        "Boost did nothing: {fastest_m_s} m/s"
+    );
+    assert!(
+        fastest_m_s < limit_m_s,
+        "fastest speed in 24 s of Boost: {fastest_m_s} m/s, limit {limit_m_s} m/s"
     );
 }
 
@@ -352,9 +367,9 @@ fn full_lock_at_20_m_s_corners_at_road_tyre_grip() {
         peak_lateral_g = peak_lateral_g.max(lateral_g);
     }
 
-    // Grip 1.3 holds about 1.14 g here; the old race-tyre grip (1.4) held 1.22 g.
+    // Grip 1.9 (R2a, for the 1.6 g launch) holds about 1.57 g here; grip 1.3 held 1.14 g.
     assert!(
-        (0.8..1.18).contains(&peak_lateral_g),
+        (1.4..1.7).contains(&peak_lateral_g),
         "peak lateral {peak_lateral_g} g"
     );
 }
