@@ -8,11 +8,19 @@ import { swapCourseView } from '../render/course-view.ts';
 import type { ArenaKind } from './arena-choice.ts';
 
 /** Camera spots, in m: high and far back for the flat arena's 64-car grid (about 100 m
- * across), closer for the obstacle arena, where every car drops near the centre. */
+ * across), closer for the obstacle arena, where every car drops near the centre. The
+ * courses start at the origin and run along +X; the camera follows the cars from there. */
 const CAMERA_SPOT_M: Record<ArenaKind, [number, number, number]> = {
   flat: [0, 70, 105],
-  obstacles: [0, 50, 72],
+  obstacles: [0, 38, 54],
+  driving: [-18, 9, 22],
+  flight: [-18, 9, 22],
+  gauntlet: [-18, 9, 22],
 };
+/** The camera trails the cars' centre by this much, in m (behind, above, to the side). */
+const FOLLOW_OFFSET_M: [number, number, number] = [-18, 9, 22];
+/** It looks this far ahead of the cars' centre, in m. */
+const FOLLOW_LOOK_AHEAD_M = 8;
 /** Both cameras look at this point just above the arena centre, in m. */
 const CAMERA_TARGET_M: [number, number, number] = [0, 2, 0];
 
@@ -46,4 +54,11 @@ export function showArena(view: ArenaView, kind: ArenaKind, shapesJson: string |
   view.camera.position.set(...CAMERA_SPOT_M[kind]);
   view.camera.lookAt(...CAMERA_TARGET_M);
   view.kind = kind;
+}
+
+/** Aims the camera at the cars' centre `(x, z)`, in m, for the arenas with a long course. */
+export function followCars(view: ArenaView, x: number, z: number): void {
+  const [dx, dy, dz] = FOLLOW_OFFSET_M;
+  view.camera.position.set(x + dx, dy, z + dz);
+  view.camera.lookAt(x + FOLLOW_LOOK_AHEAD_M, 1, z);
 }

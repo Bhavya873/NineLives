@@ -99,3 +99,52 @@ test('?arena=obstacles opens on the obstacle arena and O goes back to flat', asy
   await expect.poll(async () => (await readViewer(page))?.courseShapeCount ?? -1).toBe(0);
   expect(consoleErrors).toEqual([]);
 });
+
+test('the stage picker flies Stage D, Stage F and the Gauntlet with the Hybrid', async ({
+  page,
+}) => {
+  test.setTimeout(3 * SLOW_MACHINE_TIMEOUT_MS);
+  const consoleErrors = collectConsoleErrors(page);
+  await page.goto('/viewer.html');
+  await expectArena(page, 'flat arena');
+  await expect(page.locator('#stage-select option')).toHaveText([
+    'Flat arena',
+    'Obstacle arena',
+    'Stage D course',
+    'Stage F flip plate',
+    'Gauntlet',
+  ]);
+
+  for (const [value, label] of [
+    ['driving', 'stage d course'],
+    ['flight', 'stage f flip plate'],
+    ['gauntlet', 'gauntlet'],
+  ]) {
+    await page.locator('#stage-select').selectOption(value);
+
+    await expectArena(page, label);
+    await expect(page).toHaveURL(new RegExp(`arena=${value}`));
+    // A generated course and the Gauntlet are drawn from the crowd's shapes.
+    await expect
+      .poll(async () => (await readViewer(page))?.courseShapeCount ?? 0)
+      .toBeGreaterThan(3);
+    expect((await readViewer(page))?.arena).toBe(value);
+  }
+  // Stage F flights end within seconds; the cars land.
+  await page.locator('#stage-select').selectOption('flight');
+  await expect
+    .poll(() => readLanded(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBeGreaterThan(0);
+  expect(consoleErrors).toEqual([]);
+});
+
+test('?arena=gauntlet opens on the Gauntlet', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  const consoleErrors = collectConsoleErrors(page);
+  await page.goto('/viewer.html?arena=gauntlet');
+
+  await expectArena(page, 'gauntlet');
+
+  await expect(page.locator('#stage-select')).toHaveValue('gauntlet');
+  expect(consoleErrors).toEqual([]);
+});

@@ -55,6 +55,13 @@
         cursor: pointer;
         font: inherit;
       }
+      #stage-select {
+        top: 56px;
+        left: auto;
+        right: 16px;
+        border: 1px solid #3a4a5c;
+        font: inherit;
+      }
       #arena-toggle:hover {
         background: rgba(30, 44, 60, 0.9);
       }
@@ -68,9 +75,12 @@
     <div id="viewer-status" class="panel">Loading checkpoints…</div>
     <table id="viewer-board" class="panel"></table>
     <button id="arena-toggle" class="panel" type="button">Switch arena</button>
+    <select id="stage-select" class="panel" aria-label="Stage"></select>
     <div id="viewer-help" class="panel">
-      Each row of cars is one checkpoint, flying the same drops. Faded cars crashed. O switches
-      arena. <a href="./">Back to the game</a>
+      Each row of cars is one checkpoint, flown by the Hybrid (PD flies until the car tips past the
+      hand-over, then the checkpoint's AI), on the same drops. Faded cars crashed. O switches arena;
+      the picker adds Stage D, Stage F and the Gauntlet.
+      <a href="./">Back to the game</a>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>
   </body>
