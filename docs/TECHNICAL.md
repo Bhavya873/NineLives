@@ -194,6 +194,10 @@ The world queues events and the caller drains them (`crates/nl-sim/src/events.rs
 - **Save**: during an upset, four wheels down, tilt < 15° and |ω| < 1.5 rad/s, held for 0.5 s. It
   carries the touchdown spin and fall speed, and a landing quality: the heading error against the
   last take-off from the wheels, and the share of forward speed kept 0.5 s after touchdown.
+- **Peak g**: the raw per-tick seat g (`GLoad::raw_g`, before the 0.1 s filter) is maxed over a stunt
+  window from `AirborneStart` to 0.5 s after the touchdown that ends the airtime, resets at the next
+  take-off, a respawn and a placement, and goes out in `Save.peak_g` and `HudField.PeakGLoad`. Every
+  wasm event is 5 floats (`FLOATS_PER_EVENT`); Save's fifth is `peak_g`, the others pad 0.
 - **Hard landing**: a suspension compression of 0.95 or more within 0.2 s of a touchdown.
 - **Crash**: a body or roof contact faster than 6 m/s along the contact normal, any roof contact
   above 120° of tilt, more than 100° of tilt for 2 s, or leaving the course bounds.
