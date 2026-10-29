@@ -397,7 +397,9 @@ checkpoints are exported for the training viewer.
 --episodes 1000 --seed 0` and `python -m ninelives.eval` run the same Rust episode code and give
 identical rows. Results go to `results/eval_<controller>_<stage>_<mode>.json`, one row per
 episode: success, saves, crash cause, air used, peak tilt, touchdown spin and fall speed, hard
-landings, heading error, speed kept, settle time and air left. Seeds are split into blocks:
+landings, heading error, speed kept, settle time and air left. Each file also carries
+`physics_hash`, `controller_config_hash`, `policy_hash` and `git_sha` (`nl_sim::provenance`, FNV-1a),
+so a result can be matched to the settings it ran on; `--out <dir>` picks the folder. Seeds are split into blocks:
 0–999 (the spent M7 tests), 1,000,000–2,999,999 for validation and tuning, and
 3,000,000–3,000,999 for the one-time final test. Controllers are compared on identical seeds.
 

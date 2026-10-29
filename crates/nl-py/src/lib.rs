@@ -51,6 +51,26 @@ fn obs_schema_hash_py() -> String {
     obs_schema_hash()
 }
 
+/// A fingerprint (16 hex digits) of the given texts, in order; the same one the Rust eval
+/// runner writes into its artifacts (`nl_sim::provenance::text_hash`).
+#[pyfunction]
+fn text_hash(parts: Vec<String>) -> String {
+    let parts: Vec<&str> = parts.iter().map(String::as_str).collect();
+    nl_sim::provenance::text_hash(&parts)
+}
+
+/// The fingerprint of the physics settings, from their file texts
+/// (`nl_sim::provenance::physics_hash`).
+#[pyfunction]
+fn physics_hash(
+    vehicle_toml: &str,
+    modes_toml: &str,
+    pieces_json: &str,
+    approach_toml: &str,
+) -> String {
+    nl_sim::provenance::physics_hash(vehicle_toml, modes_toml, pieces_json, approach_toml)
+}
+
 /// The `format` and `version` an exported policy file must carry (SPEC §9.12).
 #[pyfunction]
 fn policy_format() -> (&'static str, u32) {
@@ -76,5 +96,7 @@ fn ninelives_sim(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(obs_spec_py, module)?)?;
     module.add_function(wrap_pyfunction!(obs_schema_hash_py, module)?)?;
     module.add_function(wrap_pyfunction!(reward_term_names, module)?)?;
+    module.add_function(wrap_pyfunction!(text_hash, module)?)?;
+    module.add_function(wrap_pyfunction!(physics_hash, module)?)?;
     Ok(())
 }
