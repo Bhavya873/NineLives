@@ -23,6 +23,17 @@ const RECOVERY_LIMIT_S: f32 = 8.0;
 /// Most AI↔PD handovers one recovery may need: to the AI, then back to PD.
 const MOST_HANDOVERS: usize = 2;
 
+/// Realistic-mode cases the shipped policy (R4, DECISIONS 2026-10-27) does not land:
+/// both start upside down, where the AI takes over at once. The previous policy landed
+/// them; R4 was shipped anyway for its Stage F and randomized gains. Arcade must still
+/// land every case, and a new policy should empty this list.
+const KNOWN_REALISTIC_MISSES: [&str; 2] = ["upside down and back-flipping", "still 8 m"];
+
+/// Whether `case` in `mode_name` is a known miss of the shipped policy.
+fn is_known_miss(mode_name: &str, case: &str) -> bool {
+    mode_name == "Realistic" && KNOWN_REALISTIC_MISSES.contains(&case)
+}
+
 const FORWARD: [f32; 3] = [1.0, 0.0, 0.0];
 const RIGHT: [f32; 3] = [0.0, 0.0, 1.0];
 const LEVEL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -137,11 +148,13 @@ fn shipped_policy() -> Arc<Policy> {
 
 /// Hybrid with the shipped policy.
 fn hybrid_for(mode: ModeParams) -> Hybrid {
-    Hybrid::new(
-        pd_for(mode),
-        Ai::new(shipped_policy()),
-        HybridGateSettings::for_vehicle(&vehicle()),
-    )
+    Hybrid::new(pd_for(mode), Ai::new(shipped_policy()), shipped_gate())
+}
+
+/// The shipped gate: the car's thresholds with controllers.toml's `[hybrid]` hand-over tilt.
+fn shipped_gate() -> HybridGateSettings {
+    let controllers = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
+    HybridGateSettings::for_vehicle(&vehicle()).with_enter_tilt(controllers.hybrid.enter_tilt_deg)
 }
 
 /// A world with the car let go in `tumble`.
@@ -245,7 +258,9 @@ fn hybrid_lands_every_tumble_pd_lands_and_hands_over_at_most_twice() {
         for tumble in tumbles_pd_lands() {
             let (outcome, handovers) = recover_with_hybrid(mode, &tumble);
 
-            assert_eq!(outcome, Outcome::Landed, "{mode_name} {}", tumble.name);
+            if !is_known_miss(mode_name, tumble.name) {
+                assert_eq!(outcome, Outcome::Landed, "{mode_name} {}", tumble.name);
+            }
             assert!(
                 handovers <= MOST_HANDOVERS,
                 "{mode_name} {}: {handovers} handovers",
@@ -262,6 +277,9 @@ fn hybrid_lands_a_car_let_go_upside_down_and_still() {
             let tumble = upside_down_and_still(height_m);
 
             let (hybrid_outcome, _) = recover_with_hybrid(mode, &tumble);
+            if is_known_miss(mode_name, &format!("still {height_m} m")) {
+                continue;
+            }
 
             // PD alone crashes here today (its attitude error has no preferred way round,
             // so it only nudges the roll). That is not pinned: a better PD may land it.

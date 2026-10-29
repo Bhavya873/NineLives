@@ -112,7 +112,7 @@ pub fn driving_air_kg(
     ))
 }
 
-/// The policy's actions (each in −1..1) for N observations (N × 41 → N × 10).
+/// The policy's actions (each in −1..1) for N observations (N × 43 → N × 10).
 #[pyfunction]
 pub fn policy_actions<'py>(
     py: Python<'py>,

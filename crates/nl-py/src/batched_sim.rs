@@ -1,6 +1,6 @@
 //! `BatchedSim` (SPEC §9.1, ADR-002): N training environments stepped together with one
 //! call from Python. The worlds step in parallel with rayon while the GIL is released;
-//! everything crosses the boundary as numpy arrays (float32 observations, N × 41).
+//! everything crosses the boundary as numpy arrays (float32 observations, N × 43).
 
 use nl_control::{ControllerChoices, HybridSwitch, RESIDUAL_ACTION_COUNT, ResidualPd};
 use nl_sim::conventions::NOZZLE_COUNT;
@@ -88,7 +88,7 @@ impl BatchedSim {
     }
 
     /// Starts a new episode in every environment and returns the first observations
-    /// (N × 41). `seeds` (N unsigned integers) picks each episode; without it each
+    /// (N × 43). `seeds` (N unsigned integers) picks each episode; without it each
     /// environment takes the next seed of its own stream.
     #[pyo3(signature = (seeds=None))]
     fn reset<'py>(
@@ -271,7 +271,7 @@ fn step_return<'py>(py: Python<'py>, steps: &[SlotStep]) -> PyResult<StepReturn<
 
 /// SPEC §9.1 `info`, one row per environment:
 /// - `done`: the row's episode (for the policy) ended this step (bool);
-/// - `terminal_obs`: that episode's last observation (N × 41; zeros where not done);
+/// - `terminal_obs`: that episode's last observation (N × 43; zeros where not done);
 /// - `episode`: the row of a sim episode that ended as a JSON object string
 ///   (`FinishedEpisode`: the eval `EpisodeResult` fields plus `stage`, `level`,
 ///   `control_steps`), else None. Without Hybrid gating it comes exactly with `done`;
@@ -306,7 +306,7 @@ fn episode_json(episode: &FinishedEpisode) -> PyResult<String> {
         .map_err(|error| PyValueError::new_err(format!("BatchedSim: episode row: {error}")))
 }
 
-/// Observations as an N × 41 float32 array.
+/// Observations as an N × 43 float32 array.
 fn observations_array<'py>(
     py: Python<'py>,
     observations: &[Observation],

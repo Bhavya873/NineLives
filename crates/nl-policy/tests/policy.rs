@@ -8,7 +8,7 @@ use nl_policy::{POLICY_FORMAT, POLICY_FORMAT_VERSION, Policy, PolicyError};
 use nl_sim::obs::{OBS_DIM, obs_schema_hash};
 use serde_json::{Value, json};
 
-/// A 41 → 2 (tanh) → 10 network: hidden unit 0 reads obs[0], hidden unit 1 reads
+/// An `OBS_DIM` → 2 (tanh) → 10 network: hidden unit 0 reads obs[0], hidden unit 1 reads
 /// 0.5 × obs[1] + 0.1; every action is hidden0 − hidden1 + `action_bias`. No scaling
 /// in the normalizer (mean 0, var 1, eps 0), clip at 10.
 fn small_policy(action_bias: f32) -> Value {

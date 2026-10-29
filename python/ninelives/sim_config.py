@@ -22,6 +22,7 @@ def load_sim_config(
     residual: dict[str, object] | None = None,
     randomize_mode: bool = True,
     controller: str | None = None,
+    randomize_share: float = 1.0,
 ) -> str:
     """The sim config JSON for `mode` ("realistic" or "arcade") and `stage`; `randomize`
     turns on SPEC §9.8 domain randomization for BatchedSim episodes (training only);
@@ -30,7 +31,8 @@ def load_sim_config(
     `residual` (`{"base": "pd", "scale": …}`) makes BatchedSim add the action to PD's
     throttles (`ResidualSettings.as_sim_json`); `randomize_mode=False` keeps `mode`'s
     preset under randomization, for a policy trained for one mode; `controller="hybrid"`
-    trains under the game's Hybrid gate (PD flies until the gate hands over)."""
+    trains under the game's Hybrid gate (PD flies until the gate hands over);
+    `randomize_share` randomizes only that share of episodes (the rest run plain)."""
     if not CONFIGS_DIR.is_dir():
         raise FileNotFoundError(
             f"configs folder not found at {CONFIGS_DIR}: install ninelives from the repo "
@@ -49,6 +51,7 @@ def load_sim_config(
         "stage": stage,
         "randomize": randomize,
         "randomize_mode": randomize_mode,
+        "randomize_share": randomize_share,
     }
     if residual is not None:
         config["residual"] = residual

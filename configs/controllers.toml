@@ -67,3 +67,7 @@ iterations = 30
 model = "actuator_aware"
 # actuator_aware only: share of the valve lag made up within one control interval (0..1).
 lag_compensation = 0.3572
+
+# The AI takes over only past 120 deg, so PD keeps the upsets it saves well (EXPERIMENTS 2026-10-27, R4).
+[hybrid]
+enter_tilt_deg = 120.0
