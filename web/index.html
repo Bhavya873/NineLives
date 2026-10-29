@@ -195,10 +195,23 @@
         }
       }
 
-      /* Bottom-right: the wind, only when there is any. */
-      #hud-wind {
+      /* Bottom-right: a link to the training viewer, with the wind above it when there is any. */
+      #hud-watch {
         right: var(--edge);
         bottom: var(--edge);
+        color: var(--text);
+        font-size: 14px;
+        text-decoration: none;
+        pointer-events: auto;
+      }
+      #hud-watch:hover,
+      #hud-watch:focus-visible {
+        background: var(--panel-solid);
+        color: var(--link);
+      }
+      #hud-wind {
+        right: var(--edge);
+        bottom: 60px;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -246,6 +259,13 @@
         margin: 6px 0 0;
         font-size: 14px;
         color: var(--muted);
+      }
+      #paused a {
+        display: inline-block;
+        margin-top: 12px;
+        color: var(--link);
+        font-size: 14px;
+        pointer-events: auto;
       }
 
       /* All nine lives gone: a black screen to restart from. */
@@ -304,6 +324,11 @@
         }
         #hud-wind {
           bottom: 132px;
+        }
+        /* The dashboard fills the bottom edge, so the viewer link moves to the free top-right. */
+        #hud-watch {
+          top: var(--edge);
+          bottom: auto;
         }
         .heart svg {
           width: 20px;
@@ -364,11 +389,14 @@
         </div>
       </div>
     </div>
+    <!-- Out of the Tab order: Enter starts the Gauntlet, so a focused link would leave the game. -->
+    <a id="hud-watch" class="hud" href="./viewer.html" tabindex="-1">Watch AI training</a>
     <div id="hud-toast" class="hud" hidden></div>
     <div id="hud-perf" class="hud" hidden></div>
     <section id="paused" class="hud" hidden>
       <h2>Paused</h2>
       <p>Press Esc to resume</p>
+      <a href="./viewer.html">Watch AI training</a>
     </section>
     <section id="game-over" hidden>
       <h1 class="wordmark">Nine Lives</h1>

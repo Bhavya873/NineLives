@@ -37,6 +37,14 @@ pub(crate) const FLOATS_PER_POSE: usize = 7;
 /// exhaust direction x, y, z.
 const FLOATS_PER_NOZZLE: usize = 6;
 
+// Reserved numbers (docs/contracts/events-hud.md, frozen at Gate 0). Do not reuse them
+// for anything else; each PR below adds its own variants.
+//   HudField  23 PeakGLoad, 24 StuntPhase, 25 StuntCode, 26 ApproachHint,
+//             27 PolicyOutOfEnvelope.
+//   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted,
+//             15 Scrape, 16 TooSlowFallback.
+// The Save event will gain a 5th float, `peak_g` (FLOATS_PER_EVENT goes 4 -> 5).
+
 /// Where each value sits in the array returned by `Game::hud`. JavaScript sees this
 /// as an object, so it can write `hud[HudField.SpeedMS]` instead of a bare number.
 #[wasm_bindgen]

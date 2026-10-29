@@ -1,0 +1,16 @@
+{
+ "experiment_id": "2026-10-27-r4",
+ "purpose": "Owner Q4a: R4 trains the Hybrid fresh on observation v2 (heading error from take-off at 41-42), half the episodes plain and half randomized; scored against the tuned PD alone, with the gate's hand-over at 60 (default), 90, 120 and 150 deg.",
+ "config": "configs/train/flight-r4.yaml",
+ "train_seed": 0,
+ "total_steps": 100000000,
+ "train_wall_time_s": 7896,
+ "checkpoints": "best = 90M steps (checkpoint eval 90.6%), latest = 100M",
+ "validation_seeds": {
+  "first": 1500000,
+  "episodes_per_cell": 1000,
+  "cells": "A-F x both modes x plain/randomized"
+ },
+ "held_out_seeds": "untouched (3,000,000+)",
+ "outcome": "R4 best with the hand-over at 120 deg: plain 94.93% vs PD 94.84% (loses A Arcade -1.1, A Realistic -0.3, E Arcade -0.9), randomized 92.14% vs 88.74% (no cell lost, F +19). Stage F landing heading median 2-4 deg plain (R3: 11-19). At the 60 deg default it loses B badly (Realistic -25): it never trained on B and tips some of those cars over."
+}

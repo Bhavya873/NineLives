@@ -344,3 +344,22 @@ Results: `results/control_upgrade/2026-10-27-gate-tilt/`. New optional setting `
 - **The thruster interlock never held after AirborneStart.**
 - **PD crashes (HardImpact) on landing:** ramps #1 at 25/30, #3/#9/#24 at 30, and #22 at 20 m/s. A G2 survival-contract issue.
 - **Notes:** Realistic flips fit only the 22° ramps at ≥ 25 m/s or the 28° ramp at ≥ 20 m/s, with a 0.3 s margin.
+### 2026-10-27 — R4: the Hybrid retrained on observation v2 (heading from take-off)
+Results: `results/control_upgrade/2026-10-27-r4/` (manifest, per-cell summaries).
+- **Run:** `PYTHONPATH=python python -m ninelives.train --config configs/train/flight-r4.yaml --run-id flight-r4`, seed 0, 100M steps, 2 h 12 min. A fresh start (the input grew to 43 values), stages A/D/E/F at 0.2/0.15/0.2/0.45, half the episodes plain and half randomized (`randomize_share` 0.5), lr 3e-4, with the tuned PD and actuator-aware allocation underneath.
+- **Checkpoint eval** (200 per stage from 1,000,000, stages A/D/E/F): 89–91% from about 60M steps on. Best was 90.6% at 90M.
+- **Validation** (seeds 1,500,000+, 1000 per cell), mean success over 12 cells, plain / randomized:
+
+| Controller | Plain | Randomized | F Realistic / Arcade (plain) | Cells lost to PD (plain / rand.) |
+|---|---|---|---|---|
+| PD alone (tuned) | 94.84% | 88.74% | 89.5 / 92.6 | — |
+| R4 best, hand-over 60° (default) | 91.83% | 90.56% | 91.6 / 96.3 | 8 / 6 |
+| R4 latest, hand-over 60° | 92.07% | 90.44% | 92.1 / 96.2 | 8 / 6 |
+| R4 best, hand-over 90° | 92.75% | 91.31% | 91.5 / 96.7 | 6 / 4 |
+| R4 best, hand-over 120° | **94.93%** | **92.14%** | 90.3 / 95.0 | 3 / 0 |
+| R4 best, hand-over 150° | 94.97% | 91.33% | 86.5 / 96.9 | 3 / 0 |
+
+- **The heading fix worked.** On plain Stage F the Hybrid now beats PD at every hand-over tilt but 150° Realistic. The median landing heading error is 2–9° (R3: 11–19°). Randomized Stage F goes from PD's 68.2% to 82–92%.
+- **Stage B is the weak spot at the 60° default.** R4 never trained on B, because B almost never upsets the car. There the AI takes over and tips 8.6% of the cars past 150°: B Realistic falls to 74.0% against PD's 99.5%. Raising the hand-over to 120° leaves B to PD (99.5%).
+- **With the hand-over at 120°,** R4 best is the first trained Hybrid with a higher mean than PD in both plain and randomized runs. It still loses three plain cells by small margins (A Arcade −1.1, A Realistic −0.3, E Arcade −0.9), so the owner's rule of a win on every stage and mode is not strictly met.
+- **Outcome:** the owner approved shipping it. R4 best is now `models/policy.json`, with `[hybrid] enter_tilt_deg = 120` in `controllers.toml`, and the viewer shows R4's checkpoints. The game keeps flying PD alone; the Hybrid stays behind `?controller=hybrid`. With the 120° gate the strong flip-plate test passes. Two Realistic upside-down recoveries the old policy landed now crash: upside down and back-flipping, and upside down and still from 8 m. `flip_recovery` lists them as known misses.

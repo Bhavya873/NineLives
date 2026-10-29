@@ -33,6 +33,7 @@ use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
+use crate::landing::heading_error_sin_cos;
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
 use crate::thrusters::full_throttle_force_body_n;
@@ -572,6 +573,14 @@ impl World {
             && body.linvel().y.abs() <= lock.max_vertical_speed_m_s;
         // The height needs a ray, so it is checked last, only when the rest already hold.
         steady && height_above_ground_m(&self.physics, &self.car) <= lock.max_height_m
+    }
+
+    /// How far the nose has yawed from the latest take-off heading, as [sin, cos]
+    /// (`landing::heading_error_sin_cos`): [0, 0] with no heading to keep.
+    pub fn heading_error_sin_cos(&self) -> [f32; 2] {
+        let body = &self.physics.bodies[self.car.chassis];
+        let nose = body.rotation() * Vector::X;
+        heading_error_sin_cos(self.events.take_off(), nose.to_array())
     }
 
     /// Angle between the car's up axis and world up: 0 level, π upside down.

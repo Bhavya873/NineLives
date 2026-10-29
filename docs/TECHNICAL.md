@@ -197,7 +197,8 @@ Courses are JSON (schema version 1, `crates/nl-sim/src/course.rs`). They are che
 (field ranges, at most 200 pieces, unknown fields refused, errors that name the piece and the
 field) and built into static colliders (`course_build.rs`). Ramps, kickers and corkscrews are
 single curved trimeshes with Rapier's internal-edge fix, because separate convex segments stopped
-cars on their seams. Checkpoints, the finish and kick plates are trigger boxes tested against the
+cars on their seams. A half loop is a half circle of road the car rides up and over; its road is
+slick (friction 0.1) because the loop's 6 g bottoms out the suspension and the body scrapes. Checkpoints, the finish and kick plates are trigger boxes tested against the
 path of the centre of mass since the last step, so a fast car cannot step over a 0.5 m line. A
 generator (`course_gen.rs`, `configs/pieces.json`) builds random straight training courses from
 the same pieces, including "flip plates": named presets of linear and angular impulse that throw
@@ -311,7 +312,7 @@ physics files: the TOML texts are passed in as one JSON config.
 
 ### 7.2 Observation
 
-41 values, defined once in `crates/nl-sim/src/obs.rs` (`OBS_SPEC`), each clamped to a stated
+43 values, defined once in `crates/nl-sim/src/obs.rs` (`OBS_SPEC`), each clamped to a stated
 range:
 
 | Index | Content |
@@ -326,6 +327,7 @@ range:
 | 24–25 | driver throttle and steer |
 | 26–30 | terrain height 2–10 m ahead along the heading |
 | 31–40 | the previous commanded throttles |
+| 41–42 | the heading error: sin and cos of the nose's yaw from the take-off heading, both 0 with no heading to keep (`landing::heading_error_sin_cos`) |
 
 The schema hash is FNV-1a 64 over every field's name and range. The trainer, the exporter and the
 browser all check it before trusting a policy.

@@ -27,7 +27,7 @@ A browser driving game where an AI fires a car's 10 cold-gas thrusters automatic
 1. **Physics lives only in `crates/nl-sim`.** Thruster forces, the air tank, events, observations and rewards are never re-implemented in Python or TypeScript. Python and the browser call into Rust.
 2. **Determinism.** Rapier runs with `enhanced-determinism`. Use only seeded `ChaCha8Rng`; no system time, `thread_rng` or `HashMap` iteration in sim logic. The golden-trace test must pass on native and wasm.
 3. **Conventions** (SPEC §4): SI units; world +Y up; car body frame +X forward, +Y up, +Z right; `dt = 1/120`, control at 60 Hz; nozzle order `L_FL L_FR L_RL L_RR S_FL S_RL S_FR S_RR B_L B_R`; wheel order `FL FR RL RR`.
-4. **Observation layout** is defined once in Rust (`ObsSpec`, 41 values in v1). Any change bumps the schema hash. Python, the exporter and the browser all check the hash.
+4. **Observation layout** is defined once in Rust (`ObsSpec`, 43 values in v2). Any change bumps the schema hash. Python, the exporter and the browser all check the hash.
 5. **Sign tests first.** When adding or changing a force, torque or frame transform, write the unit test that pins its sign before the code.
 6. **Configs, not constants.** Tunable numbers go in `configs/*.toml` (vehicle, modes, reward, scenarios). Code holds no magic numbers that the spec marks *(start)*.
 7. **No branding.** Never use Tesla or SpaceX names, logos or car shapes in code, assets or UI. Use "inspired by" wording in docs only.
