@@ -173,6 +173,20 @@ pub enum PieceSpec {
         /// Length along the piece's +X, in m.
         length: f32,
     },
+    /// The first half of a loop along +X: the road curves up from flat through
+    /// vertical to upside down at `2 × radius`, where it ends. A fast car leaves its
+    /// top upside down, heading back along −X (M7 wrap-up, owner request).
+    HalfLoop {
+        /// Start point on the ground (the bottom of the curve), in m.
+        pos: [f32; 3],
+        /// Heading about +Y, in degrees (0 runs along +X).
+        #[serde(default)]
+        yaw: f32,
+        /// Radius of the curve, in m.
+        radius: f32,
+        /// Width of the road, in m.
+        width: f32,
+    },
     /// `count` low bumps across the lane, one every few metres along +X.
     Bumps {
         /// Start point on the ground, in m.
@@ -361,6 +375,7 @@ impl PieceSpec {
             PieceSpec::Gap { .. } => "gap",
             PieceSpec::CarRow { .. } => "car_row",
             PieceSpec::Halfpipe { .. } => "halfpipe",
+            PieceSpec::HalfLoop { .. } => "half_loop",
             PieceSpec::Bumps { .. } => "bumps",
             PieceSpec::KickPlate { .. } => "kick_plate",
             PieceSpec::Wall { .. } => "wall",
@@ -379,6 +394,7 @@ impl PieceSpec {
             | PieceSpec::Gap { pos, .. }
             | PieceSpec::CarRow { pos, .. }
             | PieceSpec::Halfpipe { pos, .. }
+            | PieceSpec::HalfLoop { pos, .. }
             | PieceSpec::Bumps { pos, .. }
             | PieceSpec::KickPlate { pos, .. }
             | PieceSpec::Wall { pos, .. }
@@ -480,6 +496,7 @@ fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
         }
         PieceSpec::CarRow { yaw, .. }
         | PieceSpec::Halfpipe { yaw, .. }
+        | PieceSpec::HalfLoop { yaw, .. }
         | PieceSpec::Bumps { yaw, .. }
         | PieceSpec::Wall { yaw, .. }
         | PieceSpec::LandingPad { yaw, .. }
@@ -506,6 +523,9 @@ fn piece_sizes(piece: &PieceSpec) -> Vec<(&'static str, f32)> {
         }
         PieceSpec::Halfpipe { radius, length, .. } => {
             vec![("radius", *radius), ("length", *length)]
+        }
+        PieceSpec::HalfLoop { radius, width, .. } => {
+            vec![("radius", *radius), ("width", *width)]
         }
         PieceSpec::KickPlate { .. }
         | PieceSpec::LandingPad { .. }
