@@ -368,7 +368,7 @@ Results: `results/control_upgrade/2026-10-27-r4/` (manifest, per-cell summaries)
 Results: `results/baseline_2026-10/` (48 files, README there). PD and Hybrid, stages A–F, both modes, plain and `--dr`, 1000 episodes each from seed 1,500,000 (`cargo run --release -p nl-control --example eval -- … --out results/baseline_2026-10`, about 1 minute on 6 cores).
 - **Means over the 12 cells:** PD 94.84% plain / 88.74% randomized; Hybrid with the 120° hand-over 94.93% / 92.14%. These equal the R4 validation rows, which checks that the new `--out` and hash fields changed nothing about the episodes.
 - **Every file records** `physics_hash`, `controller_config_hash`, `policy_hash` and `git_sha` (DECISIONS 2026-10-29), so the new-physics results in G2 and later can be told apart from this baseline.
-- **Not recorded yet:** the speed sweep (R2's tool is not on main) and the viewer landing rates.
+- **Not recorded here yet:** the speed sweep (R2's tool is not on main). The viewer landing rates are in the D1 entry below.
 
 ### 2026-10-29 — R2: drive values, suspension limit and per-piece speed survival
 Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_load` (nl-sim examples) and `speed_sweep` (nl-control example); read-only diagnostics in `nl-sim/src/diagnostics.rs`. Results: `results/baseline_2026-10/speed_sweep.*` (today's physics) and `results/speed_sweep_drive_candidate.*`.
@@ -376,3 +376,21 @@ Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_
 - **Suspension limit:** the stock car's body first touches at a design load of 3.8 g (last clean run 3.4 g; the contract assumed 3 g). A bump stop starting at 0.14 m with rate 300/s² lifts the clean load to 4.2 g with 0.087 m of rebound, which cuts the 200 km/h ramp-entry radius from 158 m to about 99 m.
 - **Speed sweep (today's physics):** 1,295 crashes in 16,320 runs; concave bottoming 598, bump faces 413, floor contact after flight 244, gap too slow 40. Only `bumps_0.2`, the halfpipe and the barrel flips never crash. The stronger drive barely changes this (1,239 crashes), so survival is a geometry, suspension and crash-rule problem.
 
+### 2026-10-29 — D1: the viewer flies the Hybrid; viewer landing rates (G1)
+Results: `results/baseline_2026-10/viewer_landing_rates.json`; reproduce with `cargo run --release -p nl-wasm --example viewer_rates -- --checkpoints web/public/checkpoints --out results/baseline_2026-10/viewer_landing_rates.json`. The viewer's `Crowd` now flies the Hybrid (controllers.toml hand-over 120°) with each checkpoint as its AI; before, it flew the raw policy. The example drives that same crowd natively: 8 checkpoints of `flight-r4`, Realistic, 64 cars per stage from seed 0 (crowds of 8, so Stage D and F use 8 generated courses), physics hash `db310175722eef10`, controller hash `dd24c53fe5654c16`.
+
+| Checkpoint (steps) | A flat | Arena | D | F | Gauntlet |
+|---|---|---|---|---|---|
+| 1 (2M) | 71.9% | 40.6% | 98.4% | 3.1% | 82.8% |
+| 2 (16M) | 81.3% | 51.6% | 98.4% | 48.4% | 82.8% |
+| 3 (30M) | 85.9% | 51.6% | 98.4% | 62.5% | 82.8% |
+| 4 (46M) | 82.8% | 54.7% | 98.4% | 65.6% | 82.8% |
+| 5 (60M) | 82.8% | 57.8% | 98.4% | 70.3% | 82.8% |
+| 6 (74M) | 81.3% | 56.3% | 98.4% | 73.4% | 82.8% |
+| 7 (88M) | 78.1% | 57.8% | 98.4% | 82.8% | 82.8% |
+| 8 (90M) | 81.3% | 53.1% | 98.4% | 79.7% | 82.8% |
+
+- **Landed** is the viewer's count: the episode succeeded, or on a drop it timed out after a save without crashing. The JSON also has crashed and still-flying counts (the arena leaves 5–7 cars of 64 stuck on a ramp or block until the time limit).
+- **The seeds 0–63 drops are harder than the validation block:** Stage A flat lands 81% with checkpoint 8, where the 1000-seed validation shows about 95% (the Hybrid eval on seeds 0–63 gives the same 52 of 64, so the crowd and the eval agree; a test pins it).
+- **D and the Gauntlet do not move with the checkpoint:** PD drives and flies, and the results are identical at every checkpoint, so the AI never took over. Stage F improves with training (3% to 80%): the plates tip the car, so the AI flies.
+- **The arena is hard on purpose:** with the pieces pulled in to 6–32 m from the centre (D1), drops meet ramps, rows and walls, and landings fall by 25–30 points against flat ground.
