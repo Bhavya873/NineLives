@@ -1,39 +1,39 @@
 {
   "runs": [
     {
-      "run_id": "stage-a-004",
+      "run_id": "flight-r4",
       "checkpoints": [
         {
           "file": "1.json",
-          "steps": 1000000
+          "steps": 2000000
         },
         {
           "file": "2.json",
-          "steps": 9000000
-        },
-        {
-          "file": "3.json",
           "steps": 16000000
         },
         {
+          "file": "3.json",
+          "steps": 30000000
+        },
+        {
           "file": "4.json",
-          "steps": 24000000
+          "steps": 46000000
         },
         {
           "file": "5.json",
-          "steps": 32000000
+          "steps": 60000000
         },
         {
           "file": "6.json",
-          "steps": 39000000
+          "steps": 74000000
         },
         {
           "file": "7.json",
-          "steps": 47000000
+          "steps": 88000000
         },
         {
           "file": "8.json",
-          "steps": 48000000
+          "steps": 90000000
         }
       ]
     }

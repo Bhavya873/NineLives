@@ -65,11 +65,13 @@ fn hybrid_for(mode: ModeParams) -> Hybrid {
     let policy = POLICY.get_or_init(|| {
         Arc::new(Policy::from_json(include_str!("../../../models/policy.json")).unwrap())
     });
-    Hybrid::new(
-        pd_for(mode),
-        Ai::new(Arc::clone(policy)),
-        HybridGateSettings::for_vehicle(&vehicle()),
-    )
+    Hybrid::new(pd_for(mode), Ai::new(Arc::clone(policy)), shipped_gate())
+}
+
+/// The shipped gate: the car's thresholds with controllers.toml's `[hybrid]` hand-over tilt.
+fn shipped_gate() -> HybridGateSettings {
+    let controllers = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
+    HybridGateSettings::for_vehicle(&vehicle()).with_enter_tilt(controllers.hybrid.enter_tilt_deg)
 }
 
 fn flip_plates() -> FlipPlates {

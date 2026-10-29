@@ -140,6 +140,25 @@ pub fn heading_error_rad(before: [f32; 2], now: [f32; 2]) -> f32 {
     libm::atan2f(cross.abs(), dot)
 }
 
+/// How far the nose has yawed from the take-off heading, as [sin, cos] of the signed
+/// angle (SPEC §9.2): positive when it turned left, a positive turn about world +Y.
+/// [0, 0] when there is no heading to keep: no take-off from the wheels (PLAN §3.3, as
+/// `Landing::at_touchdown` judges), or the nose points almost straight up or down now.
+pub fn heading_error_sin_cos(take_off: Option<TakeOff>, nose_world: [f32; 3]) -> [f32; 2] {
+    let take_off_heading = take_off
+        .filter(|take_off| take_off.forward_speed_m_s.is_some())
+        .and_then(|take_off| take_off.heading_xz);
+    match (take_off_heading, flat_heading(nose_world)) {
+        (Some([before_x, before_z]), Some([now_x, now_z])) => {
+            // The world +Y part of before × now, for [x, z] vectors with +Y up.
+            let sin = before_z * now_x - before_x * now_z;
+            let cos = before_x * now_x + before_z * now_z;
+            [sin, cos]
+        }
+        _ => [0.0, 0.0],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +201,53 @@ mod tests {
         let landing = Landing::at_touchdown(STILL, Some(in_the_air), [0.0, 0.0, -1.0], &config());
 
         assert_eq!(landing.quality.heading_error_rad, None);
+    }
+
+    #[test]
+    fn a_nose_yawed_left_of_its_take_off_heading_has_a_positive_heading_sine() {
+        // Take-off facing +X; now facing −Z, a quarter turn left (a positive turn
+        // about world +Y: +Z is the car's right).
+        let take_off = TakeOff::new([1.0, 0.0, 0.0], Some(10.0));
+
+        let [sin, cos] = heading_error_sin_cos(Some(take_off), [0.0, 0.0, -1.0]);
+
+        assert!((sin - 1.0).abs() < 1e-6, "{sin}");
+        assert!(cos.abs() < 1e-6, "{cos}");
+    }
+
+    #[test]
+    fn a_nose_yawed_right_of_its_take_off_heading_has_a_negative_heading_sine() {
+        let take_off = TakeOff::new([1.0, 0.0, 0.0], Some(10.0));
+
+        let [sin, cos] = heading_error_sin_cos(Some(take_off), [1.0, 0.0, 1.0]);
+
+        assert!((sin + libm::sqrtf(0.5)).abs() < 1e-6, "{sin}");
+        assert!((cos - libm::sqrtf(0.5)).abs() < 1e-6, "{cos}");
+    }
+
+    #[test]
+    fn a_nose_still_facing_its_take_off_heading_has_cosine_1_whatever_the_pitch() {
+        let take_off = TakeOff::new([1.0, 0.0, 0.0], Some(10.0));
+
+        let [sin, cos] = heading_error_sin_cos(Some(take_off), [0.5, 0.8, 0.0]);
+
+        assert!(sin.abs() < 1e-6 && (cos - 1.0).abs() < 1e-6, "{sin} {cos}");
+    }
+
+    #[test]
+    fn with_no_heading_to_keep_the_heading_sine_and_cosine_are_both_0() {
+        let in_the_air = TakeOff::new([1.0, 0.0, 0.0], None);
+        let take_off = TakeOff::new([1.0, 0.0, 0.0], Some(10.0));
+
+        assert_eq!(heading_error_sin_cos(None, [1.0, 0.0, 0.0]), [0.0, 0.0]);
+        assert_eq!(
+            heading_error_sin_cos(Some(in_the_air), [1.0, 0.0, 0.0]),
+            [0.0, 0.0]
+        );
+        assert_eq!(
+            heading_error_sin_cos(Some(take_off), [0.0, -1.0, 0.0]),
+            [0.0, 0.0]
+        );
     }
 
     #[test]

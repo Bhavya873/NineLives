@@ -31,6 +31,10 @@ struct SimConfigJson {
     /// for a policy trained for one mode. Without it, true.
     #[serde(default = "always")]
     randomize_mode: bool,
+    /// With `randomize`, the share of `BatchedSim` episodes randomized (0..=1); the rest
+    /// run on the plain car and world. Without it, 1: every episode.
+    #[serde(default = "every_episode")]
+    randomize_share: f32,
     /// configs/pieces.json (Stage D's course pieces); without it the built-in copy.
     #[serde(default)]
     pieces_json: Option<String>,
@@ -47,6 +51,11 @@ struct SimConfigJson {
 /// Serde default for `randomize_mode`.
 fn always() -> bool {
     true
+}
+
+/// Serde default for `randomize_share`.
+fn every_episode() -> f32 {
+    1.0
 }
 
 /// `residual` in the config JSON: which controller the policy's action is added to and
@@ -108,6 +117,12 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         Some(residual) => Some(parse_residual(residual)?),
     };
     let hybrid = parse_hybrid(fields.controller.as_deref(), residual.is_some())?;
+    if !(0.0..=1.0).contains(&fields.randomize_share) {
+        return Err(format!(
+            "sim config JSON: randomize_share must be between 0 and 1, not {}",
+            fields.randomize_share
+        ));
+    }
     Ok(SimConfig {
         training: TrainingConfig {
             vehicle,
@@ -115,6 +130,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
             scenarios,
             reward,
             randomize: fields.randomize,
+            randomize_share: fields.randomize_share,
         },
         stage,
         controllers_toml: fields.controllers_toml,

@@ -353,7 +353,7 @@ pub trait Controller {
    - **On the ground and tipped over:** roll torque to flip back, plus a side-booster push along whichever body side axis points up, `ground_side_push` (0.4) × the car's weight.
    - Implementation notes (`nl-control/src/pd.rs`): PD is off while ≥ 3 wheels touch (it saves air); "on the ground" means below `on_ground_height_m`, not upright and nearly still, and there the roll torque is multiplied by `ground_roll_gain` (tipping the car over its side edge needs far more torque than turning it in the air); when nearly upside down the cross product vanishes, so PD rolls toward the lower side; gains live in `configs/controllers.toml`. PD reads `CarState` (`World::car_state`), the physical quantities the observation is built from.
 4. **Ai:** loads `models/policy.json`, normalizes the observation, runs the MLP forward pass, and maps the action from [−1, 1] to [0, 1]. The policy is deterministic (mean action).
-5. **Hybrid** (DECISIONS 2026-10-21): the AI saves upsets, PD does the rest. `nl_control::HybridGate` hands the nozzles to the AI when the tilt passes `events.upset_tilt_deg` (being airborne alone is not enough: PD lands upright jumps and hops; handing those to the AI too cut Stage D from 99% to 12%), and back to PD once all four wheels are down, tilt < `events.save_tilt_deg` and spin < `events.save_max_spin_rad_s` for `events.save_hold_s` (a latch, so a bounce never flicks control). The thresholds come from vehicle.toml `[events]`; an optional controllers.toml `[hybrid] enter_tilt_deg` moves only the hand-over tilt (unset in the repo; EXPERIMENTS 2026-10-27). The game, both eval runners and training share the gate. **Training under the gate:** a training config with `controller: hybrid` runs PD hidden inside `BatchedSim` until the gate hands over; each AI stretch is one episode for the policy, ending at the gate's release (terminated), a crash or the time limit. PD stretches are never transitions, sim episodes PD flies alone are skipped, and checkpoints are scored by the Rust Hybrid eval. The HUD shows "Hybrid · AI" or "Hybrid · PD"; T cycles Off → PD → AI → Hybrid. The game flies PD alone (DECISIONS 2026-10-27: the tuned PD beats every trained Hybrid on validation); `?controller=hybrid` loads the policy and switches to Hybrid once it has loaded.
+5. **Hybrid** (DECISIONS 2026-10-21): the AI saves upsets, PD does the rest. `nl_control::HybridGate` hands the nozzles to the AI when the tilt passes `events.upset_tilt_deg` (being airborne alone is not enough: PD lands upright jumps and hops; handing those to the AI too cut Stage D from 99% to 12%), and back to PD once all four wheels are down, tilt < `events.save_tilt_deg` and spin < `events.save_max_spin_rad_s` for `events.save_hold_s` (a latch, so a bounce never flicks control). The thresholds come from vehicle.toml `[events]`; an optional controllers.toml `[hybrid] enter_tilt_deg` moves only the hand-over tilt (120° in the repo since R4 shipped: the AI takes over only where PD struggles; EXPERIMENTS 2026-10-27). The game, both eval runners and training share the gate. **Training under the gate:** a training config with `controller: hybrid` runs PD hidden inside `BatchedSim` until the gate hands over; each AI stretch is one episode for the policy, ending at the gate's release (terminated), a crash or the time limit. PD stretches are never transitions, sim episodes PD flies alone are skipped, and checkpoints are scored by the Rust Hybrid eval. The HUD shows "Hybrid · AI" or "Hybrid · PD"; T cycles Off → PD → AI → Hybrid. The game flies PD alone (DECISIONS 2026-10-27: the tuned PD beat every Hybrid before R4, and R4 still trails it slightly on plain A and E); `?controller=hybrid` loads the policy and switches to Hybrid once it has loaded.
 
 The PD controller is required before RL. It proves the problem is controllable and is the baseline the AI must be compared against.
 
@@ -375,7 +375,7 @@ The PD controller is required before RL. It proves the problem is controllable a
 - `NineLivesVecEnv(sb3.common.vec_env.VecEnv)` adapts `BatchedSim` to SB3. It sets `infos[i]["terminal_observation"]` and `infos[i]["TimeLimit.truncated"]`.
 - `NineLivesEnv(gymnasium.Env)` is a single-env wrapper, used only for `gymnasium.utils.env_checker.check_env` and debugging.
 
-### 9.2 Observation (OBS_DIM = 41, v1) *(req layout)*
+### 9.2 Observation (OBS_DIM = 43, v2) *(req layout)*
 | Index | Name | Notes |
 |---|---|---|
 | 0–2 | gravity_dir_body | unit vector of world-down in the body frame |
@@ -394,10 +394,11 @@ The PD controller is required before RL. It proves the problem is controllable a
 | 25 | driver_steer | −1..1 |
 | 26–30 | terrain_probe | ground height relative to the centre of mass at 2, 4, 6, 8 and 10 m ahead along the horizontal heading (downward world rays), capped |
 | 31–40 | prev_action | the last 10 throttles |
+| 41–42 | heading_error | sin and cos of the nose's signed yaw from the take-off heading (positive: turned left, about world +Y); both 0 with no heading to keep (no take-off from the wheels, or the nose straight up or down). v2, DECISIONS 2026-10-27 |
 
 The layout lives in Rust (`ObsSpec`). The schema hash covers names, order and clamp ranges. Python, the export and the browser all check the hash *(req)*.
 
-Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range listed in `OBS_SPEC` (spin ±30 rad/s, velocity ±60 m/s, thrust scale 0..3, Hop time 0..1 s), so the ranges double as the Gymnasium `Box` bounds. `prev_action` holds the controller throttles in [0, 1], not the policy's [−1, 1] actions. Each terrain probe is a world-down ray from 20 m above the centre of mass at that distance along the nose direction flattened onto the ground (world +X when the nose points straight up or down); a probe that hits nothing reads −20. Suspension compression is (rest length − measured length) / max travel, 0 when the wheel does not touch. The schema hash is FNV-1a 64 over each field's `name low high` line in order, as 16 hex digits (v1: `16d2f5faa7964d05`); it covers the clamp ranges as well as names and order, so a policy never runs on inputs clamped differently from training. Python and the browser read the hash from Rust rather than recomputing it.
+Implementation notes (`nl-sim/src/obs.rs`): every value is clamped to the range listed in `OBS_SPEC` (spin ±30 rad/s, velocity ±60 m/s, thrust scale 0..3, Hop time 0..1 s), so the ranges double as the Gymnasium `Box` bounds. `prev_action` holds the controller throttles in [0, 1], not the policy's [−1, 1] actions. Each terrain probe is a world-down ray from 20 m above the centre of mass at that distance along the nose direction flattened onto the ground (world +X when the nose points straight up or down); a probe that hits nothing reads −20. Suspension compression is (rest length − measured length) / max travel, 0 when the wheel does not touch. The schema hash is FNV-1a 64 over each field's `name low high` line in order, as 16 hex digits (v1: `16d2f5faa7964d05`, 41 values; v2: `9cfb7c4a8a03a228`); it covers the clamp ranges as well as names and order, so a policy never runs on inputs clamped differently from training. Python and the browser read the hash from Rust rather than recomputing it.
 
 ### 9.3 Action
 `Box(low=−1, high=1, shape=(10,))`, mapped in the sim to `u = (a + 1) / 2`.
@@ -497,9 +498,9 @@ For the training viewer (§11.6), training also exports up to 8 evenly spaced ch
 ```json
 {
   "format": "ninelives-policy", "version": 1,
-  "obs_schema_hash": "…", "obs_dim": 41, "act_dim": 10,
+  "obs_schema_hash": "…", "obs_dim": 43, "act_dim": 10,
   "obs_norm": { "mean": [], "var": [], "eps": 1e-8, "clip": 10.0 },
-  "layers": [ { "w": [], "b": [], "in": 41, "out": 128, "act": "tanh" },
+  "layers": [ { "w": [], "b": [], "in": 43, "out": 128, "act": "tanh" },
               { "w": [], "b": [], "in": 128, "out": 128, "act": "tanh" },
               { "w": [], "b": [], "in": 128, "out": 10, "act": "none" } ],
   "action": { "clip": [-1, 1], "map": "(a+1)/2" },
@@ -615,7 +616,7 @@ class Game {
 - **Hop:** Realistic, flat ground, controller Off, centre-of-mass offset 0 → apex 1.7 m ± 20%; Arcade apex 7.5 m ± 20%.
 - **Events:** an upright 2 m drop gives a landing with no crash; an upside-down 0.5 m drop gives an `UpsideDown` crash; a hard side impact at 8 m/s gives a `HardImpact` crash; 3 s at tilt > 100° without roof contact gives a `Stuck` crash; with auto-respawn on, a crashed car stays frozen for `respawn_delay_s` and then is back at its checkpoint pose with a full tank and a `Respawn` event; the Reset bit respawns at once, only once while held; without auto-respawn (training) a crash stays until reset.
 - **Determinism:** two runs with the same seed and inputs are bit-identical for 2000 steps; the golden trace matches.
-- **Observations:** length 41; names unique; hash stable; values inside the spec bounds on random states.
+- **Observations:** length 43; names unique; hash stable; values inside the spec bounds on random states.
 - **Policy:** the JSON loader rejects a wrong hash or shape; the forward pass matches fixtures.
 
 ### Python (`pytest python/tests`)

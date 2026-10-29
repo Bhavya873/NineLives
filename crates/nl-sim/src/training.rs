@@ -4,6 +4,7 @@
 //! in eval. `nl-py`'s `BatchedSim` runs many of these side by side; nothing about the
 //! reward or the episode rules lives in Python (CLAUDE.md golden rule 1).
 
+use rand::RngExt;
 use serde::Serialize;
 
 use crate::actuator_model::ActuatorState;
@@ -21,6 +22,9 @@ use crate::world::PlaceCarError;
 
 /// The ChaCha8 stream of the episode seed that picks the episode's stage from the mix.
 const STAGE_PICK_RNG_STREAM: u64 = 8;
+/// ChaCha8 stream that decides whether a training episode is randomized
+/// (`randomize_share`).
+const RANDOMIZE_PICK_RNG_STREAM: u64 = 11;
 
 /// One stage in the training mix (SPEC §9.9): how often it comes up and at which
 /// curriculum level.
@@ -48,6 +52,9 @@ pub struct TrainingConfig {
     /// Draw each episode's car and world from `scenarios.randomization` (SPEC §9.8).
     /// Training turns this on; eval leaves it off.
     pub randomize: bool,
+    /// With `randomize`, the share of episodes randomized (0..=1); the rest run on the
+    /// plain car and world, as the game does. 1 randomizes every episode.
+    pub randomize_share: f32,
 }
 
 /// What one control step produced.
@@ -256,7 +263,8 @@ impl TrainingEnv {
     fn start_episode(&self, stage: Stage, level: u32, seed: u64) -> Result<Episode, PlaceCarError> {
         let config = &self.config;
         let scenarios = config.scenarios.at_level(stage, level);
-        let randomization = config.randomize.then_some(&scenarios.randomization);
+        let randomized = randomizes_episode(config.randomize, config.randomize_share, seed);
+        let randomization = randomized.then_some(&scenarios.randomization);
         let variation =
             EpisodeVariation::for_seed(randomization, &config.vehicle, config.mode, seed);
         Episode::start(&variation, &scenarios, stage, seed)
@@ -331,4 +339,14 @@ pub fn throttles_from_action(action: [f32; NOZZLE_COUNT]) -> [f32; NOZZLE_COUNT]
         }
     }
     throttles
+}
+
+/// Whether the training episode with `seed` runs on a randomized car and world: with
+/// `randomize` on, a `randomize_share` of episodes, picked from the seed alone.
+pub fn randomizes_episode(randomize: bool, randomize_share: f32, seed: u64) -> bool {
+    if !randomize {
+        return false;
+    }
+    let mut rng = stream_rng(seed, RANDOMIZE_PICK_RNG_STREAM);
+    rng.random::<f32>() < randomize_share
 }

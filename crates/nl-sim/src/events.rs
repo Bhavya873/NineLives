@@ -145,6 +145,11 @@ impl EventTracker {
         self.crashed
     }
 
+    /// The latest take-off, until all four wheels are down again (see `take_off`).
+    pub fn take_off(&self) -> Option<TakeOff> {
+        self.take_off
+    }
+
     /// Forgets everything, e.g. when the car is placed somewhere new.
     pub fn reset(&mut self) {
         *self = EventTracker::default();

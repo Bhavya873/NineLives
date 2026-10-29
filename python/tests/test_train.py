@@ -9,8 +9,9 @@ import pytest
 import yaml
 
 from ninelives.curriculum import Curriculum
-from ninelives.sim_config import CONFIGS_DIR
+from ninelives.sim_config import CONFIGS_DIR, load_sim_config
 from ninelives.train import train
+from ninelives_sim import BatchedSim
 
 
 def small_config(tmp_path: Path, total_steps: int) -> Path:
@@ -513,3 +514,31 @@ def test_the_shipped_flight_config_trains_under_the_gate_from_the_hardest_level(
     assert config.controller == "hybrid"
     assert config.curriculum_start_at_hardest
     assert "F" in config.stages
+
+
+def test_the_r4_config_randomizes_half_the_episodes():
+    from ninelives.train_config import load_train_config
+
+    config = load_train_config(CONFIGS_DIR / "train" / "flight-r4.yaml")
+
+    assert config.randomize_share == 0.5
+    assert load_train_config(CONFIGS_DIR / "train" / "base.yaml").randomize_share == 1.0
+
+
+def test_a_randomize_share_outside_0_to_1_is_refused(tmp_path):
+    from ninelives.train_config import load_train_config
+
+    text = (CONFIGS_DIR / "train" / "flight-r4.yaml").read_text()
+    path = tmp_path / "bad.yaml"
+    path.write_text(text.replace("randomize_share: 0.5", "randomize_share: 1.5"))
+
+    with pytest.raises(ValueError, match="randomize_share"):
+        load_train_config(path)
+
+
+def test_the_sim_refuses_a_randomize_share_outside_0_to_1():
+    config = json.loads(load_sim_config(randomize=True, randomize_share=0.5))
+    config["randomize_share"] = -0.1
+
+    with pytest.raises(ValueError, match="randomize_share"):
+        BatchedSim(1, json.dumps(config), 0)
