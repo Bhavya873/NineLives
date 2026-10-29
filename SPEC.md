@@ -278,10 +278,11 @@ During a Hop the controller cannot reduce lift below `hop_ff`, but it can add up
 ### 7.9 Events *(req definitions; start thresholds)*
 - **Airborne start/end:** wheel-contact count goes to 0 (no wheel touches) / back above 0 (any wheel touches).
 - **Upset start:** airborne for > 0.3 s, or tilt > 60°.
-- **Save:** during an upset, 4 wheels touching, tilt < 15°, |ω| < 1.5 rad/s, held for 0.5 s. Emits `Save { duration, air_used, peak_tilt, landing, quality }`: `landing` is the spin and fall speed just before the upset's first touchdown; `quality` (`nl_sim::landing`) is that touchdown's **heading error** (the angle between the nose flattened onto the ground at touchdown and at the last take-off, i.e. the last Airborne start; judged only when that take-off was from the wheels, so Stage A drops and Stage B tip-overs have none) and **speed kept** (forward speed 0.5 s after touchdown ÷ forward speed at take-off, only when the car left the ground from its wheels faster than 3 m/s, so drops and tip-overs are not judged on it; if the save comes before the 0.5 s, it is measured at the save). The take-off is forgotten once all four wheels are down again, so a later upset (e.g. tipped by a bump) is not judged against an old jump.
+- **Save:** during an upset, 4 wheels touching, tilt < 15°, |ω| < 1.5 rad/s, held for 0.5 s. Emits `Save { duration, air_used, peak_tilt, landing, quality, peak_g }`: `landing` is the spin and fall speed just before the upset's first touchdown; `quality` (`nl_sim::landing`) is that touchdown's **heading error** (the angle between the nose flattened onto the ground at touchdown and at the last take-off, i.e. the last Airborne start; judged only when that take-off was from the wheels, so Stage A drops and Stage B tip-overs have none) and **speed kept** (forward speed 0.5 s after touchdown ÷ forward speed at take-off, only when the car left the ground from its wheels faster than 3 m/s, so drops and tip-overs are not judged on it; if the save comes before the 0.5 s, it is measured at the save). The take-off is forgotten once all four wheels are down again, so a later upset (e.g. tipped by a bump) is not judged against an old jump.
 - **Hard landing:** within 0.2 s after a touchdown (first wheel down after none; the first step after the car is placed or respawned is never a touchdown), any wheel's suspension compression ≥ 0.95. Not a crash. Emits `HardLanding { compression, fall_speed }` once per touchdown (wasm `EventKind` 10). Thresholds in `vehicle.toml [events]`.
 - **Crash:** any chassis or roof collider contact with relative normal speed > 6 m/s (`HardImpact`); **or** any roof contact while tilt > 120°, at any speed (`UpsideDown`); **or** stuck (tilt > 100° for > 2 s) (`Stuck`); **or** out of bounds (y < −20 or outside the course box) (`OutOfBounds`). Emits `Crash { cause }`.
 - **Explosion and respawn (game only):** on `Crash` the sim freezes the wreck (no physics steps) and the game plays an explosion (flash, shockwave ring, about 20 low-poly debris pieces, camera shake unless reduced motion is on). After `respawn_delay_s` (1.5 s) of sim time (auto-respawn, which only the game turns on) the sim puts the car back at its last checkpoint (pose and velocities, not a `restore`) with a full tank and emits `Respawn`; mode, clock and random generator carry on. The HUD's "Lives used" counter is the crash count, which the game keeps as it drains events. The Reset button (R) respawns at once. In training a crash simply ends the episode (9.5).
+- **Peak g (g-meter, `docs/contracts/g-meter.md`):** `EventTracker` keeps the raw (per-tick, unsmoothed) peak seat g over a stunt window that starts at `AirborneStart` and ends 0.5 s after the touchdown that ends the airtime (the touchdown counts). It resets at the next `AirborneStart`, a respawn and a placement, and is kept after the window closes. `Save.peak_g` carries it, `World::peak_g_load()` returns it (`HudField.PeakGLoad`, 23), and `World::peak_displayed_g_load()` returns the peak of the 0.1 s smoothed value over the same window. Nothing in the physics reads it.
 - Events are drained by the caller (`world.drain_events()`) and counted in stats.
 
 ### 7.10 Determinism *(req)*
@@ -545,7 +546,7 @@ class Game {
   nozzle_throttles(): Float32Array;         // 10 flame sizes: valve opening × tank gate
   nozzle_layout(): Float32Array;            // 10 × [x, y, z, exhaust x, y, z] in the body frame
   hud(): Float32Array;                      // fixed layout: speed, air_frac, tilt, |ω|, saves, crashes, time, hop_cd, …
-  drain_events(): Float32Array;             // 4 per event: EventKind, then up to 3 values (Save stats, CrashCode)
+  drain_events(): Float32Array;             // 5 per event: EventKind, then up to 4 values (Save: duration, air used, peak tilt, peak g; CrashCode); the rest 0
   is_crashed(): boolean;
   set_checkpoint(): void;                   // the car's pose and motion now become the respawn point
   snapshot(): Uint8Array; restore(s: Uint8Array): void;
@@ -588,7 +589,7 @@ class Game {
 - **Bottom-right:** an attitude ball (roll/pitch), spin rate, and a top-down **nozzle map** of the car with 10 dots glowing by throttle.
 - **Top-right:** saves, crashes, time, Hop cooldown.
 - **Under the stats:** a wind arrow (relative to the camera) with Off / Breeze / Storm and the speed, hidden with no wind; streaks in the air show the wind too.
-- **G blackout:** clear up to 3 g passenger load (`HudField.GLoad`); above it the screen edges darken, reaching full black after about 1 s held, and recover over 1.5 s below 3 g.
+- **G blackout:** clear up to 3 g passenger load (`HudField.GLoad`, the 0.1 s smoothed value; `HudField.PeakGLoad` is the raw peak of the stunt window); above it the screen edges darken, reaching full black after about 1 s held, and recover over 1.5 s below 3 g.
 - **Centre toasts:** "SAVE" (with air used), "CRASH" (with cause), "NO AIR".
 
 ### 11.6 Screens and features

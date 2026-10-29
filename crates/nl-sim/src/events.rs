@@ -49,6 +49,9 @@ pub enum SimEvent {
         landing: Touchdown,
         /// How well that landing kept the take-off heading and speed (PLAN §3.3).
         quality: LandingQuality,
+        /// The raw (per-tick, unsmoothed) peak seat g of the latest stunt window, in g
+        /// (`docs/contracts/g-meter.md`); 0 if no airtime has started since the reset.
+        peak_g: f32,
     },
     /// A wheel's suspension bottomed out just after a touchdown (PLAN §3.3). Not a
     /// crash: the car drives on, but the reward charges for it.
@@ -101,6 +104,10 @@ pub struct EventInputs {
     /// True if the centre of mass has left the course's bounds box (always false on
     /// flat ground, which has no box).
     pub outside_course: bool,
+    /// The seat g-load of this step, unsmoothed, in g (SPEC §9.4).
+    pub raw_g: f32,
+    /// The same g-load smoothed over `[passenger] smoothing_s`: what the meter shows.
+    pub displayed_g: f32,
 }
 
 /// An upset in progress.
@@ -137,9 +144,42 @@ pub struct EventTracker {
     hard_landing_watch_s: f32,
     /// Fall speed just before the latest touchdown, for the HardLanding event, in m/s.
     touchdown_fall_m_s: f32,
+    /// The stunt window for the g-meter (`docs/contracts/g-meter.md`).
+    stunt_window: StuntWindow,
+    /// Largest raw seat g in the stunt window so far, in g. Kept after the window
+    /// closes, until the next AirborneStart or a reset.
+    peak_raw_g: f32,
+    /// Largest smoothed (displayed) seat g in the same window, in g.
+    peak_displayed_g: f32,
+}
+
+/// How long the stunt window stays open after the touchdown that ends the airtime, in s.
+const STUNT_WINDOW_TAIL_S: f32 = 0.5;
+
+/// Where the g-meter's stunt window stands.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+enum StuntWindow {
+    /// No airtime since the reset, or the window has closed.
+    #[default]
+    Closed,
+    /// Open: from AirborneStart through the airtime.
+    Open,
+    /// The airtime ended; the window closes after this many more seconds.
+    Closing { left_s: f32 },
 }
 
 impl EventTracker {
+    /// The raw (per-tick) peak seat g of the stunt window, in g; 0 before the first
+    /// take-off after a reset.
+    pub fn peak_raw_g(&self) -> f32 {
+        self.peak_raw_g
+    }
+
+    /// The peak of the displayed (smoothed) seat g over the same window, in g.
+    pub fn peak_displayed_g(&self) -> f32 {
+        self.peak_displayed_g
+    }
+
     /// True once a crash has happened. Nothing else is reported until `reset`.
     pub fn crashed(&self) -> bool {
         self.crashed
@@ -170,10 +210,12 @@ impl EventTracker {
         if let Some(cause) = self.crash_cause(inputs, config) {
             self.crashed = true;
             self.upset = None;
+            self.update_stunt_window(inputs, dt_s);
             events.push(SimEvent::Crash { cause });
             return;
         }
         self.update_airborne(inputs, dt_s, events);
+        self.update_stunt_window(inputs, dt_s);
         self.update_hard_landing(inputs, config, dt_s, events);
         self.update_upset_and_save(inputs, config, dt_s, events);
         if inputs.wheels_down == WHEEL_COUNT {
@@ -228,18 +270,40 @@ impl EventTracker {
         let airborne_now = inputs.wheels_down == 0;
         if airborne_now && !self.is_airborne() {
             events.push(SimEvent::AirborneStart);
+            // A new take-off starts a fresh stunt window, even inside the old one's tail.
+            self.stunt_window = StuntWindow::Open;
+            self.peak_raw_g = 0.0;
+            self.peak_displayed_g = 0.0;
             let left_the_wheels = self.previous_wheels_down > 0;
             let speed_m_s = left_the_wheels.then_some(inputs.forward_speed_m_s);
             self.take_off = Some(TakeOff::new(inputs.nose_world, speed_m_s));
         }
         if !airborne_now && self.is_airborne() {
             events.push(SimEvent::AirborneEnd);
+            self.stunt_window = StuntWindow::Closing {
+                left_s: STUNT_WINDOW_TAIL_S,
+            };
         }
         if airborne_now {
             self.airborne_s += dt_s;
         } else {
             self.airborne_s = 0.0;
         }
+    }
+
+    /// Folds this step's g into the stunt window's peaks while the window is open. The
+    /// touchdown step is inside the window, and so are the 0.5 s after it.
+    fn update_stunt_window(&mut self, inputs: &EventInputs, dt_s: f32) {
+        self.stunt_window = match self.stunt_window {
+            StuntWindow::Closed => return,
+            StuntWindow::Open => StuntWindow::Open,
+            StuntWindow::Closing { left_s } if left_s - dt_s > 0.0 => StuntWindow::Closing {
+                left_s: left_s - dt_s,
+            },
+            StuntWindow::Closing { .. } => StuntWindow::Closed,
+        };
+        self.peak_raw_g = self.peak_raw_g.max(inputs.raw_g);
+        self.peak_displayed_g = self.peak_displayed_g.max(inputs.displayed_g);
     }
 
     /// PLAN §3.3: after a touchdown, watches for `hard_landing_window_s` for a wheel's
@@ -326,6 +390,7 @@ impl EventTracker {
                 peak_tilt_rad: upset.peak_tilt_rad,
                 landing: landing.motion,
                 quality: landing.finish(inputs.forward_speed_m_s),
+                peak_g: self.peak_raw_g,
             });
             self.upset = None;
         }
@@ -362,6 +427,8 @@ mod tests {
             nose_world: [1.0, 0.0, 0.0],
             forward_speed_m_s: 0.0,
             max_suspension_compression: 0.3,
+            raw_g: 1.0,
+            displayed_g: 1.0,
         }
     }
 
@@ -638,5 +705,89 @@ mod tests {
 
         assert!(later.is_empty());
         assert_eq!(after_reset, vec![SimEvent::AirborneStart]);
+    }
+
+    /// Inputs with this raw and displayed g.
+    fn with_g(inputs: EventInputs, raw_g: f32, displayed_g: f32) -> EventInputs {
+        EventInputs {
+            raw_g,
+            displayed_g,
+            ..inputs
+        }
+    }
+
+    fn in_the_air() -> EventInputs {
+        EventInputs {
+            wheels_down: 0,
+            ..upright_on_wheels()
+        }
+    }
+
+    #[test]
+    fn the_peak_is_zero_until_a_take_off_and_the_touchdown_counts() {
+        let mut tracker = EventTracker::default();
+
+        feed(&mut tracker, with_g(upright_on_wheels(), 5.0, 5.0), 0.5);
+        assert_eq!(tracker.peak_raw_g(), 0.0);
+
+        feed(&mut tracker, with_g(in_the_air(), 0.0, 0.0), 1.0);
+        // One tick of landing spike; the smoothed value barely moves.
+        feed(&mut tracker, with_g(upright_on_wheels(), 6.5, 1.4), DT_S);
+        feed(&mut tracker, with_g(upright_on_wheels(), 1.0, 1.3), 0.3);
+
+        assert_eq!(tracker.peak_raw_g(), 6.5);
+        assert_eq!(tracker.peak_displayed_g(), 1.4);
+    }
+
+    #[test]
+    fn the_window_closes_half_a_second_after_the_touchdown() {
+        let mut tracker = EventTracker::default();
+        feed(&mut tracker, in_the_air(), 0.5);
+        feed(&mut tracker, with_g(upright_on_wheels(), 2.0, 2.0), DT_S);
+
+        // Still inside the window 0.4 s after the touchdown.
+        feed(&mut tracker, with_g(upright_on_wheels(), 3.0, 3.0), 0.4);
+        assert_eq!(tracker.peak_raw_g(), 3.0);
+        // Past the 0.5 s tail (the touchdown tick was the first of it) nothing counts.
+        feed(&mut tracker, with_g(upright_on_wheels(), 1.0, 1.0), 0.15);
+        feed(&mut tracker, with_g(upright_on_wheels(), 9.0, 9.0), 0.2);
+        assert_eq!(tracker.peak_raw_g(), 3.0);
+        // The value is kept after the window closes.
+        feed(&mut tracker, with_g(upright_on_wheels(), 9.0, 9.0), 1.0);
+        assert_eq!(tracker.peak_raw_g(), 3.0);
+    }
+
+    #[test]
+    fn the_peak_resets_at_the_next_take_off_and_on_reset() {
+        let mut tracker = EventTracker::default();
+        feed(&mut tracker, with_g(in_the_air(), 1.0, 1.0), 0.5);
+        feed(&mut tracker, with_g(upright_on_wheels(), 7.0, 2.0), DT_S);
+        feed(&mut tracker, upright_on_wheels(), 1.0);
+        assert_eq!(tracker.peak_raw_g(), 7.0);
+
+        feed(&mut tracker, with_g(in_the_air(), 0.2, 0.2), DT_S);
+        assert_eq!(tracker.peak_raw_g(), 0.2);
+
+        tracker.reset();
+        assert_eq!(tracker.peak_raw_g(), 0.0);
+        assert_eq!(tracker.peak_displayed_g(), 0.0);
+    }
+
+    #[test]
+    fn a_save_carries_the_raw_peak_of_its_stunt_window() {
+        let mut tracker = EventTracker::default();
+        let mut events = feed(&mut tracker, with_g(in_the_air(), 0.0, 0.0), 1.0);
+        events.extend(feed(
+            &mut tracker,
+            with_g(upright_on_wheels(), 4.5, 1.2),
+            DT_S,
+        ));
+        events.extend(feed(&mut tracker, upright_on_wheels(), 1.0));
+
+        let peak = events.iter().find_map(|event| match event {
+            SimEvent::Save { peak_g, .. } => Some(*peak_g),
+            _ => None,
+        });
+        assert_eq!(peak, Some(4.5));
     }
 }
