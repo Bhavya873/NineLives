@@ -27,7 +27,7 @@ use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, Worl
 use wasm_bindgen::prelude::*;
 
 mod course;
-mod crowd;
+pub mod crowd;
 mod eval;
 
 /// Number of floats in one pose: position x, y, z then quaternion x, y, z, w.

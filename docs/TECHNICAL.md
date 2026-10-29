@@ -434,8 +434,13 @@ The game flies PD alone (`?controller=hybrid` loads the policy and flies the Hyb
 pauses on Esc, and gives the player nine lives, one lost per crash.
 
 The training viewer (`web/viewer.html`) builds one wasm `Crowd` per exported checkpoint and flies
-them all at once on the same Stage A drops: one labelled row of translucent cars per checkpoint,
-plus a table of landings and crashes.
+them all at once on the same episodes: one labelled row of translucent cars per checkpoint,
+plus a table of landings and crashes. Every car is flown by the Hybrid (`build_controller("hybrid", ...)`,
+the hand-over from `controllers.toml`) with the checkpoint as its AI. `Crowd::for_stage` covers Stage A
+drops (flat and the obstacle arena), Stage D and F on a generated course (`episode::course_for_stage`, one
+course per crowd, drawn from `course_shapes()`) and the Gauntlet; a stage picker (or `?arena=`) chooses.
+`cargo run --release -p nl-wasm --example viewer_rates` flies the same crowds natively and records the
+landing rates (`results/baseline_2026-10/viewer_landing_rates.json`).
 
 ## 10. Testing
 

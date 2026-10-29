@@ -1,23 +1,25 @@
-// The training viewer's crowd (SPEC §11.6, M6): one policy flies many Stage A drops, each
-// a full sim episode, and every car ends exactly as the native eval says it does.
+// The training viewer's crowd (SPEC §11.6, M6, D1): one policy flies many episodes, each a
+// full sim episode, every car flown by the Hybrid, and every car ends exactly as the native
+// Hybrid eval says it does.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { Crowd, CrowdOutcome, asFloat32, policyJson } from './load-wasm.mjs';
 
-/** Steps `crowd` until every car's episode has ended (8 s limit: 960 steps at most). */
-function runToEnd(crowd) {
+/** Steps `crowd` until every car's episode has ended (`limit` steps at most; a drop's
+ * time limit is 8 s, 960 steps). */
+function runToEnd(crowd, limit = 2000) {
   let steps = 0;
   while (crowd.step()) {
     steps += 1;
-    assert.ok(steps < 2000, 'the crowd never finished');
+    assert.ok(steps < limit, 'the crowd never finished');
   }
 }
 
-test('each car ends exactly as the native eval of its seed does', () => {
+test('each car ends exactly as the native Hybrid eval of its seed does', () => {
   const committed = JSON.parse(
-    readFileSync(new URL('../../results/eval_ai_A_realistic.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('../../results/eval_hybrid_A_realistic.json', import.meta.url), 'utf8'),
   ).episodes.slice(0, 8);
   const crowd = new Crowd(policyJson, 'realistic', 0n, 8);
 
@@ -80,5 +82,45 @@ test('a bad course is refused with the piece named', () => {
   assert.throws(
     () => Crowd.on_course(policyJson, 'realistic', 0n, 2, JSON.stringify(broken)),
     /piece 1 'ramp'/,
+  );
+});
+
+test('every car is flown by the Hybrid', () => {
+  for (const stage of ['A', 'arena', 'D', 'F', 'gauntlet']) {
+    assert.equal(
+      Crowd.for_stage(policyJson, 'realistic', stage, 0n, 2).controller_name(),
+      'hybrid',
+    );
+  }
+  assert.equal(new Crowd(policyJson, 'realistic', 0n, 1).controller_name(), 'hybrid');
+});
+
+test('the crowd covers Stage A, the arena, Stage D, Stage F and the Gauntlet', () => {
+  for (const stage of ['A', 'arena', 'D', 'F', 'gauntlet']) {
+    const crowd = Crowd.for_stage(policyJson, 'realistic', stage, 0n, 3);
+
+    crowd.step();
+
+    assert.equal(crowd.count(), 3, stage);
+    assert.equal(crowd.course_shapes() === undefined, stage === 'A', stage);
+    assert.equal(crowd.chassis_poses().length, 3 * 7, stage);
+  }
+});
+
+test('a generated course is drawn from its shapes and the cars on it finish', () => {
+  const crowd = Crowd.for_stage(policyJson, 'realistic', 'D', 0n, 4);
+
+  const shapes = JSON.parse(crowd.course_shapes());
+  runToEnd(crowd, 120 * 120);
+
+  assert.ok(shapes.length > 3);
+  const landed = Array.from(crowd.outcomes()).filter((code) => code === CrowdOutcome.Landed);
+  assert.ok(landed.length >= 3, `${landed.length} of 4 reached the finish`);
+});
+
+test('an unknown stage is refused with the valid names', () => {
+  assert.throws(
+    () => Crowd.for_stage(policyJson, 'realistic', 'Z', 0n, 2),
+    /stage must be one of A, arena, D, F, gauntlet/,
   );
 });

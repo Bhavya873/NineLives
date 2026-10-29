@@ -1,22 +1,27 @@
 // The training viewer (SPEC §11.6): every exported checkpoint of the newest training run
-// flies at once, one labelled row of translucent cars per checkpoint, all on the same Stage A
+// flies at once, one labelled row of translucent cars per checkpoint, all on the same
 // drops, so you can see the policy improve from row to row. The sim (one wasm Crowd per
-// checkpoint) flies every car; this page only draws them and counts how the drops end.
-// The drops land on the flat arena or the obstacle arena (O key, the button or `?arena=obstacles`).
+// checkpoint, every car flown by the Hybrid) flies every car; this page only draws them and
+// counts how the episodes end. The cars fly Stage A drops on the flat arena or the obstacle
+// arena (O key, the button or `?arena=obstacles`), or Stage D, Stage F and the Gauntlet
+// (the stage picker or `?arena=driving|flight|gauntlet`).
 import { requireElement, setText } from '../dom.ts';
 import { startGameLoop } from '../game-loop.ts';
 import { FLOATS_PER_POSE } from '../render/pose-blend.ts';
 import { createArena } from '../render/scene.ts';
 import initWasm, { type Crowd, CrowdOutcome, Game } from '../wasm/nl_wasm.js';
 import {
+  ARENAS,
   type ArenaKind,
   arenaFromUrl,
   arenaLabel,
+  followsCars,
   newCrowd,
   otherArena,
+  rowsShareSeeds,
   searchWithArena,
 } from './arena-choice.ts';
-import { createArenaView, showArena } from './arena-view.ts';
+import { createArenaView, followCars, showArena } from './arena-view.ts';
 import { type RunEntry, loadCheckpoint, loadNewestRun } from './checkpoints.ts';
 import { createCrowdView, updateCrowdRow } from './crowd-view.ts';
 
@@ -50,6 +55,10 @@ async function start(): Promise<void> {
   }
   const status = requireElement('viewer-status');
   const toggle = requireElement('arena-toggle');
+  const picker = requireElement('stage-select') as HTMLSelectElement;
+  for (const kind of ARENAS) {
+    picker.add(new Option(arenaLabel(kind), kind));
+  }
   const run = await loadNewestRun();
   const board = createBoard(requireElement('viewer-board'), run);
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
@@ -69,6 +78,12 @@ async function start(): Promise<void> {
   const wheelCount = wheelPoses / (CARS_PER_CHECKPOINT * FLOATS_PER_POSE);
   const view = createCrowdView(arena.scene, rowLabels(run), CARS_PER_CHECKPOINT, wheelCount);
   const switchArena = () => startRound(state, otherArena(state.arena), state.round);
+  picker.addEventListener('change', () => {
+    const kind = ARENAS.find((arenaKind) => arenaKind === picker.value);
+    if (kind) {
+      startRound(state, kind, state.round);
+    }
+  });
   window.addEventListener('keydown', (event) => {
     if (event.code === 'KeyO') {
       switchArena();
@@ -90,16 +105,23 @@ async function start(): Promise<void> {
         showArena(arenaView, state.arena, state.rows[0]?.crowd.course_shapes());
         view.spreadOnGrid = state.arena === 'flat';
         setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
+        picker.value = state.arena;
       }
+      const centre = { x: 0, z: 0, cars: 0 };
       state.rows.forEach((row, index) => {
         const outcomes = row.crowd.outcomes();
-        updateCrowdRow(view, index, row.crowd.chassis_poses(), row.crowd.wheel_poses(), outcomes);
+        const chassis = row.crowd.chassis_poses();
+        updateCrowdRow(view, index, chassis, row.crowd.wheel_poses(), outcomes);
+        addRunningCars(centre, chassis, outcomes);
         const cells = board[index];
         if (cells) {
           setText(cells.landed, String(count(outcomes, CrowdOutcome.Landed)));
           setText(cells.crashed, String(count(outcomes, CrowdOutcome.Crashed)));
         }
       });
+      if (followsCars(state.arena) && centre.cars > 0) {
+        followCars(arenaView, centre.x / centre.cars, centre.z / centre.cars);
+      }
       arena.renderer.render(arena.scene, arena.camera);
       setText(status, statusText(state));
       nextRoundWhenDone(state);
@@ -117,14 +139,16 @@ async function start(): Promise<void> {
 }
 
 /** Builds every checkpoint's crowd for round `round` in `arena`, replacing the old ones.
- * On the flat arena every row flies the same drops, so rows compare fairly; on the shared
- * obstacle course each row gets its own drops, so the cars do not sit on top of each other. */
+ * On the flat arena and the generated courses every row flies the same seeds (and so the same
+ * course), so rows compare fairly; on the shared obstacle arena and the Gauntlet each row gets
+ * its own seeds, so the cars do not sit on top of each other. */
 function startRound(state: ViewerState, arena: ArenaKind, round: number): void {
   const rows = state.policies.length;
-  const roundSeed = BigInt(round * CARS_PER_CHECKPOINT * (arena === 'flat' ? 1 : rows));
+  const shared = rowsShareSeeds(arena);
+  const roundSeed = BigInt(round * CARS_PER_CHECKPOINT * (shared ? 1 : rows));
   // Build the new crowds first, so a bad file never leaves freed crowds behind.
   const crowds = state.policies.map((policyJson, index) => {
-    const rowSeed = arena === 'flat' ? 0n : BigInt(index * CARS_PER_CHECKPOINT);
+    const rowSeed = shared ? 0n : BigInt(index * CARS_PER_CHECKPOINT);
     return newCrowd(arena, policyJson, roundSeed + rowSeed, CARS_PER_CHECKPOINT);
   });
   for (const row of state.rows) {
@@ -150,6 +174,21 @@ function nextRoundWhenDone(state: ViewerState): void {
   } else if (nowMs - state.finishedAtMs > PAUSE_BETWEEN_S * 1000) {
     startRound(state, state.arena, state.round + 1);
   }
+}
+
+/** Adds the position of every car still flying or driving to `centre`, for the camera. */
+function addRunningCars(
+  centre: { x: number; z: number; cars: number },
+  chassis: Float32Array,
+  outcomes: Uint8Array,
+): void {
+  outcomes.forEach((outcome, car) => {
+    if (outcome === CrowdOutcome.Running) {
+      centre.x += chassis[car * FLOATS_PER_POSE] ?? 0;
+      centre.z += chassis[car * FLOATS_PER_POSE + 2] ?? 0;
+      centre.cars += 1;
+    }
+  });
 }
 
 /** A checkpoint's training steps in millions, e.g. "16M". */
@@ -189,7 +228,7 @@ function createBoard(table: HTMLElement, run: RunEntry): BoardCells[] {
   });
 }
 
-/** "Run stage-a-004: 8 checkpoints at once, 8 drops each, flat arena, round 1". */
+/** "Run flight-r4: 8 checkpoints at once, 8 drops each, flat arena, round 1". */
 function statusText(state: ViewerState): string {
   const arena = arenaLabel(state.arena).toLowerCase();
   const checkpoints = `${state.rows.length} checkpoints at once`;
