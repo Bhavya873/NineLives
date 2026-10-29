@@ -29,6 +29,9 @@ use crate::conventions::{
 use crate::course::{BoundsSpec, CourseSpec};
 use crate::course_build::{OBSTACLE_USER_DATA, build_course_shapes, shape_collider};
 use crate::course_triggers::{CourseTriggers, TriggerAction};
+use crate::diagnostics::{
+    ChassisContactPoint, WheelDiagnostics, chassis_contact_points, wheel_diagnostics,
+};
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
@@ -530,6 +533,18 @@ impl World {
     pub fn chassis_touching_obstacle(&self) -> bool {
         is_touching_tagged(&self.physics, self.car.body_collider, OBSTACLE_USER_DATA)
             || is_touching_tagged(&self.physics, self.car.roof_collider, OBSTACLE_USER_DATA)
+    }
+
+    /// What each wheel ray saw and pushed on the last step, in wheel order (read-only,
+    /// for research tools such as the speed sweep).
+    pub fn wheel_diagnostics(&self) -> [WheelDiagnostics; WHEEL_COUNT] {
+        wheel_diagnostics(&self.car)
+    }
+
+    /// Every point where the body or roof touches something after the last step
+    /// (read-only, for research tools; after a crash it is the crash step's contacts).
+    pub fn chassis_contact_points(&self) -> Vec<ChassisContactPoint> {
+        chassis_contact_points(&self.physics, &self.car)
     }
 
     /// True if the body or roof box touches anything now (wheels are rays, not boxes).

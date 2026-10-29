@@ -115,6 +115,11 @@ impl Car {
         self.wheels = build_wheels(&self.config, self.chassis);
     }
 
+    /// The raycast wheels, read-only (for `diagnostics`).
+    pub(crate) fn wheels(&self) -> &[rapier3d::control::Wheel] {
+        self.wheels.wheels()
+    }
+
     /// The car's settings.
     pub fn config(&self) -> &VehicleConfig {
         &self.config

@@ -16,4 +16,6 @@ Regenerate one file (from the repo root; `--dr` for randomized):
     cargo run --release -p nl-control --example eval -- --controller pd --stage A \
       --mode realistic --episodes 1000 --seed 1500000 --out results/baseline_2026-10
 
-Not here yet: the per-piece speed sweep (needs the R2 sweep tool) and the viewer landing rates.
+`speed_sweep.json` and `.csv`: the per-piece speed sweep under the same physics (16,320 runs, 1295 crashes), with its cause table in `docs/research/speed-survival.md`.
+
+Not here yet: the viewer landing rates.
