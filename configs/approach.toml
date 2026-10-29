@@ -1,0 +1,19 @@
+# When a car's entry onto a course piece counts as "clean" (docs/contracts/traversal.md).
+# Judged in the piece's local frame at the moment of entry. Only clean entries are
+# covered by the survival rule (docs/contracts/survival.md).
+# Stub from Gate 0: no code reads this file yet. G2 (`claude/fearless-pieces`) adds
+# the loader. Every value is a starting value to tune.
+
+# Largest heading error against the piece's forward axis, in degrees. (start)
+max_heading_err_deg = 15.0
+# Largest pitch relative to the piece surface, in degrees. (start)
+max_pitch_deg = 10.0
+# Largest roll, in degrees. (start)
+max_roll_deg = 10.0
+# The car's centre must stay inside the piece width minus this margin, in m. (start)
+lateral_margin_m = 0.5
+# Fewest wheels on the ground at entry, for ground-entry pieces only. Flip plates
+# entered while airborne are exempt. (start)
+min_wheels_down = 3
+# The traversal record times out after piece length / entry speed plus this, in s. (start)
+timeout_extra_s = 3.0
