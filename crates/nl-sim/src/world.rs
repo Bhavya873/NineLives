@@ -86,7 +86,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 17;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 18;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -343,6 +343,18 @@ impl World {
         self.g_load.g()
     }
 
+    /// The raw (per-tick, unsmoothed) peak seat g of the current stunt window, in g
+    /// (`docs/contracts/g-meter.md`): from AirborneStart to 0.5 s after the touchdown,
+    /// 0 before the first take-off since a respawn or placement.
+    pub fn peak_g_load(&self) -> f32 {
+        self.events.peak_raw_g()
+    }
+
+    /// The peak of the displayed (0.1 s smoothed) g over the same window, in g.
+    pub fn peak_displayed_g_load(&self) -> f32 {
+        self.events.peak_displayed_g()
+    }
+
     /// Gives the car a random Chaos knock (SPEC §7.12).
     fn knock(&mut self) {
         let body = &mut self.physics.bodies[self.car.chassis];
@@ -430,6 +442,8 @@ impl World {
             outside_course: self
                 .course_bounds
                 .is_some_and(|bounds| !bounds.contains(body.center_of_mass().to_array())),
+            raw_g: self.g_load.raw_g(),
+            displayed_g: self.g_load.g(),
         };
         let config = &self.car.config().events;
         self.events

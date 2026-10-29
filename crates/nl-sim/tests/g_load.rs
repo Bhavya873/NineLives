@@ -44,3 +44,28 @@ fn a_falling_car_feels_almost_nothing_and_braking_feels_heavy() {
     assert!(falling_g < 0.1, "falling {falling_g} g");
     assert!(braking_g > 1.5, "braking {braking_g} g");
 }
+
+#[test]
+fn a_drop_reports_a_raw_peak_above_the_displayed_one_and_a_respawn_clears_it() {
+    let mut world = new_world();
+    world
+        .place_car([0.0, 3.0, 0.0], LEVEL, [0.0; 3], [0.0; 3])
+        .unwrap();
+    assert_eq!(world.peak_g_load(), 0.0);
+
+    // 3 m of fall, the touchdown, and the 0.5 s after it.
+    run(&mut world, [0.0; NOZZLE_COUNT], 480);
+    let raw_peak = world.peak_g_load();
+    let displayed_peak = world.peak_displayed_g_load();
+
+    // The landing is in the peak; the 0.1 s filter flattens its one-tick spike.
+    assert!(raw_peak > 1.5, "raw peak {raw_peak} g");
+    assert!(
+        raw_peak > displayed_peak,
+        "{raw_peak} vs {displayed_peak} g"
+    );
+    assert!(displayed_peak >= world.g_load());
+
+    world.respawn();
+    assert_eq!(world.peak_g_load(), 0.0);
+}

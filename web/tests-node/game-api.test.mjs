@@ -93,7 +93,7 @@ test('space-bar hop lifts the car once it has settled', () => {
   assert.ok(game.chassis_pose()[1] > 1.2, `height ${game.chassis_pose()[1]}`);
 });
 
-/** Splits the flat drain_events() array into [kind, a, b, c] groups. */
+/** Splits the flat drain_events() array into [kind, a, b, c, d] groups. */
 function eventGroups(values) {
   const groups = [];
   for (let start = 0; start < values.length; start += Game.floats_per_event()) {
@@ -164,4 +164,36 @@ test('holding Boost in tight circles runs the Realistic tank out of air', () => 
   }
 
   assert.equal(game.hud()[HudField.OutOfAir], 1, `air ${game.hud()[HudField.AirFraction]}`);
+});
+
+test('the HUD array and the event width match the contract', () => {
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+
+  // docs/contracts/events-hud.md: HudField 23 is the last one so far; events are 5 floats.
+  assert.equal(HudField.PeakGLoad, 23);
+  assert.equal(game.hud().length, HudField.PeakGLoad + 1);
+  assert.equal(Game.floats_per_event(), 5);
+});
+
+test('a Hop reports the raw peak g in the HUD and in the Save event', () => {
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+  game.set_controller('off');
+  tickMany(game, new Uint8Array([0, 0, 0, 0]), 180);
+  game.drain_events();
+  // (The start pose is a little above resting height, so a small first drop already ran.)
+
+  game.tick(new Uint8Array([0, 0, 1, 0]));
+  let displayedPeak = 0;
+  for (let i = 0; i < 360; i += 1) {
+    game.tick(new Uint8Array([0, 0, 0, 0]));
+    displayedPeak = Math.max(displayedPeak, game.hud()[HudField.GLoad]);
+  }
+  const save = eventGroups(game.drain_events()).find((group) => group[0] === EventKind.Save);
+
+  assert.ok(save, 'a Save event');
+  const rawPeak = game.hud()[HudField.PeakGLoad];
+  // The landing is in the peak, and the raw peak is at least the smoothed one.
+  assert.ok(rawPeak > 1, `peak ${rawPeak}`);
+  assert.ok(rawPeak >= displayedPeak - 1e-3, `raw ${rawPeak} displayed ${displayedPeak}`);
+  assert.equal(save[4], rawPeak);
 });

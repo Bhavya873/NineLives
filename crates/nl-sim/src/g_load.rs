@@ -14,6 +14,9 @@ use crate::conventions::GRAVITY_M_S2;
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct GLoad {
     smoothed_g: f32,
+    /// The unsmoothed g-load of the latest measured step (120 Hz), in g. 1 until a step
+    /// has been measured. Only the peak tracker reads it; it feeds nothing in the physics.
+    raw_g: f32,
     /// Linear and angular velocity at the end of the last step, world frame; None right
     /// after the car was placed, so a placement is not felt as a jolt.
     last_velocity: Option<([f32; 3], [f32; 3])>,
@@ -24,6 +27,7 @@ impl Default for GLoad {
     fn default() -> GLoad {
         GLoad {
             smoothed_g: 1.0,
+            raw_g: 1.0,
             last_velocity: None,
         }
     }
@@ -35,9 +39,16 @@ impl GLoad {
         self.smoothed_g
     }
 
+    /// The raw (unsmoothed) g-load of the step just measured, in g. Spikes at a landing
+    /// that the smoothed value flattens.
+    pub fn raw_g(&self) -> f32 {
+        self.raw_g
+    }
+
     /// Forgets the last velocities, e.g. after the car is placed or respawned.
     pub fn forget_motion(&mut self) {
         self.last_velocity = None;
+        self.raw_g = 1.0;
     }
 
     /// Measures the step `body` just took (seat at `seat_body_m`, body frame) and folds
@@ -45,6 +56,7 @@ impl GLoad {
     pub fn update(&mut self, body: &RigidBody, seat_body_m: [f32; 3], dt_s: f32, smoothing_s: f32) {
         if let Some(before) = self.last_velocity {
             let instant_g = seat_g(before, body, seat_body_m, dt_s);
+            self.raw_g = instant_g;
             self.smooth(instant_g, dt_s, smoothing_s);
         }
         self.last_velocity = Some((body.linvel().to_array(), body.angvel().to_array()));
