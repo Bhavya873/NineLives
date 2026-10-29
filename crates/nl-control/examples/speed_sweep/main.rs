@@ -269,17 +269,20 @@ fn piece_cases() -> Result<Vec<PieceCase>, Box<dyn Error>> {
         }],
         end_x_m: x + 20.0,
     });
-    // A table top the height of a 2 m wall: the ramp starts at PIECE_X_M.
-    cases.push(PieceCase {
-        name: "wall_ramp".to_string(),
-        pieces: vec![PieceSpec::Wall {
-            pos: [x, 0.0, 0.0],
-            yaw: 0.0,
-            height: 2.0,
-            with_ramp: true,
-        }],
-        end_x_m: x + wall_ramp_total_length_m(2.0),
-    });
+    // A table top the height of a wall: the ramp starts at PIECE_X_M. 1 m is covered
+    // (its landing stays under about 9 m/s at 200 km/h); 2 m is logged for comparison.
+    for height_m in [1.0_f32, 2.0] {
+        cases.push(PieceCase {
+            name: format!("wall_ramp_{height_m:.0}m"),
+            pieces: vec![PieceSpec::Wall {
+                pos: [x, 0.0, 0.0],
+                yaw: 0.0,
+                height: height_m,
+                with_ramp: true,
+            }],
+            end_x_m: x + wall_ramp_total_length_m(height_m),
+        });
+    }
     cases.extend(flip_plate_cases()?);
     Ok(cases)
 }

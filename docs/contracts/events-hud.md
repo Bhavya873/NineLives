@@ -1,6 +1,6 @@
 # Contract: event and HUD numbering
 
-Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.6). The numbers are reserved now so parallel PRs do not collide. They are also listed in a comment above `HudField` in `crates/nl-wasm/src/lib.rs`. No enum variant exists yet.
+Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.6). The numbers are reserved now so parallel PRs do not collide. They are also listed in a comment above `HudField` in `crates/nl-wasm/src/lib.rs`. `EventKind` 15 and 16 exist since G2 (`Scrape`: `[15, normal_speed_m_s, 0, 0, 0]`; `TooSlowFallback`: `[16, piece_index, entry_speed_m_s, 0, 0]`).
 
 ## HudField (the array from `Game::hud`)
 Today the last field is 22 `WindZMS`.

@@ -24,6 +24,6 @@
     { "kind": "bumps", "weight": 1.0, "count": [2, 5], "height_m": [0.2, 0.4], "run_out_m": 10.0, "v_complete_min_m_s": 0.0 },
     { "kind": "kick_plate", "weight": 1.0, "impulse_up_n_s": [2000.0, 4000.0], "impulse_side_n_s": [1000.0, 3000.0], "angular_roll_n_m_s": [1000.0, 2500.0], "run_out_m": 20.0, "v_complete_min_m_s": 0.0 },
     { "kind": "halfpipe", "weight": 0.5, "radius_m": [5.0, 7.0], "length_m": [15.0, 25.0], "run_out_m": 10.0, "v_complete_min_m_s": 0.0 },
-    { "kind": "wall", "weight": 0.0, "height_m": [1.5, 3.0], "run_out_m": 60.0, "v_complete_min_m_s": 0.0 }
+    { "kind": "wall", "weight": 0.0, "height_m": [0.8, 1.0], "run_out_m": 60.0, "v_complete_min_m_s": 0.0 }
   ]
 }

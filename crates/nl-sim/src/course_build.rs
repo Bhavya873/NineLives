@@ -50,7 +50,7 @@ pub const MIN_CONCAVE_RADIUS_M: f32 = 110.0;
 /// A catch pit's floor slopes down from the lip at this angle and the exit slopes up at
 /// the other, in degrees (docs/contracts/survival.md: a car that falls short drives out).
 const PIT_ENTRY_SLOPE_DEG: f32 = 30.0;
-const PIT_EXIT_SLOPE_DEG: f32 = 15.0;
+const PIT_EXIT_SLOPE_DEG: f32 = 8.0;
 /// A pit's mesh reaches this far below its deepest point, in m.
 const PIT_BASE_DEPTH_M: f32 = 0.2;
 /// Walls are this thick along the course.

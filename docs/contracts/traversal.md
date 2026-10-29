@@ -13,12 +13,12 @@ Approach { clean: bool, heading_err_rad, lateral_offset_m, pitch_rad, roll_rad, 
 ```
 
 ## When an entry is clean
-Judged in the **piece's local frame**, at the moment the car enters. All limits come from `configs/approach.toml` (stub added in Gate 0, not read by any code yet).
+Judged in the **piece's local frame**, at the moment the car enters. All limits come from `configs/approach.toml`, read by `traversal.rs` (G2).
 
 | Check | Limit *(start)* | `approach.toml` key |
 |---|---|---|
 | Heading error against the piece's forward axis | ≤ 15° | `max_heading_err_deg` |
-| Lateral offset from the piece centre line | inside the piece width minus 0.5 m | `lateral_margin_m` |
+| Lateral offset from the piece centre line | inside the piece half width minus 0.5 m minus the car's half width (1.0 m) | `lateral_margin_m`, `car_half_width_m` (added in G2: a 4 m corkscrew is only clean if the whole car fits) |
 | Pitch relative to the piece surface | ≤ 10° | `max_pitch_deg` |
 | Roll | ≤ 10° | `max_roll_deg` |
 | Wheels on the ground | ≥ 3 (ground-entry pieces only) | `min_wheels_down` |
@@ -29,7 +29,7 @@ Flip plates entered while airborne are exempt from the wheel check. If an entry 
 Whichever comes first:
 - the car exits the piece;
 - a timeout: piece length / entry speed + **3 s** (`timeout_extra_s`);
-- contact with a collider that does not belong to the piece.
+- contact with a collider that does not belong to the piece. *(G2 does not implement this one: colliders do not carry their piece index. The record ends on exit or timeout.)*
 
 ## What it must never do
 - **The traversal never makes the car immune.** Crash classification always uses the real contact geometry (see `crash-scrape.md`).

@@ -376,3 +376,11 @@ Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_
 - **Suspension limit:** the stock car's body first touches at a design load of 3.8 g (last clean run 3.4 g; the contract assumed 3 g). A bump stop starting at 0.14 m with rate 300/s² lifts the clean load to 4.2 g with 0.087 m of rebound, which cuts the 200 km/h ramp-entry radius from 158 m to about 99 m.
 - **Speed sweep (today's physics):** 1,295 crashes in 16,320 runs; concave bottoming 598, bump faces 413, floor contact after flight 244, gap too slow 40. Only `bumps_0.2`, the halfpipe and the barrel flips never crash. The stronger drive barely changes this (1,239 crashes), so survival is a geometry, suspension and crash-rule problem.
 
+
+### 2026-10-29 — G2 pieces: bump stop, curved geometry and the speed sweep after
+Tools: `suspension_load` (bump stop re-measured: last clean 4.21 g at 30 m/s, first touch 4.65 g, rebound 0.087 m at a 1.5 m drop), `speed_sweep` (15,360 runs: 8 piece kinds, flip plates, both modes, 20 seeds, 24 speeds). Result: `results/speed_sweep_after_pieces.{json,csv}` (adds scrape runs and impact severity histograms). No training.
+- **Crashes: 1,295 of 16,320 before, 6 of 15,360 after.** Before-classes: concave bottoming 598, bump faces 413, floor artifacts 244, gap too slow 40. After: all `landing_slam` (a car touching down with its nose rotating into the floor at 12 to 20 m/s). Covered pieces: corkscrew 2 (Arcade, 42.5 and 55.6 m/s), 1 m table top 1 (Realistic, 55.6 m/s). Flip plates (not covered) 3.
+- What moved the numbers: the 110 m radius and the bump stop (bottoming), bump length (bump faces), the true floor normal (artifacts), the catch pit (gap), 8° lips and corkscrew bank 8° (landings). Bank 45° crashed from 17 m/s, and a tiled floor was worse (seam contacts).
+- The residual is a spurious Rapier contact: at touchdown the car's rear corner gets a horizontal normal (0.87, -0.07, 0.49) with a reported 45 m/s, and the solver turns it into a 14 rad/s yaw. Chassis CCD (`claude/roadster-drive`) may remove it.
+- `pd_driving_over_bumps_uses_almost_no_air` kept passing once bumps became longer; with the old 5 m bumps and the stop the PD used 5 to 13 kg depending on the stop's rate (chaotic, no trend).
+- Golden trace: hash only; trajectory unchanged (frozen car, flat ground).

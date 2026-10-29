@@ -190,7 +190,17 @@ The world queues events and the caller drains them (`crates/nl-sim/src/events.rs
   wasm event is 5 floats (`FLOATS_PER_EVENT`); Save's fifth is `peak_g`, the others pad 0.
 - **Hard landing**: a suspension compression of 0.95 or more within 0.2 s of a touchdown.
 - **Crash**: a body or roof contact faster than 6 m/s along the contact normal, any roof contact
-  above 120° of tilt, more than 100° of tilt for 2 s, or leaving the course bounds.
+  above 120° of tilt, more than 100° of tilt for 2 s, or leaving the course bounds. A contact with
+  the flat floor is judged on its true normal (straight up): Rapier's box-box manifold sometimes
+  reports a tipped normal for the car's bevelled edge, which turned a car sliding at 50 m/s into a
+  "46 m/s impact" (244 of the R2c baseline's 1,295 crashes).
+- **Scrape** (wasm `EventKind` 15): a body contact that is underbody (0.05 m inside the lower face),
+  with its normal within 30° of body up, at most 4 m/s along it, with the tilt under 25°. Numbers in
+  `configs/approach.toml`. It never counts toward a crash and reports once per scrape.
+- **TooSlowFallback** (`EventKind` 16): a clean entry onto a piece below its `v_complete_min_m_s`.
+  `traversal.rs` keeps a `PieceTraversal` per pass (entry tick, entry speed, `Approach`: heading,
+  lateral offset, pitch, roll, wheels down, `clean`, `reason`) judged against `approach.toml`; it is
+  read by tests, the HUD hint and the survival metric and never makes the car immune.
 
 In the game a crash freezes the wreck and the car respawns at the last checkpoint after 1.5 s. In
 training a crash ends the episode.
@@ -207,6 +217,15 @@ path of the centre of mass since the last step, so a fast car cannot step over a
 generator (`course_gen.rs`, `configs/pieces.json`) builds random straight training courses from
 the same pieces, including "flip plates": named presets of linear and angular impulse that throw
 the car into front flips, back flips, barrel rolls and flat spins.
+
+Piece geometry follows `docs/contracts/ramp-curvature.md`: curved pieces have an entry radius of
+at least 110 m (a design load of 3.9 g at 200 km/h against the bump stop's measured 4.2 g), so a
+ramp is `R · angle` long, and no two neighbouring segments meet at more than 1.2°. Jump lips stay
+at 8° or less. A wall with a ramp is a table top (ramp, deck, ramp down), a gap can hold a catch
+pit (sloped floor, exit slope), and bumps are as long as their height needs for 4.6° faces. The
+generator lays each run-out past the farthest landing at 55.6 m/s (`flight_distance_m`) and
+`pieces.json` publishes `v_complete_min_m_s` per piece. The suspension has a bump stop
+(`[wheels] bump_stop_*`): past 0.14 m of compression an extra spring of 300 (m/s²)/m per kg joins.
 
 ### 5.8 Wind and disturbances
 
