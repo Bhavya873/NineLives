@@ -44,6 +44,52 @@ struct Cell {
     crash_contact_m_s_max: f32,
     /// Crash contacts that pass the plan §1.3 underbody geometry test.
     crash_underbody: u32,
+    /// Runs whose worst body contact is a Scrape (docs/contracts/crash-scrape.md).
+    scrape_runs: u32,
+    /// Impact severity: runs by the normal speed of their worst body contact, in bins
+    /// `SEVERITY_BINS_M_S` (the last bin is everything above) plus "none".
+    severity_hist: Vec<u32>,
+}
+
+/// Upper edges of the impact severity histogram bins, in m/s: a run's worst body contact
+/// (or its crash contact) falls in the first bin it does not exceed.
+const SEVERITY_BINS_M_S: [f32; 5] = [1.0, 2.0, 4.0, 6.0, 10.0];
+
+/// Sums over every cell: runs, crashes, crashes by class, scrape runs, bottomed runs and
+/// the impact severity histogram (bins `SEVERITY_BINS_M_S`, then "above", then "none").
+fn totals(cells: &[Cell]) -> serde_json::Value {
+    let mut classes: BTreeMap<&str, u32> = BTreeMap::new();
+    let mut severity = vec![0_u32; SEVERITY_BINS_M_S.len() + 2];
+    let (mut runs, mut crashed, mut scrape_runs, mut bottomed_runs) = (0, 0, 0, 0);
+    for cell in cells {
+        runs += cell.runs;
+        crashed += cell.crashed;
+        scrape_runs += cell.scrape_runs;
+        bottomed_runs += cell.bottomed_runs;
+        for (class, count) in &cell.classes {
+            *classes.entry(class).or_insert(0) += count;
+        }
+        for (total, count) in severity.iter_mut().zip(&cell.severity_hist) {
+            *total += count;
+        }
+    }
+    serde_json::json!({
+        "runs": runs,
+        "crashed": crashed,
+        "classes": classes,
+        "scrape_runs": scrape_runs,
+        "bottomed_runs": bottomed_runs,
+        "severity_bins_m_s": SEVERITY_BINS_M_S,
+        "severity_hist": severity,
+    })
+}
+
+/// The histogram bin for a contact of `normal_speed_m_s`.
+fn severity_bin(normal_speed_m_s: f32) -> usize {
+    SEVERITY_BINS_M_S
+        .iter()
+        .position(|edge| normal_speed_m_s <= *edge)
+        .unwrap_or(SEVERITY_BINS_M_S.len())
 }
 
 /// Where a piece starts to crash, in one mode.
@@ -73,6 +119,7 @@ pub fn write_summary(
         "seeds": args.seeds,
         "speeds_m_s": args.speeds,
         "vehicle": args.vehicle,
+        "totals": totals(&cells),
         "onsets": onsets,
         "cells": cells,
         "crash_examples": examples,
@@ -136,6 +183,8 @@ impl Cell {
             crash_contact_m_s_min: f32::INFINITY,
             crash_contact_m_s_max: 0.0,
             crash_underbody: 0,
+            scrape_runs: 0,
+            severity_hist: vec![0; SEVERITY_BINS_M_S.len() + 2],
         }
     }
 
@@ -167,6 +216,17 @@ impl Cell {
     }
 
     fn add_contacts(&mut self, record: &RunRecord) {
+        let worst = record
+            .crash_contact
+            .as_ref()
+            .or(record.worst_contact.as_ref());
+        match worst {
+            Some(contact) => {
+                self.scrape_runs += u32::from(contact.scrape && record.outcome != "crashed");
+                self.severity_hist[severity_bin(contact.normal_speed_m_s)] += 1;
+            }
+            None => self.severity_hist[SEVERITY_BINS_M_S.len() + 1] += 1,
+        }
         if record.outcome == "survived"
             && let Some(contact) = &record.worst_contact
         {
@@ -242,7 +302,7 @@ fn crash_examples(records: &[RunRecord]) -> Vec<&RunRecord> {
 
 fn cells_csv(cells: &[Cell]) -> String {
     let mut text = String::from(
-        "piece,mode,speed_m_s,runs,survived,crashed,timeout,cleared,classes,peak_compression_max,bottomed_runs,peak_load_g_max,landings,landing_fall_m_s_mean,landing_fall_m_s_max,landing_distance_m_mean,landing_slope_deg_mean,air_used_kg_mean,air_used_kg_max,survived_contact_m_s_max,survived_underbody_runs,crash_contact_m_s_min,crash_contact_m_s_max,crash_underbody\n",
+        "piece,mode,speed_m_s,runs,survived,crashed,timeout,cleared,classes,peak_compression_max,bottomed_runs,peak_load_g_max,landings,landing_fall_m_s_mean,landing_fall_m_s_max,landing_distance_m_mean,landing_slope_deg_mean,air_used_kg_mean,air_used_kg_max,survived_contact_m_s_max,survived_underbody_runs,crash_contact_m_s_min,crash_contact_m_s_max,crash_underbody,scrape_runs,severity_hist\n",
     );
     for cell in cells {
         let classes: Vec<String> = cell
@@ -250,9 +310,10 @@ fn cells_csv(cells: &[Cell]) -> String {
             .iter()
             .map(|(class, count)| format!("{class}:{count}"))
             .collect();
+        let severity: Vec<String> = cell.severity_hist.iter().map(u32::to_string).collect();
         let _ = writeln!(
             text,
-            "{},{},{},{},{},{},{},{},{},{:.3},{},{:.2},{},{:.2},{:.2},{:.1},{:.1},{:.2},{:.2},{:.2},{},{:.2},{:.2},{}",
+            "{},{},{},{},{},{},{},{},{},{:.3},{},{:.2},{},{:.2},{:.2},{:.1},{:.1},{:.2},{:.2},{:.2},{},{:.2},{:.2},{},{},{}",
             cell.piece,
             cell.mode,
             cell.speed_m_s,
@@ -276,7 +337,9 @@ fn cells_csv(cells: &[Cell]) -> String {
             cell.survived_underbody_runs,
             cell.crash_contact_m_s_min,
             cell.crash_contact_m_s_max,
-            cell.crash_underbody
+            cell.crash_underbody,
+            cell.scrape_runs,
+            severity.join(":")
         );
     }
     text

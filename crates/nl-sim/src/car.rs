@@ -194,6 +194,37 @@ impl Car {
             filter,
         );
         self.wheels.update_vehicle(PHYSICS_DT_S, queries);
+        self.apply_bump_stops(physics);
+    }
+
+    /// Adds the bump stop force: past `bump_stop_start_m` of compression each wheel gets a
+    /// stiff extra spring, `rate × mass × (compression − start)`, pushing the body up along
+    /// the contact normal. The wheel's total suspension force stays under
+    /// `max_suspension_force_n`. A pure spring (no damper), so it gives back no more energy
+    /// than it took (tested in `bump_stop_tests`).
+    fn apply_bump_stops(&mut self, physics: &mut PhysicsWorld) {
+        let wheels_config = &self.config.wheels;
+        if wheels_config.bump_stop_rate_per_kg <= 0.0 {
+            return;
+        }
+        let body = &mut physics.bodies[self.chassis];
+        let mass_kg = body.mass();
+        for wheel in self.wheels.wheels() {
+            let info = wheel.raycast_info();
+            if !info.is_in_contact {
+                continue;
+            }
+            let compression_m = wheel.suspension_rest_length - info.suspension_length;
+            let past_start_m = compression_m - wheels_config.bump_stop_start_m;
+            if past_start_m <= 0.0 {
+                continue;
+            }
+            let wanted_n = wheels_config.bump_stop_rate_per_kg * mass_kg * past_start_m;
+            let room_n =
+                (wheels_config.max_suspension_force_n - wheel.wheel_suspension_force).max(0.0);
+            let impulse = info.contact_normal_ws * (wanted_n.min(room_n) * PHYSICS_DT_S);
+            body.apply_impulse_at_point(impulse, info.contact_point_ws, false);
+        }
     }
 
     /// Speed along the car's nose direction. Negative when rolling backwards.

@@ -202,19 +202,18 @@ fn a_ramp_curves_up_along_its_heading_to_its_lip_angle() {
     );
     // Curved, so lower than a straight 45° wedge (12 m) but well off the ground.
     assert!(top[1] > 4.0 && top[1] < 12.0, "top height {}", top[1]);
-    // The lip (the last 2 m segment) leaves at the full 45°: it rises as much as it runs.
-    let lip_start = highest_point(
-        &last_segment
-            .iter()
-            .copied()
-            .filter(|p| p[0] < 51.0)
-            .collect::<Vec<_>>(),
-    );
-    let lip_rise_m = top[1] - lip_start[1];
-    assert!(
-        (lip_rise_m - 2.0).abs() < 1e-3,
-        "lip rises {lip_rise_m} m over 2 m"
-    );
+    // The lip leaves at the full 45° (the last segment rises as much as it runs). The
+    // ramp has many short segments so no kink exceeds 1.2°; look at the last two top
+    // points, which are one segment apart.
+    let mut tops: Vec<[f32; 3]> = last_segment
+        .iter()
+        .copied()
+        .filter(|p| p[1] > 1.0)
+        .collect();
+    tops.sort_by(|a, b| b[0].total_cmp(&a[0]));
+    tops.dedup_by(|a, b| (a[0] - b[0]).abs() < 1e-4);
+    let slope = (tops[0][1] - tops[1][1]) / (tops[0][0] - tops[1][0]);
+    assert!((slope - 1.0).abs() < 1e-2, "lip slope {slope}");
 }
 
 #[test]
@@ -339,8 +338,8 @@ fn markings_are_not_solid_and_obstacles_are() {
         piece_shapes(r#"{"type": "wall", "pos": [40, 0, 0], "height": 3, "with_ramp": true}"#);
 
     assert!(!pad[0].solid);
-    // A wall with a ramp is one wall box plus the ramp's smooth mesh.
-    assert_eq!(count_surface(&wall, Surface::Obstacle), 1);
+    // A wall with a ramp is a table top: one smooth mesh (ramp, deck, ramp down), no box.
+    assert_eq!(count_surface(&wall, Surface::Obstacle), 0);
     assert_eq!(count_surface(&wall, Surface::Ramp), 1);
     assert!(wall.iter().all(|shape| shape.solid));
 }

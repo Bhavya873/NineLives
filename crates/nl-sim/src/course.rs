@@ -36,6 +36,10 @@ const MAX_RAMP_ANGLE_DEG: f32 = 60.0;
 /// raised edge stays a slope and never folds over.
 const MIN_BANK_DEG: f32 = 1.0;
 const MAX_BANK_DEG: f32 = 80.0;
+/// Largest `v_complete_min_m_s` a piece may publish, in m/s (above the fastest car).
+const MAX_V_COMPLETE_MIN_M_S: f32 = 150.0;
+/// Deepest catch pit, in m.
+const MAX_PIT_DEPTH_M: f32 = 5.0;
 /// Farthest any bounds corner may sit from the origin on any axis, in m. The floor
 /// spans the bounds, and Rapier loses precision on huge boxes.
 const MAX_BOUNDS_M: f32 = 5000.0;
@@ -103,6 +107,11 @@ pub enum PieceSpec {
         width: f32,
         /// Slope, in degrees.
         angle_deg: f32,
+        /// The slowest clean entry that still clears what the ramp leads to (a gap), in
+        /// m/s; below it the car takes the fallback (`docs/contracts/survival.md`).
+        /// 0, the default, means any speed completes.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        v_complete_min_m_s: f32,
     },
     /// A narrow ramp on one side of the lane, so only that side's wheels climb: it rolls
     /// the car.
@@ -143,8 +152,20 @@ pub enum PieceSpec {
         /// Which edge is raised: the car rolls away from it.
         side: Side,
     },
-    /// A hole in the floor `length` long, across the whole course (runs along +X).
-    Gap { pos: [f32; 3], length: f32 },
+    /// A hole in the floor `length` long, across the whole course (runs along +X). With
+    /// `pit_depth` above 0 it is a catch pit instead: a sloped floor `pit_depth` deep with
+    /// an exit slope, so a car that falls short drives out (`docs/contracts/survival.md`).
+    /// `entry_height` is the height of the lip it follows; the pit's floor starts there.
+    Gap {
+        pos: [f32; 3],
+        length: f32,
+        /// Depth of the catch pit below the floor, in m. 0 (the default) is a bare hole.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        pit_depth: f32,
+        /// Height of the lip before the pit, in m (only used with a pit).
+        #[serde(default, skip_serializing_if = "is_zero")]
+        entry_height: f32,
+    },
     /// `count` parked cars nose to tail along +X, 4.5 m long, 1.9 m wide, `height` tall,
     /// 0.6 m apart. `hop_hint` tells the driver bot to Hop.
     CarRow {
@@ -186,6 +207,10 @@ pub enum PieceSpec {
         radius: f32,
         /// Width of the road, in m.
         width: f32,
+        /// The slowest clean entry that completes the loop, in m/s; below it the car
+        /// rolls back down the entry. 0, the default, means no minimum is published.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        v_complete_min_m_s: f32,
     },
     /// `count` low bumps across the lane, one every few metres along +X.
     Bumps {
@@ -249,6 +274,11 @@ pub enum PieceSpec {
         #[serde(default)]
         yaw: f32,
     },
+}
+
+/// For serde: leaves a zero optional number out of the written file.
+fn is_zero(value: &f32) -> bool {
+    *value == 0.0
 }
 
 /// A checked course file.
@@ -461,6 +491,7 @@ fn check_piece(index: usize, piece: &PieceSpec, bounds: &BoundsSpec) -> Result<(
             "`bank_deg` must be at least {MIN_BANK_DEG} and below {MAX_BANK_DEG}, not {bank_deg}"
         )));
     }
+    check_fallback_fields(piece).map_err(fail)?;
     if !bounds.contains(piece.position()) {
         return Err(fail(format!(
             "`pos` {:?} is outside the course bounds",
@@ -470,14 +501,49 @@ fn check_piece(index: usize, piece: &PieceSpec, bounds: &BoundsSpec) -> Result<(
     Ok(())
 }
 
+/// Checks the optional survival fields: a minimum completion speed and a catch pit's size.
+fn check_fallback_fields(piece: &PieceSpec) -> Result<(), String> {
+    match piece {
+        PieceSpec::Ramp {
+            v_complete_min_m_s, ..
+        }
+        | PieceSpec::HalfLoop {
+            v_complete_min_m_s, ..
+        } if !(0.0..=MAX_V_COMPLETE_MIN_M_S).contains(v_complete_min_m_s) => Err(format!(
+            "`v_complete_min_m_s` must be 0 to {MAX_V_COMPLETE_MIN_M_S}, not {v_complete_min_m_s}"
+        )),
+        PieceSpec::Gap {
+            pit_depth,
+            entry_height,
+            ..
+        } if !(0.0..=MAX_PIT_DEPTH_M).contains(pit_depth)
+            || !(0.0..=MAX_PIECE_SIZE_M).contains(entry_height) =>
+        {
+            Err(format!(
+                "`pit_depth` must be 0 to {MAX_PIT_DEPTH_M} m and `entry_height` 0 to {MAX_PIECE_SIZE_M} m, not {pit_depth} and {entry_height}"
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Every number in a piece, for the finite check.
 fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
     let mut numbers = piece.position().to_vec();
     numbers.extend(piece_sizes(piece).into_iter().map(|(_, size)| size));
     match piece {
-        PieceSpec::Ramp { yaw, angle_deg, .. } | PieceSpec::Kicker { yaw, angle_deg, .. } => {
-            numbers.extend([*yaw, *angle_deg]);
-        }
+        PieceSpec::Ramp {
+            yaw,
+            angle_deg,
+            v_complete_min_m_s,
+            ..
+        } => numbers.extend([*yaw, *angle_deg, *v_complete_min_m_s]),
+        PieceSpec::Kicker { yaw, angle_deg, .. } => numbers.extend([*yaw, *angle_deg]),
+        PieceSpec::HalfLoop {
+            yaw,
+            v_complete_min_m_s,
+            ..
+        } => numbers.extend([*yaw, *v_complete_min_m_s]),
         PieceSpec::Corkscrew {
             yaw,
             angle_deg,
@@ -496,13 +562,16 @@ fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
         }
         PieceSpec::CarRow { yaw, .. }
         | PieceSpec::Halfpipe { yaw, .. }
-        | PieceSpec::HalfLoop { yaw, .. }
         | PieceSpec::Bumps { yaw, .. }
         | PieceSpec::Wall { yaw, .. }
         | PieceSpec::LandingPad { yaw, .. }
         | PieceSpec::Checkpoint { yaw, .. }
         | PieceSpec::Finish { yaw, .. } => numbers.push(*yaw),
-        PieceSpec::Gap { .. } => {}
+        PieceSpec::Gap {
+            pit_depth,
+            entry_height,
+            ..
+        } => numbers.extend([*pit_depth, *entry_height]),
     }
     numbers
 }

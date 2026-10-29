@@ -21,7 +21,9 @@ use crate::car_state::{
 };
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
-use crate::contacts::{MotionBeforeStep, is_touching, is_touching_tagged, read_body_contacts};
+use crate::contacts::{
+    BodyPose, MotionBeforeStep, ScrapeRule, is_touching, is_touching_tagged, read_body_contacts,
+};
 use crate::conventions::{
     NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
     gravity_vector,
@@ -40,6 +42,7 @@ use crate::landing::heading_error_sin_cos;
 use crate::modes::ModeParams;
 use crate::tank::AirTank;
 use crate::thrusters::full_throttle_force_body_n;
+use crate::traversal::{ApproachConfig, CarSample, TraversalNote, TraversalTracker};
 use crate::vehicle_config::VehicleConfig;
 use crate::wind::{Wind, WindLevelConfig};
 
@@ -86,7 +89,7 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Version of the snapshot byte format. Bump it whenever `World`, `Car` or anything
 /// they contain changes shape, so old snapshots are refused instead of misread.
-pub const SNAPSHOT_FORMAT_VERSION: u32 = 17;
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 18;
 
 /// Why a snapshot could not be made or loaded.
 #[derive(Debug, thiserror::Error)]
@@ -146,6 +149,13 @@ pub struct World {
     course_bounds: Option<BoundsSpec>,
     /// The course's checkpoint and finish lines and kick plates, and the car's progress.
     triggers: CourseTriggers,
+    /// When an entry onto a piece is clean and when a body touch is a Scrape
+    /// (`configs/approach.toml`).
+    approach: ApproachConfig,
+    /// The record of the car's pass over each course piece (docs/contracts/traversal.md).
+    traversal: TraversalTracker,
+    /// Physics steps since the last Scrape event, so one long scrape reports once.
+    steps_since_scrape_event: u32,
     /// The passenger's smoothed g-load (SPEC §9.4).
     g_load: GLoad,
     /// World time when the car crossed the finish line, in s.
@@ -206,6 +216,7 @@ impl World {
             seed,
         );
         world.triggers = CourseTriggers::from_course(course, &shapes);
+        world.traversal = TraversalTracker::for_course(course, world.approach);
         world
     }
 
@@ -240,6 +251,9 @@ impl World {
             auto_respawn_after_steps: None,
             course_bounds,
             triggers: CourseTriggers::default(),
+            approach: ApproachConfig::built_in(),
+            traversal: TraversalTracker::empty(),
+            steps_since_scrape_event: u32::MAX,
             g_load: GLoad::default(),
             finish_time_s: None,
             wind: Wind::calm(seed),
@@ -324,6 +338,7 @@ impl World {
         self.update_triggers();
         // 12. Events (SPEC §7.9).
         self.update_events(&motion_before, touching_after);
+        self.update_traversal(touching_after);
     }
 
     /// Folds this step's seat g-load into the smoothed passenger g-load (SPEC §9.4).
@@ -403,12 +418,20 @@ impl World {
     /// Feeds this step's state to the event rules and keeps any new events.
     /// `touching` is which wheels touch after this step's physics step.
     fn update_events(&mut self, motion_before: &MotionBeforeStep, touching: [bool; WHEEL_COUNT]) {
+        let scrape_rule = self.scrape_rule();
+        let body_pose = BodyPose {
+            pose: *self.physics.bodies[self.car.chassis].position(),
+            tilt_rad: self.tilt_rad(),
+        };
         let contacts = read_body_contacts(
             &self.physics,
             self.car.body_collider,
             self.car.roof_collider,
             motion_before,
+            &scrape_rule,
+            &body_pose,
         );
+        self.report_scrape(contacts.scrape_speed_m_s);
         let body = &self.physics.bodies[self.car.chassis];
         let nose = body.rotation() * Vector::X;
         let compressions = self.car.compressions_of(touching);
@@ -439,6 +462,69 @@ impl World {
             // The wreck stays frozen, so close its valves rather than show live flames.
             self.reset_controls();
         }
+    }
+
+    /// The scrape rule (docs/contracts/crash-scrape.md) from the car's size and
+    /// `configs/approach.toml`.
+    fn scrape_rule(&self) -> ScrapeRule {
+        ScrapeRule {
+            body_half_height_m: self.car.config().chassis.half_extents_m[1],
+            underbody_margin_m: self.approach.scrape_underbody_margin_m,
+            normal_limit_rad: self.approach.scrape_normal_deg.to_radians(),
+            max_normal_m_s: self.approach.scrape_max_normal_m_s,
+            max_tilt_rad: self.approach.scrape_max_tilt_deg.to_radians(),
+        }
+    }
+
+    /// Reports a Scrape event when a scrape starts, not on every step it lasts.
+    fn report_scrape(&mut self, scrape_speed_m_s: Option<f32>) {
+        self.steps_since_scrape_event = self.steps_since_scrape_event.saturating_add(1);
+        let Some(normal_speed_m_s) = scrape_speed_m_s else {
+            return;
+        };
+        let quiet_steps = (self.approach.scrape_event_gap_s * PHYSICS_HZ as f32) as u32;
+        if self.steps_since_scrape_event >= quiet_steps {
+            self.keep_event(SimEvent::Scrape { normal_speed_m_s });
+        }
+        self.steps_since_scrape_event = 0;
+    }
+
+    /// Feeds the car's pose to the piece traversal records and reports the car entering
+    /// a piece too slowly to complete it (docs/contracts/traversal.md, survival.md).
+    fn update_traversal(&mut self, touching: [bool; WHEEL_COUNT]) {
+        let body = &self.physics.bodies[self.car.chassis];
+        let sample = CarSample {
+            position_m: body.translation().to_array(),
+            velocity_m_s: body.linvel().to_array(),
+            nose_world: (body.rotation() * Vector::X).to_array(),
+            up_world: (body.rotation() * Vector::Y).to_array(),
+            wheels_down: count_true(touching) as u32,
+        };
+        let notes = self
+            .traversal
+            .update(self.step_count, PHYSICS_DT_S, &sample);
+        for note in notes {
+            let TraversalNote::TooSlow {
+                piece_id,
+                entry_speed_m_s,
+            } = note;
+            self.keep_event(SimEvent::TooSlowFallback {
+                piece: piece_id as u32,
+                entry_speed_m_s,
+            });
+        }
+    }
+
+    /// The records of the car's passes over the course's pieces (docs/contracts/
+    /// traversal.md): the one in progress and the finished ones.
+    pub fn traversal(&self) -> &TraversalTracker {
+        &self.traversal
+    }
+
+    /// Replaces the clean-entry limits and scrape numbers (tests and tuning).
+    pub fn set_approach_config(&mut self, approach: ApproachConfig) {
+        self.approach = approach;
+        self.traversal.set_limits(approach);
     }
 
     /// Acts on the course triggers the car entered this step.
@@ -834,6 +920,8 @@ impl World {
         self.triggers.forget_car();
         self.g_load.forget_motion();
         self.events.reset();
+        self.traversal.reset();
+        self.steps_since_scrape_event = u32::MAX;
         self.steps_since_crash = 0;
         let body = &mut self.physics.bodies[self.car.chassis];
         body.set_position(target.pose.to_rapier(), true);

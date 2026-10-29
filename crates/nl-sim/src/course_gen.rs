@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::course::{CourseSpec, PieceSpec, Side};
 use crate::course_build::{
-    BUMP_SPACING_M, KICK_PLATE_LENGTH_M, WALL_RAMP_GAP_M, WALL_RAMP_LENGTH_M, WALL_THICKNESS_M,
+    KICK_PLATE_LENGTH_M, bump_spacing_m, ramp_lip_height_m, wall_ramp_total_length_m,
 };
 use crate::driving_stages::{pick_weighted, straight_course, stream_rng};
 use crate::scenarios::draw;
@@ -47,8 +47,30 @@ pub struct PieceCatalog {
     /// Before a jump the straight is at least this long, so a car starting at rest
     /// (after a checkpoint respawn) reaches jumping speed, in m.
     pub jump_run_up_m: f32,
+    /// The arc maths the pieces are laid out by (docs/contracts/ramp-curvature.md).
+    pub design: DesignRules,
     /// The pieces to draw from.
     pub pieces: Vec<PieceTemplate>,
+}
+
+/// The numbers behind the piece geometry and spacing (pieces.json `design`).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesignRules {
+    /// The fastest clean entry the pieces are built for, in m/s (200 km/h).
+    pub speed_m_s: f32,
+    /// Smallest radius of a concave entry curve, in m (equals
+    /// `course_build::MIN_CONCAVE_RADIUS_M`; a test keeps them in step).
+    pub min_concave_radius_m: f32,
+    /// Smallest radius of a crest in the middle of a piece, in m: v²/g at the design
+    /// speed, so the car never leaves the ground by accident.
+    pub min_crest_radius_m: f32,
+    /// Largest angle between two neighbouring surface segments, in degrees.
+    pub max_kink_deg: f32,
+    /// The car's mass, in kg, for the flight of a flip plate's push.
+    pub car_mass_kg: f32,
+    /// Flat floor kept past the farthest landing at the design speed, in m.
+    pub landing_margin_m: f32,
 }
 
 /// One kind of piece and the ranges its sizes are drawn from. `weight` is its relative
@@ -59,37 +81,47 @@ pub enum PieceTemplate {
     /// A ramp to jump off (a jump).
     Ramp {
         weight: f32,
-        length_m: [f32; 2],
+        /// Radius of the entry curve; the ramp is `radius · angle` long.
+        radius_m: [f32; 2],
         width_m: [f32; 2],
         angle_deg: [f32; 2],
         run_out_m: f32,
+        /// The slowest clean entry that completes the piece, in m/s (0: any speed).
+        v_complete_min_m_s: f32,
     },
     /// A ramp with a gap in the floor right after its lip (a jump).
     RampGap {
         weight: f32,
-        length_m: [f32; 2],
+        radius_m: [f32; 2],
         width_m: [f32; 2],
         angle_deg: [f32; 2],
         gap_m: [f32; 2],
+        /// How deep the catch pit in the gap is, in m.
+        pit_depth_m: f32,
         run_out_m: f32,
+        /// A car entering slower than this drops into the catch pit and drives out.
+        v_complete_min_m_s: f32,
     },
     /// A kicker on a random side.
     Kicker {
         weight: f32,
-        length_m: [f32; 2],
+        radius_m: [f32; 2],
         width_m: [f32; 2],
         angle_deg: [f32; 2],
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
     /// A corkscrew on a random side: it flips the car, so the thrusters must save it
     /// (a jump).
     Corkscrew {
         weight: f32,
-        length_m: [f32; 2],
+        /// Radius of the low edge's entry curve; the piece is `radius · tan(angle)` long.
+        radius_m: [f32; 2],
         width_m: [f32; 2],
         angle_deg: [f32; 2],
         bank_deg: [f32; 2],
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
     /// A run of bumps.
     Bumps {
@@ -97,6 +129,7 @@ pub enum PieceTemplate {
         count: [u32; 2],
         height_m: [f32; 2],
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
     /// A kick plate pushing up and to a random side, rolling the car the same way.
     KickPlate {
@@ -105,6 +138,7 @@ pub enum PieceTemplate {
         impulse_side_n_s: [f32; 2],
         angular_roll_n_m_s: [f32; 2],
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
     /// A flip plate: a kick plate with one of the named `presets`, its impulses scaled by
     /// a drawn `strength`. It throws the car into a front or back flip, a barrel roll, a
@@ -117,6 +151,7 @@ pub enum PieceTemplate {
         strong_strength: f32,
         presets: Vec<FlipPreset>,
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
     /// A halfpipe to drive through.
     Halfpipe {
@@ -124,12 +159,14 @@ pub enum PieceTemplate {
         radius_m: [f32; 2],
         length_m: [f32; 2],
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
     /// A wall with its jump ramp (a jump).
     Wall {
         weight: f32,
         height_m: [f32; 2],
         run_out_m: f32,
+        v_complete_min_m_s: f32,
     },
 }
 
@@ -254,6 +291,21 @@ impl PieceCatalog {
         if !sizes.iter().all(|size| size.is_finite() && *size > 0.0) {
             return bad("sizes must be finite numbers above zero");
         }
+        let design = &self.design;
+        let design_numbers = [
+            design.speed_m_s,
+            design.min_concave_radius_m,
+            design.min_crest_radius_m,
+            design.max_kink_deg,
+            design.car_mass_kg,
+            design.landing_margin_m,
+        ];
+        if !design_numbers
+            .iter()
+            .all(|value| value.is_finite() && *value > 0.0)
+        {
+            return bad("`design` numbers must be finite and above zero");
+        }
         if !is_range(self.straight_m) {
             return bad("`straight_m` must be [low, high] with 0 ≤ low ≤ high");
         }
@@ -304,6 +356,39 @@ impl PieceTemplate {
         }
     }
 
+    /// The slowest clean entry that completes the piece, in m/s (0: any speed).
+    pub fn v_complete_min_m_s(&self) -> f32 {
+        match self {
+            PieceTemplate::Ramp {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::RampGap {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::Kicker {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::Corkscrew {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::Bumps {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::KickPlate {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::FlipPlate {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::Halfpipe {
+                v_complete_min_m_s, ..
+            }
+            | PieceTemplate::Wall {
+                v_complete_min_m_s, ..
+            } => *v_complete_min_m_s,
+        }
+    }
+
     /// True for pieces that throw the car into the air, which need a long run-up.
     fn is_jump(&self) -> bool {
         matches!(
@@ -318,7 +403,7 @@ impl PieceTemplate {
 
     /// Weight and run-out are finite and not negative; every range is in order.
     fn has_sane_numbers(&self) -> bool {
-        let singles = [self.weight(), self.run_out_m()];
+        let singles = [self.weight(), self.run_out_m(), self.v_complete_min_m_s()];
         if !singles
             .iter()
             .all(|value| value.is_finite() && *value >= 0.0)
@@ -327,31 +412,31 @@ impl PieceTemplate {
         }
         let ranges: Vec<[f32; 2]> = match self {
             PieceTemplate::Ramp {
-                length_m,
+                radius_m,
                 width_m,
                 angle_deg,
                 ..
             }
             | PieceTemplate::Kicker {
-                length_m,
+                radius_m,
                 width_m,
                 angle_deg,
                 ..
-            } => vec![*length_m, *width_m, *angle_deg],
+            } => vec![*radius_m, *width_m, *angle_deg],
             PieceTemplate::RampGap {
-                length_m,
+                radius_m,
                 width_m,
                 angle_deg,
                 gap_m,
                 ..
-            } => vec![*length_m, *width_m, *angle_deg, *gap_m],
+            } => vec![*radius_m, *width_m, *angle_deg, *gap_m],
             PieceTemplate::Corkscrew {
-                length_m,
+                radius_m,
                 width_m,
                 angle_deg,
                 bank_deg,
                 ..
-            } => vec![*length_m, *width_m, *angle_deg, *bank_deg],
+            } => vec![*radius_m, *width_m, *angle_deg, *bank_deg],
             PieceTemplate::Bumps {
                 count, height_m, ..
             } => vec![[count[0] as f32, count[1] as f32], *height_m],
@@ -384,7 +469,9 @@ impl PieceTemplate {
 
 /// The course for the episode with `seed`. Layout along +X: start, then for each piece
 /// a straight, the piece and its run-out; a checkpoint after every run-out but the
-/// last, where the finish goes instead.
+/// last, where the finish goes instead. A run-out is at least as long as the farthest
+/// a car at the design speed can land past the piece (`landing_reach_m`), so a clean
+/// car never lands on the next piece.
 pub fn generate_course(catalog: &PieceCatalog, seed: u64) -> CourseSpec {
     let mut rng = stream_rng(seed, COURSE_RNG_STREAM);
     let [fewest, most] = catalog.piece_count;
@@ -400,9 +487,9 @@ pub fn generate_course(catalog: &PieceCatalog, seed: u64) -> CourseSpec {
             straight_m = straight_m.max(catalog.jump_run_up_m);
         }
         x_m += straight_m;
-        let (laid, length_m) = lay_piece(template, x_m, &mut rng);
-        pieces.extend(laid);
-        x_m += length_m + template.run_out_m();
+        let laid = lay_piece(template, &catalog.design, x_m, &mut rng);
+        x_m += laid.length_m + laid.run_out_m(template.run_out_m(), &catalog.design);
+        pieces.extend(laid.pieces);
         let line = [x_m, 0.0, 0.0];
         if section + 1 < count {
             pieces.push(PieceSpec::Checkpoint {
@@ -420,91 +507,168 @@ pub fn generate_course(catalog: &PieceCatalog, seed: u64) -> CourseSpec {
     straight_course(&name, catalog, x_m, pieces)
 }
 
-/// The course pieces for one template starting at `x_m`, and how far along the course
-/// they reach from there, in m.
-fn lay_piece(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> (Vec<PieceSpec>, f32) {
+/// One laid piece: its course pieces, how far it reaches along the course and how far
+/// past its start a car at the design speed can land.
+struct LaidPiece {
+    pieces: Vec<PieceSpec>,
+    /// How far along the course the piece reaches from its start, in m.
+    length_m: f32,
+    /// The farthest a car at the design speed lands from the piece's start, in m
+    /// (0 for pieces that do not throw the car).
+    landing_reach_m: f32,
+}
+
+impl LaidPiece {
+    fn on_the_ground(pieces: Vec<PieceSpec>, length_m: f32) -> LaidPiece {
+        LaidPiece {
+            pieces,
+            length_m,
+            landing_reach_m: 0.0,
+        }
+    }
+
+    /// The flat floor after the piece: the template's own run-out, or enough to cover the
+    /// farthest landing plus the margin, whichever is longer.
+    fn run_out_m(&self, template_run_out_m: f32, design: &DesignRules) -> f32 {
+        let needed_m = self.landing_reach_m + design.landing_margin_m - self.length_m;
+        template_run_out_m.max(needed_m)
+    }
+}
+
+/// How far a car leaving a lip at `speed_m_s`, `angle_deg` above level and `height_m`
+/// above the floor lands from the lip, in m (ballistic flight, no drag).
+pub fn flight_distance_m(speed_m_s: f32, angle_deg: f32, height_m: f32) -> f32 {
+    let gravity = 9.81;
+    let angle_rad = angle_deg.to_radians();
+    let rise_m_s = speed_m_s * libm::sinf(angle_rad);
+    let fall_time_s =
+        (rise_m_s + libm::sqrtf(rise_m_s * rise_m_s + 2.0 * gravity * height_m)) / gravity;
+    speed_m_s * libm::cosf(angle_rad) * fall_time_s
+}
+
+/// The course pieces for one template starting at `x_m`.
+fn lay_piece(
+    template: &PieceTemplate,
+    design: &DesignRules,
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
     let pos = [x_m, 0.0, 0.0];
+    let speed_m_s = design.speed_m_s;
     match template {
         PieceTemplate::Ramp {
-            length_m,
+            radius_m,
             width_m,
             angle_deg,
+            v_complete_min_m_s,
             ..
         } => {
-            let length = draw(rng, *length_m);
-            let ramp = ramp(pos, length, draw(rng, *width_m), draw(rng, *angle_deg));
-            (vec![ramp], length)
+            let angle = draw(rng, *angle_deg);
+            let length = draw(rng, *radius_m) * angle.to_radians();
+            let width = draw(rng, *width_m);
+            let ramp = ramp(pos, length, width, angle, *v_complete_min_m_s);
+            let lip_m = ramp_lip_height_m(length, angle);
+            LaidPiece {
+                pieces: vec![ramp],
+                length_m: length,
+                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+            }
         }
         PieceTemplate::RampGap {
-            length_m,
+            radius_m,
             width_m,
             angle_deg,
             gap_m,
+            pit_depth_m,
+            v_complete_min_m_s,
             ..
         } => {
-            let length = draw(rng, *length_m);
-            let ramp = ramp(pos, length, draw(rng, *width_m), draw(rng, *angle_deg));
+            let angle = draw(rng, *angle_deg);
+            let length = draw(rng, *radius_m) * angle.to_radians();
+            let width = draw(rng, *width_m);
+            let ramp = ramp(pos, length, width, angle, *v_complete_min_m_s);
+            let lip_m = ramp_lip_height_m(length, angle);
             let gap_length = draw(rng, *gap_m);
             let gap = PieceSpec::Gap {
                 pos: [x_m + length, 0.0, 0.0],
                 length: gap_length,
+                pit_depth: *pit_depth_m,
+                entry_height: lip_m,
             };
-            (vec![ramp, gap], length + gap_length)
+            LaidPiece {
+                pieces: vec![ramp, gap],
+                length_m: length + gap_length,
+                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+            }
         }
         PieceTemplate::Kicker {
-            length_m,
+            radius_m,
             width_m,
             angle_deg,
             ..
         } => {
-            let length = draw(rng, *length_m);
+            let angle = draw(rng, *angle_deg);
+            let length = draw(rng, *radius_m) * angle.to_radians();
             let kicker = PieceSpec::Kicker {
                 pos,
                 yaw: 0.0,
                 length,
                 width: draw(rng, *width_m),
-                angle_deg: draw(rng, *angle_deg),
+                angle_deg: angle,
                 side: random_side(rng),
             };
-            (vec![kicker], length)
+            let lip_m = ramp_lip_height_m(length, angle);
+            LaidPiece {
+                pieces: vec![kicker],
+                length_m: length,
+                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+            }
         }
         PieceTemplate::Corkscrew {
-            length_m,
+            radius_m,
             width_m,
             angle_deg,
             bank_deg,
             ..
         } => {
-            let length = draw(rng, *length_m);
+            let angle = draw(rng, *angle_deg);
+            // The low edge is a parabola: radius at the foot = length / tan(angle).
+            let length = draw(rng, *radius_m) * libm::tanf(angle.to_radians());
             let corkscrew = PieceSpec::Corkscrew {
                 pos,
                 yaw: 0.0,
                 length,
                 width: draw(rng, *width_m),
-                angle_deg: draw(rng, *angle_deg),
+                angle_deg: angle,
                 bank_deg: draw(rng, *bank_deg),
                 side: random_side(rng),
             };
-            (vec![corkscrew], length)
+            let lip_m = 0.5 * length * libm::tanf(angle.to_radians());
+            LaidPiece {
+                pieces: vec![corkscrew],
+                length_m: length,
+                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+            }
         }
         PieceTemplate::Bumps {
             count, height_m, ..
         } => {
             let count = rng.random_range(count[0]..=count[1]);
+            let height = draw(rng, *height_m);
             let bumps = PieceSpec::Bumps {
                 pos,
                 yaw: 0.0,
                 count,
-                height: draw(rng, *height_m),
+                height,
             };
-            (vec![bumps], count as f32 * BUMP_SPACING_M)
+            LaidPiece::on_the_ground(vec![bumps], count as f32 * bump_spacing_m(height))
         }
         PieceTemplate::KickPlate {
             impulse_up_n_s,
             impulse_side_n_s,
             angular_roll_n_m_s,
             ..
-        } => (
+        } => LaidPiece::on_the_ground(
             vec![kick_plate(
                 pos,
                 rng,
@@ -518,8 +682,16 @@ fn lay_piece(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> (Vec<P
             strength, presets, ..
         } => {
             let preset = pick_preset(presets, rng);
-            let plate = preset.kick_plate_at(pos, draw(rng, *strength));
-            (vec![plate], KICK_PLATE_LENGTH_M)
+            let strength = draw(rng, *strength);
+            let plate = preset.kick_plate_at(pos, strength);
+            // The push throws the car up at impulse / mass, then it falls back.
+            let rise_m_s = preset.impulse_n_s[1] * strength / design.car_mass_kg;
+            let airtime_s = 2.0 * rise_m_s / 9.81;
+            LaidPiece {
+                pieces: vec![plate],
+                length_m: KICK_PLATE_LENGTH_M,
+                landing_reach_m: KICK_PLATE_LENGTH_M + speed_m_s * airtime_s,
+            }
         }
         PieceTemplate::Halfpipe {
             radius_m, length_m, ..
@@ -531,30 +703,37 @@ fn lay_piece(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> (Vec<P
                 radius: draw(rng, *radius_m),
                 length,
             };
-            (vec![halfpipe], length)
+            LaidPiece::on_the_ground(vec![halfpipe], length)
         }
         PieceTemplate::Wall { height_m, .. } => {
-            // A wall's jump ramp starts this far before the wall itself.
-            let ramp_m = WALL_RAMP_LENGTH_M + WALL_RAMP_GAP_M;
+            let height = draw(rng, *height_m);
             let wall = PieceSpec::Wall {
-                pos: [x_m + ramp_m, 0.0, 0.0],
+                pos,
                 yaw: 0.0,
-                height: draw(rng, *height_m),
+                height,
                 with_ramp: true,
             };
-            (vec![wall], ramp_m + WALL_THICKNESS_M)
+            let length = wall_ramp_total_length_m(height);
+            LaidPiece::on_the_ground(vec![wall], length)
         }
     }
 }
 
 /// A straight ramp piece.
-fn ramp(pos: [f32; 3], length: f32, width: f32, angle_deg: f32) -> PieceSpec {
+fn ramp(
+    pos: [f32; 3],
+    length: f32,
+    width: f32,
+    angle_deg: f32,
+    v_complete_min_m_s: f32,
+) -> PieceSpec {
     PieceSpec::Ramp {
         pos,
         yaw: 0.0,
         length,
         width,
         angle_deg,
+        v_complete_min_m_s,
     }
 }
 

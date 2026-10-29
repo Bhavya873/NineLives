@@ -1,8 +1,9 @@
-# When a car's entry onto a course piece counts as "clean" (docs/contracts/traversal.md).
-# Judged in the piece's local frame at the moment of entry. Only clean entries are
-# covered by the survival rule (docs/contracts/survival.md).
-# Stub from Gate 0: no code reads this file yet. G2 (`claude/fearless-pieces`) adds
-# the loader. Every value is a starting value to tune.
+# When a car's entry onto a course piece counts as "clean" (docs/contracts/traversal.md),
+# and when an underbody touch is a Scrape instead of a crash (docs/contracts/crash-scrape.md).
+# Read by `crates/nl-sim/src/traversal.rs` (embedded in the build like the other configs).
+# A clean entry is judged in the piece's local frame at the moment of entry. Only clean
+# entries are covered by the survival rule (docs/contracts/survival.md).
+# Every value is a starting value to tune.
 
 # Largest heading error against the piece's forward axis, in degrees. (start)
 max_heading_err_deg = 15.0
@@ -10,10 +11,31 @@ max_heading_err_deg = 15.0
 max_pitch_deg = 10.0
 # Largest roll, in degrees. (start)
 max_roll_deg = 10.0
-# The car's centre must stay inside the piece width minus this margin, in m. (start)
+# The car's centre must stay this far inside the piece's edge, in m... (start)
 lateral_margin_m = 0.5
+# ...and the car's own half width on top, in m: wheels at ±0.85 plus the tyre, so the whole
+# car fits on a narrow piece. (start)
+car_half_width_m = 1.0
 # Fewest wheels on the ground at entry, for ground-entry pieces only. Flip plates
 # entered while airborne are exempt. (start)
 min_wheels_down = 3
 # The traversal record times out after piece length / entry speed plus this, in s. (start)
 timeout_extra_s = 3.0
+
+# --- Scrape rule (crash-scrape.md): a body contact is a Scrape, not a crash, only if all
+# four hold. Anything else is judged by the crash rules in vehicle.toml [events].
+# The contact point is this far above the body's lower face or lower, in m: it must be
+# below (lower half-height - margin) in the body frame. (start)
+scrape_underbody_margin_m = 0.05
+# The contact normal must be within this angle of body up, in degrees. (start)
+scrape_normal_deg = 30.0
+# The speed into the other collider along the normal must be at most this, in m/s.
+# Below vehicle.toml's crash_impact_speed_m_s (6) on purpose: a strike between the two
+# is neither a Scrape nor a crash, and one above 6 is a crash. (start, R2 measured the
+# gentle underbody touches of the sweep at 1 to 3 m/s)
+scrape_max_normal_m_s = 4.0
+# The car's tilt must be under this, in degrees. (start)
+scrape_max_tilt_deg = 25.0
+# One long scrape reports one Scrape event; a new one is reported once the contact has
+# been gone this long, in s. (start)
+scrape_event_gap_s = 0.5
