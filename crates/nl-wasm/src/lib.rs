@@ -39,11 +39,11 @@ const FLOATS_PER_NOZZLE: usize = 6;
 
 // Reserved numbers (docs/contracts/events-hud.md, frozen at Gate 0). Do not reuse them
 // for anything else; each PR below adds its own variants.
-//   HudField  23 PeakGLoad, 24 StuntPhase, 25 StuntCode, 26 ApproachHint,
-//             27 PolicyOutOfEnvelope.
+//   HudField  24 StuntPhase, 25 StuntCode, 26 ApproachHint, 27 PolicyOutOfEnvelope
+//             (23 PeakGLoad is in use).
 //   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted
 //             (15 Scrape and 16 TooSlowFallback exist since G2).
-// The Save event will gain a 5th float, `peak_g` (FLOATS_PER_EVENT goes 4 -> 5).
+// Every event is 5 floats; Save's 5th is `peak_g` (FLOATS_PER_EVENT went 4 -> 5).
 
 /// Where each value sits in the array returned by `Game::hud`. JavaScript sees this
 /// as an object, so it can write `hud[HudField.SpeedMS]` instead of a bare number.
@@ -98,10 +98,14 @@ pub enum HudField {
     WindXMS = 21,
     /// The wind now (mean plus gust) along world +Z, in m/s.
     WindZMS = 22,
+    /// The raw (per-tick) peak seat g of the current stunt window, in g (docs/contracts/
+    /// g-meter.md): from take-off to 0.5 s after the touchdown, 0 before the first
+    /// take-off since a respawn. `GLoad` is the 0.1 s smoothed value the meter shows.
+    PeakGLoad = 23,
 }
 
 /// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::WindZMS as usize + 1;
+const HUD_LENGTH: usize = HudField::PeakGLoad as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
 #[wasm_bindgen]
@@ -175,7 +179,7 @@ pub struct Game {
 }
 
 /// Number of floats per event in `Game::drain_events`.
-const FLOATS_PER_EVENT: usize = 4;
+const FLOATS_PER_EVENT: usize = 5;
 
 /// What happened, the first of the 4 floats of each event from `drain_events`.
 #[wasm_bindgen]
@@ -416,6 +420,7 @@ impl Game {
         values[HudField::FinishTimeS as usize] = self.world.finish_time_s().unwrap_or(0.0);
         values[HudField::GLoad as usize] = self.world.g_load();
         let [wind_x_m_s, _, wind_z_m_s] = self.world.wind_m_s();
+        values[HudField::PeakGLoad as usize] = self.world.peak_g_load();
         values[HudField::WindXMS as usize] = wind_x_m_s;
         values[HudField::WindZMS as usize] = wind_z_m_s;
         values
@@ -562,52 +567,59 @@ impl Game {
     }
 }
 
-/// One event as 4 numbers for JavaScript (see `EventKind`).
+/// One event as 5 numbers for JavaScript (see `EventKind`): the kind, up to four values,
+/// padded with 0.
 fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
+    let kind = |kind: EventKind| kind_code(kind);
     match event {
-        SimEvent::AirborneStart => [kind_code(EventKind::AirborneStart), 0.0, 0.0, 0.0],
-        SimEvent::AirborneEnd => [kind_code(EventKind::AirborneEnd), 0.0, 0.0, 0.0],
-        SimEvent::UpsetStart => [kind_code(EventKind::UpsetStart), 0.0, 0.0, 0.0],
+        SimEvent::AirborneStart => [kind(EventKind::AirborneStart), 0.0, 0.0, 0.0, 0.0],
+        SimEvent::AirborneEnd => [kind(EventKind::AirborneEnd), 0.0, 0.0, 0.0, 0.0],
+        SimEvent::UpsetStart => [kind(EventKind::UpsetStart), 0.0, 0.0, 0.0, 0.0],
         SimEvent::Save {
             duration_s,
             air_used_kg,
             peak_tilt_rad,
+            peak_g,
             ..
         } => [
-            kind_code(EventKind::Save),
+            kind(EventKind::Save),
             duration_s,
             air_used_kg,
             peak_tilt_rad,
+            peak_g,
         ],
-        SimEvent::Crash { cause } => [kind_code(EventKind::Crash), crash_code(cause), 0.0, 0.0],
-        SimEvent::Respawn => [kind_code(EventKind::Respawn), 0.0, 0.0, 0.0],
+        SimEvent::Crash { cause } => [kind(EventKind::Crash), crash_code(cause), 0.0, 0.0, 0.0],
+        SimEvent::Respawn => [kind(EventKind::Respawn), 0.0, 0.0, 0.0, 0.0],
         SimEvent::CheckpointReached { number } => [
-            kind_code(EventKind::CheckpointReached),
+            kind(EventKind::CheckpointReached),
             number as f32,
             0.0,
             0.0,
+            0.0,
         ],
-        SimEvent::Finished { time_s } => [kind_code(EventKind::Finished), time_s, 0.0, 0.0],
-        SimEvent::Kicked { piece } => [kind_code(EventKind::Kicked), piece as f32, 0.0, 0.0],
+        SimEvent::Finished { time_s } => [kind(EventKind::Finished), time_s, 0.0, 0.0, 0.0],
+        SimEvent::Kicked { piece } => [kind(EventKind::Kicked), piece as f32, 0.0, 0.0, 0.0],
         SimEvent::Scrape { normal_speed_m_s } => {
-            [kind_code(EventKind::Scrape), normal_speed_m_s, 0.0, 0.0]
+            [kind(EventKind::Scrape), normal_speed_m_s, 0.0, 0.0, 0.0]
         }
         SimEvent::TooSlowFallback {
             piece,
             entry_speed_m_s,
         } => [
-            kind_code(EventKind::TooSlowFallback),
+            kind(EventKind::TooSlowFallback),
             piece as f32,
             entry_speed_m_s,
+            0.0,
             0.0,
         ],
         SimEvent::HardLanding {
             compression,
             fall_m_s,
         } => [
-            kind_code(EventKind::HardLanding),
+            kind(EventKind::HardLanding),
             compression,
             fall_m_s,
+            0.0,
             0.0,
         ],
     }

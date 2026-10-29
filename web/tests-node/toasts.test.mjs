@@ -10,13 +10,13 @@ import { CrashCode, EventKind } from './load-wasm.mjs';
 const INVERTED_TILT_RAD = (150 * Math.PI) / 180;
 
 test('a save toast shows the air used', () => {
-  const events = new Float32Array([EventKind.Save, 1.2, 14.25, 2.0]);
+  const events = new Float32Array([EventKind.Save, 1.2, 14.25, 2.0, 3.5]);
 
   assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'Saved with 14.3 kg of air');
 });
 
 test('a save past upside down is a flip save', () => {
-  const events = new Float32Array([EventKind.Save, 1.8, 9.0, 3.0]);
+  const events = new Float32Array([EventKind.Save, 1.8, 9.0, 3.0, 3.5]);
 
   assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'Flip saved with 9.0 kg of air');
 });
@@ -27,8 +27,10 @@ test('a crash after a save in the same frame wins, with its cause', () => {
     1.2,
     14.25,
     2.0,
+    3.5,
     EventKind.Crash,
     CrashCode.UpsideDown,
+    0,
     0,
     0,
   ]);
@@ -37,7 +39,18 @@ test('a crash after a save in the same frame wins, with its cause', () => {
 });
 
 test('airborne and respawn events get no toast', () => {
-  const events = new Float32Array([EventKind.AirborneStart, 0, 0, 0, EventKind.Respawn, 0, 0, 0]);
+  const events = new Float32Array([
+    EventKind.AirborneStart,
+    0,
+    0,
+    0,
+    0,
+    EventKind.Respawn,
+    0,
+    0,
+    0,
+    0,
+  ]);
 
   assert.equal(toastForEvents(events, INVERTED_TILT_RAD), null);
 });
