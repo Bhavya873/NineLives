@@ -172,9 +172,13 @@ test('holding Boost in tight circles runs the Realistic tank out of air', () => 
 test('the HUD array and the event width match the contract', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
-  // docs/contracts/events-hud.md: HudField 23 is the last one so far; events are 5 floats.
+  // docs/contracts/events-hud.md: HudField 27 is the last one so far (24 to 26 are reserved
+  // by other streams and read 0); events are 5 floats.
   assert.equal(HudField.PeakGLoad, 23);
-  assert.equal(game.hud().length, HudField.PeakGLoad + 1);
+  assert.equal(HudField.PolicyOutOfEnvelope, 27);
+  assert.equal(game.hud().length, HudField.PolicyOutOfEnvelope + 1);
+  assert.deepEqual(Array.from(game.hud().slice(24, 27)), [0, 0, 0]);
+  assert.equal(game.hud()[HudField.PolicyOutOfEnvelope], 0);
   assert.equal(Game.floats_per_event(), 5);
 });
 

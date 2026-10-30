@@ -71,3 +71,10 @@ lag_compensation = 0.3572
 # The AI takes over only past 120 deg, so PD keeps the upsets it saves well (EXPERIMENTS 2026-10-27, R4).
 [hybrid]
 enter_tilt_deg = 120.0
+# The policy envelope: the AI was only validated up to this speed (m/s), and its observation
+# clamps velocity at 60 m/s. Faster than this, or with any saturating observation value on its
+# clamp bound (angular and body velocity, thrust_scale, hop_time_left), PD has the nozzles and
+# HudField 27 PolicyOutOfEnvelope is set; inside again, the normal gate rules apply. Left out,
+# the limit is 55. Raise it only after running the Hybrid eval at the higher speed and logging
+# the result in docs/EXPERIMENTS.md ("validated" means exactly that).
+# policy_max_speed_m_s = 55.0

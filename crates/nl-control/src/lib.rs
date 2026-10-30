@@ -17,6 +17,7 @@ mod ai;
 pub mod allocation;
 pub mod config;
 mod controller_kind;
+pub mod envelope;
 pub mod eval;
 mod hybrid;
 mod manual;
@@ -29,6 +30,7 @@ pub use controller_kind::{
     BuildControllerError, CONTROLLER_NAMES, CYCLE_NAMES, ControllerChoiceError, ControllerChoices,
     ControllerKind, build_controller,
 };
+pub use envelope::{DEFAULT_POLICY_MAX_SPEED_M_S, PolicyEnvelope};
 pub use hybrid::{Hybrid, HybridGate, HybridGateSettings, HybridSwitch};
 pub use manual::Manual;
 pub use off::Off;
