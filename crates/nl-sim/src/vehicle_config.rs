@@ -116,11 +116,25 @@ pub struct WheelConfig {
     pub suspension_relaxation_damping_per_kg: f32,
     /// Upper limit on one wheel's suspension force.
     pub max_suspension_force_n: f32,
+    /// Bump stop: the compression (m) past which an extra, stiff spring joins the main
+    /// one, so a hard landing or a concave ramp foot does not reach the body
+    /// (`docs/research/speed-survival.md` §2). Must be below `suspension_max_travel_m`.
+    #[serde(default = "default_bump_stop_start_m")]
+    pub bump_stop_start_m: f32,
+    /// Bump stop spring rate per kg of car mass, in (m/s²) per metre of compression past
+    /// the start, like the main spring. 0 (the default) switches the stop off.
+    #[serde(default)]
+    pub bump_stop_rate_per_kg: f32,
     /// Tyre grip: how much of the suspension force can become a forward push before
     /// the tyre slips. Higher means stronger braking and acceleration.
     pub friction_slip: f32,
     /// Multiplier on sideways tyre grip. 1.0 is normal; 0.0 slides like ice.
     pub side_friction_stiffness: f32,
+}
+
+/// Bump stop start used when a vehicle file omits it (it only matters with a rate above 0).
+fn default_bump_stop_start_m() -> f32 {
+    0.14
 }
 
 /// Engine and brakes. See `[drive]`.
@@ -291,6 +305,11 @@ pub enum VehicleConfigError {
     )]
     SaveTiltNotBelowUpsetTilt { save: f32, upset: f32 },
 
+    #[error(
+        "vehicle.toml: wheels.bump_stop_start_m ({start}) must be below wheels.suspension_max_travel_m ({travel})"
+    )]
+    BumpStopBeyondTravel { start: f32, travel: f32 },
+
     #[error("vehicle.toml: nozzle {index} must be named \"{expected}\", but it is \"{found}\"")]
     WrongNozzleOrder {
         index: usize,
@@ -397,6 +416,14 @@ impl WheelConfig {
         let relaxation = self.suspension_relaxation_damping_per_kg;
         must_not_be_negative("wheels.suspension_relaxation_damping_per_kg", relaxation)?;
         must_be_positive("wheels.max_suspension_force_n", self.max_suspension_force_n)?;
+        must_not_be_negative("wheels.bump_stop_rate_per_kg", self.bump_stop_rate_per_kg)?;
+        must_not_be_negative("wheels.bump_stop_start_m", self.bump_stop_start_m)?;
+        if self.bump_stop_start_m >= self.suspension_max_travel_m {
+            return Err(VehicleConfigError::BumpStopBeyondTravel {
+                start: self.bump_stop_start_m,
+                travel: self.suspension_max_travel_m,
+            });
+        }
         must_be_positive("wheels.friction_slip", self.friction_slip)?;
         must_not_be_negative(
             "wheels.side_friction_stiffness",

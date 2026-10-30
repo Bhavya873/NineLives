@@ -102,7 +102,7 @@ function eventGroups(values) {
   return groups;
 }
 
-test('a hop reports airborne, upset, hard landing and save events', () => {
+test('a hop reports airborne, upset, scrape and save events, with one rebound', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   // Thrusters off, so the bare Hop's own events show (PD would soften the landing).
   game.set_controller('off');
@@ -117,8 +117,11 @@ test('a hop reports airborne, upset, hard landing and save events', () => {
     EventKind.AirborneStart,
     EventKind.UpsetStart,
     EventKind.AirborneEnd,
-    // A full Hop from a standstill lands hard enough to bottom out the springs.
-    EventKind.HardLanding,
+    // Since the G2 bump stop, a full Hop from a standstill no longer bottoms the springs (no
+    // HardLanding): the underbody touches (a Scrape) and the stiff stop rebounds the car once.
+    EventKind.Scrape,
+    EventKind.AirborneStart,
+    EventKind.AirborneEnd,
     EventKind.Save,
   ]);
   assert.equal(game.is_crashed(), false);
@@ -183,17 +186,28 @@ test('a Hop reports the raw peak g in the HUD and in the Save event', () => {
   // (The start pose is a little above resting height, so a small first drop already ran.)
 
   game.tick(new Uint8Array([0, 0, 1, 0]));
+  // The stiff bump stop rebounds the car once, and that take-off opens a fresh window
+  // (docs/contracts/g-meter.md), so the peaks are read tick by tick, not once at the end.
+  let rawPeak = 0;
   let displayedPeak = 0;
+  let save = null;
+  let hudPeakAtSave = null;
   for (let i = 0; i < 360; i += 1) {
     game.tick(new Uint8Array([0, 0, 0, 0]));
-    displayedPeak = Math.max(displayedPeak, game.hud()[HudField.GLoad]);
+    const hud = game.hud();
+    rawPeak = Math.max(rawPeak, hud[HudField.PeakGLoad]);
+    displayedPeak = Math.max(displayedPeak, hud[HudField.GLoad]);
+    for (const group of eventGroups(game.drain_events())) {
+      if (group[0] === EventKind.Save) {
+        save = group;
+        hudPeakAtSave = hud[HudField.PeakGLoad];
+      }
+    }
   }
-  const save = eventGroups(game.drain_events()).find((group) => group[0] === EventKind.Save);
 
   assert.ok(save, 'a Save event');
-  const rawPeak = game.hud()[HudField.PeakGLoad];
   // The landing is in the peak, and the raw peak is at least the smoothed one.
   assert.ok(rawPeak > 1, `peak ${rawPeak}`);
   assert.ok(rawPeak >= displayedPeak - 1e-3, `raw ${rawPeak} displayed ${displayedPeak}`);
-  assert.equal(save[4], rawPeak);
+  assert.equal(save[4], hudPeakAtSave);
 });

@@ -23,14 +23,19 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use nl_control::config::DEFAULT_CONTROLLERS_TOML;
 use nl_control::{ControlCtx, Controller, build_controller};
+use nl_sim::contacts::{ScrapeRule, is_underbody_scrape};
 use nl_sim::conventions::{PHYSICS_DT_S, PHYSICS_HZ};
 use nl_sim::course::{BoundsSpec, CourseSpec, PieceSpec, Side, StartSpec};
-use nl_sim::course_build::{OBSTACLE_USER_DATA, WALL_RAMP_GAP_M, WALL_RAMP_LENGTH_M};
+use nl_sim::course_build::{
+    MIN_CONCAVE_RADIUS_M, OBSTACLE_USER_DATA, bump_spacing_m, ramp_lip_height_m,
+    wall_ramp_total_length_m,
+};
 use nl_sim::course_gen::PieceCatalog;
 use nl_sim::diagnostics::{ChassisContactPoint, ChassisPart};
 use nl_sim::events::SimEvent;
 use nl_sim::input::InputFrame;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
+use nl_sim::traversal::ApproachConfig;
 use nl_sim::vehicle_config::{DEFAULT_VEHICLE_TOML, VehicleConfig};
 use nl_sim::world::{DEFAULT_GROUND_FRICTION, World};
 use serde::Serialize;
@@ -69,6 +74,9 @@ const HEADING_JITTER_DEG: f32 = 2.0;
 const UNDERBODY_MARGIN_M: f32 = 0.05;
 const UNDERBODY_NORMAL_DEG: f32 = 30.0;
 const SCRAPE_TILT_DEG: f32 = 25.0;
+/// A contact on the floor counts as on its top face above this height, in m (the sim's
+/// `contacts::FLOOR_TOP_MIN_Y_M`).
+const FLOOR_TOP_MIN_Y_M: f32 = -0.05;
 
 /// One course piece to test.
 struct PieceCase {
@@ -103,6 +111,9 @@ struct ContactRecord {
     normal_speed_m_s: f32,
     /// Below the body's lower face minus the margin, normal within 30° of body down.
     underbody: bool,
+    /// All four scrape conditions hold (docs/contracts/crash-scrape.md): underbody, normal
+    /// up, gentle (at most `scrape_max_normal_m_s`) and nearly level.
+    scrape: bool,
     tilt_deg: f32,
     time_s: f32,
 }
@@ -177,40 +188,49 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// The pieces of plan R2c, each alone on a long flat course.
+/// The pieces of plan R2c, each alone on a long flat course, laid out the way the
+/// generator and the playground lay them (docs/contracts/ramp-curvature.md: a curved
+/// piece is its entry radius times its lip angle long, radius `MIN_CONCAVE_RADIUS_M`).
 fn piece_cases() -> Result<Vec<PieceCase>, Box<dyn Error>> {
     let x = PIECE_X_M;
     let mut cases = Vec::new();
-    for (angle_deg, length_m) in [(15.0, 10.0), (18.0, 12.0), (22.0, 15.0), (28.0, 15.0)] {
+    for angle_deg in [6.0_f32, 8.0] {
+        let length_m = ramp_length_m(angle_deg);
         cases.push(PieceCase {
             name: format!("ramp_{angle_deg:.0}"),
             pieces: vec![ramp(x, length_m, angle_deg)],
             end_x_m: x + length_m,
         });
     }
-    // course_gen's ramp_gap at its longest: a 12 m, 18° ramp, then a 6 m gap.
+    // course_gen's ramp_gap at its hardest: a 6° ramp (the lowest lip) and a 6 m gap
+    // with its catch pit.
+    let gap_angle_deg = 6.0;
+    let gap_ramp_m = ramp_length_m(gap_angle_deg);
     cases.push(PieceCase {
         name: "ramp_gap".to_string(),
         pieces: vec![
-            ramp(x, 12.0, 18.0),
+            ramp(x, gap_ramp_m, gap_angle_deg),
             PieceSpec::Gap {
-                pos: [x + 12.0, 0.0, 0.0],
+                pos: [x + gap_ramp_m, 0.0, 0.0],
                 length: 6.0,
+                pit_depth: 0.5,
+                entry_height: ramp_lip_height_m(gap_ramp_m, gap_angle_deg),
             },
         ],
-        end_x_m: x + 18.0,
+        end_x_m: x + gap_ramp_m + 6.0,
     });
+    let kicker_m = ramp_length_m(8.0);
     cases.push(PieceCase {
         name: "kicker".to_string(),
         pieces: vec![PieceSpec::Kicker {
             pos: [x, 0.0, 0.0],
             yaw: 0.0,
-            length: 8.0,
+            length: kicker_m,
             width: 4.0,
-            angle_deg: 15.0,
+            angle_deg: 8.0,
             side: Side::Left,
         }],
-        end_x_m: x + 8.0,
+        end_x_m: x + kicker_m,
     });
     for height_m in [0.2, 0.4, 0.5] {
         cases.push(PieceCase {
@@ -221,21 +241,23 @@ fn piece_cases() -> Result<Vec<PieceCase>, Box<dyn Error>> {
                 count: 4,
                 height: height_m,
             }],
-            end_x_m: x + 4.0 * 6.0,
+            end_x_m: x + 4.0 * bump_spacing_m(height_m),
         });
     }
+    // The corkscrew's low edge is a parabola: length = radius · tan(angle).
+    let corkscrew_m = MIN_CONCAVE_RADIUS_M * 8.0_f32.to_radians().tan();
     cases.push(PieceCase {
         name: "corkscrew".to_string(),
         pieces: vec![PieceSpec::Corkscrew {
             pos: [x, 0.0, 0.0],
             yaw: 0.0,
-            length: 15.0,
+            length: corkscrew_m,
             width: 4.0,
-            angle_deg: 15.0,
-            bank_deg: 45.0,
+            angle_deg: 8.0,
+            bank_deg: 8.0,
             side: Side::Right,
         }],
-        end_x_m: x + 15.0,
+        end_x_m: x + corkscrew_m,
     });
     cases.push(PieceCase {
         name: "halfpipe".to_string(),
@@ -247,20 +269,28 @@ fn piece_cases() -> Result<Vec<PieceCase>, Box<dyn Error>> {
         }],
         end_x_m: x + 20.0,
     });
-    // The wall's ramp starts 12 m before the wall; put the ramp's foot at PIECE_X_M.
-    let wall_x_m = x + WALL_RAMP_LENGTH_M + WALL_RAMP_GAP_M;
-    cases.push(PieceCase {
-        name: "wall_ramp".to_string(),
-        pieces: vec![PieceSpec::Wall {
-            pos: [wall_x_m, 0.0, 0.0],
-            yaw: 0.0,
-            height: 3.0,
-            with_ramp: true,
-        }],
-        end_x_m: wall_x_m + 1.0,
-    });
+    // A table top the height of a wall: the ramp starts at PIECE_X_M. 1 m is covered
+    // (its landing stays under about 9 m/s at 200 km/h); 2 m is logged for comparison.
+    for height_m in [1.0_f32, 2.0] {
+        cases.push(PieceCase {
+            name: format!("wall_ramp_{height_m:.0}m"),
+            pieces: vec![PieceSpec::Wall {
+                pos: [x, 0.0, 0.0],
+                yaw: 0.0,
+                height: height_m,
+                with_ramp: true,
+            }],
+            end_x_m: x + wall_ramp_total_length_m(height_m),
+        });
+    }
     cases.extend(flip_plate_cases()?);
     Ok(cases)
+}
+
+/// The length of a ramp of lip angle `angle_deg` whose entry curve has radius
+/// `MIN_CONCAVE_RADIUS_M`, in m.
+fn ramp_length_m(angle_deg: f32) -> f32 {
+    MIN_CONCAVE_RADIUS_M * angle_deg.to_radians()
 }
 
 /// One mild flip plate per preset that generated courses draw (weight > 0).
@@ -286,6 +316,7 @@ fn ramp(x_m: f32, length_m: f32, angle_deg: f32) -> PieceSpec {
         length: length_m,
         width: 8.0,
         angle_deg,
+        v_complete_min_m_s: 0.0,
     }
 }
 
@@ -440,6 +471,8 @@ fn course_for(case: &PieceCase, floor: Floor) -> CourseSpec {
             pieces.push(PieceSpec::Gap {
                 pos: [seam_x_m, 0.0, 0.0],
                 length: 0.0,
+                pit_depth: 0.0,
+                entry_height: 0.0,
             });
             seam_x_m += floor.tile_m;
         }
@@ -498,7 +531,10 @@ fn start_run(vehicle: &VehicleConfig, mode: ModeParams, case: &PieceCase, job: &
         0.0,
         -speed * libm::sinf(heading_rad),
     ];
-    let position = [PIECE_X_M - lead_m, resting_y_m, lateral_m];
+    // The lateral jitter is the offset at the piece's foot, so start far enough over to
+    // drift into it along the heading.
+    let start_z_m = lateral_m + lead_m * libm::tanf(heading_rad);
+    let position = [PIECE_X_M - lead_m, resting_y_m, start_z_m];
     // The values are finite and the rotation is a unit quaternion, so this cannot fail.
     let _ = world.place_car(position, rotation, velocity, [0.0; 3]);
     world.refill_tank();
@@ -542,10 +578,13 @@ impl MotionBefore {
 /// One line per step for `--trace`: time, position, fall speed, tilt, wheel
 /// compressions (m), and every body contact (body-frame point, world normal, speed).
 fn print_trace_step(world: &World, before: &MotionBefore, time_s: f32) {
-    let [x, y, _] = world.chassis_pose().position_m;
+    let [x, y, z] = world.chassis_pose().position_m;
     let mut line = format!(
-        "t={time_s:.3} x={x:.2} y={y:.2} vy={:.2} tilt={:.1}",
+        "t={time_s:.3} x={x:.2} y={y:.2} z={z:.2} vy={:.2} w={:?} tilt={:.1}",
         world.linear_velocity_m_s()[1],
+        world
+            .angular_velocity_rad_s()
+            .map(|w| (w * 10.0).round() / 10.0),
         world.tilt_rad().to_degrees()
     );
     for wheel in world.wheel_diagnostics() {
@@ -835,7 +874,9 @@ fn fastest_contact(
     best
 }
 
-/// One contact point in body-frame terms, with its plan §1.3 underbody test.
+/// One contact point in body-frame terms, with its plan §1.3 underbody test and the
+/// scrape rule. The floor's normal is its true one (straight up), as in the sim's own
+/// crash rule (`contacts::touching_points`).
 fn contact_record(
     world: &World,
     point: &ChassisContactPoint,
@@ -846,23 +887,54 @@ fn contact_record(
     let pose = world.chassis_pose();
     let inverse = conjugate(pose.rotation_xyzw);
     let point_body_m = rotate(inverse, sub(point.point_m, pose.position_m));
-    let normal_body = rotate(inverse, point.normal);
+    let on_floor_top = point.other_shape == "cuboid"
+        && point.other_user_data == 0
+        && point.point_m[1] > FLOOR_TOP_MIN_Y_M;
+    let normal_world = if on_floor_top {
+        [0.0, -1.0, 0.0]
+    } else {
+        point.normal
+    };
+    let normal_body = rotate(inverse, normal_world);
     let tilt_deg = world.tilt_rad().to_degrees();
     // Normal from the car into the ground points down the body (-Y) for an underbody hit.
     let normal_down_deg = libm::acosf((-normal_body[1]).clamp(-1.0, 1.0)).to_degrees();
     let underbody = point_body_m[1] < -(half_height_m - UNDERBODY_MARGIN_M)
         && normal_down_deg <= UNDERBODY_NORMAL_DEG
         && tilt_deg < SCRAPE_TILT_DEG;
+    let normal_speed_m_s = before.speed_along(point.point_m, normal_world).max(0.0);
+    let rule = scrape_rule(half_height_m);
+    let scrape = point.part == ChassisPart::Body
+        && is_underbody_scrape(
+            point_body_m,
+            normal_body,
+            normal_speed_m_s,
+            tilt_deg.to_radians(),
+            &rule,
+        );
     ContactRecord {
         part: point.part,
         hit: hit_name(point),
         point_body_m,
         normal_body,
-        normal_world: point.normal,
-        normal_speed_m_s: before.speed_along(point.point_m, point.normal).max(0.0),
+        normal_world,
+        normal_speed_m_s,
         underbody,
+        scrape,
         tilt_deg,
         time_s,
+    }
+}
+
+/// The sim's scrape rule for a car with a body of `half_height_m`, from approach.toml.
+fn scrape_rule(half_height_m: f32) -> ScrapeRule {
+    let approach = ApproachConfig::built_in();
+    ScrapeRule {
+        body_half_height_m: half_height_m,
+        underbody_margin_m: approach.scrape_underbody_margin_m,
+        normal_limit_rad: approach.scrape_normal_deg.to_radians(),
+        max_normal_m_s: approach.scrape_max_normal_m_s,
+        max_tilt_rad: approach.scrape_max_tilt_deg.to_radians(),
     }
 }
 

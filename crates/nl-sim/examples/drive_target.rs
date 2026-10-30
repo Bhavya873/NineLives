@@ -395,6 +395,8 @@ fn seam_pieces() -> Vec<PieceSpec> {
         pieces.push(PieceSpec::Gap {
             pos: [seam as f32 * SEAM_SPACING_M, 0.0, 0.0],
             length: 0.0,
+            pit_depth: 0.0,
+            entry_height: 0.0,
         });
     }
     pieces
@@ -408,6 +410,7 @@ fn kink_ramp() -> PieceSpec {
         length: KINK_RAMP_LENGTH_M,
         width: 10.0,
         angle_deg: KINK_RAMP_ANGLE_DEG,
+        v_complete_min_m_s: 0.0,
     }
 }
 

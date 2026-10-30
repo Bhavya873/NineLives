@@ -144,13 +144,14 @@ fn peak_tilt_deg(piece: &str, speed_m_s: f32) -> f32 {
 }
 
 #[test]
-fn a_car_driven_over_a_corkscrew_is_rolled_past_its_side() {
-    // The owner: "the car doesn't flip upside down in the obstacles". A corkscrew's
-    // twisted lip must roll a car past 90° so the thrusters have something to save.
+fn a_car_driven_over_a_corkscrew_is_tilted_but_not_crashed() {
+    // G2: corkscrews are laid out by the curvature rules (docs/contracts/ramp-curvature.md)
+    // with a gentle twist, so a clean entry is never crashed (survival.md). The twist
+    // still rolls the car a little; flips come from flip plates.
     for side in ["left", "right"] {
         let piece = format!(
-            r#"{{"type": "corkscrew", "pos": [20, 0, 0], "length": 15, "width": 4,
-            "angle_deg": 15, "bank_deg": 45, "side": "{side}"}}"#
+            r#"{{"type": "corkscrew", "pos": [20, 0, 0], "length": 15.5, "width": 4,
+            "angle_deg": 8, "bank_deg": 8, "side": "{side}"}}"#
         );
         // Grip 1.9 keeps the tyres on the ramp longer: at 15 m/s the roll is now 66°, at
         // 20 and 25 m/s it is 101° and 130° (it was past 90° from 15 m/s with grip 1.3).
@@ -158,8 +159,8 @@ fn a_car_driven_over_a_corkscrew_is_rolled_past_its_side() {
             let tilt_deg = peak_tilt_deg(&piece, speed_m_s);
 
             assert!(
-                tilt_deg > 90.0,
-                "{side} corkscrew at {speed_m_s} m/s: only {tilt_deg:.0}° of tilt"
+                tilt_deg > 1.0 && tilt_deg < 90.0,
+                "{side} corkscrew at {speed_m_s} m/s: {tilt_deg:.0}° of tilt"
             );
         }
     }

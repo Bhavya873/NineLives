@@ -12,31 +12,53 @@ use crate::course_mesh::{LoftedMesh, loft};
 use crate::world::Pose;
 
 /// Course width across the lane (local Z) where a piece does not give one, in m.
-const LANE_WIDTH_M: f32 = 16.0;
+pub const LANE_WIDTH_M: f32 = 16.0;
 /// Floor thickness below y = 0, in m.
 const FLOOR_THICKNESS_M: f32 = 1.0;
 /// SPEC §7.11 car row: each parked car is 4.5 m long, 1.9 m wide, 0.6 m apart.
 pub const PARKED_CAR_LENGTH_M: f32 = 4.5;
 pub const PARKED_CAR_WIDTH_M: f32 = 1.9;
 pub const PARKED_CAR_GAP_M: f32 = 0.6;
-/// Bumps: one every this many metres, each this long (half up, half down).
-pub const BUMP_SPACING_M: f32 = 6.0;
-const BUMP_LENGTH_M: f32 = 5.0;
+/// Bumps: each is as long as its faces need to be shallow, and they are this far apart
+/// (flat floor between one and the next), in m. A bump `height` tall is `height /
+/// BUMP_FACE_SLOPE * 2` long: R2c found that a car at 40 to 55 m/s leaves a steeper face
+/// (a 0.4 m bump of 5 m is 9°) with a vertical speed of 7 to 8 m/s and lands on the next
+/// bump too hard; a 0.2 m bump of 5 m (slope 0.08, 4.6°) never crashed it.
+pub const BUMP_FACE_SLOPE: f32 = 0.08;
+const BUMP_GAP_M: f32 = 1.0;
+/// Shortest bump, in m (a 0.2 m bump is 5 m long).
+const BUMP_MIN_LENGTH_M: f32 = 5.0;
 /// Ramp, kicker and bump hulls reach this far below the floor (hidden by it), so even a
 /// nearly flat segment is a solid Rapier can always build a hull from, in m.
 const HULL_BASE_DEPTH_M: f32 = 0.2;
-/// Ramps are built from this many convex segments of rising slope.
+/// A ramp is built from at least this many straight segments of rising slope (more for
+/// steeper ramps, see `MAX_KINK_DEG`).
 const RAMP_SEGMENTS: usize = 6;
-/// A corkscrew's edges are sampled at this many steps along its length, so its twist
-/// looks and drives smooth.
+/// The angle between two neighbouring segments of a curved piece stays at or under this,
+/// in degrees (docs/contracts/ramp-curvature.md allows 1.5°; this keeps rounding margin),
+/// so a wheel ray at 100 m/s never meets a visible kink.
+pub const MAX_KINK_DEG: f32 = 1.2;
+/// A corkscrew's edges are sampled at least this many steps along its length, so its twist
+/// looks and drives smooth (more for steeper lips, see `MAX_KINK_DEG`).
 const CORKSCREW_SAMPLES: usize = 16;
+/// The concave entry radius of the curved pieces' foot, in m (docs/contracts/
+/// ramp-curvature.md): R ≥ v² / (n_max − g) at the design speed 55.6 m/s. R2b measured
+/// the suspension with its bump stop clean up to 4.2 g (R = 99 m); 110 m is 3.9 g, a
+/// 7% margin under that. `configs/pieces.json` holds the same number for generated
+/// courses (a test keeps them equal).
+pub const MIN_CONCAVE_RADIUS_M: f32 = 110.0;
+/// A catch pit's floor slopes down from the lip at this angle and the exit slopes up at
+/// the other, in degrees (docs/contracts/survival.md: a car that falls short drives out).
+const PIT_ENTRY_SLOPE_DEG: f32 = 30.0;
+const PIT_EXIT_SLOPE_DEG: f32 = 8.0;
+/// A pit's mesh reaches this far below its deepest point, in m.
+const PIT_BASE_DEPTH_M: f32 = 0.2;
 /// Walls are this thick along the course.
 pub const WALL_THICKNESS_M: f32 = 1.0;
-/// A wall's jump ramp: this long and steep, ending this far before the wall. At 30°
-/// the curved ramp's lip is about 3.2 m high, above a 3 m wall.
-pub const WALL_RAMP_LENGTH_M: f32 = 10.0;
-const WALL_RAMP_ANGLE_DEG: f32 = 30.0;
-pub const WALL_RAMP_GAP_M: f32 = 2.0;
+/// A wall with a ramp is a table top (docs/contracts/survival.md: not clearing the wall
+/// means stopping on the ramp, never hitting its face): a curved ramp of radius
+/// `MIN_CONCAVE_RADIUS_M` up to the wall's height, a flat deck as long as the wall is
+/// thick, and the same curve back down. A car too slow to jump drives over it.
 /// Halfpipe walls: flat floor this wide between the curves, wall panels this thick, and
 /// this many flat panels per quarter circle.
 const HALFPIPE_FLOOR_WIDTH_M: f32 = 4.0;
@@ -124,6 +146,17 @@ pub struct CourseShape {
     pub friction: Option<f32>,
 }
 
+/// How long a bump `height_m` tall is along the course, in m: both faces slope at
+/// `BUMP_FACE_SLOPE` or less.
+pub fn bump_length_m(height_m: f32) -> f32 {
+    (2.0 * height_m / BUMP_FACE_SLOPE).max(BUMP_MIN_LENGTH_M)
+}
+
+/// The distance from the start of one bump to the start of the next, in m.
+pub fn bump_spacing_m(height_m: f32) -> f32 {
+    bump_length_m(height_m) + BUMP_GAP_M
+}
+
 /// How long a row of `count` parked cars is along the course, gaps included, in m.
 pub fn car_row_length_m(count: u32) -> f32 {
     let count = count as f32;
@@ -189,7 +222,7 @@ fn floor_segments(spec: &CourseSpec) -> Vec<CourseShape> {
     let [max_x, _, max_z] = spec.bounds.max;
     let mut holes: Vec<(f32, f32)> = Vec::new();
     for piece in &spec.pieces {
-        if let PieceSpec::Gap { pos, length } = piece {
+        if let PieceSpec::Gap { pos, length, .. } = piece {
             holes.push((pos[0], pos[0] + length));
         }
     }
@@ -230,6 +263,7 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             length,
             width,
             angle_deg,
+            ..
         } => at(*pos, *yaw).ramp(Surface::Ramp, 0.0, 0.0, *length, *width, *angle_deg),
         PieceSpec::Kicker {
             pos,
@@ -268,7 +302,12 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             };
             at(*pos, *yaw).corkscrew(&twist, raised_side_z)
         }
-        PieceSpec::Gap { .. } => Vec::new(),
+        PieceSpec::Gap {
+            pos,
+            length,
+            pit_depth,
+            entry_height,
+        } => catch_pit(at(*pos, 0.0), *length, *pit_depth, *entry_height),
         PieceSpec::CarRow {
             pos,
             yaw,
@@ -287,6 +326,7 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             yaw,
             radius,
             width,
+            ..
         } => half_loop(at(*pos, *yaw), *radius, *width),
         PieceSpec::Bumps {
             pos,
@@ -315,6 +355,45 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
     }
 }
 
+/// The catch pit of a gap (docs/contracts/survival.md): a mesh filling the hole with a
+/// sloped floor, from the lip's height `entry_height_m` down `PIT_ENTRY_SLOPE_DEG` to
+/// `depth_m` below the floor, flat, then up `PIT_EXIT_SLOPE_DEG` to the floor at the
+/// far edge. No pit (`depth_m` 0) leaves the bare hole.
+fn catch_pit(
+    frame: PieceFrame,
+    length_m: f32,
+    depth_m: f32,
+    entry_height_m: f32,
+) -> Vec<CourseShape> {
+    if depth_m <= 0.0 {
+        return Vec::new();
+    }
+    let mut run_in_m = (entry_height_m + depth_m) / libm::tanf(PIT_ENTRY_SLOPE_DEG.to_radians());
+    let mut run_out_m = depth_m / libm::tanf(PIT_EXIT_SLOPE_DEG.to_radians());
+    if run_in_m + run_out_m > length_m {
+        // A short pit: the same shape, squeezed (steeper slopes, no flat bottom).
+        let squeeze = length_m / (run_in_m + run_out_m);
+        run_in_m *= squeeze;
+        run_out_m *= squeeze;
+    }
+    let profile = [
+        (0.0, entry_height_m),
+        (run_in_m, -depth_m),
+        (length_m - run_out_m, -depth_m),
+        (length_m, 0.0),
+    ];
+    let section = |z: f32| {
+        // Lower chain: a flat base under the deepest point; upper chain: the pit floor.
+        let base_m = -depth_m - PIT_BASE_DEPTH_M;
+        let mut points: Vec<[f32; 3]> = profile.iter().map(|(x, _)| [*x, base_m, z]).collect();
+        points.extend(profile.iter().rev().map(|(x, y)| [*x, *y, z]));
+        points
+    };
+    let near = section(-LANE_WIDTH_M / 2.0);
+    let far = section(LANE_WIDTH_M / 2.0);
+    vec![frame.mesh(Surface::Ramp, loft(&near, &far))]
+}
+
 /// SPEC §7.11: `count` parked cars nose to tail along local +X (PLAN §3.2: five cars
 /// make a row about 25 m long).
 fn car_row(frame: PieceFrame, count: u32, height: f32) -> Vec<CourseShape> {
@@ -332,43 +411,42 @@ fn car_row(frame: PieceFrame, count: u32, height: f32) -> Vec<CourseShape> {
     shapes
 }
 
-/// Gentle humps across the lane, one every `BUMP_SPACING_M`. Each is
-/// `BUMP_LENGTH_M` long, so its faces are shallow enough that the wheels lift the car
-/// before the chassis nose (0.14 m above the ground) reaches the hump.
+/// Gentle humps across the lane, one every `bump_spacing_m(height)`. Each is
+/// `bump_length_m(height)` long, so its faces are shallow enough that the wheels lift the
+/// car before the chassis nose (0.14 m above the ground) reaches the hump, and a fast car
+/// leaves a face with a small vertical speed.
 fn bumps(frame: PieceFrame, count: u32, height: f32) -> Vec<CourseShape> {
     let half_width = LANE_WIDTH_M / 2.0;
     let mut shapes = Vec::new();
+    let length_m = bump_length_m(height);
     for bump in 0..count {
-        let start_x = bump as f32 * BUMP_SPACING_M;
+        let start_x = bump as f32 * bump_spacing_m(height);
         let mut points = Vec::new();
         for z in [-half_width, half_width] {
             points.push([start_x, -HULL_BASE_DEPTH_M, z]);
             points.push([start_x, 0.0, z]);
-            points.push([start_x + BUMP_LENGTH_M / 2.0, height, z]);
-            points.push([start_x + BUMP_LENGTH_M, 0.0, z]);
-            points.push([start_x + BUMP_LENGTH_M, -HULL_BASE_DEPTH_M, z]);
+            points.push([start_x + length_m / 2.0, height, z]);
+            points.push([start_x + length_m, 0.0, z]);
+            points.push([start_x + length_m, -HULL_BASE_DEPTH_M, z]);
         }
         shapes.push(frame.hull(Surface::Obstacle, points));
     }
     shapes
 }
 
-/// A wall across the lane, with an optional jump ramp ending just before it.
+/// A wall across the lane, or with `with_ramp` a table top of its height (see
+/// `table_top_profile`).
 fn wall(frame: PieceFrame, height: f32, with_ramp: bool) -> Vec<CourseShape> {
-    let half = [WALL_THICKNESS_M / 2.0, height / 2.0, LANE_WIDTH_M / 2.0];
-    let mut shapes = vec![frame.local_box(Surface::Obstacle, [half[0], half[1], 0.0], half, 0.0)];
     if with_ramp {
-        let start_x = -WALL_RAMP_GAP_M - WALL_RAMP_LENGTH_M;
-        shapes.extend(frame.ramp(
-            Surface::Ramp,
-            start_x,
-            0.0,
-            WALL_RAMP_LENGTH_M,
-            LANE_WIDTH_M,
-            WALL_RAMP_ANGLE_DEG,
-        ));
+        // A table top starting at the piece's position (see `table_top_profile`).
+        let profile = table_top_profile(height);
+        let section = |z: f32| profile_section(&profile, 0.0, z, 1.0);
+        let near = section(-LANE_WIDTH_M / 2.0);
+        let far = section(LANE_WIDTH_M / 2.0);
+        return vec![frame.mesh(Surface::Ramp, loft(&near, &far))];
     }
-    shapes
+    let half = [WALL_THICKNESS_M / 2.0, height / 2.0, LANE_WIDTH_M / 2.0];
+    vec![frame.local_box(Surface::Obstacle, [half[0], half[1], 0.0], half, 0.0)]
 }
 
 /// A U-channel along local +X: a flat floor between two quarter-circle walls, each one
@@ -460,18 +538,62 @@ fn profile_section(
     points
 }
 
-/// A ramp's side profile as (distance along, height) points, in m: `RAMP_SEGMENTS`
-/// straight segments, each steeper than the last by the same step, ending at
+/// How many segments a curve ending at `lip_angle_deg` needs so that no two neighbours
+/// meet at more than `MAX_KINK_DEG`, and at least `fewest`.
+fn segments_for(lip_angle_deg: f32, fewest: usize) -> usize {
+    let needed = libm::ceilf(lip_angle_deg / MAX_KINK_DEG) as usize;
+    needed.max(fewest)
+}
+
+/// A ramp's side profile as (distance along, height) points, in m: straight
+/// segments (at least `RAMP_SEGMENTS`), each steeper than the last by the same step, ending at
 /// `lip_angle_deg`. So a fast car meets no sharp kink (a straight wedge's foot crashed
 /// the car above about 25 m/s), and the ramp ends lower than `length · tan(angle)`.
 fn ramp_profile(length: f32, lip_angle_deg: f32) -> Vec<(f32, f32)> {
-    let segment_length_m = length / RAMP_SEGMENTS as f32;
+    let segments = segments_for(lip_angle_deg, RAMP_SEGMENTS);
+    let segment_length_m = length / segments as f32;
     let mut profile = vec![(0.0, 0.0)];
     let mut height_m = 0.0;
-    for segment in 1..=RAMP_SEGMENTS {
-        let slope_deg = lip_angle_deg * segment as f32 / RAMP_SEGMENTS as f32;
+    for segment in 1..=segments {
+        let slope_deg = lip_angle_deg * segment as f32 / segments as f32;
         height_m += segment_length_m * libm::tanf(slope_deg.to_radians());
         profile.push((segment as f32 * segment_length_m, height_m));
+    }
+    profile
+}
+
+/// How high a ramp of `length` and `lip_angle_deg` is at its lip, in m (what the gap
+/// pit after it must start at).
+pub fn ramp_lip_height_m(length: f32, lip_angle_deg: f32) -> f32 {
+    ramp_profile(length, lip_angle_deg)
+        .last()
+        .map_or(0.0, |point| point.1)
+}
+
+/// The dimensions of a wall's table-top ramp for a wall `height_m` tall: the curve's
+/// length and lip angle (deg) for radius `MIN_CONCAVE_RADIUS_M`. On a parabola of radius
+/// R rising h, the angle is sqrt(2h/R) and the length R · angle.
+pub fn wall_ramp_dims(height_m: f32) -> (f32, f32) {
+    let angle_rad = libm::sqrtf(2.0 * height_m / MIN_CONCAVE_RADIUS_M);
+    (MIN_CONCAVE_RADIUS_M * angle_rad, angle_rad.to_degrees())
+}
+
+/// How long a wall with a ramp is along the course (ramp up, deck, ramp down), in m.
+pub fn wall_ramp_total_length_m(height_m: f32) -> f32 {
+    2.0 * wall_ramp_dims(height_m).0 + WALL_THICKNESS_M
+}
+
+/// The side profile of a wall's table top: the ramp, a flat deck and the ramp mirrored.
+fn table_top_profile(height_m: f32) -> Vec<(f32, f32)> {
+    let (length_m, angle_deg) = wall_ramp_dims(height_m);
+    let up = ramp_profile(length_m, angle_deg);
+    let deck_start_m = length_m;
+    let mut profile = up.clone();
+    let deck_height_m = up.last().map_or(0.0, |point| point.1);
+    profile.push((deck_start_m + WALL_THICKNESS_M, deck_height_m));
+    // The way down is the way up backwards: steepest at the deck, flat at the floor.
+    for (x_m, y_m) in up.iter().rev().skip(1) {
+        profile.push((deck_start_m + WALL_THICKNESS_M + (length_m - x_m), *y_m));
     }
     profile
 }
@@ -497,10 +619,11 @@ impl CorkscrewTwist {
     /// above the low edge.
     fn edge_profiles(&self) -> (SideProfile, SideProfile) {
         let lip_slope = libm::tanf(self.lip_angle_deg.to_radians());
+        let samples = segments_for(self.lip_angle_deg, CORKSCREW_SAMPLES);
         let mut low_edge = Vec::new();
         let mut raised_edge = Vec::new();
-        for sample in 0..=CORKSCREW_SAMPLES {
-            let progress = sample as f32 / CORKSCREW_SAMPLES as f32;
+        for sample in 0..=samples {
+            let progress = sample as f32 / samples as f32;
             let x = progress * self.length;
             let low_m = self.length * lip_slope * progress * progress / 2.0;
             let bank_rad = (self.bank_deg * progress * progress).to_radians();

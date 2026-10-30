@@ -112,7 +112,7 @@ fn checkpoints_and_the_finish_sit_on_floor_not_over_a_gap() {
             .pieces
             .iter()
             .filter_map(|piece| match piece {
-                PieceSpec::Gap { pos, length } => Some((pos[0], pos[0] + length)),
+                PieceSpec::Gap { pos, length, .. } => Some((pos[0], pos[0] + length)),
                 _ => None,
             })
             .collect();
@@ -156,8 +156,12 @@ fn most_generated_courses_have_a_piece_that_flips_the_car() {
 fn a_flip_plate_without_presets_is_refused() {
     let broken = r#"{"version": 1, "start_height_m": 0.7, "track_half_width_m": 10.0,
         "bounds_margin_m": 30.0, "piece_count": [4, 8], "straight_m": [20.0, 40.0],
-        "jump_run_up_m": 33.0, "pieces": [
+        "jump_run_up_m": 33.0,
+        "design": {"speed_m_s": 55.6, "min_concave_radius_m": 110.0, "min_crest_radius_m": 315.0,
+                   "max_kink_deg": 1.2, "car_mass_kg": 1800.0, "landing_margin_m": 20.0},
+        "pieces": [
           {"kind": "flip_plate", "weight": 1.0, "strength": [1.0, 1.1], "strong_strength": 3.0, "run_out_m": 45.0,
+           "v_complete_min_m_s": 0.0,
            "presets": []}]}"#;
 
     let error = PieceCatalog::from_json_str(broken).unwrap_err();

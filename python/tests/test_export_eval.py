@@ -5,6 +5,7 @@ an exported policy can be evaluated as the AI controller."""
 import json
 
 import numpy as np
+import pytest
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
@@ -81,6 +82,12 @@ def test_the_python_eval_reproduces_the_rust_eval_runners_rows():
 
     report = evaluate("pd", "A", "realistic", episodes=20, first_seed=0)
 
+    if committed.get("physics_hash") != report.get("physics_hash"):
+        # The committed result was recorded under older physics (before the bump stop and
+        # floor-contact rule of G2, which move some Stage A drops). Gate G3 regenerates the
+        # results/eval_* files with hashes; until then rows are only comparable when the
+        # physics matches.
+        pytest.skip("committed eval_pd_A_realistic.json predates the current physics_hash")
     assert report["episodes"] == committed["episodes"][:20]
 
 

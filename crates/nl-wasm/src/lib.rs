@@ -41,8 +41,8 @@ const FLOATS_PER_NOZZLE: usize = 6;
 // for anything else; each PR below adds its own variants.
 //   HudField  24 StuntPhase, 25 StuntCode, 26 ApproachHint, 27 PolicyOutOfEnvelope
 //             (23 PeakGLoad is in use).
-//   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted,
-//             15 Scrape, 16 TooSlowFallback.
+//   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted
+//             (15 Scrape and 16 TooSlowFallback exist since G2).
 // Every event is 5 floats; Save's 5th is `peak_g` (FLOATS_PER_EVENT went 4 -> 5).
 
 /// Where each value sits in the array returned by `Game::hud`. JavaScript sees this
@@ -206,6 +206,13 @@ pub enum EventKind {
     /// A wheel bottomed out at touchdown (not a crash). Followed by: the largest
     /// suspension compression (0..1), the fall speed just before touchdown in m/s.
     HardLanding = 10,
+    /// A gentle underbody touch, not a crash (docs/contracts/crash-scrape.md). Followed
+    /// by: the normal speed into the surface in m/s. Numbers 11 to 14 are reserved for the
+    /// stunt events (docs/contracts/events-hud.md).
+    Scrape = 15,
+    /// The car entered a piece below its minimum completion speed and takes its safe
+    /// fallback. Followed by: the piece's index in the course file, the entry speed in m/s.
+    TooSlowFallback = 16,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -592,6 +599,19 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
         ],
         SimEvent::Finished { time_s } => [kind(EventKind::Finished), time_s, 0.0, 0.0, 0.0],
         SimEvent::Kicked { piece } => [kind(EventKind::Kicked), piece as f32, 0.0, 0.0, 0.0],
+        SimEvent::Scrape { normal_speed_m_s } => {
+            [kind(EventKind::Scrape), normal_speed_m_s, 0.0, 0.0, 0.0]
+        }
+        SimEvent::TooSlowFallback {
+            piece,
+            entry_speed_m_s,
+        } => [
+            kind(EventKind::TooSlowFallback),
+            piece as f32,
+            entry_speed_m_s,
+            0.0,
+            0.0,
+        ],
         SimEvent::HardLanding {
             compression,
             fall_m_s,

@@ -72,6 +72,20 @@ pub enum SimEvent {
     Finished { time_s: f32 },
     /// A kick plate (`piece` index in the course file) pushed the car.
     Kicked { piece: u32 },
+    /// A gentle underbody touch that is not a crash (docs/contracts/crash-scrape.md,
+    /// wasm `EventKind` 15). One event per scrape, however long it lasts.
+    Scrape {
+        /// How fast the car was moving into the surface, along the contact normal, in m/s.
+        normal_speed_m_s: f32,
+    },
+    /// The car entered a course piece below its `v_complete_min_m_s` and will take its
+    /// safe fallback (docs/contracts/survival.md, wasm `EventKind` 16).
+    TooSlowFallback {
+        /// Index of the piece in the course file.
+        piece: u32,
+        /// The entry speed along the piece's forward axis, in m/s.
+        entry_speed_m_s: f32,
+    },
 }
 
 /// What the tracker looks at on each physics step.

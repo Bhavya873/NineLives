@@ -53,10 +53,16 @@ fn a_drop_reports_a_raw_peak_above_the_displayed_one_and_a_respawn_clears_it() {
         .unwrap();
     assert_eq!(world.peak_g_load(), 0.0);
 
-    // 3 m of fall, the touchdown, and the 0.5 s after it.
-    run(&mut world, [0.0; NOZZLE_COUNT], 480);
-    let raw_peak = world.peak_g_load();
-    let displayed_peak = world.peak_displayed_g_load();
+    // 3 m of fall, the touchdown, and the 0.5 s after it. The stiff bump stop can rebound the
+    // car off the ground, and that take-off opens a fresh window (docs/contracts/g-meter.md),
+    // so the landing's peak is read tick by tick, not once at the end.
+    let mut raw_peak = 0.0_f32;
+    let mut displayed_peak = 0.0_f32;
+    for _ in 0..480 {
+        run(&mut world, [0.0; NOZZLE_COUNT], 1);
+        raw_peak = raw_peak.max(world.peak_g_load());
+        displayed_peak = displayed_peak.max(world.peak_displayed_g_load());
+    }
 
     // The landing is in the peak; the 0.1 s filter flattens its one-tick spike.
     assert!(raw_peak > 1.5, "raw peak {raw_peak} g");
