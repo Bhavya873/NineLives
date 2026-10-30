@@ -24,6 +24,7 @@ mod manual;
 mod off;
 mod pd;
 mod residual;
+pub mod stunt;
 
 pub use ai::Ai;
 pub use controller_kind::{

@@ -68,6 +68,45 @@ model = "actuator_aware"
 # actuator_aware only: share of the valve lag made up within one control interval (0..1).
 lag_compensation = 0.3572
 
+# Stunts (plan 2026-10-27 G4, docs/contracts/stunt-states.md; numbers from
+# docs/research/stunt-planning.md §4, all (start)). Every entry is optional; left out, the
+# value here applies.
+[stunt]
+# Coast rate per stunt and mode, rad/s.
+flip_coast_rate_realistic_rad_s = 5.0
+barrel_coast_rate_realistic_rad_s = 5.0
+flip_coast_rate_arcade_rad_s = 5.0
+barrel_coast_rate_arcade_rad_s = 6.0
+# Reachable angular acceleration at thrust scale 1 and a full tank, rad/s² (the planner
+# multiplies by the mode's thrust scale and the tank gate).
+pitch_alpha_rad_s2 = 13.2
+roll_alpha_rad_s2 = 28.7
+# Air used while firing full stunt torque at thrust scale 1, kg/s.
+pitch_air_kg_s = 40.0
+roll_air_kg_s = 53.3
+# The Brake phase hands over to PD at this spin, rad/s.
+handover_rate_rad_s = 1.5
+# PD's catch budget after the hand-over: time (s) and air (kg).
+catch_time_s = 0.8
+catch_air_kg = 11.0
+# "Complete" needs at least 2π minus this, rad.
+complete_rotation_slack_rad = 0.15
+settle_margin_s = 0.3
+# Landing authorization (rule 1) and the forecast's uncertainty samples (rule 2).
+landing_max_normal_tilt_deg = 15.0
+landing_min_length_car_lengths = 2.0
+car_length_m = 4.2
+forecast_speed_spread = 0.02
+forecast_pitch_spread_deg = 1.0
+# Air (rule 3) and start envelope (rule 4).
+air_margin = 1.25
+landing_reserve_kg = 60.0
+start_max_tilt_deg = 25.0
+start_max_spin_rad_s = 1.5
+# Request handling.
+request_timeout_s = 3.0
+hybrid_hold_after_settled_s = 1.0
+
 # The AI takes over only past 120 deg, so PD keeps the upsets it saves well (EXPERIMENTS 2026-10-27, R4).
 [hybrid]
 enter_tilt_deg = 120.0

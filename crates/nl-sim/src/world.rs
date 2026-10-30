@@ -35,6 +35,7 @@ use crate::diagnostics::{
     ChassisContactPoint, WheelDiagnostics, chassis_contact_points, wheel_diagnostics,
 };
 use crate::events::{EventInputs, EventTracker, SimEvent};
+use crate::forecast::{ForecastSettings, LandingForecast, forecast};
 use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
@@ -996,6 +997,27 @@ impl World {
     /// and how far each wheel has rolled, so the renderer can spin them.
     pub fn wheel_poses(&self) -> [Pose; WHEEL_COUNT] {
         self.car.wheel_poses(&self.physics)
+    }
+
+    /// Forecasts where and when the car will touch down with the default settings
+    /// (`ForecastSettings::default`); see `forecast_landing_with`.
+    pub fn forecast_landing(&self) -> Option<LandingForecast> {
+        self.forecast_landing_with(&ForecastSettings::default())
+    }
+
+    /// Forecasts the landing from the car's current position and velocity: touchdown time
+    /// and point, surface normal, usable landing length and the spread from ±speed and
+    /// ±pitch samples (`crate::forecast`). None if nothing is hit within the horizon.
+    /// Read-only: it never changes the world.
+    pub fn forecast_landing_with(&self, settings: &ForecastSettings) -> Option<LandingForecast> {
+        let body = &self.physics.bodies[self.car.chassis];
+        forecast(
+            &self.physics,
+            &self.car,
+            body.translation(),
+            body.linvel(),
+            settings,
+        )
     }
 
     /// The car's velocity in world coordinates.

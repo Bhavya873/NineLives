@@ -89,6 +89,152 @@ pub struct HybridConfig {
     pub policy_max_speed_m_s: Option<f32>,
 }
 
+/// The stunt planner's settings, `[stunt]` in controllers.toml (docs/contracts/stunt-states.md,
+/// numbers from docs/research/stunt-planning.md). Optional: left out, these defaults apply.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct StuntConfig {
+    /// Coast rate of a flip in Realistic, rad/s.
+    pub flip_coast_rate_realistic_rad_s: f32,
+    /// Coast rate of a barrel roll in Realistic, rad/s.
+    pub barrel_coast_rate_realistic_rad_s: f32,
+    /// Coast rate of a flip in Arcade, rad/s.
+    pub flip_coast_rate_arcade_rad_s: f32,
+    /// Coast rate of a barrel roll in Arcade, rad/s.
+    pub barrel_coast_rate_arcade_rad_s: f32,
+    /// Angular acceleration about the pitch axis through the allocator at thrust scale 1
+    /// and a full tank, rad/s².
+    pub pitch_alpha_rad_s2: f32,
+    /// The same about the roll axis, rad/s².
+    pub roll_alpha_rad_s2: f32,
+    /// Air used while firing full pitch torque at thrust scale 1, kg/s.
+    pub pitch_air_kg_s: f32,
+    /// The same for full roll torque, kg/s.
+    pub roll_air_kg_s: f32,
+    /// The Brake phase hands over to PD at this spin, rad/s.
+    pub handover_rate_rad_s: f32,
+    /// Time PD needs after the hand-over to make the car landable, s.
+    pub catch_time_s: f32,
+    /// Air PD needs for that, kg.
+    pub catch_air_kg: f32,
+    /// Rotation short of 2π still counted as complete, rad.
+    pub complete_rotation_slack_rad: f32,
+    /// Spare time on top of spin, brake and catch, s.
+    pub settle_margin_s: f32,
+    /// The landing surface may tilt this far from level, degrees.
+    pub landing_max_normal_tilt_deg: f32,
+    /// The usable landing length must be at least this many car lengths.
+    pub landing_min_length_car_lengths: f32,
+    /// Car length used for the landing check, m.
+    pub car_length_m: f32,
+    /// Relative speed spread of the forecast's uncertainty samples (0.02 = 2%).
+    pub forecast_speed_spread: f32,
+    /// Pitch spread of those samples, degrees.
+    pub forecast_pitch_spread_deg: f32,
+    /// Safety factor on the air a stunt needs.
+    pub air_margin: f32,
+    /// Air kept for a normal PD landing, kg.
+    pub landing_reserve_kg: f32,
+    /// A stunt may only start at most this tilted, degrees.
+    pub start_max_tilt_deg: f32,
+    /// ... and spinning at most this fast, rad/s.
+    pub start_max_spin_rad_s: f32,
+    /// A queued request expires after this long, s.
+    pub request_timeout_s: f32,
+    /// The Hybrid gate stays on PD this long after Settled, s.
+    pub hybrid_hold_after_settled_s: f32,
+}
+
+impl Default for StuntConfig {
+    fn default() -> StuntConfig {
+        StuntConfig {
+            flip_coast_rate_realistic_rad_s: 5.0,
+            barrel_coast_rate_realistic_rad_s: 5.0,
+            flip_coast_rate_arcade_rad_s: 5.0,
+            barrel_coast_rate_arcade_rad_s: 6.0,
+            pitch_alpha_rad_s2: 13.2,
+            roll_alpha_rad_s2: 28.7,
+            pitch_air_kg_s: 40.0,
+            roll_air_kg_s: 53.3,
+            handover_rate_rad_s: 1.5,
+            catch_time_s: 0.8,
+            catch_air_kg: 11.0,
+            complete_rotation_slack_rad: 0.15,
+            settle_margin_s: 0.3,
+            landing_max_normal_tilt_deg: 15.0,
+            landing_min_length_car_lengths: 2.0,
+            car_length_m: 4.2,
+            forecast_speed_spread: 0.02,
+            forecast_pitch_spread_deg: 1.0,
+            air_margin: 1.25,
+            landing_reserve_kg: 60.0,
+            start_max_tilt_deg: 25.0,
+            start_max_spin_rad_s: 1.5,
+            request_timeout_s: 3.0,
+            hybrid_hold_after_settled_s: 1.0,
+        }
+    }
+}
+
+impl StuntConfig {
+    /// Every number as (name, value) for the positive check.
+    fn fields(&self) -> [(&'static str, f32); 24] {
+        [
+            (
+                "stunt.flip_coast_rate_realistic_rad_s",
+                self.flip_coast_rate_realistic_rad_s,
+            ),
+            (
+                "stunt.barrel_coast_rate_realistic_rad_s",
+                self.barrel_coast_rate_realistic_rad_s,
+            ),
+            (
+                "stunt.flip_coast_rate_arcade_rad_s",
+                self.flip_coast_rate_arcade_rad_s,
+            ),
+            (
+                "stunt.barrel_coast_rate_arcade_rad_s",
+                self.barrel_coast_rate_arcade_rad_s,
+            ),
+            ("stunt.pitch_alpha_rad_s2", self.pitch_alpha_rad_s2),
+            ("stunt.roll_alpha_rad_s2", self.roll_alpha_rad_s2),
+            ("stunt.pitch_air_kg_s", self.pitch_air_kg_s),
+            ("stunt.roll_air_kg_s", self.roll_air_kg_s),
+            ("stunt.handover_rate_rad_s", self.handover_rate_rad_s),
+            ("stunt.catch_time_s", self.catch_time_s),
+            ("stunt.catch_air_kg", self.catch_air_kg),
+            (
+                "stunt.complete_rotation_slack_rad",
+                self.complete_rotation_slack_rad,
+            ),
+            ("stunt.settle_margin_s", self.settle_margin_s),
+            (
+                "stunt.landing_max_normal_tilt_deg",
+                self.landing_max_normal_tilt_deg,
+            ),
+            (
+                "stunt.landing_min_length_car_lengths",
+                self.landing_min_length_car_lengths,
+            ),
+            ("stunt.car_length_m", self.car_length_m),
+            ("stunt.forecast_speed_spread", self.forecast_speed_spread),
+            (
+                "stunt.forecast_pitch_spread_deg",
+                self.forecast_pitch_spread_deg,
+            ),
+            ("stunt.air_margin", self.air_margin),
+            ("stunt.landing_reserve_kg", self.landing_reserve_kg),
+            ("stunt.start_max_tilt_deg", self.start_max_tilt_deg),
+            ("stunt.start_max_spin_rad_s", self.start_max_spin_rad_s),
+            ("stunt.request_timeout_s", self.request_timeout_s),
+            (
+                "stunt.hybrid_hold_after_settled_s",
+                self.hybrid_hold_after_settled_s,
+            ),
+        ]
+    }
+}
+
 /// Everything in controllers.toml.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,6 +243,8 @@ pub struct ControllersConfig {
     pub allocation: AllocationConfig,
     #[serde(default)]
     pub hybrid: HybridConfig,
+    #[serde(default)]
+    pub stunt: StuntConfig,
 }
 
 /// Why controllers.toml could not be used.
@@ -189,6 +337,36 @@ impl ControllersConfig {
                 return Err(ControllersConfigError::NotFraction { field, value });
             }
         }
+        for (field, value) in self.stunt.fields() {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(ControllersConfigError::NotPositive { field, value });
+            }
+        }
+        let stunt = &self.stunt;
+        if stunt.landing_max_normal_tilt_deg >= 90.0 {
+            return Err(ControllersConfigError::NotTilt {
+                field: "stunt.landing_max_normal_tilt_deg",
+                value: stunt.landing_max_normal_tilt_deg,
+            });
+        }
+        if stunt.start_max_tilt_deg > 180.0 {
+            return Err(ControllersConfigError::NotTilt {
+                field: "stunt.start_max_tilt_deg",
+                value: stunt.start_max_tilt_deg,
+            });
+        }
+        if stunt.forecast_speed_spread >= 1.0 {
+            return Err(ControllersConfigError::NotFraction {
+                field: "stunt.forecast_speed_spread",
+                value: stunt.forecast_speed_spread,
+            });
+        }
+        if stunt.complete_rotation_slack_rad >= std::f32::consts::PI {
+            return Err(ControllersConfigError::NotFraction {
+                field: "stunt.complete_rotation_slack_rad",
+                value: stunt.complete_rotation_slack_rad,
+            });
+        }
         if let Some(value) = self.hybrid.enter_tilt_deg
             && !(value > 0.0 && value <= 180.0)
         {
@@ -270,5 +448,47 @@ mod tests {
             error.to_string(),
             "controllers.toml: `hybrid.policy_max_speed_m_s` must be a positive number, but it is -1"
         );
+    }
+
+    #[test]
+    fn the_repo_stunt_table_is_the_default() {
+        let config = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
+        assert_eq!(config.stunt, StuntConfig::default());
+    }
+
+    #[test]
+    fn an_unknown_stunt_key_is_refused() {
+        let broken =
+            DEFAULT_CONTROLLERS_TOML.replace("[stunt]\n", "[stunt]\nbogus_setting = 1.0\n");
+        let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
+        assert!(error.to_string().contains("bogus_setting"), "{error}");
+    }
+
+    #[test]
+    fn an_unknown_table_is_refused() {
+        let broken = format!("{DEFAULT_CONTROLLERS_TOML}\n[bogus]\nx = 1\n");
+        assert!(ControllersConfig::from_toml_str(&broken).is_err());
+    }
+
+    #[test]
+    fn a_bad_stunt_number_names_its_field() {
+        let broken = with_value("catch_time_s", "-0.5");
+        let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "controllers.toml: `stunt.catch_time_s` must be a positive number, but it is -0.5"
+        );
+    }
+
+    #[test]
+    fn the_stunt_table_is_optional() {
+        let cut = DEFAULT_CONTROLLERS_TOML
+            .split("[stunt]")
+            .next()
+            .unwrap()
+            .to_string()
+            + "[hybrid]\n";
+        let config = ControllersConfig::from_toml_str(&cut).unwrap();
+        assert_eq!(config.stunt, StuntConfig::default());
     }
 }
