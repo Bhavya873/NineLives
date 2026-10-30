@@ -65,6 +65,16 @@ import {
   type WindLevel,
 } from './screen-effects.ts';
 import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
+import { requestStuntInSim } from './stunt-adapter.ts';
+import {
+  STUNT_KEYS,
+  applyStuntEvents,
+  createStuntQueue,
+  expireStunt,
+  pressStunt,
+  stuntToastForEvents,
+  submitPendingStunt,
+} from './stunt-requests.ts';
 import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
 import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
 
@@ -116,6 +126,11 @@ async function start(): Promise<void> {
   }
   const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
   onKeyPress('F3', () => togglePerfOverlay(perf));
+  // Stunt keys only queue a request; the sim's planner decides (see stunt-requests.ts).
+  const stuntQueue = createStuntQueue();
+  for (const [code, stunt] of Object.entries(STUNT_KEYS)) {
+    onKeyPress(code, () => pressStunt(stuntQueue, stunt, performance.now() / 1000));
+  }
 
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),
@@ -216,7 +231,10 @@ async function start(): Promise<void> {
       snapViewToGame(game, frames, view, carPose);
       resetScreenEffects(effects);
     }
-    const toast = toastForEvents(events, invertedTiltRad);
+    applyStuntEvents(stuntQueue, events);
+    expireStunt(stuntQueue, nowMs / 1000);
+    submitPendingStunt(stuntQueue, (code) => requestStuntInSim(game, code));
+    const toast = stuntToastForEvents(events) ?? toastForEvents(events, invertedTiltRad);
     // Nothing covers the game-over screen.
     if (toast && !lives.over) {
       showToast(toasts, toast, nowMs);
