@@ -7,6 +7,9 @@ use nl_sim::car_state::CarState;
 use nl_sim::conventions::{CONTROL_DT_S, NOZZLE_COUNT, WHEEL_COUNT};
 use nl_sim::vehicle_config::VehicleConfig;
 
+use nl_sim::obs::Observation;
+
+use crate::envelope::PolicyEnvelope;
 use crate::{Ai, ControlCtx, Controller, Pd};
 
 /// When the gate switches, read from vehicle.toml `[events]` (SPEC §7.9), so a trained
@@ -22,6 +25,8 @@ pub struct HybridGateSettings {
     pub release_spin_rad_s: f32,
     /// ...on all four wheels, held this long, in seconds (`save_hold_s`).
     pub release_hold_s: f32,
+    /// Where the AI may be trusted (`[hybrid] policy_max_speed_m_s`); outside it PD flies.
+    pub envelope: PolicyEnvelope,
 }
 
 impl HybridGateSettings {
@@ -33,6 +38,19 @@ impl HybridGateSettings {
             release_tilt_deg: events.save_tilt_deg,
             release_spin_rad_s: events.save_max_spin_rad_s,
             release_hold_s: events.save_hold_s,
+            envelope: PolicyEnvelope::default(),
+        }
+    }
+
+    /// These settings with the policy validated up to `max_speed_m_s` instead, if given
+    /// (controllers.toml `[hybrid]`).
+    pub fn with_policy_max_speed(self, max_speed_m_s: Option<f32>) -> HybridGateSettings {
+        match max_speed_m_s {
+            Some(max_speed_m_s) => HybridGateSettings {
+                envelope: PolicyEnvelope { max_speed_m_s },
+                ..self
+            },
+            None => self,
         }
     }
 
@@ -58,6 +76,8 @@ pub struct HybridGate {
     ai_in_control: bool,
     /// How long the car has been settled on its wheels while the AI is in control, in s.
     settled_s: f32,
+    /// Whether the last `update` found the car outside the policy envelope.
+    out_of_envelope: bool,
 }
 
 impl HybridGate {
@@ -67,6 +87,7 @@ impl HybridGate {
             settings,
             ai_in_control: false,
             settled_s: 0.0,
+            out_of_envelope: false,
         }
     }
 
@@ -74,15 +95,25 @@ impl HybridGate {
     pub fn reset(&mut self) {
         self.ai_in_control = false;
         self.settled_s = 0.0;
+        self.out_of_envelope = false;
     }
 
     /// Updates the gate for one control step (`CONTROL_DT_S`) and says whether the AI
-    /// has the nozzles. Call it once per control step with the state the controllers see.
-    pub fn update(&mut self, state: &CarState) -> bool {
+    /// has the nozzles. Call it once per control step with the state and observation the
+    /// controllers see. The upset/settle latch runs by its normal rules throughout, but
+    /// while the car is outside the policy envelope PD has the nozzles whatever the latch
+    /// says, and the latch's choice applies again the moment the car is back inside.
+    pub fn update(&mut self, state: &CarState, observation: &Observation) -> bool {
+        self.out_of_envelope = self.settings.envelope.is_outside(state, observation);
+        self.update_latch(state);
+        self.ai_in_control()
+    }
+
+    fn update_latch(&mut self, state: &CarState) {
         if !self.ai_in_control {
             self.ai_in_control = self.is_upset(state);
             self.settled_s = 0.0;
-            return self.ai_in_control;
+            return;
         }
         self.settled_s = if self.is_settled(state) {
             self.settled_s + CONTROL_DT_S
@@ -90,14 +121,20 @@ impl HybridGate {
             0.0
         };
         if self.settled_s >= self.settings.release_hold_s {
-            self.reset();
+            self.ai_in_control = false;
+            self.settled_s = 0.0;
         }
-        self.ai_in_control
     }
 
-    /// True while the AI has the nozzles (as of the last `update`).
+    /// True while the AI has the nozzles (as of the last `update`): the latch says AI and
+    /// the car is inside the policy envelope.
     pub fn ai_in_control(&self) -> bool {
-        self.ai_in_control
+        self.ai_in_control && !self.out_of_envelope
+    }
+
+    /// True when the last `update` found the car outside the policy envelope.
+    pub fn policy_out_of_envelope(&self) -> bool {
+        self.out_of_envelope
     }
 
     /// Tilted past SPEC §7.9's upset angle. Being airborne alone is not enough: PD lands
@@ -150,7 +187,7 @@ impl HybridSwitch {
     /// the nozzles this step; otherwise send `pd_throttles()`.
     pub fn decide(&mut self, ctx: &ControlCtx) -> bool {
         self.pd_throttles = self.pd.act(ctx);
-        self.gate.update(&ctx.state)
+        self.gate.update(&ctx.state, &ctx.observation)
     }
 
     /// PD's throttles from the last `decide`, each in [0, 1].
@@ -161,6 +198,11 @@ impl HybridSwitch {
     /// True while the AI has the nozzles.
     pub fn ai_in_control(&self) -> bool {
         self.gate.ai_in_control()
+    }
+
+    /// True when the last `decide` found the car outside the policy envelope.
+    pub fn policy_out_of_envelope(&self) -> bool {
+        self.gate.policy_out_of_envelope()
     }
 }
 
@@ -184,6 +226,11 @@ impl Hybrid {
     pub fn ai_in_control(&self) -> bool {
         self.switch.ai_in_control()
     }
+
+    /// True when the last control step found the car outside the policy envelope.
+    pub fn policy_out_of_envelope(&self) -> bool {
+        self.switch.policy_out_of_envelope()
+    }
 }
 
 impl Controller for Hybrid {
@@ -204,6 +251,10 @@ impl Controller for Hybrid {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nl_sim::obs::OBS_DIM;
+
+    /// An observation with nothing clamped.
+    const CALM: Observation = [0.0; OBS_DIM];
 
     /// The repo's thresholds: enter above 60°, release below 15° and 1.5 rad/s, held 0.5 s.
     fn settings() -> HybridGateSettings {
@@ -212,6 +263,7 @@ mod tests {
             release_tilt_deg: 15.0,
             release_spin_rad_s: 1.5,
             release_hold_s: 0.5,
+            envelope: PolicyEnvelope::default(),
         }
     }
 
@@ -238,7 +290,7 @@ mod tests {
     fn a_car_driving_on_its_wheels_stays_with_pd() {
         let mut gate = HybridGate::new(settings());
 
-        let ai = gate.update(&car(5.0, 4));
+        let ai = gate.update(&car(5.0, 4), &CALM);
 
         assert!(!ai);
     }
@@ -247,7 +299,7 @@ mod tests {
     fn one_wheel_lifting_on_a_bump_stays_with_pd() {
         let mut gate = HybridGate::new(settings());
 
-        let ai = gate.update(&car(5.0, 3));
+        let ai = gate.update(&car(5.0, 3), &CALM);
 
         assert!(!ai);
     }
@@ -256,7 +308,7 @@ mod tests {
     fn an_upright_jump_stays_with_pd() {
         let mut gate = HybridGate::new(settings());
 
-        let ai = gate.update(&car(20.0, 0));
+        let ai = gate.update(&car(20.0, 0), &CALM);
 
         assert!(!ai);
     }
@@ -265,7 +317,7 @@ mod tests {
     fn a_car_tumbling_past_the_upset_angle_in_the_air_hands_over_at_once() {
         let mut gate = HybridGate::new(settings());
 
-        let ai = gate.update(&car(90.0, 0));
+        let ai = gate.update(&car(90.0, 0), &CALM);
 
         assert!(ai);
     }
@@ -274,8 +326,8 @@ mod tests {
     fn tipping_past_the_upset_angle_on_four_wheels_hands_over_to_the_ai() {
         let mut gate = HybridGate::new(settings());
 
-        let ai_at_55 = gate.update(&car(55.0, 4));
-        let ai_at_65 = gate.update(&car(65.0, 4));
+        let ai_at_55 = gate.update(&car(55.0, 4), &CALM);
+        let ai_at_65 = gate.update(&car(65.0, 4), &CALM);
 
         assert!(!ai_at_55);
         assert!(ai_at_65);
@@ -284,12 +336,12 @@ mod tests {
     #[test]
     fn the_ai_keeps_control_until_the_car_has_settled_for_the_hold() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(90.0, 0));
+        gate.update(&car(90.0, 0), &CALM);
 
         for _ in 0..steps(0.5) - 1 {
-            assert!(gate.update(&car(2.0, 4)));
+            assert!(gate.update(&car(2.0, 4), &CALM));
         }
-        let ai = gate.update(&car(2.0, 4));
+        let ai = gate.update(&car(2.0, 4), &CALM);
 
         assert!(!ai);
     }
@@ -297,37 +349,86 @@ mod tests {
     #[test]
     fn a_bounce_during_the_hold_restarts_it() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(90.0, 0));
+        gate.update(&car(90.0, 0), &CALM);
         for _ in 0..steps(0.4) {
-            gate.update(&car(2.0, 4));
+            gate.update(&car(2.0, 4), &CALM);
         }
 
-        gate.update(&car(2.0, 2));
+        gate.update(&car(2.0, 2), &CALM);
         for _ in 0..steps(0.4) {
-            assert!(gate.update(&car(2.0, 4)));
+            assert!(gate.update(&car(2.0, 4), &CALM));
         }
     }
 
     #[test]
     fn a_spinning_or_tilted_landing_does_not_count_as_settled() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(90.0, 0));
+        gate.update(&car(90.0, 0), &CALM);
         let mut spinning = car(2.0, 4);
         spinning.angular_velocity_body_rad_s = [0.0, 2.0, 0.0];
 
         for _ in 0..steps(1.0) {
-            assert!(gate.update(&spinning));
-            assert!(gate.update(&car(20.0, 4)));
+            assert!(gate.update(&spinning, &CALM));
+            assert!(gate.update(&car(20.0, 4), &CALM));
         }
     }
 
     #[test]
     fn reset_gives_the_nozzles_back_to_pd() {
         let mut gate = HybridGate::new(settings());
-        gate.update(&car(90.0, 0));
+        gate.update(&car(90.0, 0), &CALM);
 
         gate.reset();
 
         assert!(!gate.ai_in_control());
+    }
+
+    /// An observation with the forward body velocity on its clamp bound.
+    fn clamped() -> Observation {
+        let mut observation = CALM;
+        observation[6] = 60.0;
+        observation
+    }
+
+    #[test]
+    fn outside_the_envelope_pd_keeps_an_upset_and_the_ai_gets_it_back_when_it_clears() {
+        let mut gate = HybridGate::new(settings());
+
+        let ai_outside = gate.update(&car(90.0, 0), &clamped());
+        let outside = gate.policy_out_of_envelope();
+        let ai_back_inside = gate.update(&car(90.0, 0), &CALM);
+
+        assert!(!ai_outside);
+        assert!(outside);
+        assert!(ai_back_inside);
+        assert!(!gate.policy_out_of_envelope());
+    }
+
+    #[test]
+    fn the_settle_hold_keeps_counting_by_the_normal_rules_outside_the_envelope() {
+        let mut gate = HybridGate::new(settings());
+        gate.update(&car(90.0, 0), &CALM);
+
+        for _ in 0..steps(0.5) {
+            assert!(!gate.update(&car(2.0, 4), &clamped()));
+        }
+
+        // The hold ran out while outside, so PD stays in charge once the car is back.
+        assert!(!gate.update(&car(2.0, 4), &CALM));
+    }
+
+    #[test]
+    fn a_car_past_the_speed_limit_is_outside_and_a_raised_limit_moves_it() {
+        let fast = CarState {
+            linear_velocity_body_m_s: [70.0, 0.0, 0.0],
+            ..car(90.0, 0)
+        };
+        let mut default_gate = HybridGate::new(settings());
+        let mut raised_gate = HybridGate::new(settings().with_policy_max_speed(Some(80.0)));
+
+        assert!(!default_gate.update(&fast, &CALM));
+        assert!(default_gate.policy_out_of_envelope());
+        assert!(raised_gate.update(&fast, &CALM));
+        assert!(!raised_gate.policy_out_of_envelope());
     }
 }

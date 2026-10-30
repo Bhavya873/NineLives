@@ -83,6 +83,10 @@ pub struct HybridConfig {
     /// The AI takes over only past this tilt, in degrees (0..=180); None uses the car's
     /// upset angle.
     pub enter_tilt_deg: Option<f32>,
+    /// The policy counts as validated up to this speed, in m/s; faster, PD flies (the
+    /// policy envelope). None uses 55, the speed it was evaluated to. Raise it only after
+    /// running the Hybrid eval at the higher speed and logging it in docs/EXPERIMENTS.md.
+    pub policy_max_speed_m_s: Option<f32>,
 }
 
 /// Everything in controllers.toml.
@@ -193,6 +197,14 @@ impl ControllersConfig {
                 value,
             });
         }
+        if let Some(value) = self.hybrid.policy_max_speed_m_s
+            && !(value.is_finite() && value > 0.0)
+        {
+            return Err(ControllersConfigError::NotPositive {
+                field: "hybrid.policy_max_speed_m_s",
+                value,
+            });
+        }
         Ok(())
     }
 }
@@ -241,5 +253,22 @@ mod tests {
         let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
 
         assert!(error.to_string().contains("between 0 and 1"), "{error}");
+    }
+
+    #[test]
+    fn the_policy_speed_limit_is_optional_and_checked() {
+        let default = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
+        assert_eq!(default.hybrid.policy_max_speed_m_s, None);
+
+        let raised = format!("{DEFAULT_CONTROLLERS_TOML}\npolicy_max_speed_m_s = 70.0\n");
+        let config = ControllersConfig::from_toml_str(&raised).unwrap();
+        assert_eq!(config.hybrid.policy_max_speed_m_s, Some(70.0));
+
+        let broken = format!("{DEFAULT_CONTROLLERS_TOML}\npolicy_max_speed_m_s = -1.0\n");
+        let error = ControllersConfig::from_toml_str(&broken).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "controllers.toml: `hybrid.policy_max_speed_m_s` must be a positive number, but it is -1"
+        );
     }
 }

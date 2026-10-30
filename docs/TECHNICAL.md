@@ -333,6 +333,13 @@ Being airborne alone does not hand over: PD lands ordinary jumps well, and handi
 AI cost Stage D success. The game, both eval runners and training share this gate, so the shipped
 controller is judged under the rule it runs.
 
+The gate also applies the policy envelope (`envelope.rs`, `PolicyEnvelope::is_outside`): when the
+body forward speed is above `[hybrid] policy_max_speed_m_s` (55 m/s unless raised) or a saturating
+observation value is on its clamp bound, `update` reports PD in control, `policy_out_of_envelope()`
+is true, and `Game::hud()[HudField.PolicyOutOfEnvelope]` (27) is 1. The latch keeps running by its
+normal rules meanwhile. The wasm `Game` computes the flag with the same function, so native, wasm,
+the crowd and the eval agree. Raise the limit only after logging a Hybrid eval at that speed.
+
 ## 7. Reinforcement learning
 
 ### 7.1 Batched environment

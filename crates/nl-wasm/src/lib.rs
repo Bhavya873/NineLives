@@ -39,8 +39,9 @@ const FLOATS_PER_NOZZLE: usize = 6;
 
 // Reserved numbers (docs/contracts/events-hud.md, frozen at Gate 0). Do not reuse them
 // for anything else; each PR below adds its own variants.
-//   HudField  24 StuntPhase, 25 StuntCode, 26 ApproachHint, 27 PolicyOutOfEnvelope
-//             (23 PeakGLoad is in use).
+//   HudField  24 StuntPhase, 25 StuntCode, 26 ApproachHint (still reserved by other
+//             streams; the HUD array holds zeros there), 27 PolicyOutOfEnvelope
+//             (in use since G3; 23 PeakGLoad is in use).
 //   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted
 //             (15 Scrape and 16 TooSlowFallback exist since G2).
 // Every event is 5 floats; Save's 5th is `peak_g` (FLOATS_PER_EVENT went 4 -> 5).
@@ -102,10 +103,16 @@ pub enum HudField {
     /// g-meter.md): from take-off to 0.5 s after the touchdown, 0 before the first
     /// take-off since a respawn. `GLoad` is the 0.1 s smoothed value the meter shows.
     PeakGLoad = 23,
+    /// 1 when the AI is outside where it was validated (speed past `[hybrid]
+    /// policy_max_speed_m_s`, 55 by default, or a saturated observation value), so the
+    /// Hybrid has PD fly, else 0. Set whichever controller is active; 0 while the wreck is
+    /// frozen. Fields 24 to 26 are reserved by other streams and read 0 for now.
+    PolicyOutOfEnvelope = 27,
 }
 
-/// Number of values in the HUD array: one more than the last `HudField`.
-const HUD_LENGTH: usize = HudField::PeakGLoad as usize + 1;
+/// Number of values in the HUD array: one more than the last `HudField`. Fields 24 to 26
+/// are reserved placeholders (always 0), so the array runs to `PolicyOutOfEnvelope`.
+const HUD_LENGTH: usize = HudField::PolicyOutOfEnvelope as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
 #[wasm_bindgen]
@@ -387,6 +394,16 @@ impl Game {
         self.nozzle_layout.clone()
     }
 
+    /// The same test the Hybrid's gate applies (`nl_control::PolicyEnvelope`), on the car
+    /// as the game's controllers see it.
+    fn out_of_envelope(&self) -> bool {
+        let ctx = ControlCtx::for_world(&self.world, InputFrame::default());
+        self.choices
+            .hybrid_gate
+            .envelope
+            .is_outside(&ctx.state, &ctx.observation)
+    }
+
     /// Values for the on-screen display. Read them with the `HudField` indices.
     pub fn hud(&self) -> Vec<f32> {
         let mut values = vec![0.0; HUD_LENGTH];
@@ -398,6 +415,7 @@ impl Game {
             self.world.forward_speed_m_s()
         };
         values[HudField::SpeedMS as usize] = speed_m_s;
+        values[HudField::PolicyOutOfEnvelope as usize] = one_if(!crashed && self.out_of_envelope());
         values[HudField::TimeS as usize] = self.world.time_s() as f32;
         values[HudField::WheelsTouching as usize] = self.world.wheels_touching_count() as f32;
         values[HudField::AirFraction as usize] = self.world.air_fraction();
@@ -691,6 +709,8 @@ pub(crate) fn flatten_poses(poses: &[Pose]) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
+    // Test helpers may panic on bad setup; that is a test failure, not a library bug.
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]
@@ -704,5 +724,100 @@ mod tests {
 
         assert_eq!(values.len(), 14);
         assert_eq!(&values[0..7], &[1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0]);
+    }
+
+    /// A game and a native world with the same Hybrid, both let go upside down at `speed`
+    /// m/s, each driven the way `tick` does. The wasm path and the native one share the
+    /// envelope code, so they must agree on the flag and on every pose.
+    fn hybrid_pair(speed_m_s: f32, ticks: usize) -> (Vec<f32>, bool, Vec<f32>, bool) {
+        use nl_control::build_controller;
+        use nl_control::config::DEFAULT_CONTROLLERS_TOML;
+        use nl_sim::modes::DEFAULT_MODES_TOML;
+        use nl_sim::vehicle_config::DEFAULT_VEHICLE_TOML;
+
+        let policy = include_str!("../../../models/policy.json");
+        let upside_down = [1.0, 0.0, 0.0, 0.0];
+        let velocity = [speed_m_s, 0.0, 0.0];
+
+        let mut game = Game::new(
+            DEFAULT_VEHICLE_TOML,
+            DEFAULT_MODES_TOML,
+            DEFAULT_CONTROLLERS_TOML,
+            0,
+        )
+        .unwrap();
+        game.load_policy(policy).unwrap();
+        game.set_controller("hybrid").unwrap();
+        game.world
+            .place_car([0.0, 30.0, 0.0], upside_down, velocity, [0.0; 3])
+            .unwrap();
+
+        let config = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
+        let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML).unwrap();
+        let mut world =
+            World::new_on_flat_ground(&config, modes.realistic, DEFAULT_GROUND_FRICTION, 0);
+        world.enable_auto_respawn(config.events.respawn_delay_s);
+        let mut native = build_controller(
+            "hybrid",
+            &config,
+            modes.realistic,
+            DEFAULT_CONTROLLERS_TOML,
+            Some(policy),
+        )
+        .unwrap();
+        world
+            .place_car([0.0, 30.0, 0.0], upside_down, velocity, [0.0; 3])
+            .unwrap();
+
+        let mut native_flag = false;
+        for _ in 0..ticks {
+            game.tick(&[0, 0, 0, 0]).unwrap();
+            if world.is_control_step() {
+                let ctx = ControlCtx::for_world(&world, InputFrame::default());
+                let throttles = native.act(&ctx);
+                world.set_controller_throttles(throttles);
+            }
+            world.step(InputFrame::default());
+            if let ControllerKind::Hybrid(hybrid) = &native {
+                native_flag = hybrid.policy_out_of_envelope();
+            }
+        }
+        let hud_flag = game.hud()[HudField::PolicyOutOfEnvelope as usize] == 1.0;
+        (
+            game.chassis_pose(),
+            hud_flag,
+            flatten_poses(&[world.chassis_pose()]),
+            native_flag,
+        )
+    }
+
+    #[test]
+    fn the_hud_has_28_values_with_zero_placeholders_for_fields_24_to_26() {
+        let game = Game::new(
+            nl_sim::vehicle_config::DEFAULT_VEHICLE_TOML,
+            nl_sim::modes::DEFAULT_MODES_TOML,
+            nl_control::config::DEFAULT_CONTROLLERS_TOML,
+            0,
+        )
+        .unwrap();
+
+        let hud = game.hud();
+
+        assert_eq!(hud.len(), 28);
+        assert_eq!(&hud[24..27], &[0.0, 0.0, 0.0]);
+        assert_eq!(hud[HudField::PolicyOutOfEnvelope as usize], 0.0);
+    }
+
+    #[test]
+    fn the_hud_flag_mirrors_the_envelope_and_wasm_matches_native() {
+        // Upside down, an upset the Hybrid would hand to the AI: at 20 m/s it does; at
+        // 70 m/s PD flies and the flag is set. Native and wasm agree either way.
+        for (speed, expected_flag) in [(20.0, false), (70.0, true)] {
+            let (wasm_pose, hud_flag, native_pose, native_flag) = hybrid_pair(speed, 60);
+
+            assert_eq!(hud_flag, expected_flag, "hud at {speed} m/s");
+            assert_eq!(native_flag, expected_flag, "native at {speed} m/s");
+            assert_eq!(wasm_pose, native_pose, "poses at {speed} m/s");
+        }
     }
 }

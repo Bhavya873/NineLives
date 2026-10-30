@@ -69,7 +69,8 @@ impl ControllerChoices {
             pd: Pd::for_vehicle(vehicle, mode, &controllers),
             policy,
             hybrid_gate: HybridGateSettings::for_vehicle(vehicle)
-                .with_enter_tilt(controllers.hybrid.enter_tilt_deg),
+                .with_enter_tilt(controllers.hybrid.enter_tilt_deg)
+                .with_policy_max_speed(controllers.hybrid.policy_max_speed_m_s),
         })
     }
 }
