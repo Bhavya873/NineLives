@@ -3,13 +3,13 @@
 Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.6). The numbers are reserved now so parallel PRs do not collide. They are also listed in a comment above `HudField` in `crates/nl-wasm/src/lib.rs`. `EventKind` 15 and 16 exist since G2 (`Scrape`: `[15, normal_speed_m_s, 0, 0, 0]`; `TooSlowFallback`: `[16, piece_index, entry_speed_m_s, 0, 0]`).
 
 ## HudField (the array from `Game::hud`)
-Today the last field in use is 27 `PolicyOutOfEnvelope` (G3); 24 to 26 are still reserved by other streams and read 0, so the array has 28 values.
+Today the last field in use is 27 `PolicyOutOfEnvelope` (G3); 24 `StuntPhase` and 25 `StuntCode` are in use since G4, and 26 is still reserved and reads 0, so the array has 28 values.
 
 | Number | Name | Meaning | Added by |
 |---|---|---|---|
 | 23 | `PeakGLoad` | Raw peak g of the current stunt window, in g (see `g-meter.md`) | A1 `claude/g-peak-sim` |
-| 24 | `StuntPhase` | The stunt phase as a number (see `stunt-states.md`) | G4 |
-| 25 | `StuntCode` | Which stunt: barrel left/right, front flip, back flip | G4 |
+| 24 | `StuntPhase` | The stunt phase, 0 to 8 (see `stunt-states.md`) | G4 |
+| 25 | `StuntCode` | Which stunt: 1 barrel left, 2 barrel right, 3 front flip, 4 back flip, 0 none | G4 |
 | 26 | `ApproachHint` | What the approach HUD should say, e.g. "too slow to clear this gap" | G2 / G5 |
 | 27 | `PolicyOutOfEnvelope` | 1 when the AI is outside where it was validated (speed > 55 m/s or another observation clamp), so the Hybrid uses PD | G3 (in use; set under any controller, computed by `nl_control::PolicyEnvelope`, 0 while the wreck is frozen; the limit is `[hybrid] policy_max_speed_m_s`) |
 
@@ -18,10 +18,12 @@ Today the last kind is 10 `HardLanding`.
 
 | Number | Name | Meaning |
 |---|---|---|
-| 11 | `StuntStart` | An authorized stunt began SpinUp |
-| 12 | `StuntLanded` | The stunt reached Settled with full rotation |
-| 13 | `StuntRefused` | The planner said no to a request |
-| 14 | `StuntAborted` | The planner stopped a stunt mid-air and handed over to PD |
+| 11 | `StuntStart` | An authorized stunt began SpinUp: `[11, code, 0, 0, 0]` |
+| 12 | `StuntLanded` | The stunt reached Settled with full rotation: `[12, code, peak_g, rotation_rad, 0]` |
+| 13 | `StuntRefused` | The planner said no to a request: `[13, code, reason, 0, 0]` |
+| 14 | `StuntAborted` | The planner stopped a stunt mid-air and handed over to PD: `[14, code, reason, rotation_rad, 0]` |
+
+Stunt reasons (float 2 of 13 and 14): 0 not enough air time, 1 landing blocked, 2 request expired, 3 control lost.
 | 15 | `Scrape` | An underbody touch classed as a Scrape, not a crash (see `crash-scrape.md`) |
 | 16 | `TooSlowFallback` | The car entered a piece below `v_complete_min_m_s` and takes the fallback (see `survival.md`) |
 

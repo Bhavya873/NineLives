@@ -16,6 +16,7 @@ export const {
   HopBlocked,
   HudField,
   ModeCode,
+  StuntReasonCode,
   eval_episodes: evalEpisodes,
   Crowd,
   CrowdOutcome,

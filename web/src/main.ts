@@ -233,7 +233,10 @@ async function start(): Promise<void> {
     }
     applyStuntEvents(stuntQueue, events);
     expireStunt(stuntQueue, nowMs / 1000);
-    submitPendingStunt(stuntQueue, (code) => requestStuntInSim(game, code));
+    submitPendingStunt(
+      stuntQueue,
+      (code) => !paused && !lives.over && requestStuntInSim(game, code),
+    );
     const toast = stuntToastForEvents(events) ?? toastForEvents(events, invertedTiltRad);
     // Nothing covers the game-over screen.
     if (toast && !lives.over) {

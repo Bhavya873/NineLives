@@ -14,10 +14,12 @@
 use std::f32::consts::TAU;
 
 use nl_sim::car_state::CarState;
+use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::forecast::{ForecastSettings, LandingForecast};
 use nl_sim::world::World;
 
 use crate::config::StuntConfig;
+use crate::{ControlCtx, Controller, Pd};
 
 /// Valve lag the switching curve leads by, in s (research §2.2).
 const VALVE_LAG_S: f32 = 0.03;
@@ -68,6 +70,18 @@ impl StuntKind {
     /// The HUD `StuntCode` value.
     pub fn code(self) -> u8 {
         self as u8
+    }
+
+    /// The stunt a `StuntCode` value names, `None` for 0 or an unknown number.
+    pub fn from_code(code: u8) -> Option<StuntKind> {
+        [
+            StuntKind::BarrelLeft,
+            StuntKind::BarrelRight,
+            StuntKind::FrontFlip,
+            StuntKind::BackFlip,
+        ]
+        .into_iter()
+        .find(|kind| kind.code() == code)
     }
 }
 
@@ -641,5 +655,77 @@ impl StuntPlanner {
             _ => return None,
         };
         Some(StuntCommand { axis, direction })
+    }
+}
+
+/// What the director decided for one control tick.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StuntStep {
+    /// What the planner reported (phase, owner, events).
+    pub tick: StuntTick,
+    /// The throttles to use this tick when a stunt owns the nozzles (spin, brake, coast)
+    /// or PD must hold them (catch, settle); `None` when the active controller flies.
+    pub throttles: Option<[f32; NOZZLE_COUNT]>,
+}
+
+/// The planner and its executor (plan G4): the planner decides, the director turns the
+/// command into throttles through PD's allocation, and PD flies the catch, so exactly one
+/// of them writes the nozzles each tick. With no stunt requested it does nothing, and the
+/// active controller flies as before.
+#[derive(Debug, Clone)]
+pub struct StuntDirector {
+    planner: StuntPlanner,
+    pd: Pd,
+}
+
+impl StuntDirector {
+    /// A director with `config`'s planner; `pd` is the catch controller and the allocator
+    /// the spin torque goes through.
+    pub fn new(config: StuntConfig, pd: Pd) -> StuntDirector {
+        StuntDirector {
+            planner: StuntPlanner::new(config),
+            pd,
+        }
+    }
+
+    /// The planner, for its phase, rotation and Hybrid hold.
+    pub fn planner(&self) -> &StuntPlanner {
+        &self.planner
+    }
+
+    /// Queues a request for `kind` at world time `now_s`; false if one is already queued
+    /// or active.
+    pub fn request(&mut self, kind: StuntKind, now_s: f32) -> bool {
+        self.planner.request(kind, now_s)
+    }
+
+    /// Back to Idle with PD reset, on a respawn or a controller change.
+    pub fn reset(&mut self) {
+        self.planner.reset();
+        self.pd.reset(0);
+    }
+
+    /// One control tick covering `dt_s`: replans against `world` and says whether the
+    /// director has the nozzles.
+    pub fn step(&mut self, world: &World, ctx: &ControlCtx, dt_s: f32) -> StuntStep {
+        let tick = self.planner.tick_world(world, dt_s);
+        let throttles = match (tick.owner, tick.command) {
+            (NozzleOwner::StuntDirector, Some(command)) => {
+                let config = self.planner.config();
+                let alpha = if self.planner.kind().is_flip() {
+                    config.pitch_alpha_rad_s2
+                } else {
+                    config.roll_alpha_rad_s2
+                };
+                Some(
+                    self.pd
+                        .spin_throttles(command.axis, command.direction, alpha, ctx),
+                )
+            }
+            (NozzleOwner::StuntDirector, None) => Some([0.0; NOZZLE_COUNT]),
+            (NozzleOwner::Pd, _) if self.planner.hybrid_hold_active() => Some(self.pd.act(ctx)),
+            _ => None,
+        };
+        StuntStep { tick, throttles }
     }
 }
