@@ -22,8 +22,24 @@ import {
   searchWithArena,
 } from './arena-choice.ts';
 import { createArenaView, followCars, showArena } from './arena-view.ts';
-import { type RunEntry, loadCheckpoint, loadNewestRun } from './checkpoints.ts';
+import {
+  type RunEntry,
+  loadCheckpoint,
+  loadCurve,
+  loadNewestRun,
+  loadShowcase,
+} from './checkpoints.ts';
 import { createCrowdView, updateCrowdRow } from './crowd-view.ts';
+import { CURVE_TITLE, type CurveFile, curveSvg } from './curve.ts';
+import { pickCrowdLeader } from './leader.ts';
+import {
+  STAGE_TABS,
+  type ShowcaseFile,
+  type StageTab,
+  arenaTab,
+  showcaseSeed,
+  tabArena,
+} from './showcase.ts';
 
 /** Cars per checkpoint: 8 checkpoints × 8 cars is SPEC §11.6's crowd of about 64. */
 const CARS_PER_CHECKPOINT = 8;
@@ -46,6 +62,12 @@ interface ViewerState {
   round: number;
   rows: Row[];
   finishedAtMs: number | null;
+  /** The committed showcase seeds, or null when the file is absent. */
+  showcase: ShowcaseFile | null;
+  /** The tab (stage) the curve shows. */
+  tab: StageTab;
+  /** True while the camera follows the best car instead of the crowd's centre. */
+  leaderCamera: boolean;
 }
 
 async function start(): Promise<void> {
@@ -60,6 +82,11 @@ async function start(): Promise<void> {
     picker.add(new Option(arenaLabel(kind), kind));
   }
   const run = await loadNewestRun();
+  const curve = await loadCurve(run).catch((error: unknown) => {
+    console.error(error);
+    return null;
+  });
+  const showcase = await loadShowcase(run).catch(() => null);
   const board = createBoard(requireElement('viewer-board'), run);
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
   const arena = createArena(requireElement('viewer'));
@@ -71,8 +98,22 @@ async function start(): Promise<void> {
     round: 0,
     rows: [],
     finishedAtMs: null,
+    showcase,
+    tab: arenaTab(arenaFromUrl(window.location.search)),
+    leaderCamera: new URLSearchParams(window.location.search).get('camera') === 'leader',
   };
   startRound(state, state.arena, 0);
+  const panel = createCurvePanel(curve, state, (tab) => {
+    const kind = tabArena(tab);
+    if (kind) {
+      startRound(state, kind, 0);
+    }
+  });
+  const cameraButton = requireElement('camera-toggle');
+  const toggleCamera = () => {
+    state.leaderCamera = !state.leaderCamera;
+  };
+  cameraButton.addEventListener('click', toggleCamera);
   // Wheels per car, read from the sim rather than assumed.
   const wheelPoses = state.rows[0]?.crowd.wheel_poses().length ?? 0;
   const wheelCount = wheelPoses / (CARS_PER_CHECKPOINT * FLOATS_PER_POSE);
@@ -87,6 +128,8 @@ async function start(): Promise<void> {
   window.addEventListener('keydown', (event) => {
     if (event.code === 'KeyO') {
       switchArena();
+    } else if (event.code === 'KeyL') {
+      toggleCamera();
     }
   });
   toggle.addEventListener('click', switchArena);
@@ -106,6 +149,7 @@ async function start(): Promise<void> {
         view.spreadOnGrid = state.arena === 'flat';
         setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
         picker.value = state.arena;
+        panel.select(arenaTab(state.arena));
       }
       const centre = { x: 0, z: 0, cars: 0 };
       state.rows.forEach((row, index) => {
@@ -119,7 +163,20 @@ async function start(): Promise<void> {
           setText(cells.crashed, String(count(outcomes, CrowdOutcome.Crashed)));
         }
       });
-      if (followsCars(state.arena) && centre.cars > 0) {
+      const follows = followsCars(state.arena);
+      setText(cameraButton, state.leaderCamera ? 'Camera: leader (L)' : 'Camera: crowd (L)');
+      if (follows && state.leaderCamera) {
+        const leader = pickCrowdLeader(
+          state.rows.map((row) => ({
+            poses: row.crowd.chassis_poses(),
+            outcomes: row.crowd.outcomes(),
+          })),
+          FLOATS_PER_POSE,
+        );
+        if (leader) {
+          followCars(arenaView, leader.x, leader.z);
+        }
+      } else if (follows && centre.cars > 0) {
         followCars(arenaView, centre.x / centre.cars, centre.z / centre.cars);
       }
       arena.renderer.render(arena.scene, arena.camera);
@@ -134,6 +191,9 @@ async function start(): Promise<void> {
       landed: () => totalLanded(state),
       arena: () => state.arena,
       courseShapeCount: () => arenaView.shapeCount,
+      tab: () => state.tab,
+      leaderCamera: () => state.leaderCamera,
+      firstSeed: () => showcaseSeed(state.showcase, state.arena, state.round, CARS_PER_CHECKPOINT),
     },
   });
 }
@@ -145,7 +205,10 @@ async function start(): Promise<void> {
 function startRound(state: ViewerState, arena: ArenaKind, round: number): void {
   const rows = state.policies.length;
   const shared = rowsShareSeeds(arena);
-  const roundSeed = BigInt(round * CARS_PER_CHECKPOINT * (shared ? 1 : rows));
+  // Shared-seed arenas open on the committed showcase drops (see showcase.ts).
+  const roundSeed = shared
+    ? BigInt(showcaseSeed(state.showcase, arena, round, CARS_PER_CHECKPOINT))
+    : BigInt(round * CARS_PER_CHECKPOINT * rows);
   // Build the new crowds first, so a bad file never leaves freed crowds behind.
   const crowds = state.policies.map((policyJson, index) => {
     const rowSeed = shared ? 0n : BigInt(index * CARS_PER_CHECKPOINT);
@@ -156,6 +219,7 @@ function startRound(state: ViewerState, arena: ArenaKind, round: number): void {
   }
   state.rows = crowds.map((crowd) => ({ crowd, running: true }));
   state.arena = arena;
+  state.tab = arenaTab(arena);
   state.round = round;
   state.finishedAtMs = null;
   // Keep the URL in step so a reload stays in this arena.
@@ -189,6 +253,45 @@ function addRunningCars(
       centre.cars += 1;
     }
   });
+}
+
+/** The stage tabs and the curve under them: the chart of the selected stage, titled as the
+ * plan requires, with a note on tabs whose stage the crowd cannot fly. `select` re-draws. */
+function createCurvePanel(
+  curve: CurveFile | null,
+  state: ViewerState,
+  onTab: (tab: StageTab) => void,
+): { select: (tab: StageTab) => void } {
+  const tabs = requireElement('stage-tabs');
+  const chart = requireElement('curve-chart');
+  setText(requireElement('curve-title'), CURVE_TITLE);
+  const buttons = new Map<StageTab, HTMLButtonElement>();
+  const select = (tab: StageTab) => {
+    state.tab = tab;
+    for (const [name, button] of buttons) {
+      button.setAttribute('aria-pressed', String(name === tab));
+    }
+    if (!curve) {
+      chart.textContent = 'No curve.json: run `python -m ninelives.export --viewer-curve`';
+      return;
+    }
+    const note = tabArena(tab) ? '' : '<p>No crowd for this stage: curve only.</p>';
+    const facts = `<p>${curve.episodes} episodes per point, physics ${curve.physics_hash}</p>`;
+    chart.innerHTML = curveSvg(curve, tab) + note + facts;
+  };
+  for (const tab of STAGE_TABS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = tab;
+    button.addEventListener('click', () => {
+      select(tab);
+      onTab(tab);
+    });
+    tabs.appendChild(button);
+    buttons.set(tab, button);
+  }
+  select(state.tab);
+  return { select };
 }
 
 /** A checkpoint's training steps in millions, e.g. "16M". */
