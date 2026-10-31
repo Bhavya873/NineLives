@@ -7,11 +7,13 @@
 //! So far: driving, thrusters, the air tank, modes, Hop and Boost, events, respawn and
 //! the Off, PD, AI and (debug-only) Manual controllers, and courses (`course.rs`, M7).
 
+use nl_control::config::ControllersConfig;
+use nl_control::stunt::{StuntDirector, StuntEvent, StuntKind, StuntReason};
 use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind};
 use std::sync::Arc;
 
 use nl_policy::Policy;
-use nl_sim::conventions::{INVERTED_TILT_DEG, NOZZLE_COUNT, PHYSICS_DT_S};
+use nl_sim::conventions::{CONTROL_DT_S, INVERTED_TILT_DEG, NOZZLE_COUNT, PHYSICS_DT_S};
 use nl_sim::events::{CrashCause, SimEvent};
 use nl_sim::golden_trace::run_golden_trace;
 use nl_sim::hop_boost::HopBlockedReason;
@@ -39,11 +41,11 @@ const FLOATS_PER_NOZZLE: usize = 6;
 
 // Reserved numbers (docs/contracts/events-hud.md, frozen at Gate 0). Do not reuse them
 // for anything else; each PR below adds its own variants.
-//   HudField  24 StuntPhase, 25 StuntCode, 26 ApproachHint (still reserved by other
-//             streams; the HUD array holds zeros there), 27 PolicyOutOfEnvelope
-//             (in use since G3; 23 PeakGLoad is in use).
-//   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted
-//             (15 Scrape and 16 TooSlowFallback exist since G2).
+//   HudField  26 ApproachHint (still reserved by another stream; the HUD array holds
+//             zeros there). 24 StuntPhase and 25 StuntCode are in use since G4, 27
+//             PolicyOutOfEnvelope since G3, 23 PeakGLoad since A1.
+//   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted (G4;
+//             15 Scrape and 16 TooSlowFallback exist since G2).
 // Every event is 5 floats; Save's 5th is `peak_g` (FLOATS_PER_EVENT went 4 -> 5).
 
 /// Where each value sits in the array returned by `Game::hud`. JavaScript sees this
@@ -103,15 +105,21 @@ pub enum HudField {
     /// g-meter.md): from take-off to 0.5 s after the touchdown, 0 before the first
     /// take-off since a respawn. `GLoad` is the 0.1 s smoothed value the meter shows.
     PeakGLoad = 23,
+    /// Where the stunt is: 0 Idle, 1 Requested, 2 Authorized, 3 SpinUp, 4 Coast, 5 Brake,
+    /// 6 Catch, 7 Settled, 8 Aborted (docs/contracts/stunt-states.md).
+    StuntPhase = 24,
+    /// The stunt in progress or waiting: 1 BarrelLeft, 2 BarrelRight, 3 FrontFlip,
+    /// 4 BackFlip, 0 when none.
+    StuntCode = 25,
     /// 1 when the AI is outside where it was validated (speed past `[hybrid]
     /// policy_max_speed_m_s`, 55 by default, or a saturated observation value), so the
     /// Hybrid has PD fly, else 0. Set whichever controller is active; 0 while the wreck is
-    /// frozen. Fields 24 to 26 are reserved by other streams and read 0 for now.
+    /// frozen. Field 26 is reserved by another stream and reads 0 for now.
     PolicyOutOfEnvelope = 27,
 }
 
-/// Number of values in the HUD array: one more than the last `HudField`. Fields 24 to 26
-/// are reserved placeholders (always 0), so the array runs to `PolicyOutOfEnvelope`.
+/// Number of values in the HUD array: one more than the last `HudField`. Field 26 is a
+/// reserved placeholder (always 0), so the array runs to `PolicyOutOfEnvelope`.
 const HUD_LENGTH: usize = HudField::PolicyOutOfEnvelope as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
@@ -183,6 +191,10 @@ pub struct Game {
     /// Saves and crashes since the game started, counted as events are drained.
     saves: u32,
     crashes: u32,
+    /// The stunt planner and its executor (plan G4); idle until `request_stunt`.
+    stunt: StuntDirector,
+    /// Stunt events since the last `drain_events`, already as the floats it returns.
+    stunt_events: Vec<[f32; FLOATS_PER_EVENT]>,
 }
 
 /// Number of floats per event in `Game::drain_events`.
@@ -213,13 +225,37 @@ pub enum EventKind {
     /// A wheel bottomed out at touchdown (not a crash). Followed by: the largest
     /// suspension compression (0..1), the fall speed just before touchdown in m/s.
     HardLanding = 10,
+    /// An authorized stunt began its spin. Followed by: the `StuntCode`.
+    StuntStart = 11,
+    /// A stunt finished with the full rotation. Followed by: the `StuntCode`, the peak g of
+    /// the landing, the rotation in rad.
+    StuntLanded = 12,
+    /// The planner said no. Followed by: the `StuntCode`, a `StuntReasonCode`.
+    StuntRefused = 13,
+    /// The planner stopped a stunt in the air and PD took over. Followed by: the
+    /// `StuntCode`, a `StuntReasonCode`, the rotation reached in rad.
+    StuntAborted = 14,
     /// A gentle underbody touch, not a crash (docs/contracts/crash-scrape.md). Followed
-    /// by: the normal speed into the surface in m/s. Numbers 11 to 14 are reserved for the
-    /// stunt events (docs/contracts/events-hud.md).
+    /// by: the normal speed into the surface in m/s. Numbers 11 to 14 are the stunt events
+    /// stunt events.
     Scrape = 15,
     /// The car entered a piece below its minimum completion speed and takes its safe
     /// fallback. Followed by: the piece's index in the course file, the entry speed in m/s.
     TooSlowFallback = 16,
+}
+
+/// Why a stunt was refused or aborted, the third float of those events.
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum StuntReasonCode {
+    /// Too little air time, tank or start state to spin and catch ("Not enough air time").
+    NotEnoughAirTime = 0,
+    /// No flat, clear landing ahead ("Landing blocked").
+    LandingBlocked = 1,
+    /// The request waited `request_timeout_s` without a take-off.
+    RequestExpired = 2,
+    /// Aborted in the air: thrust ran out or a wheel touched early.
+    ControlLost = 3,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -257,6 +293,10 @@ impl Game {
         world.enable_auto_respawn(config.events.respawn_delay_s);
         let choices =
             ControllerChoices::from_configs(&config, modes.realistic, controllers_toml, None)?;
+        let stunt = StuntDirector::new(
+            ControllersConfig::from_toml_str(controllers_toml)?.stunt,
+            choices.pd.clone(),
+        );
         Ok(Game {
             world,
             vehicle: config.clone(),
@@ -271,6 +311,8 @@ impl Game {
             buttons_since_control_step: 0,
             saves: 0,
             crashes: 0,
+            stunt,
+            stunt_events: Vec::new(),
         })
     }
 
@@ -357,6 +399,7 @@ impl Game {
             // The wreck is frozen until it respawns: nothing to control, and the
             // controller should start fresh on the respawned car.
             self.controller.reset(0);
+            self.stunt.reset();
         } else if self.world.is_control_step() {
             let controller_input = InputFrame {
                 buttons: self.buttons_since_control_step,
@@ -364,11 +407,33 @@ impl Game {
             };
             self.buttons_since_control_step = 0;
             let ctx = ControlCtx::for_world(&self.world, controller_input);
-            let throttles = self.controller.act(&ctx);
+            // A stunt, once authorized, owns the nozzles until it settles (PD catches it);
+            // otherwise the controller flies.
+            let step = self.stunt.step(&self.world, &ctx, CONTROL_DT_S);
+            self.record_stunt_events(&step.tick.events);
+            let throttles = match step.throttles {
+                Some(throttles) => throttles,
+                None => self.controller.act(&ctx),
+            };
             self.world.set_controller_throttles(throttles);
         }
         self.world.step(input);
         Ok(())
+    }
+
+    /// Asks for a stunt: 1 barrel roll left, 2 barrel roll right, 3 front flip, 4 back flip
+    /// (the `StuntCode` values). The planner decides, at the next control step in the air,
+    /// whether to start it (`StuntStart`) or refuse (`StuntRefused`), and a request still
+    /// waiting after `[stunt] request_timeout_s` is refused. Returns false, queueing
+    /// nothing, for an unknown code, a crashed car or a stunt already queued or flying.
+    pub fn request_stunt(&mut self, code: u8) -> bool {
+        let Some(kind) = StuntKind::from_code(code) else {
+            return false;
+        };
+        if self.world.is_crashed() {
+            return false;
+        }
+        self.stunt.request(kind, self.world.time_s() as f32)
     }
 
     /// The car body's pose: [x, y, z, qx, qy, qz, qw].
@@ -438,6 +503,8 @@ impl Game {
         values[HudField::FinishTimeS as usize] = self.world.finish_time_s().unwrap_or(0.0);
         values[HudField::GLoad as usize] = self.world.g_load();
         let [wind_x_m_s, _, wind_z_m_s] = self.world.wind_m_s();
+        values[HudField::StuntPhase as usize] = self.stunt.planner().phase().code() as f32;
+        values[HudField::StuntCode as usize] = self.stunt_code_for_hud();
         values[HudField::PeakGLoad as usize] = self.world.peak_g_load();
         values[HudField::WindXMS as usize] = wind_x_m_s;
         values[HudField::WindZMS as usize] = wind_z_m_s;
@@ -452,6 +519,7 @@ impl Game {
     /// Loads a state saved by `snapshot`. Throws on bytes from another build.
     pub fn restore(&mut self, snapshot: &[u8]) -> Result<(), JsError> {
         self.world.restore(snapshot)?;
+        self.stunt.reset();
         Ok(())
     }
 
@@ -477,6 +545,9 @@ impl Game {
                 _ => {}
             }
             values.extend_from_slice(&event_floats(event));
+        }
+        for event in self.stunt_events.drain(..) {
+            values.extend_from_slice(&event);
         }
         values
     }
@@ -559,8 +630,58 @@ impl Game {
     /// so they do not linger until the new one's first control step.
     fn use_controller(&mut self, mut controller: ControllerKind) {
         controller.reset(0);
+        self.stunt.reset();
         self.controller = controller;
         self.world.set_controller_throttles([0.0; NOZZLE_COUNT]);
+    }
+
+    /// The stunt code the HUD shows: the stunt waiting or flying, 0 when idle.
+    fn stunt_code_for_hud(&self) -> f32 {
+        match self.stunt.planner().phase() {
+            nl_control::stunt::StuntPhase::Idle => 0.0,
+            _ => self.stunt.planner().kind().code() as f32,
+        }
+    }
+
+    /// Keeps the planner's `events` for `drain_events`, as the floats JavaScript reads.
+    fn record_stunt_events(&mut self, events: &[StuntEvent]) {
+        for event in events {
+            let floats = match *event {
+                StuntEvent::Started { kind } => [
+                    kind_code(EventKind::StuntStart),
+                    kind.code() as f32,
+                    0.0,
+                    0.0,
+                    0.0,
+                ],
+                StuntEvent::Landed { kind, rotation_rad } => [
+                    kind_code(EventKind::StuntLanded),
+                    kind.code() as f32,
+                    self.world.peak_g_load(),
+                    rotation_rad,
+                    0.0,
+                ],
+                StuntEvent::Refused { kind, reason } => [
+                    kind_code(EventKind::StuntRefused),
+                    kind.code() as f32,
+                    stunt_reason_code(reason),
+                    0.0,
+                    0.0,
+                ],
+                StuntEvent::Aborted {
+                    kind,
+                    reason,
+                    rotation_rad,
+                } => [
+                    kind_code(EventKind::StuntAborted),
+                    kind.code() as f32,
+                    stunt_reason_code(reason),
+                    rotation_rad,
+                    0.0,
+                ],
+            };
+            self.stunt_events.push(floats);
+        }
     }
 
     /// Which preset the world's current mode is.
@@ -644,6 +765,25 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
 }
 
 /// An `EventKind` as the number JavaScript sees.
+/// The reason number a `StuntRefused` or `StuntAborted` event carries.
+fn stunt_reason_code(reason: StuntReason) -> f32 {
+    let code = match reason {
+        StuntReason::NotEnoughTime
+        | StuntReason::NotEnoughAir
+        | StuntReason::NotAirborne
+        | StuntReason::TiltedTooFar
+        | StuntReason::SpinningTooFast
+        | StuntReason::TankNotFull
+        | StuntReason::ModeUnknown => StuntReasonCode::NotEnoughAirTime,
+        StuntReason::NoLanding | StuntReason::LandingTilted | StuntReason::LandingBlocked => {
+            StuntReasonCode::LandingBlocked
+        }
+        StuntReason::RequestExpired => StuntReasonCode::RequestExpired,
+        StuntReason::ControlLost => StuntReasonCode::ControlLost,
+    };
+    code as u8 as f32
+}
+
 fn kind_code(kind: EventKind) -> f32 {
     kind as u8 as f32
 }

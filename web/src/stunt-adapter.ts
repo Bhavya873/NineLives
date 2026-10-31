@@ -1,11 +1,10 @@
-// The ONE call from the web into the sim for stunts. Until the Rust planner lands
-// (branch claude/stunt-forecast) the wasm Game has no stunt method, so this returns false
-// and the request just waits and expires. When the planner lands, only this file changes.
+// The ONE call from the web into the sim for stunts: the wasm `Game.request_stunt`.
+// An older wasm without it returns false, so the request just waits and expires.
 import type { StuntCodeValue } from './stunt-requests.ts';
 
-/** The method the planner must add to the wasm `Game`. */
+/** The wasm `Game` method (crates/nl-wasm). */
 interface StuntCapableGame {
-  /** Queue a stunt request (never starts one directly). Returns true if accepted. */
+  /** Queue a stunt request (the planner decides). Returns true if queued. */
   request_stunt(code: number): boolean;
 }
 

@@ -105,7 +105,19 @@ test('toasts use the contract wording and the real peak g', () => {
     stuntToastForEvents(ev(StuntEvent.Refused, 3, RefusedReason.LandingBlocked)),
     'Landing blocked',
   );
-  assert.equal(stuntToastForEvents(ev(StuntEvent.Aborted, 3)), 'Landing blocked');
+  assert.equal(
+    stuntToastForEvents(ev(StuntEvent.Refused, 3, RefusedReason.Expired)),
+    null,
+    'a lapsed request is silent',
+  );
+  assert.equal(
+    stuntToastForEvents(ev(StuntEvent.Aborted, 3, RefusedReason.ControlLost)),
+    'Stunt aborted',
+  );
+  assert.equal(
+    stuntToastForEvents(ev(StuntEvent.Aborted, 3, RefusedReason.LandingBlocked)),
+    'Landing blocked',
+  );
   assert.equal(stuntToastForEvents(ev(StuntEvent.Start, 3)), null);
   assert.equal(stuntToastForEvents(new Float32Array(0)), null);
 });

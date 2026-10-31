@@ -331,6 +331,13 @@ impl Controller for Pd {
 
     fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
         let wrench = self.wanted_wrench_for(&ctx.state, &ctx.input);
+        self.allocate(wrench, ctx)
+    }
+}
+
+impl Pd {
+    /// Throttles for `wrench` (all zero when it is zero), the allocation `act` uses.
+    fn allocate(&mut self, wrench: Wrench, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
         if wrench == [0.0; WRENCH_SIZE] {
             self.throttles = [0.0; NOZZLE_COUNT];
             return self.throttles;
@@ -346,5 +353,19 @@ impl Controller for Pd {
                 .solve(wrench, ctx.state.mode_thrust_scale, &mut self.throttles),
         }
         self.throttles
+    }
+
+    /// Throttles that spin the car about body axis `axis` (0 roll, 2 pitch) with angular
+    /// acceleration `direction × alpha_rad_s2`, for the stunt director (no force asked).
+    pub fn spin_throttles(
+        &mut self,
+        axis: usize,
+        direction: f32,
+        alpha_rad_s2: f32,
+        ctx: &ControlCtx,
+    ) -> [f32; NOZZLE_COUNT] {
+        let mut wrench = [0.0; WRENCH_SIZE];
+        wrench[3 + axis] = direction * alpha_rad_s2 * self.inertia_kg_m2[axis];
+        self.allocate(wrench, ctx)
     }
 }

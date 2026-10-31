@@ -56,6 +56,8 @@ impl Game {
         self.world = world;
         self.apply_wind_level();
         self.controller.reset(self.seed);
+        self.stunt.reset();
+        self.stunt_events.clear();
         self.buttons_since_control_step = 0;
         self.saves = 0;
         self.crashes = 0;
