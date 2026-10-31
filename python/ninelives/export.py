@@ -2,11 +2,17 @@
 
     python -m ninelives.export --run runs/<name> --out models/policy.json
     python -m ninelives.export --run runs/<name> --viewer   # also the training viewer files
+    python -m ninelives.export --viewer-curve [--run-id flight-r4] [--episodes 200]
 
 The file holds the VecNormalize statistics and the MLP layers (SB3's
 `mlp_extractor.policy_net` plus `action_net`), row-major `out × in`. Viewer checkpoints
 are up to 8 evenly spaced numbered checkpoints, rounded to 4 significant digits, written
 to `web/public/checkpoints/<run-id>/<n>.json` (under 3 MB together).
+
+`--viewer-curve` flies those committed checkpoints under the Hybrid in the CURRENT physics
+(every stage A-F, a few hundred seeded episodes each) and writes `curve.json` beside them,
+the data the viewer's chart loads. It is a re-evaluation of old policies in today's
+physics, not the training history, and the file says so (`CURVE_TITLE`).
 """
 
 import argparse
@@ -27,6 +33,12 @@ VIEWER_DIR = REPO_ROOT / "web" / "public" / "checkpoints"
 VIEWER_MAX_CHECKPOINTS = 8
 VIEWER_MAX_BYTES = 3_000_000
 VIEWER_SIGNIFICANT_DIGITS = 4
+CURVE_TITLE = "Checkpoint evaluation under current physics"
+CURVE_FILE = "curve.json"
+CURVE_STAGES = ("A", "B", "C", "D", "E", "F")
+CURVE_MODE = "realistic"
+CURVE_EPISODES = 200
+CURVE_FIRST_SEED = 0
 
 
 def export_policy(
@@ -114,7 +126,8 @@ def export_viewer_checkpoints(run_dir: Path, shipped: Path) -> list[Path]:
     out_dir = VIEWER_DIR / run_dir.name
     out_dir.mkdir(parents=True, exist_ok=True)
     for old_file in out_dir.glob("*.json"):
-        old_file.unlink()  # a re-export may write fewer files than the last one
+        if old_file.name != CURVE_FILE:
+            old_file.unlink()  # a re-export may write fewer files than the last one
     written = []
     for number, text in enumerate(policies, start=1):
         path = out_dir / f"{number}.json"
@@ -143,14 +156,88 @@ def write_viewer_index(viewer_dir: Path = VIEWER_DIR) -> Path:
     return index
 
 
+def curve_data(
+    run_dir: Path, episodes: int = CURVE_EPISODES, first_seed: int = CURVE_FIRST_SEED
+) -> dict[str, Any]:
+    """The viewer's curve: each committed checkpoint of `run_dir` (a folder of `<n>.json`
+    files listed in the parent's `index.json`) flown by the Hybrid in the current physics on
+    every stage, with the success, save and crash rates. Carries the physics, controller and
+    policy hashes so a stale curve is detectable."""
+    from ninelives.eval import evaluate  # Imported late: it pulls in the sim extension.
+
+    index = json.loads((run_dir.parent / "index.json").read_text())
+    run = next(entry for entry in index["runs"] if entry["run_id"] == run_dir.name)
+    rows = []
+    shared: dict[str, Any] = {}
+    for entry in run["checkpoints"]:
+        policy_json = (run_dir / entry["file"]).read_text()
+        stages = {}
+        for stage in CURVE_STAGES:
+            report = evaluate(
+                "hybrid", stage, CURVE_MODE, episodes, first_seed, policy_json=policy_json
+            )
+            summary = report["summary"]
+            stages[stage] = {
+                "success_rate": summary["success_rate"],
+                "save_rate": summary["save_rate"],
+                "crash_rate": summary["crash_rate"],
+            }
+            shared = {
+                key: report[key] for key in ("physics_hash", "controller_config_hash", "git_sha")
+            }
+            policy_hash = report["policy_hash"]
+        rows.append(
+            {
+                "file": entry["file"],
+                "steps": entry["steps"],
+                "policy_hash": policy_hash,
+                "stages": stages,
+            }
+        )
+    return {
+        "title": CURVE_TITLE,
+        "what": (
+            "The committed checkpoints re-evaluated by the Hybrid in the current physics. "
+            "Not the training history: each point is how that old policy flies today."
+        ),
+        "run_id": run_dir.name,
+        "controller": "hybrid",
+        "mode": CURVE_MODE,
+        "episodes": episodes,
+        "first_seed": first_seed,
+        "stages": list(CURVE_STAGES),
+        **shared,
+        "checkpoints": rows,
+    }
+
+
+def write_curve(run_dir: Path, episodes: int = CURVE_EPISODES) -> Path:
+    """Writes `curve.json` into `run_dir`; returns its path."""
+    path = run_dir / CURVE_FILE
+    path.write_text(json.dumps(curve_data(run_dir, episodes), indent=2) + "\n")
+    return path
+
+
 def main(argv: list[str] | None = None) -> None:
     """The command line (see the module docstring)."""
     parser = argparse.ArgumentParser(description="Export a trained policy to JSON.")
-    parser.add_argument("--run", type=Path, required=True, help="runs/<name>")
+    parser.add_argument("--run", type=Path, help="runs/<name>")
     parser.add_argument("--checkpoint", default="best", help="best, latest or a step count")
     parser.add_argument("--out", type=Path, default=DEFAULT_POLICY_PATH)
     parser.add_argument("--viewer", action="store_true", help="also write viewer checkpoints")
+    parser.add_argument(
+        "--viewer-curve", action="store_true", help="evaluate the committed viewer checkpoints"
+    )
+    parser.add_argument("--run-id", default=None, help="with --viewer-curve (default: newest)")
+    parser.add_argument("--episodes", type=int, default=CURVE_EPISODES, help="per stage")
     args = parser.parse_args(argv)
+    if args.viewer_curve:
+        index = json.loads((VIEWER_DIR / "index.json").read_text())
+        run_id = args.run_id or index["runs"][-1]["run_id"]
+        print(f"wrote {write_curve(VIEWER_DIR / run_id, args.episodes)}")
+        return
+    if args.run is None:
+        parser.error("--run is required (or use --viewer-curve)")
     folder = args.run / args.checkpoint
     if args.checkpoint.isdigit():
         folder = args.run / "checkpoints" / args.checkpoint

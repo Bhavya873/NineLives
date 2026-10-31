@@ -1,6 +1,8 @@
 // Finds the training viewer's checkpoints (SPEC §9.12): `ninelives.export --viewer` writes
 // up to 8 policy files per run to public/checkpoints/<run-id>/<n>.json plus an index.json
 // listing them, in training order. The viewer shows the newest run.
+import { type CurveFile, parseCurve } from './curve.ts';
+import type { ShowcaseFile } from './showcase.ts';
 
 /** One exported checkpoint: where its file is and how far training had got. */
 export interface CheckpointEntry {
@@ -40,4 +42,16 @@ export async function loadCheckpoint(run: RunEntry, entry: CheckpointEntry): Pro
     throw new Error(`Checkpoint ${run.run_id}/${entry.file} is missing`);
   }
   return response.text();
+}
+
+/** The run's curve file (`curve.json`, from `export --viewer-curve`), or null if absent. */
+export async function loadCurve(run: RunEntry): Promise<CurveFile | null> {
+  const response = await fetch(checkpointUrl(`${run.run_id}/curve.json`));
+  return response.ok ? parseCurve(await response.json()) : null;
+}
+
+/** The run's showcase seeds (`showcase.json`), or null if absent. */
+export async function loadShowcase(run: RunEntry): Promise<ShowcaseFile | null> {
+  const response = await fetch(checkpointUrl(`${run.run_id}/showcase.json`));
+  return response.ok ? ((await response.json()) as ShowcaseFile) : null;
 }

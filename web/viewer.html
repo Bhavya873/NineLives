@@ -65,6 +65,47 @@
       #arena-toggle:hover {
         background: rgba(30, 44, 60, 0.9);
       }
+      #stage-tabs {
+        top: 96px;
+        left: auto;
+        right: 16px;
+        display: flex;
+        gap: 4px;
+      }
+      #stage-tabs button,
+      #camera-toggle {
+        border: 1px solid #3a4a5c;
+        border-radius: 4px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      #stage-tabs button[aria-pressed='true'] {
+        background: #9fd1ff;
+        color: #0c121a;
+      }
+      #camera-toggle {
+        top: 136px;
+        left: auto;
+        right: 16px;
+      }
+      #curve-panel {
+        top: 176px;
+        left: auto;
+        right: 16px;
+        width: 320px;
+      }
+      #curve-title {
+        margin: 0 0 4px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      #curve-chart p {
+        margin: 4px 0 0;
+        color: #a9b6c4;
+        font-size: 12px;
+      }
       a {
         color: #9fd1ff;
       }
@@ -76,10 +117,16 @@
     <table id="viewer-board" class="panel"></table>
     <button id="arena-toggle" class="panel" type="button">Switch arena</button>
     <select id="stage-select" class="panel" aria-label="Stage"></select>
+    <div id="stage-tabs" class="panel" role="group" aria-label="Stage tabs"></div>
+    <button id="camera-toggle" class="panel" type="button">Camera: crowd (L)</button>
+    <div id="curve-panel" class="panel">
+      <h2 id="curve-title"></h2>
+      <div id="curve-chart"></div>
+    </div>
     <div id="viewer-help" class="panel">
       Each row of cars is one checkpoint, flown by the Hybrid (PD flies until the car tips past the
       hand-over, then the checkpoint's AI), on the same drops. Faded cars crashed. O switches arena;
-      the picker adds Stage D, Stage F and the Gauntlet.
+      the picker adds Stage D, Stage F and the Gauntlet. L follows the leading car on the courses.
       <a href="./">Back to the game</a>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>

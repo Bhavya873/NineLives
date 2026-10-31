@@ -193,3 +193,46 @@ def test_viewer_checkpoints_end_on_the_shipped_policy(tmp_path, monkeypatch):
     index = json.loads((tmp_path / "viewer" / "index.json").read_text())
     assert index["runs"][0]["run_id"] == "run"
     assert [entry["steps"] for entry in index["runs"][0]["checkpoints"]] == [100, 200]
+
+
+def test_viewer_curve_data_matches_the_python_eval_and_carries_hashes(tmp_path):
+    from ninelives.export import CURVE_STAGES, CURVE_TITLE, curve_data, write_curve
+
+    model, normalizer = random_policy()
+    policy_json = json.dumps(export_policy(model, normalizer, "curve-test", 4))
+    run_dir = tmp_path / "run-x"
+    run_dir.mkdir()
+    (run_dir / "1.json").write_text(policy_json)
+    (tmp_path / "index.json").write_text(
+        json.dumps({"runs": [{"run_id": "run-x", "checkpoints": [{"file": "1.json", "steps": 7}]}]})
+    )
+
+    curve = curve_data(run_dir, episodes=4)
+
+    assert curve["title"] == CURVE_TITLE == "Checkpoint evaluation under current physics"
+    assert curve["stages"] == list(CURVE_STAGES)
+    assert curve["episodes"] == 4
+    row = curve["checkpoints"][0]
+    assert row["steps"] == 7
+    assert row["policy_hash"] == text_hash([policy_json])
+    expected = evaluate("hybrid", "F", "realistic", 4, 0, policy_json=policy_json)
+    assert row["stages"]["F"]["success_rate"] == expected["summary"]["success_rate"]
+    assert curve["physics_hash"] == expected["physics_hash"]
+    assert curve["controller_config_hash"] == expected["controller_config_hash"]
+    path = write_curve(run_dir, episodes=2)
+    assert json.loads(path.read_text())["episodes"] == 2
+
+
+def test_the_committed_curve_matches_the_committed_checkpoints():
+    from ninelives.export import CURVE_TITLE, VIEWER_DIR
+
+    index = json.loads((VIEWER_DIR / "index.json").read_text())
+    run = index["runs"][-1]
+    curve = json.loads((VIEWER_DIR / run["run_id"] / "curve.json").read_text())
+    assert curve["title"] == CURVE_TITLE
+    assert [row["file"] for row in curve["checkpoints"]] == [
+        entry["file"] for entry in run["checkpoints"]
+    ]
+    for row in curve["checkpoints"]:
+        policy_json = (VIEWER_DIR / run["run_id"] / row["file"]).read_text()
+        assert row["policy_hash"] == text_hash([policy_json])
