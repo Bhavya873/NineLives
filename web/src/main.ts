@@ -101,6 +101,8 @@ const hudValues: HudValues = {
   finished: false,
   finishTimeS: 0,
   gLoad: 1,
+  peakG: 0,
+  policyOutOfEnvelope: 0,
   windWorldM_S: [0, 0, 0],
 };
 
@@ -156,7 +158,7 @@ async function start(): Promise<void> {
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
   const reducedMotion = prefersReducedMotion();
-  const effects = createScreenEffects(view.scene, reducedMotion);
+  const effects = createScreenEffects(view.scene);
   // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
   let windLevel = startingWindLevel(params);
   const setWind = (level: WindLevel) => {
@@ -288,6 +290,9 @@ async function start(): Promise<void> {
       view.camera.position.sub(shake);
       renderScreenEffects(effects, {
         gLoad: hudValues.gLoad,
+        peakG: hudValues.peakG,
+        policyOutOfEnvelope: hudValues.policyOutOfEnvelope,
+        events,
         windWorldM_S: hudValues.windWorldM_S,
         crashed: hudValues.crashed,
         camera: view.camera,
@@ -376,6 +381,8 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.finished = values[HudField.Finished] === 1;
   out.finishTimeS = values[HudField.FinishTimeS] ?? 0;
   out.gLoad = values[HudField.GLoad] ?? 1;
+  out.peakG = values[HudField.PeakGLoad] ?? 0;
+  out.policyOutOfEnvelope = values[HudField.PolicyOutOfEnvelope] ?? 0;
   out.windWorldM_S[0] = values[HudField.WindXMS] ?? 0;
   out.windWorldM_S[2] = values[HudField.WindZMS] ?? 0;
 }

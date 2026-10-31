@@ -1,98 +1,12 @@
-// Unit tests for the HUD screen effects: the g-force blackout's timing, the wind arrow's
+// Unit tests for the HUD screen effects: the wind arrow's
 // angle and label, the wind streaks' wrapping and the wind level setting. Plain Node.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { URLSearchParams } from 'node:url';
 
-import {
-  applyGBlackout,
-  blackoutLook,
-  createGBlackoutView,
-  newGBlackoutState,
-  updateGBlackout,
-} from '../src/hud/g-blackout.ts';
 import { cameraYawRad, windArrowAngleRad, windLabel } from '../src/hud/wind-indicator.ts';
 import { wrap } from '../src/render/wind-streaks.ts';
 import { nextWindLevel, startingWindLevel } from '../src/screen-effects.ts';
-
-const FRAME_S = 1 / 60;
-
-/** Runs the blackout at `gLoad` for `seconds` and returns the final darkness. */
-function holdG(state, gLoad, seconds) {
-  let darkness = state.darkness;
-  for (let step = 0; step < Math.round(seconds / FRAME_S); step += 1) {
-    darkness = updateGBlackout(state, gLoad, FRAME_S);
-  }
-  return darkness;
-}
-
-test('the view stays clear at or below 3 g', () => {
-  const state = newGBlackoutState();
-
-  assert.equal(holdG(state, 3, 2), 0);
-  assert.equal(holdG(state, 1, 2), 0);
-});
-
-test('the edges darken at once above 3 g, more for more g', () => {
-  const mild = updateGBlackout(newGBlackoutState(), 4, FRAME_S);
-  const hard = updateGBlackout(newGBlackoutState(), 6, FRAME_S);
-
-  assert.ok(mild > 0.2, `4 g darkens at once (${mild})`);
-  assert.ok(hard > mild, '6 g darkens more than 4 g');
-  assert.ok(hard < 1, 'one frame of g alone never blacks out fully');
-});
-
-test('holding just over 3 g builds to full black in about a second', () => {
-  const state = newGBlackoutState();
-
-  assert.ok(holdG(state, 3.1, 0.5) < 0.7, 'not black after half a second');
-  assert.equal(holdG(state, 3.1, 0.6), 1, 'black after about a second');
-});
-
-test('below 3 g the view recovers from black over 1.5 s', () => {
-  const state = { darkness: 1 };
-
-  const afterOneSecond = holdG(state, 1, 1);
-  const afterTwoSeconds = holdG(state, 1, 1);
-
-  assert.ok(afterOneSecond > 0.2 && afterOneSecond < 0.5, `partly back (${afterOneSecond})`);
-  assert.equal(afterTwoSeconds, 0);
-});
-
-test('the vignette is clear in the middle when light and solid black when full', () => {
-  const light = blackoutLook(0.2, 0);
-  const full = blackoutLook(1, 0);
-
-  assert.equal(light.fillOpacity, 0);
-  assert.match(light.gradient, /rgb\(0 0 0 \/ 0\) 56\.0%/);
-  assert.equal(full.fillOpacity, 1);
-});
-
-test('with reduced motion the overlay darkens but never throbs', () => {
-  const element = { hidden: true, style: { backgroundImage: '', backgroundColor: '' } };
-  const view = createGBlackoutView(element, true);
-
-  applyGBlackout(view, 0.8, 0.0);
-  const first = element.style.backgroundImage;
-  applyGBlackout(view, 0.8, 0.3);
-
-  assert.equal(element.hidden, false);
-  assert.equal(element.style.backgroundImage, first);
-});
-
-test('the overlay throbs while dark without reduced motion, and hides when clear', () => {
-  const element = { hidden: true, style: { backgroundImage: '', backgroundColor: '' } };
-  const view = createGBlackoutView(element, false);
-
-  applyGBlackout(view, 0.8, 0.0);
-  const first = element.style.backgroundImage;
-  applyGBlackout(view, 0.8, 0.15);
-  const later = element.style.backgroundImage;
-  applyGBlackout(view, 0, 0.3);
-
-  assert.notEqual(later, first);
-  assert.equal(element.hidden, true);
-});
 
 test('camera yaw is 0 looking along +X and a quarter turn looking along -Z', () => {
   assert.ok(Math.abs(cameraYawRad(1, 0)) < 1e-9);

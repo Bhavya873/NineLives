@@ -1,0 +1,67 @@
+// The approach HUD: an amber speed readout above 200 km/h, a "too slow" warning when
+// the sim raises TooSlowFallback (event 16), and an "AI outside envelope" badge when
+// HudField PolicyOutOfEnvelope is 1. The approach hint is computed here from the event,
+// not from HudField 26 (ApproachHint), which stays reserved: the web does not know the
+// next piece's v_complete_min_m_s, so it cannot warn before the entry. Pure logic.
+import { FLOATS_PER_EVENT } from '../sim-events.ts';
+
+/** Event kinds this HUD reads (docs/contracts/events-hud.md). */
+export const APPROACH_EVENT = { Scrape: 15, TooSlowFallback: 16 } as const;
+
+/** Amber above this speed: 200 km/h. */
+export const FAST_SPEED_M_S = 200 / 3.6;
+/** How long the too-slow warning stays. */
+export const TOO_SLOW_SHOW_S = 3;
+
+/** True when the speed readout should be amber. */
+export function isFast(speedMS: number): boolean {
+  return Math.abs(speedMS) > FAST_SPEED_M_S;
+}
+
+/** True when the AI badge should show (HudField PolicyOutOfEnvelope === 1). */
+export function outsideEnvelope(flag: number): boolean {
+  return flag === 1;
+}
+
+/** The warning text for TooSlowFallback events in a batch (the last one), or null. */
+export function tooSlowWarning(events: Float32Array): string | null {
+  let text: string | null = null;
+  for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
+    if (events[start] === APPROACH_EVENT.TooSlowFallback) {
+      const kmH = Math.abs(events[start + 2] ?? 0) * 3.6;
+      text = `Too slow to clear this piece (${kmH.toFixed(0)} km/h)`;
+    }
+  }
+  return text;
+}
+
+/** Normal speeds (m/s) of the Scrape events in a batch, in order. */
+export function scrapeSpeeds(events: Float32Array): number[] {
+  const speeds: number[] = [];
+  for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
+    if (events[start] === APPROACH_EVENT.Scrape) {
+      speeds.push(Math.abs(events[start + 1] ?? 0));
+    }
+  }
+  return speeds;
+}
+
+/** The warning's state. */
+export interface TooSlowState {
+  text: string;
+  hideAtS: number;
+}
+
+export function newTooSlowState(): TooSlowState {
+  return { text: '', hideAtS: 0 };
+}
+
+/** Starts the warning from a batch; returns the text to show at `nowS` ('' = hidden). */
+export function updateTooSlow(state: TooSlowState, events: Float32Array, nowS: number): string {
+  const warning = tooSlowWarning(events);
+  if (warning !== null) {
+    state.text = warning;
+    state.hideAtS = nowS + TOO_SLOW_SHOW_S;
+  }
+  return nowS < state.hideAtS ? state.text : '';
+}

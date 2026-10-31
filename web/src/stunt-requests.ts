@@ -46,7 +46,7 @@ export const STUNT_KEYS: Record<string, StuntCodeValue> = {
   KeyB: StuntCode.BackFlip,
 };
 
-const STUNT_NAME: Record<number, string> = {
+export const STUNT_NAME: Record<number, string> = {
   [StuntCode.BarrelLeft]: 'Barrel roll left',
   [StuntCode.BarrelRight]: 'Barrel roll right',
   [StuntCode.FrontFlip]: 'Front flip',

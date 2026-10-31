@@ -590,7 +590,7 @@ class Game {
 - **Bottom-right:** an attitude ball (roll/pitch), spin rate, and a top-down **nozzle map** of the car with 10 dots glowing by throttle.
 - **Top-right:** saves, crashes, time, Hop cooldown.
 - **Under the stats:** a wind arrow (relative to the camera) with Off / Breeze / Storm and the speed, hidden with no wind; streaks in the air show the wind too.
-- **G blackout:** clear up to 3 g passenger load (`HudField.GLoad`, the 0.1 s smoothed value; `HudField.PeakGLoad` is the raw peak of the stunt window); above it the screen edges darken, reaching full black after about 1 s held, and recover over 1.5 s below 3 g.
+- **G-meter:** a gauge with the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the raw peak of the stunt window (`HudField.PeakGLoad`); amber from 3 g, red from 6 g, and the view is never darkened. The best peak is kept in `localStorage` (`ninelives.g.v1`), with per-stunt bests for the session shown after a landing. Approach HUD: speed turns amber above 200 km/h, a too-slow warning follows `TooSlowFallback`, Scrapes throw sparks, and an "AI outside envelope" badge shows while `PolicyOutOfEnvelope` is 1.
 - **Centre toasts:** "SAVE" (with air used), "CRASH" (with cause), "NO AIR".
 
 ### 11.6 Screens and features
