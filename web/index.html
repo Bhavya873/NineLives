@@ -39,12 +39,6 @@
         position: fixed;
         inset: 0;
       }
-      #g-blackout {
-        /* The g-force vignette (src/hud/g-blackout.ts): above the 3D view, under the HUD. */
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-      }
       .hud {
         position: fixed;
         padding: 6px 12px;
@@ -165,6 +159,41 @@
         font-size: 14px;
         font-weight: 400;
         color: var(--muted);
+      }
+      #hud-speed.fast {
+        color: #ffb347;
+      }
+      #hud-g {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      #hud-g-track {
+        width: 120px;
+        height: 6px;
+        margin: 4px 0;
+        border-radius: 3px;
+        background: rgb(255 255 255 / 15%);
+      }
+      #hud-g-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: #d6ecff;
+      }
+      #hud-g[data-level='warn'] #hud-g-fill {
+        background: #ffb347;
+      }
+      #hud-g[data-level='high'] #hud-g-fill {
+        background: #ff6b5b;
+      }
+      #hud-g-live {
+        font-weight: 600;
+        color: #fff;
+      }
+      #hud-g-record,
+      #hud-too-slow,
+      #hud-envelope {
+        font-size: 13px;
+        color: #ffd9a8;
       }
       #hud-air {
         display: flex;
@@ -344,11 +373,13 @@
   </head>
   <body>
     <div id="game"></div>
-    <div id="g-blackout" hidden></div>
     <div id="hud-top-left">
       <div id="hud-hearts" aria-label="Lives"></div>
       <div id="hud-status" class="hud">Realistic</div>
       <div id="hud-alert" class="hud" hidden></div>
+      <div id="hud-too-slow" class="hud" hidden></div>
+      <div id="hud-envelope" class="hud" hidden>AI outside envelope</div>
+      <div id="hud-g-record" class="hud" hidden></div>
     </div>
     <dl id="hud-keys" class="hud" aria-label="Keys">
       <dt>W S / ↑ ↓</dt>
@@ -382,6 +413,10 @@
       <div id="hud-nozzles"></div>
       <div class="dash-readouts">
         <div id="hud-speed"><span id="hud-speed-value">0</span><small>km/h</small></div>
+        <div id="hud-g">
+          <span id="hud-g-live">1.0 g</span> <span id="hud-g-peak">peak 0.0 g</span>
+          <div id="hud-g-track"><div id="hud-g-fill"></div></div>
+        </div>
         <div id="hud-air">
           Air
           <div id="hud-air-track"><div id="hud-air-fill"></div></div>

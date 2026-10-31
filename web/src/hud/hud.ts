@@ -2,6 +2,7 @@
 // It reads plain numbers and writes text; it never touches physics.
 
 import { requireElement, setText } from '../dom.ts';
+import { isFast } from './approach-hud.ts';
 import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
@@ -58,6 +59,10 @@ export interface HudValues {
   finishTimeS: number;
   /** Passenger load at the driver's seat, in g (1 sitting still). */
   gLoad: number;
+  /** Raw peak g of the current stunt window. */
+  peakG: number;
+  /** HudField PolicyOutOfEnvelope: 1 when the AI is outside where it was validated. */
+  policyOutOfEnvelope: number;
   /** The wind now, [x, y, z] in m/s in the world frame: where the air moves to. */
   windWorldM_S: [number, number, number];
 }
@@ -83,6 +88,7 @@ export function findHud(): Hud {
 export function updateHud(hud: Hud, values: HudValues): void {
   const speedKmH = Math.abs(values.speedMS) * KM_PER_H_PER_M_PER_S;
   setText(hud.speed, speedKmH.toFixed(0));
+  hud.speed.parentElement?.classList.toggle('fast', isFast(values.speedMS));
   setText(hud.status, statusText(values));
   const alert = alertText(values);
   setText(hud.alert, alert);
