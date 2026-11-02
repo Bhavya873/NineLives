@@ -109,6 +109,7 @@ test('the stage picker flies Stage D, Stage F and the Gauntlet with the Hybrid',
   await expectArena(page, 'flat arena');
   await expect(page.locator('#stage-select option')).toHaveText([
     'Flat arena',
+    'Stage B on its side',
     'Obstacle arena',
     'Stage D course',
     'Stage F flip plate',

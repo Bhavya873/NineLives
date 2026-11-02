@@ -12,6 +12,7 @@ import type { ArenaKind } from './arena-choice.ts';
  * courses start at the origin and run along +X; the camera follows the cars from there. */
 const CAMERA_SPOT_M: Record<ArenaKind, [number, number, number]> = {
   flat: [0, 70, 105],
+  side: [0, 70, 105],
   obstacles: [0, 38, 54],
   driving: [-18, 9, 22],
   flight: [-18, 9, 22],

@@ -106,6 +106,12 @@
         color: #a9b6c4;
         font-size: 12px;
       }
+      #hud-perf {
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 13px;
+      }
       a {
         color: #9fd1ff;
       }
@@ -113,6 +119,7 @@
   </head>
   <body>
     <div id="viewer"></div>
+    <div id="hud-perf" class="panel" hidden></div>
     <div id="viewer-status" class="panel">Loading checkpoints…</div>
     <table id="viewer-board" class="panel"></table>
     <button id="arena-toggle" class="panel" type="button">Switch arena</button>
@@ -126,7 +133,8 @@
     <div id="viewer-help" class="panel">
       Each row of cars is one checkpoint, flown by the Hybrid (PD flies until the car tips past the
       hand-over, then the checkpoint's AI), on the same drops. Faded cars crashed. O switches arena;
-      the picker adds Stage D, Stage F and the Gauntlet. L follows the leading car on the courses.
+      the picker adds Stage B, Stage D, Stage F and the Gauntlet. L follows the leading car on the
+      courses. F3 shows the frame rate.
       <a href="./">Back to the game</a>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>
