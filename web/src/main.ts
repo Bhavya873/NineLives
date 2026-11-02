@@ -103,6 +103,7 @@ const hudValues: HudValues = {
   gLoad: 1,
   peakG: 0,
   policyOutOfEnvelope: 0,
+  approachHintMS: 0,
   windWorldM_S: [0, 0, 0],
 };
 
@@ -292,6 +293,7 @@ async function start(): Promise<void> {
         gLoad: hudValues.gLoad,
         peakG: hudValues.peakG,
         policyOutOfEnvelope: hudValues.policyOutOfEnvelope,
+        approachHintMS: hudValues.approachHintMS,
         events,
         windWorldM_S: hudValues.windWorldM_S,
         crashed: hudValues.crashed,
@@ -320,6 +322,8 @@ async function start(): Promise<void> {
       controllerCode: () => game.hud()[HudField.Controller] ?? ControllerCode.Off,
       courseMeshCount: () => course.view?.children.length ?? 0,
       checkpointCount: () => game.hud()[HudField.CheckpointCount] ?? 0,
+      // Tests start a course of their own (the playground has no piece that needs speed).
+      loadCourse: (courseJson: string) => startCourse(game.load_course(courseJson)),
     },
   });
 }
@@ -383,6 +387,7 @@ function fillHudValues(values: Float32Array, out: HudValues): void {
   out.gLoad = values[HudField.GLoad] ?? 1;
   out.peakG = values[HudField.PeakGLoad] ?? 0;
   out.policyOutOfEnvelope = values[HudField.PolicyOutOfEnvelope] ?? 0;
+  out.approachHintMS = values[HudField.ApproachHint] ?? 0;
   out.windWorldM_S[0] = values[HudField.WindXMS] ?? 0;
   out.windWorldM_S[2] = values[HudField.WindZMS] ?? 0;
 }

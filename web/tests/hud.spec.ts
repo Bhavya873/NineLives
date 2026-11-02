@@ -72,3 +72,40 @@ test('F3 shows the frame rate and milliseconds per tick', async ({ page }) => {
   await expect(perf).toContainText('fps', { timeout: SLOW_MACHINE_TIMEOUT_MS });
   await expect(perf).toContainText('tick');
 });
+
+test('the HUD warns before a piece that needs more speed, and the warning clears', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const consoleErrors = collectConsoleErrors(page);
+  await page.goto('/');
+  await waitForGame(page);
+  await page.evaluate(() => {
+    const course = {
+      version: 1,
+      name: 'hint',
+      start: { pos: [0, 0.7, 0], yaw: 0 },
+      bounds: { min: [-50, -20, -50], max: [600, 60, 50] },
+      pieces: [
+        {
+          type: 'ramp',
+          pos: [300, 0, 0],
+          length: 11.5,
+          width: 8,
+          angle_deg: 6,
+          v_complete_min_m_s: 60,
+        },
+      ],
+    };
+    (
+      window as unknown as { ninelivesDebug: { loadCourse: (json: string) => void } }
+    ).ninelivesDebug.loadCourse(JSON.stringify(course));
+  });
+
+  // 300 m of road and a 60 m/s ramp: driving up it the car is slower than 60 m/s inside
+  // the 80 m look-ahead, so the too-slow element names the speed (216 km/h).
+  await page.keyboard.down('KeyW');
+  await expect(page.locator('#hud-too-slow')).toContainText('need 216 km/h', { timeout: 90_000 });
+  await page.keyboard.up('KeyW');
+  expect(consoleErrors).toEqual([]);
+});
