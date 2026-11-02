@@ -409,7 +409,9 @@ fn build_body_collider(config: &VehicleConfig) -> ColliderBuilder {
     let [chamfer_length_m, chamfer_rise_m] = config.chassis.underside_chamfer_m;
     let plain_box = ColliderBuilder::cuboid(half_x, half_y, half_z);
     if chamfer_length_m <= 0.0 || chamfer_rise_m <= 0.0 {
-        return plain_box.density(0.0);
+        return plain_box
+            .density(0.0)
+            .active_hooks(ActiveHooks::MODIFY_SOLVER_CONTACTS);
     }
     let mut corners = Vec::new();
     for z in [-half_z, half_z] {

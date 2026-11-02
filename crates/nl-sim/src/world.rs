@@ -35,6 +35,7 @@ use crate::diagnostics::{
     ChassisContactPoint, WheelDiagnostics, chassis_contact_points, wheel_diagnostics,
 };
 use crate::events::{EventInputs, EventTracker, SimEvent};
+use crate::floor_hook::FloorNormalHook;
 use crate::forecast::{ForecastSettings, LandingForecast, forecast};
 use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
@@ -324,7 +325,7 @@ impl World {
         );
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
-        self.physics.step();
+        self.physics.step_with_events(&FloorNormalHook, &());
         self.update_g_load();
         let touching_after = self.wheels_touching();
         let wheels_down_after = count_true(touching_after);
