@@ -15,7 +15,7 @@ Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.7). Bu
 ## Reset
 The peak resets to 0 at the next `AirborneStart`, at a respawn, or at a placement.
 
-**Known behaviour, owner to decide (2026-10-29):** since the G2 bump stop, a hard landing can rebound off the ground. The rebound is a new take-off (`AirborneStart`), which opens a fresh window even inside the 0.5 s tail and drops the landing's peak: after a 3 m drop the raw peak reads 1.4 g although the landing reached about 5.8 g (smoothed). The tests read the peak tick by tick to see the landing. If the meter should keep the landing, a take-off inside the 0.5 s tail should continue the window instead of resetting it (one change in `EventTracker`).
+**Rebound (decided 2026-11-02):** a hard landing can rebound off the ground since the G2 bump stop. A take-off inside the 0.5 s tail **continues** the window, so the landing's peak is kept; only a take-off after the window has closed (or a respawn or placement) resets the peak (`EventTracker::update_airborne`).
 
 ## Best-ever record (web only)
 - `localStorage` key `ninelives.g.v1`, value `{ bestPeakG, version }`.
