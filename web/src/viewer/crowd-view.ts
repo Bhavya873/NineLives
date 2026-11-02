@@ -69,6 +69,8 @@ export interface CrowdView {
   wheelCount: number;
   bodySlots: Slot[];
   wheelSlots: Slot[];
+  /** Every slot, wheels first: the order they are drawn in. */
+  allSlots: Slot[];
   /** True to spread the cars on the grid; false to draw them at their true positions. */
   spreadOnGrid: boolean;
 }
@@ -95,12 +97,10 @@ export function createCrowdView(
   const wheelSlots = slotsOf(buildWheel(), carCount * wheelCount, looks, scene);
   const cars: GhostCar[] = [];
   rowLabels.forEach((text, row) => {
-    const labelCanvas = drawLabel(text);
+    const labelTexture = new CanvasTexture(drawLabel(text));
     for (let column = 0; column < carsPerRow; column += 1) {
       // Each car gets its own material so a crashed car's label can fade alone.
-      const label = new Sprite(
-        new SpriteMaterial({ map: new CanvasTexture(labelCanvas), depthTest: false }),
-      );
+      const label = new Sprite(new SpriteMaterial({ map: labelTexture, depthTest: false }));
       label.scale.set(LABEL_WIDTH_M, LABEL_TALL_M, 1);
       const gridOffset = new Vector3(
         (column - (carsPerRow - 1) / 2) * COLUMN_SPACING_M,
@@ -111,12 +111,14 @@ export function createCrowdView(
       cars.push({ label, gridOffset, crashed: false });
     }
   });
-  return { cars, carsPerRow, wheelCount, bodySlots, wheelSlots, spreadOnGrid: true };
+  const allSlots = [...wheelSlots, ...bodySlots];
+  setDrawOrder(wheelSlots, bodySlots);
+  return { cars, carsPerRow, wheelCount, bodySlots, wheelSlots, allSlots, spreadOnGrid: true };
 }
 
 /** Starts a frame: every instanced mesh will be refilled by `updateCrowdRow`. */
 export function beginCrowdFrame(view: CrowdView): void {
-  for (const slot of [...view.bodySlots, ...view.wheelSlots]) {
+  for (const slot of view.allSlots) {
     slot.flyingCount = 0;
     slot.crashedCount = 0;
   }
@@ -124,7 +126,7 @@ export function beginCrowdFrame(view: CrowdView): void {
 
 /** Ends a frame: tells three.js how many instances each mesh draws and to upload them. */
 export function endCrowdFrame(view: CrowdView): void {
-  for (const slot of [...view.bodySlots, ...view.wheelSlots]) {
+  for (const slot of view.allSlots) {
     commit(slot.flying, slot.flyingCount);
     commit(slot.crashed, slot.crashedCount);
   }
@@ -194,6 +196,24 @@ function placeSlots(
       slot.flyingCount += 1;
     }
   }
+}
+
+/** Sets each slot's render order. three.js draws see-through meshes back to front by the
+ * centre of each mesh's own geometry, so the old per-mesh cars drew low parts first (dark
+ * trim, then paint, then glass) when seen from above. Instanced meshes share one object
+ * position, so that order is fixed here: wheels first, then lowest geometry centre first
+ * (equal heights keep their build order). Crashed copies go under the flying ones. */
+function setDrawOrder(wheels: Slot[], body: Slot[]): void {
+  const height = (slot: Slot): number => {
+    const geometry = slot.flying.geometry;
+    geometry.computeBoundingSphere();
+    return geometry.boundingSphere?.center.clone().applyMatrix4(slot.local).y ?? 0;
+  };
+  const ordered = [...wheels, ...[...body].sort((a, b) => height(a) - height(b))];
+  ordered.forEach((slot, rank) => {
+    slot.crashed.renderOrder = 2 * rank;
+    slot.flying.renderOrder = 2 * rank + 1;
+  });
 }
 
 /** A canvas with `text` on a dark tag, for a car's label. */
