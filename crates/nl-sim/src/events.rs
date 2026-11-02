@@ -284,10 +284,14 @@ impl EventTracker {
         let airborne_now = inputs.wheels_down == 0;
         if airborne_now && !self.is_airborne() {
             events.push(SimEvent::AirborneStart);
-            // A new take-off starts a fresh stunt window, even inside the old one's tail.
+            // A take-off inside the old window's tail (a rebound off a hard landing)
+            // continues that window, so the landing's peak is kept; otherwise a fresh
+            // window starts.
+            if !matches!(self.stunt_window, StuntWindow::Closing { .. }) {
+                self.peak_raw_g = 0.0;
+                self.peak_displayed_g = 0.0;
+            }
             self.stunt_window = StuntWindow::Open;
-            self.peak_raw_g = 0.0;
-            self.peak_displayed_g = 0.0;
             let left_the_wheels = self.previous_wheels_down > 0;
             let speed_m_s = left_the_wheels.then_some(inputs.forward_speed_m_s);
             self.take_off = Some(TakeOff::new(inputs.nose_world, speed_m_s));
@@ -785,6 +789,17 @@ mod tests {
         tracker.reset();
         assert_eq!(tracker.peak_raw_g(), 0.0);
         assert_eq!(tracker.peak_displayed_g(), 0.0);
+    }
+
+    #[test]
+    fn a_rebound_inside_the_tail_keeps_the_landing_peak() {
+        let mut tracker = EventTracker::default();
+        feed(&mut tracker, with_g(in_the_air(), 1.0, 1.0), 0.5);
+        feed(&mut tracker, with_g(upright_on_wheels(), 7.0, 2.0), DT_S);
+        // The hard landing bounces: a take-off 0.1 s later, inside the 0.5 s tail.
+        feed(&mut tracker, with_g(upright_on_wheels(), 1.0, 1.0), 0.1);
+        feed(&mut tracker, with_g(in_the_air(), 0.2, 0.2), 0.2);
+        assert_eq!(tracker.peak_raw_g(), 7.0);
     }
 
     #[test]
