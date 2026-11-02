@@ -8,8 +8,9 @@ const MAX_TICKS_PER_FRAME = 8;
 
 /** What the loop needs from the rest of the game. */
 export interface LoopCallbacks {
-  /** Advance the physics by one fixed step. */
-  tick: () => void;
+  /** Advance the physics by one fixed step. `lastOfFrame` is true on the frame's last tick,
+   * so a caller that blends between the last two ticks knows when to snapshot. */
+  tick: (lastOfFrame: boolean) => void;
   /** Draw a frame. `blend` is 0..1: how far we are between the previous and latest tick. */
   render: (blend: number) => void;
 }
@@ -50,7 +51,7 @@ export function startGameLoop(tickS: number, callbacks: LoopCallbacks): void {
     try {
       const plan = planTicks(leftoverS, elapsedS, tickS);
       for (let tick = 0; tick < plan.ticks; tick += 1) {
-        callbacks.tick();
+        callbacks.tick(tick === plan.ticks - 1);
       }
       leftoverS = plan.leftoverS;
       callbacks.render(leftoverS / tickS);

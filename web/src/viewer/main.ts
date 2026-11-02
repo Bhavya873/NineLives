@@ -29,7 +29,13 @@ import {
   loadNewestRun,
   loadShowcase,
 } from './checkpoints.ts';
-import { createCrowdView, updateCrowdRow } from './crowd-view.ts';
+import {
+  type RowPoses,
+  beginCrowdFrame,
+  createCrowdView,
+  endCrowdFrame,
+  updateCrowdRow,
+} from './crowd-view.ts';
 import { CURVE_TITLE, type CurveFile, curveSvg } from './curve.ts';
 import { pickCrowdLeader } from './leader.ts';
 import {
@@ -45,11 +51,55 @@ import {
 const CARS_PER_CHECKPOINT = 8;
 /** How long the final picture stays before the next round of drops, in seconds. */
 const PAUSE_BETWEEN_S = 2.5;
+/** The crowd is many see-through cars, so the viewer draws at most this many pixels per CSS pixel. */
+const VIEWER_MAX_PIXEL_RATIO = 1.5;
 
 /** One checkpoint's crowd and whether its drops are still flying. */
 interface Row {
   crowd: Crowd;
   running: boolean;
+  /** The poses at the last two ticks, read once per frame (each read copies out of wasm). */
+  poses: RowPoses;
+  /** Ticks stepped since `poses.latest*` was read; 0 means they are current. */
+  ticksSinceRead: number;
+}
+
+/** A row that has just been built: its drops are at their start poses. */
+function newRow(crowd: Crowd): Row {
+  const chassis = crowd.chassis_poses();
+  const wheels = crowd.wheel_poses();
+  const poses = {
+    previousChassis: chassis,
+    latestChassis: chassis,
+    previousWheels: wheels,
+    latestWheels: wheels,
+    outcomes: crowd.outcomes(),
+  };
+  return { crowd, running: true, poses, ticksSinceRead: 0 };
+}
+
+/** Before a frame's last tick: remembers the poses the cars have now as "previous". */
+function snapshotPrevious(row: Row): void {
+  const { poses, crowd } = row;
+  if (row.ticksSinceRead === 0) {
+    // The cars have not moved since the last read: that read is already the previous pose.
+    poses.previousChassis = poses.latestChassis;
+    poses.previousWheels = poses.latestWheels;
+  } else {
+    poses.previousChassis = crowd.chassis_poses();
+    poses.previousWheels = crowd.wheel_poses();
+  }
+}
+
+/** Reads the cars' latest poses and outcomes once per frame, and only if they have moved. */
+function readLatest(row: Row): void {
+  if (row.ticksSinceRead === 0) {
+    return;
+  }
+  row.poses.latestChassis = row.crowd.chassis_poses();
+  row.poses.latestWheels = row.crowd.wheel_poses();
+  row.poses.outcomes = row.crowd.outcomes();
+  row.ticksSinceRead = 0;
 }
 
 /** Where the viewer is: the run, its checkpoints' policies and the current round. */
@@ -89,7 +139,7 @@ async function start(): Promise<void> {
   const showcase = await loadShowcase(run).catch(() => null);
   const board = createBoard(requireElement('viewer-board'), run);
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
-  const arena = createArena(requireElement('viewer'));
+  const arena = createArena(requireElement('viewer'), VIEWER_MAX_PIXEL_RATIO);
   const arenaView = createArenaView(arena.scene, arena.camera, arena.ground);
   const state: ViewerState = {
     run,
@@ -135,14 +185,18 @@ async function start(): Promise<void> {
   toggle.addEventListener('click', switchArena);
 
   startGameLoop(Game.physics_dt_s(), {
-    tick: () => {
+    tick: (lastOfFrame) => {
       for (const row of state.rows) {
         if (row.running) {
+          if (lastOfFrame) {
+            snapshotPrevious(row);
+          }
           row.running = row.crowd.step();
+          row.ticksSinceRead += 1;
         }
       }
     },
-    render: () => {
+    render: (blend) => {
       if (arenaView.kind !== state.arena) {
         // Read the shapes only when the arena changes: each call copies them out of wasm.
         showArena(arenaView, state.arena, state.rows[0]?.crowd.course_shapes());
@@ -152,24 +206,27 @@ async function start(): Promise<void> {
         panel.select(arenaTab(state.arena));
       }
       const centre = { x: 0, z: 0, cars: 0 };
+      beginCrowdFrame(view);
       state.rows.forEach((row, index) => {
-        const outcomes = row.crowd.outcomes();
-        const chassis = row.crowd.chassis_poses();
-        updateCrowdRow(view, index, chassis, row.crowd.wheel_poses(), outcomes);
-        addRunningCars(centre, chassis, outcomes);
+        readLatest(row);
+        const { outcomes, latestChassis } = row.poses;
+        // A finished row has stopped: draw it at its last tick, not part-way to it.
+        updateCrowdRow(view, index, row.poses, row.running ? blend : 1);
+        addRunningCars(centre, latestChassis, outcomes);
         const cells = board[index];
         if (cells) {
           setText(cells.landed, String(count(outcomes, CrowdOutcome.Landed)));
           setText(cells.crashed, String(count(outcomes, CrowdOutcome.Crashed)));
         }
       });
+      endCrowdFrame(view);
       const follows = followsCars(state.arena);
       setText(cameraButton, state.leaderCamera ? 'Camera: leader (L)' : 'Camera: crowd (L)');
       if (follows && state.leaderCamera) {
         const leader = pickCrowdLeader(
           state.rows.map((row) => ({
-            poses: row.crowd.chassis_poses(),
-            outcomes: row.crowd.outcomes(),
+            poses: row.poses.latestChassis,
+            outcomes: row.poses.outcomes,
           })),
           FLOATS_PER_POSE,
         );
@@ -217,7 +274,7 @@ function startRound(state: ViewerState, arena: ArenaKind, round: number): void {
   for (const row of state.rows) {
     row.crowd.free();
   }
-  state.rows = crowds.map((crowd) => ({ crowd, running: true }));
+  state.rows = crowds.map(newRow);
   state.arena = arena;
   state.tab = arenaTab(arena);
   state.round = round;
@@ -342,7 +399,7 @@ function statusText(state: ViewerState): string {
 function totalLanded(state: ViewerState): number {
   let total = 0;
   for (const row of state.rows) {
-    total += count(row.crowd.outcomes(), CrowdOutcome.Landed);
+    total += count(row.poses.outcomes, CrowdOutcome.Landed);
   }
   return total;
 }
