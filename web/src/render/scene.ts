@@ -116,10 +116,11 @@ export function createGameScene(container: HTMLElement, wheelCount: number): Gam
 
 /** The lab arena without any car (SPEC §11.4): renderer, checkered floor fading into the
  * sky dome, light with soft shadows, and a camera kept matched to the window. The game
- * and the training viewer both build on it. */
-export function createArena(container: HTMLElement): Arena {
+ * and the training viewer both build on it. The viewer draws many see-through cars, so it
+ * asks for a lower `maxPixelRatio`. */
+export function createArena(container: HTMLElement, maxPixelRatio = 2): Arena {
   const renderer = new WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
   // Filmic tone mapping keeps bright flames and the sunlit car from clipping to white.
