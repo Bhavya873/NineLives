@@ -204,6 +204,9 @@ The world queues events and the caller drains them (`crates/nl-sim/src/events.rs
   the flat floor is judged on its true normal (straight up): Rapier's box-box manifold sometimes
   reports a tipped normal for the car's bevelled edge, which turned a car sliding at 50 m/s into a
   "46 m/s impact" (244 of the R2c baseline's 1,295 crashes).
+  The solver gets the same fix: `nl-sim/src/floor_hook.rs` puts the true vertical normal back on a
+  tipped chassis-versus-floor contact (top face only), so a 1.6 m/s rear-edge touchdown no longer
+  becomes a 7 m/s bounce and a -8.8 rad/s yaw.
 - **Scrape** (wasm `EventKind` 15): a body contact that is underbody (0.05 m inside the lower face),
   with its normal within 30° of body up, at most 4 m/s along it, with the tilt under 25°. Numbers in
   `configs/approach.toml`. It never counts toward a crash and reports once per scrape.
