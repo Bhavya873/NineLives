@@ -8,6 +8,7 @@ import { requireElement } from './dom.ts';
 import {
   type TooSlowState,
   newTooSlowState,
+  approachHintText,
   outsideEnvelope,
   scrapeSpeeds,
   updateTooSlow,
@@ -90,6 +91,8 @@ export interface EffectsFrame {
   peakG: number;
   /** HudField PolicyOutOfEnvelope. */
   policyOutOfEnvelope: number;
+  /** HudField ApproachHint: the entry speed the piece ahead needs, in m/s (0 = none). */
+  approachHintMS: number;
   /** This frame's drained events. */
   events: Float32Array;
   /** The sim's wind now, [x, y, z] in m/s in the world frame. */
@@ -111,7 +114,10 @@ export function renderScreenEffects(effects: ScreenEffects, frame: EffectsFrame)
   effects.gRecordElement.textContent = line;
   effects.gRecordElement.hidden = line === '';
 
-  const tooSlow = updateTooSlow(effects.tooSlow, frame.events, frame.nowS);
+  // The warning after a too-slow entry wins; before the piece the live hint shows.
+  const tooSlow =
+    updateTooSlow(effects.tooSlow, frame.events, frame.nowS) ||
+    approachHintText(frame.approachHintMS);
   effects.tooSlowElement.textContent = tooSlow;
   effects.tooSlowElement.hidden = tooSlow === '';
   effects.envelopeBadge.hidden = !outsideEnvelope(frame.policyOutOfEnvelope);
