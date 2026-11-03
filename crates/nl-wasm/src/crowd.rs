@@ -46,6 +46,8 @@ pub enum CrowdOutcome {
 pub enum CrowdStage {
     /// Stage A drops on flat ground.
     FlatDrop,
+    /// Stage B: the car lies on its side on flat ground and must right itself.
+    FlatSide,
     /// Stage A drops into the obstacle arena (`courses/arena.json`).
     Arena,
     /// Stage D: the driver bot takes a generated course, all cars the same one.
@@ -58,12 +60,13 @@ pub enum CrowdStage {
 
 impl CrowdStage {
     /// The names `Crowd::for_stage` accepts.
-    pub const NAMES: [&'static str; 5] = ["A", "arena", "D", "F", "gauntlet"];
+    pub const NAMES: [&'static str; 6] = ["A", "B", "arena", "D", "F", "gauntlet"];
 
     /// The stage called `name` (see `NAMES`).
     pub fn from_name(name: &str) -> Option<CrowdStage> {
         match name {
             "A" => Some(CrowdStage::FlatDrop),
+            "B" => Some(CrowdStage::FlatSide),
             "arena" => Some(CrowdStage::Arena),
             "D" => Some(CrowdStage::Driving),
             "F" => Some(CrowdStage::Flight),
@@ -76,6 +79,7 @@ impl CrowdStage {
     fn stage(self) -> Stage {
         match self {
             CrowdStage::FlatDrop | CrowdStage::Arena => Stage::A,
+            CrowdStage::FlatSide => Stage::B,
             CrowdStage::Driving | CrowdStage::Gauntlet => Stage::D,
             CrowdStage::Flight => Stage::F,
         }
@@ -267,7 +271,7 @@ impl Crowd {
             (None, CrowdStage::Driving | CrowdStage::Flight) => {
                 course_for_stage(&plain, &scenarios, stage.stage(), first_seed)?
             }
-            (None, CrowdStage::FlatDrop) => None,
+            (None, CrowdStage::FlatDrop | CrowdStage::FlatSide) => None,
         };
         let course = course.or(owned_course.as_ref());
         let mut episodes = Vec::new();
@@ -331,7 +335,7 @@ mod tests {
 
     #[test]
     fn the_crowd_covers_stage_a_d_f_the_gauntlet_and_the_arena() {
-        assert_eq!(CrowdStage::NAMES, ["A", "arena", "D", "F", "gauntlet"]);
+        assert_eq!(CrowdStage::NAMES, ["A", "B", "arena", "D", "F", "gauntlet"]);
         for name in CrowdStage::NAMES {
             let mut crowd = crowd(name, 0, 2);
 
@@ -340,8 +344,12 @@ mod tests {
             }
 
             assert_eq!(crowd.count(), 2, "{name}");
-            // Only the flat drops have no course to draw.
-            assert_eq!(crowd.course_shapes().is_some(), name != "A", "{name}");
+            // Only the flat stages have no course to draw.
+            assert_eq!(
+                crowd.course_shapes().is_some(),
+                !["A", "B"].contains(&name),
+                "{name}"
+            );
         }
     }
 
@@ -396,6 +404,24 @@ mod tests {
         for seed in 0..6 {
             let mut hybrid = eval_hybrid();
             expected.push(run_episode(&plain, &scenarios, Stage::A, &mut hybrid, seed).unwrap());
+        }
+        assert_eq!(
+            crowd.results_json().ok().unwrap(),
+            serde_json::to_string(&expected).unwrap()
+        );
+    }
+
+    #[test]
+    fn stage_b_cars_end_exactly_as_the_hybrid_eval_does() {
+        let (plain, scenarios) = setup();
+        let mut crowd = crowd("B", 0, 4);
+
+        run_to_end(&mut crowd);
+
+        let mut expected = Vec::new();
+        for seed in 0..4 {
+            let mut hybrid = eval_hybrid();
+            expected.push(run_episode(&plain, &scenarios, Stage::B, &mut hybrid, seed).unwrap());
         }
         assert_eq!(
             crowd.results_json().ok().unwrap(),

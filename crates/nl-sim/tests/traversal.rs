@@ -80,3 +80,58 @@ fn a_fast_clean_entry_clears_the_gap_without_the_fallback() {
     assert!(!world.is_crashed(), "{events:?}");
     assert!(world.chassis_pose().position_m[0] > 78.0);
 }
+
+#[test]
+fn the_approach_hint_shows_before_a_slow_entry_and_not_for_a_fast_one() {
+    for (speed_m_s, expect_hint) in [(8.0, true), (25.0, false)] {
+        let mut world = World::new_on_course(
+            &vehicle(),
+            realistic(),
+            &course(),
+            DEFAULT_GROUND_FRICTION,
+            0,
+        );
+        for _ in 0..120 {
+            world.step(InputFrame::default());
+        }
+        let y = world.chassis_pose().position_m[1];
+        world
+            .place_car([40.0, y, 0.0], LEVEL, [speed_m_s, 0.0, 0.0], [0.0; 3])
+            .unwrap();
+        // 20 m before the ramp, still driving up to it.
+        for _ in 0..30 {
+            world.step(InputFrame::default());
+        }
+        assert!(world.traversal().active().is_none());
+        let hint = world.approach_hint_m_s();
+        assert_eq!(hint > 0.0, expect_hint, "speed {speed_m_s}: hint {hint}");
+        if expect_hint {
+            assert_eq!(hint, 14.0);
+        }
+    }
+}
+
+#[test]
+fn the_hint_never_changes_a_run() {
+    // Reading it twice around a step must not move the car: it is read-only.
+    let mut a = World::new_on_course(
+        &vehicle(),
+        realistic(),
+        &course(),
+        DEFAULT_GROUND_FRICTION,
+        0,
+    );
+    let mut b = World::new_on_course(
+        &vehicle(),
+        realistic(),
+        &course(),
+        DEFAULT_GROUND_FRICTION,
+        0,
+    );
+    for _ in 0..240 {
+        let _ = a.approach_hint_m_s();
+        a.step(InputFrame::default());
+        b.step(InputFrame::default());
+    }
+    assert_eq!(a.chassis_pose().position_m, b.chassis_pose().position_m);
+}

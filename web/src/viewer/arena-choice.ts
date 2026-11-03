@@ -5,12 +5,13 @@
 // Crowd (every car flown by the Hybrid); it draws nothing.
 import { Crowd } from '../wasm/nl_wasm.js';
 
-/** The viewer's arenas: flat ground or the obstacle arena for Stage A drops, a generated
+/** The viewer's arenas: flat ground or the obstacle arena for Stage A drops, flat ground with
+ * Stage B's cars lying on their side, a generated
  * course for Stage D, a flip-plate straight for Stage F, and the Gauntlet. */
-export type ArenaKind = 'flat' | 'obstacles' | 'driving' | 'flight' | 'gauntlet';
+export type ArenaKind = 'flat' | 'side' | 'obstacles' | 'driving' | 'flight' | 'gauntlet';
 
 /** Every arena, in the order the picker lists them. */
-export const ARENAS: ArenaKind[] = ['flat', 'obstacles', 'driving', 'flight', 'gauntlet'];
+export const ARENAS: ArenaKind[] = ['flat', 'side', 'obstacles', 'driving', 'flight', 'gauntlet'];
 
 /** The URL parameter that picks the arena: `?arena=obstacles`. */
 const ARENA_PARAM = 'arena';
@@ -18,6 +19,7 @@ const ARENA_PARAM = 'arena';
 /** The `Crowd.for_stage` name of each arena (crates/nl-wasm/src/crowd.rs). */
 const STAGE_NAMES: Record<ArenaKind, string> = {
   flat: 'A',
+  side: 'B',
   obstacles: 'arena',
   driving: 'D',
   flight: 'F',
@@ -54,6 +56,8 @@ export function arenaLabel(kind: ArenaKind): string {
   switch (kind) {
     case 'flat':
       return 'Flat arena';
+    case 'side':
+      return 'Stage B on its side';
     case 'obstacles':
       return 'Obstacle arena';
     case 'driving':
@@ -69,7 +73,7 @@ export function arenaLabel(kind: ArenaKind): string {
  * compare fairly. On the obstacle arena and the Gauntlet each row gets its own seeds, so
  * the cars do not sit on top of each other. */
 export function rowsShareSeeds(kind: ArenaKind): boolean {
-  return kind === 'flat' || kind === 'driving' || kind === 'flight';
+  return kind === 'flat' || kind === 'side' || kind === 'driving' || kind === 'flight';
 }
 
 /** True if the cars drive along a long course, so the camera follows them. */

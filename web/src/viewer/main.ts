@@ -4,11 +4,17 @@
 // checkpoint, every car flown by the Hybrid) flies every car; this page only draws them and
 // counts how the episodes end. The cars fly Stage A drops on the flat arena or the obstacle
 // arena (O key, the button or `?arena=obstacles`), or Stage D, Stage F and the Gauntlet
-// (the stage picker or `?arena=driving|flight|gauntlet`).
+// (the stage picker or `?arena=side|driving|flight|gauntlet`).
 import { requireElement, setText } from '../dom.ts';
 import { startGameLoop } from '../game-loop.ts';
+import {
+  createPerfOverlay,
+  recordFrame,
+  recordTick,
+  togglePerfOverlay,
+} from '../hud/perf-overlay.ts';
 import { FLOATS_PER_POSE } from '../render/pose-blend.ts';
-import { createArena } from '../render/scene.ts';
+import { createArena, setArenaPixelRatio } from '../render/scene.ts';
 import initWasm, { type Crowd, CrowdOutcome, Game } from '../wasm/nl_wasm.js';
 import {
   ARENAS,
@@ -21,6 +27,7 @@ import {
   rowsShareSeeds,
   searchWithArena,
 } from './arena-choice.ts';
+import { newQuality, recordQualityFrame } from './adaptive-quality.ts';
 import { createArenaView, followCars, showArena } from './arena-view.ts';
 import {
   type RunEntry,
@@ -180,12 +187,22 @@ async function start(): Promise<void> {
       switchArena();
     } else if (event.code === 'KeyL') {
       toggleCamera();
+    } else if (event.code === 'F3') {
+      event.preventDefault();
+      togglePerfOverlay(perf);
     }
   });
   toggle.addEventListener('click', switchArena);
 
+  // F3 shows fps and ms per tick and per frame (same readout as the game). On a slow GPU the
+  // resolution steps down by itself (adaptive-quality.ts).
+  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
+  const quality = newQuality(arena.renderer.getPixelRatio());
+  let lastFrameStartMs = performance.now();
+
   startGameLoop(Game.physics_dt_s(), {
     tick: (lastOfFrame) => {
+      const tickStartMs = performance.now();
       for (const row of state.rows) {
         if (row.running) {
           if (lastOfFrame) {
@@ -195,12 +212,14 @@ async function start(): Promise<void> {
           row.ticksSinceRead += 1;
         }
       }
+      recordTick(perf, performance.now() - tickStartMs);
     },
     render: (blend) => {
+      const frameStartMs = performance.now();
       if (arenaView.kind !== state.arena) {
         // Read the shapes only when the arena changes: each call copies them out of wasm.
         showArena(arenaView, state.arena, state.rows[0]?.crowd.course_shapes());
-        view.spreadOnGrid = state.arena === 'flat';
+        view.spreadOnGrid = state.arena === 'flat' || state.arena === 'side';
         setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
         picker.value = state.arena;
         panel.select(arenaTab(state.arena));
@@ -239,6 +258,13 @@ async function start(): Promise<void> {
       arena.renderer.render(arena.scene, arena.camera);
       setText(status, statusText(state));
       nextRoundWhenDone(state);
+      const frameEndMs = performance.now();
+      recordFrame(perf, frameEndMs - frameStartMs, frameEndMs);
+      const lowerRatio = recordQualityFrame(quality, frameStartMs - lastFrameStartMs);
+      lastFrameStartMs = frameStartMs;
+      if (lowerRatio !== null) {
+        setArenaPixelRatio(arena, lowerRatio);
+      }
     },
   });
 
@@ -250,6 +276,7 @@ async function start(): Promise<void> {
       courseShapeCount: () => arenaView.shapeCount,
       tab: () => state.tab,
       leaderCamera: () => state.leaderCamera,
+      pixelRatio: () => arena.renderer.getPixelRatio(),
       firstSeed: () => showcaseSeed(state.showcase, state.arena, state.round, CARS_PER_CHECKPOINT),
     },
   });

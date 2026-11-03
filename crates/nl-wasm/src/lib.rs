@@ -41,9 +41,8 @@ const FLOATS_PER_NOZZLE: usize = 6;
 
 // Reserved numbers (docs/contracts/events-hud.md, frozen at Gate 0). Do not reuse them
 // for anything else; each PR below adds its own variants.
-//   HudField  26 ApproachHint (still reserved by another stream; the HUD array holds
-//             zeros there). 24 StuntPhase and 25 StuntCode are in use since G4, 27
-//             PolicyOutOfEnvelope since G3, 23 PeakGLoad since A1.
+//   HudField  26 ApproachHint (in use since the wrap-up). 24 StuntPhase and 25 StuntCode
+//             are in use since G4, 27 PolicyOutOfEnvelope since G3, 23 PeakGLoad since A1.
 //   EventKind 11 StuntStart, 12 StuntLanded, 13 StuntRefused, 14 StuntAborted (G4;
 //             15 Scrape and 16 TooSlowFallback exist since G2).
 // Every event is 5 floats; Save's 5th is `peak_g` (FLOATS_PER_EVENT went 4 -> 5).
@@ -111,15 +110,18 @@ pub enum HudField {
     /// The stunt in progress or waiting: 1 BarrelLeft, 2 BarrelRight, 3 FrontFlip,
     /// 4 BackFlip, 0 when none.
     StuntCode = 25,
+    /// The approach hint: the entry speed in m/s a piece ahead needs
+    /// (`v_complete_min_m_s`) while the car is driving up to it too slowly, else 0. The
+    /// HUD says "too slow to clear this piece" with it (docs/contracts/survival.md).
+    ApproachHint = 26,
     /// 1 when the AI is outside where it was validated (speed past `[hybrid]
     /// policy_max_speed_m_s`, 55 by default, or a saturated observation value), so the
     /// Hybrid has PD fly, else 0. Set whichever controller is active; 0 while the wreck is
-    /// frozen. Field 26 is reserved by another stream and reads 0 for now.
+    /// frozen.
     PolicyOutOfEnvelope = 27,
 }
 
-/// Number of values in the HUD array: one more than the last `HudField`. Field 26 is a
-/// reserved placeholder (always 0), so the array runs to `PolicyOutOfEnvelope`.
+/// Number of values in the HUD array: one more than the last `HudField`.
 const HUD_LENGTH: usize = HudField::PolicyOutOfEnvelope as usize + 1;
 
 /// The values `HudField.Controller` can take (SPEC §8).
@@ -506,6 +508,11 @@ impl Game {
         values[HudField::StuntPhase as usize] = self.stunt.planner().phase().code() as f32;
         values[HudField::StuntCode as usize] = self.stunt_code_for_hud();
         values[HudField::PeakGLoad as usize] = self.world.peak_g_load();
+        values[HudField::ApproachHint as usize] = if crashed {
+            0.0
+        } else {
+            self.world.approach_hint_m_s()
+        };
         values[HudField::WindXMS as usize] = wind_x_m_s;
         values[HudField::WindZMS as usize] = wind_z_m_s;
         values
@@ -932,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn the_hud_has_28_values_with_zero_placeholders_for_fields_24_to_26() {
+    fn the_hud_has_28_values_and_the_stunt_and_hint_fields_start_at_zero() {
         let game = Game::new(
             nl_sim::vehicle_config::DEFAULT_VEHICLE_TOML,
             nl_sim::modes::DEFAULT_MODES_TOML,

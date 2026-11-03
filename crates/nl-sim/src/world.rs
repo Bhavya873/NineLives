@@ -531,6 +531,21 @@ impl World {
         }
     }
 
+    /// The approach hint (`HudField` 26, docs/contracts/survival.md): the
+    /// `v_complete_min_m_s` of the piece the car is driving up to when it is too slow to
+    /// complete it, else 0. Read-only.
+    pub fn approach_hint_m_s(&self) -> f32 {
+        let body = &self.physics.bodies[self.car.chassis];
+        let sample = CarSample {
+            position_m: body.translation().to_array(),
+            velocity_m_s: body.linvel().to_array(),
+            nose_world: (body.rotation() * Vector::X).to_array(),
+            up_world: (body.rotation() * Vector::Y).to_array(),
+            wheels_down: 0,
+        };
+        self.traversal.approach_hint_m_s(&sample)
+    }
+
     /// The records of the car's passes over the course's pieces (docs/contracts/
     /// traversal.md): the one in progress and the finished ones.
     pub fn traversal(&self) -> &TraversalTracker {

@@ -11,7 +11,7 @@ In short: the car may fail to complete a piece, but it never crashes on one it e
 
 ## Minimum completion speed
 - Each piece will publish `v_complete_min_m_s` (m/s): the slowest clean entry that still completes it.
-- Before entry, the HUD shows "too slow to clear this gap" when the car is below it (`HudField` 26 `ApproachHint`, event 16 `TooSlowFallback`; see `events-hud.md`).
+- Before entry, the HUD shows "Too slow to clear this piece: need N km/h" when the car is below it (`HudField` 26 `ApproachHint`, built; after the entry, event 16 `TooSlowFallback` keeps the warning up for 3 s; see `events-hud.md`).
 - **Where it lives (G2):** `v_complete_min_m_s` is a required field of every template in `configs/pieces.json` (0 = any speed; ramp gap 14 m/s, checked by `piece_geometry.rs`) and an optional field of `ramp` and `half_loop` in course files (`course.rs`). The traversal tracker raises `TooSlowFallback` (event 16) on a clean entry below it.
 
 ## Fallbacks by piece
