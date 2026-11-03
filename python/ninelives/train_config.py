@@ -104,6 +104,8 @@ class TrainConfig:
     # flies until the gate hands over; each AI stretch is an episode), and score
     # checkpoints as the shipped Hybrid controller.
     controller: str = "ai"
+    # Extra reward per step while upright. Only the hover-hack experiment (SPEC §9.11) sets it.
+    survival_bonus: float = 0.0
 
 
 def load_train_config(path: Path) -> TrainConfig:
@@ -146,6 +148,7 @@ def load_train_config(path: Path) -> TrainConfig:
                 "curriculum.start_at_hardest", raw["curriculum"].get("start_at_hardest", False)
             ),
             controller=str(raw.get("controller", "ai")),
+            survival_bonus=float(raw.get("survival_bonus", 0.0)),
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error

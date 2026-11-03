@@ -163,3 +163,23 @@ def test_a_per_mode_run_keeps_its_mode_while_everything_else_is_randomized():
     assert np.all(kept_obs[:, thrust] == 2.0)
     assert np.all(kept_obs[:, unlimited] == 1.0)
     assert len(np.unique(varied_obs[:, thrust])) > 1
+
+
+def test_the_survival_bonus_adds_to_the_reward_only_while_upright():
+    """The hover-hack experiment's broken reward (SPEC §9.11): +bonus per upright step,
+    0 for a car that ended the step tipped over."""
+    plain = NineLivesVecEnv(8, seed=3, stage="A")
+    bonus = NineLivesVecEnv(8, seed=3, stage="A", survival_bonus=0.1)
+    plain.reset()
+    bonus.reset()
+    rng = np.random.default_rng(0)
+    extras: set[float] = set()
+    for _ in range(300):
+        actions = random_actions(rng, 8)
+        plain.step_async(actions)
+        bonus.step_async(actions)
+        _, base_rewards, _, _ = plain.step_wait()
+        _, bonus_rewards, _, _ = bonus.step_wait()
+        extras |= set(np.round((bonus_rewards - base_rewards).astype(np.float64), 4).tolist())
+    # Both cases happen in 300 random steps of 8 Stage A drops, and nothing else is added.
+    assert extras == {0.0, 0.1}

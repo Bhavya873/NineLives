@@ -21,6 +21,9 @@ from ninelives.sim_config import load_sim_config
 from ninelives_sim import BatchedSim, nozzle_names, obs_spec
 
 ACTION_SIZE = len(nozzle_names())
+# `gravity_dir_body.y` in the observation: minus it is how far the car's up axis points up.
+GRAVITY_Y_OBS = 1
+UPRIGHT_ALIGNMENT = 0.8
 
 
 def observation_space() -> gym.spaces.Box:
@@ -62,6 +65,7 @@ class NineLivesVecEnv(VecEnv):
         randomize_mode: bool = True,
         controller: str | None = None,
         randomize_share: float = 1.0,
+        survival_bonus: float = 0.0,
     ) -> None:
         config = load_sim_config(
             mode,
@@ -74,6 +78,9 @@ class NineLivesVecEnv(VecEnv):
             randomize_share=randomize_share,
         )
         self.sim = BatchedSim(n_envs, config, seed)
+        # The hover-hack experiment's broken reward (SPEC §9.11): this much per step while
+        # the car is upright. 0 for every real run; the reward stays computed in Rust.
+        self.survival_bonus = survival_bonus
         super().__init__(n_envs, observation_space(), action_space(self.sim.action_size()))
 
     def seed(self, seed: int | None = None) -> list[int | None]:
@@ -104,7 +111,16 @@ class NineLivesVecEnv(VecEnv):
         for row, episode in enumerate(info["episode"]):
             if episode is not None:
                 infos[row]["nl_episode"] = finished_episode(info, row)
+        if self.survival_bonus:
+            rewards = rewards + self.survival_bonus * self._upright(observations, info)
         return observations, rewards, terminated | truncated, infos
+
+    @staticmethod
+    def _upright(observations: np.ndarray, info: dict[str, Any]) -> np.ndarray:
+        """1.0 for each env whose car ended the step upright (up_alignment above
+        UPRIGHT_ALIGNMENT), else 0.0. A finished env is judged on its last observation."""
+        final = np.where(info["done"][:, None], info["terminal_obs"], observations)
+        return (-final[:, GRAVITY_Y_OBS] > UPRIGHT_ALIGNMENT).astype(np.float32)
 
     def set_stage_and_level(self, stage: str, level: int) -> None:
         """Stage and curriculum level for every env's next episode (SPEC §9.9)."""
