@@ -73,39 +73,50 @@ test('F3 shows the frame rate and milliseconds per tick', async ({ page }) => {
   await expect(perf).toContainText('tick');
 });
 
+/** A course with one ramp that needs 60 m/s (216 km/h), `rampX` m down the road from the start. */
+function rampCourseJson(rampX: number): string {
+  return JSON.stringify({
+    version: 1,
+    name: 'hint',
+    start: { pos: [0, 0.7, 0], yaw: 0 },
+    bounds: { min: [-50, -20, -50], max: [600, 60, 50] },
+    pieces: [
+      {
+        type: 'ramp',
+        pos: [rampX, 0, 0],
+        length: 11.5,
+        width: 8,
+        angle_deg: 6,
+        v_complete_min_m_s: 60,
+      },
+    ],
+  });
+}
+
+/** Starts a course of the test's own through the test-only debug hook. */
+async function loadCourse(page: Page, courseJson: string): Promise<void> {
+  await page.evaluate((json) => {
+    const hook = (window as unknown as { ninelivesDebug: { loadCourse: (j: string) => void } })
+      .ninelivesDebug;
+    hook.loadCourse(json);
+  }, courseJson);
+}
+
+// No driving: the car starts at rest, so the hint does not depend on how fast the machine
+// runs the sim (CI's software GL gives about 3 fps).
 test('the HUD warns before a piece that needs more speed, and the warning clears', async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/');
   await waitForGame(page);
-  await page.evaluate(() => {
-    const course = {
-      version: 1,
-      name: 'hint',
-      start: { pos: [0, 0.7, 0], yaw: 0 },
-      bounds: { min: [-50, -20, -50], max: [600, 60, 50] },
-      pieces: [
-        {
-          type: 'ramp',
-          pos: [300, 0, 0],
-          length: 11.5,
-          width: 8,
-          angle_deg: 6,
-          v_complete_min_m_s: 60,
-        },
-      ],
-    };
-    (
-      window as unknown as { ninelivesDebug: { loadCourse: (json: string) => void } }
-    ).ninelivesDebug.loadCourse(JSON.stringify(course));
-  });
 
-  // 300 m of road and a 60 m/s ramp: driving up it the car is slower than 60 m/s inside
-  // the 80 m look-ahead, so the too-slow element names the speed (216 km/h).
-  await page.keyboard.down('KeyW');
-  await expect(page.locator('#hud-too-slow')).toContainText('need 216 km/h', { timeout: 90_000 });
-  await page.keyboard.up('KeyW');
+  // The ramp is 60 m ahead of a car at rest: inside the 80 m look-ahead, far too slow.
+  await loadCourse(page, rampCourseJson(60));
+  await expect(page.locator('#hud-too-slow')).toContainText('need 216 km/h', { timeout: 15_000 });
+
+  // A course whose ramp is 300 m away is outside the look-ahead: the warning goes.
+  await loadCourse(page, rampCourseJson(300));
+  await expect(page.locator('#hud-too-slow')).toBeHidden({ timeout: 15_000 });
   expect(consoleErrors).toEqual([]);
 });
