@@ -691,14 +691,16 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [x] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
-- [ ] Stages B–E trained; the policy is re-exported; eval on all stages and both modes.
+- [x] The policy is trained and re-exported: `models/policy.json` is flight-r4, trained on Stages A, D, E and F (docs/EXPERIMENTS.md).
+- [ ] Stages B and C are not trained, on purpose: B almost never upsets the car and C is a hop, so PD flies them (the Hybrid hands over only past 120° of tilt, DECISIONS 2026-10-27).
+- [x] Eval on all stages and both modes: Stages A–E, Off / PD / Hybrid, Realistic and Arcade, 1000 episodes each (`results/eval_*`). The AI policy does not beat PD in every cell (Stage A: Hybrid 81.0% against PD 82.2% in Realistic), see the README.
 - [x] The Gauntlet is playable start to finish with checkpoints and the results screen.
 - [x] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
 - [ ] Ghost, title screen, results tab, reduced motion, the performance overlay, static deploy.
-- [ ] The hover-hack experiment (9.11) with both clips.
-- [ ] README: pitch, GIF, how it works, results charts, the hover hack, limits, how to run, credits and sources.
+- [x] The hover-hack experiment (9.11): both runs, numbers and a height chart (`results/hover_hack.json`, `docs/images/hover-hack.svg`). Frame traces instead of video clips; see docs/EXPERIMENTS.md.
+- [x] README: pitch, screenshots (no GIF), how it works, results charts, the hover hack, limits, how to run, credits and sources.
 
 **M9 — Optional**
 - [ ] Anatomy figure (car teardown: nozzles, tank, valves) for the landing page.
