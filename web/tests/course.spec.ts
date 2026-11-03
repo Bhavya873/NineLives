@@ -29,13 +29,13 @@ test('free driving opens in the playground, and ?world=flat in the empty arena',
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
 
-  await page.goto('/');
+  await page.goto('/?play=1');
   await expect
     .poll(() => readCourse(page, 'meshes'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(60);
   expect(await readCourse(page, 'checkpoints')).toBe(0);
 
-  await page.goto('/?world=flat');
+  await page.goto('/?play=1&world=flat');
   await expect.poll(() => readCourse(page, 'meshes'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(0);
   expect(consoleErrors).toEqual([]);
 });

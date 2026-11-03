@@ -579,6 +579,7 @@ class Game {
 | Q / E | request a barrel roll left / right (11.8) |
 | Z / B | request a front flip / back flip (11.8) |
 | G | toggle ghost |
+| Tab | results so far (pauses like Esc; Esc or Tab closes) |
 | 1–0 | fire nozzles 0–9 (only when the controller is Manual, set through the API) |
 | Esc | pause / menu |
 
@@ -594,13 +595,13 @@ class Game {
 - **Bottom-right:** an attitude ball (roll/pitch), spin rate, and a top-down **nozzle map** of the car with 10 dots glowing by throttle.
 - **Top-right:** saves, crashes, time, Hop cooldown.
 - **Under the stats:** a wind arrow (relative to the camera) with Off / Breeze / Storm and the speed, hidden with no wind; streaks in the air show the wind too.
-- **G-meter:** a gauge with the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the raw peak of the stunt window (`HudField.PeakGLoad`); amber from 3 g, red from 6 g, and the view is never darkened. The best peak is kept in `localStorage` (`ninelives.g.v1`), with per-stunt bests for the session shown after a landing. Approach HUD: speed turns amber above 200 km/h, a too-slow warning follows `TooSlowFallback`, Scrapes throw sparks, and an "AI outside envelope" badge shows while `PolicyOutOfEnvelope` is 1.
+- **G-meter:** a gauge with the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the headline peak of the stunt window (the smoothed peak capped by the raw `HudField.PeakGLoad`, which shows in the tooltip); amber from 3 g, red from 6 g, and the view is never darkened. The best peak is kept in `localStorage` (`ninelives.g.v1`), with per-stunt bests for the session shown after a landing. Approach HUD: speed turns amber above 200 km/h, a too-slow warning follows `TooSlowFallback`, Scrapes throw sparks, and an "AI outside envelope" badge shows while `PolicyOutOfEnvelope` is 1.
 - **Centre toasts:** "SAVE" (with air used), "CRASH" (with cause), "NO AIR".
 
 ### 11.6 Screens and features
-- **Title screen:** mode and controller pickers, "How it works" (three short paragraphs plus the Section 1 sources), Play.
-- **Results screen** at the finish: time, saves, crashes, air used, and the delta vs the ghost.
-- **Ghost:** record `InputFrame`s per tick plus seed, course, mode, controller, policy hash and `build_hash`. Replay in a second `Game` instance and render it translucent. Store the best run in `localStorage` (wrap every read and write in try/catch; discard on build-hash mismatch).
+- **Title screen:** Play, "How it works", and a link to the training viewer. The game's clock waits behind it; `?play` skips it. (Mode and controller pickers are not built: M toggles the mode, the game flies PD.)
+- **Results screen** (Tab in a run, and on the game-over screen): saves, air used, peak g (with the contact spike), stunts landed by kind, time and the best spike ever. The Gauntlet is not part of the game (DECISIONS 2026-11-03).
+- **Ghost (as built):** record the chassis pose at 10 Hz of run time (rounded to 1 mm, at most 300 s) and replay it as a translucent car body in the next run. The best run (most saves, then longest) is stored in `localStorage` (`ninelives.ghost.v1`; every read and write in try/catch; an unknown shape is dropped) at game over and on page hide. G shows or hides it. A pose replay needs no second `Game`, no seed and no build-hash check: it draws where the car was, it does not re-simulate.
 - **Results tab:** shows the committed SVG charts from `results/`.
 - **Training viewer** (`viewer.html`): watch a crowd of 64 translucent cars fly the same 64 episodes (eval seeds 0–63) with checkpoint 1, 2, 3… of the newest exported run, auto-advancing, with each checkpoint's landed, crashed and still-flying counts (landed: the episode succeeded, or on a drop ran out of time after a save without crashing, so a policy that still blows air while parked shows its landings). One wasm `Crowd` per checkpoint flies every car as a full `Episode`, and **every car is flown by the Hybrid** (`build_controller("hybrid", …)`, the hand-over tilt from `controllers.toml`) with the checkpoint as its AI, as the game and the eval run it: PD flies until the car tips past the hand-over, so the viewer shows what the policy adds to PD. `ninelives.export --viewer` writes the checkpoint files plus `checkpoints/index.json`. `Crowd.for_stage(policy, mode, stage, first_seed, count)` covers five stages: `A` (Stage A drops in the flat arena, M6), `arena` (Stage A drops in the **obstacle arena**, M7, `courses/arena.json`), `D` (the driver bot on the generated course of `first_seed`), `F` (the bot rolling onto the flip plate of a generated straight) and `gauntlet` (the Stage D bot on `courses/gauntlet.json`). In D and F the cars of a crowd share the course of the first seed, so the viewer draws one course (`episode::course_for_stage(variation, scenarios, stage, seed)` returns the course a stage runs on, or none on flat ground); their seeds vary the driver's speed. The stage picker, O (flat ↔ obstacle arena) or `?arena=obstacles|driving|flight|gauntlet` chooses the stage; `Crowd.on_course(policy, mode, first_seed, count, course_json)` drops Stage A cars onto any course. `Crowd.course_shapes()` hands the viewer the shapes, drawn by the game's course renderer with the endless floor hidden; on the courses the camera follows the cars. The obstacle arena's pieces sit within about 40 m of the centre (ramp feet 6 m out, walls 31.5 m), inside the area where Stage A drops first touch ground (90% within 15 m, farthest 31 m of 256 seeds), so drops meet them. Cars share the one arena, so they are drawn at their true positions, not on the grid. The viewer landing rates under the current physics are recorded in `results/baseline_2026-10/viewer_landing_rates.json` (`cargo run --release -p nl-wasm --example viewer_rates`). The game links to it from a "Watch AI training" button in the bottom-right corner (top-right on phones) and from the pause menu; the viewer's "Back to the game" link returns.
 
@@ -696,7 +697,8 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 - [x] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
-- [ ] Ghost, title screen, results tab, reduced motion, the performance overlay, static deploy.
+- [x] Ghost, title screen, results tab, reduced motion, the performance overlay (F3).
+- [ ] Static deploy.
 - [ ] The hover-hack experiment (9.11) with both clips.
 - [ ] README: pitch, GIF, how it works, results charts, the hover hack, limits, how to run, credits and sources.
 
