@@ -26,7 +26,7 @@ export function tabArena(tab: StageTab): ArenaKind | null {
   }
 }
 
-/** The tab an arena belongs to (the obstacle arena is Stage A, the Gauntlet Stage D). */
+/** The tab an arena belongs to (the obstacle arena is Stage A). */
 export function arenaTab(kind: ArenaKind): StageTab {
   switch (kind) {
     case 'flat':
@@ -35,7 +35,6 @@ export function arenaTab(kind: ArenaKind): StageTab {
     case 'side':
       return 'B';
     case 'driving':
-    case 'gauntlet':
       return 'D';
     case 'flight':
       return 'F';
