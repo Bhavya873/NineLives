@@ -56,8 +56,15 @@ interface Slot {
 }
 
 /** One checkpoint label and where its car sits on the grid. */
+/** A row's two label looks, shared by its cars: a crashed car's label swaps to the faded one. */
+interface LabelLooks {
+  full: SpriteMaterial;
+  faded: SpriteMaterial;
+}
+
 interface GhostCar {
   label: Sprite;
+  looks: LabelLooks;
   gridOffset: Vector3;
   crashed: boolean;
 }
@@ -98,9 +105,18 @@ export function createCrowdView(
   const cars: GhostCar[] = [];
   rowLabels.forEach((text, row) => {
     const labelTexture = new CanvasTexture(drawLabel(text));
+    // One full and one faded material per row, not per car: fewer materials to bind.
+    const labelLooks: LabelLooks = {
+      full: new SpriteMaterial({ map: labelTexture, depthTest: false }),
+      faded: new SpriteMaterial({
+        map: labelTexture,
+        depthTest: false,
+        transparent: true,
+        opacity: CRASHED_LABEL_OPACITY,
+      }),
+    };
     for (let column = 0; column < carsPerRow; column += 1) {
-      // Each car gets its own material so a crashed car's label can fade alone.
-      const label = new Sprite(new SpriteMaterial({ map: labelTexture, depthTest: false }));
+      const label = new Sprite(labelLooks.full);
       label.scale.set(LABEL_WIDTH_M, LABEL_TALL_M, 1);
       const gridOffset = new Vector3(
         (column - (carsPerRow - 1) / 2) * COLUMN_SPACING_M,
@@ -108,7 +124,7 @@ export function createCrowdView(
         (row - (rowLabels.length - 1) / 2) * ROW_SPACING_M,
       );
       scene.add(label);
-      cars.push({ label, gridOffset, crashed: false });
+      cars.push({ label, looks: labelLooks, gridOffset, crashed: false });
     }
   });
   const allSlots = [...wheelSlots, ...bodySlots];
@@ -173,7 +189,7 @@ export function updateCrowdRow(view: CrowdView, row: number, poses: RowPoses, bl
     }
     if (crashed !== car.crashed) {
       car.crashed = crashed;
-      car.label.material.opacity = crashed ? CRASHED_LABEL_OPACITY : 1;
+      car.label.material = crashed ? car.looks.faded : car.looks.full;
     }
   }
 }

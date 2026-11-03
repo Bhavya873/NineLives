@@ -1,5 +1,6 @@
 // Stage tabs and showcase seeds (plan G5). The tabs are the curve's stages A-F; the crowd can
-// fly stages A, D and F (the other stages have no Crowd in the wasm), so the other tabs show
+// fly stages A, B, D and F (C and E build a course or Chaos knocks per seed, so one shared
+// course cannot be drawn for them), so the other tabs show
 // the curve alone. Showcase seeds are the first seed of the drops each tab starts on, chosen
 // by `scripts/choose-showcase-seeds.mjs` and committed in `showcase.json`, so every visit
 // opens on the same reproducible round. Pure.
@@ -14,6 +15,8 @@ export function tabArena(tab: StageTab): ArenaKind | null {
   switch (tab) {
     case 'A':
       return 'flat';
+    case 'B':
+      return 'side';
     case 'D':
       return 'driving';
     case 'F':
@@ -29,6 +32,8 @@ export function arenaTab(kind: ArenaKind): StageTab {
     case 'flat':
     case 'obstacles':
       return 'A';
+    case 'side':
+      return 'B';
     case 'driving':
     case 'gauntlet':
       return 'D';
