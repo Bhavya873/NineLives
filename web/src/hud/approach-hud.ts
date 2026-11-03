@@ -1,8 +1,8 @@
 // The approach HUD: an amber speed readout above 200 km/h, a "too slow" warning when
 // the sim raises TooSlowFallback (event 16), and an "AI outside envelope" badge when
-// HudField PolicyOutOfEnvelope is 1. The approach hint is computed here from the event,
-// not from HudField 26 (ApproachHint), which stays reserved: the web does not know the
-// next piece's v_complete_min_m_s, so it cannot warn before the entry. Pure logic.
+// HudField PolicyOutOfEnvelope is 1. Before a piece, HudField 26 (ApproachHint) holds the
+// entry speed the piece ahead needs while the car is too slow for it, and the HUD names
+// it; after the entry, TooSlowFallback keeps the warning up for a few seconds. Pure logic.
 import { FLOATS_PER_EVENT } from '../sim-events.ts';
 
 /** Event kinds this HUD reads (docs/contracts/events-hud.md). */
@@ -21,6 +21,14 @@ export function isFast(speedMS: number): boolean {
 /** True when the AI badge should show (HudField PolicyOutOfEnvelope === 1). */
 export function outsideEnvelope(flag: number): boolean {
   return flag === 1;
+}
+
+/** The pre-entry hint for HudField ApproachHint (needed speed in m/s, 0 = none), or ''. */
+export function approachHintText(neededSpeedMS: number): string {
+  if (!(neededSpeedMS > 0)) {
+    return '';
+  }
+  return `Too slow to clear this piece: need ${Math.ceil(neededSpeedMS * 3.6)} km/h`;
 }
 
 /** The warning text for TooSlowFallback events in a batch (the last one), or null. */

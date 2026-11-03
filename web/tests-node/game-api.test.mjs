@@ -172,9 +172,10 @@ test('holding Boost in tight circles runs the Realistic tank out of air', () => 
 test('the HUD array and the event width match the contract', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
 
-  // docs/contracts/events-hud.md: HudField 27 is the last one so far (24 to 26 are reserved
-  // by other streams and read 0); events are 5 floats.
+  // docs/contracts/events-hud.md: HudField 27 is the last one so far (24 to 26 read 0 on
+  // flat ground at rest); events are 5 floats.
   assert.equal(HudField.PeakGLoad, 23);
+  assert.equal(HudField.ApproachHint, 26);
   assert.equal(HudField.PolicyOutOfEnvelope, 27);
   assert.equal(game.hud().length, HudField.PolicyOutOfEnvelope + 1);
   assert.deepEqual(Array.from(game.hud().slice(24, 27)), [0, 0, 0]);
@@ -214,4 +215,44 @@ test('a Hop reports the raw peak g in the HUD and in the Save event', () => {
   assert.ok(rawPeak > 1, `peak ${rawPeak}`);
   assert.ok(rawPeak >= displayedPeak - 1e-3, `raw ${rawPeak} displayed ${displayedPeak}`);
   assert.equal(save[4], hudPeakAtSave);
+});
+
+test('the approach hint names the needed speed until the car is fast enough', () => {
+  const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
+  game.load_course(
+    JSON.stringify({
+      version: 1,
+      name: 'hint',
+      start: { pos: [0, 0.7, 0], yaw: 0 },
+      bounds: { min: [-50, -20, -50], max: [400, 60, 50] },
+      pieces: [
+        {
+          type: 'ramp',
+          pos: [120, 0, 0],
+          length: 11.5,
+          width: 8,
+          angle_deg: 6,
+          v_complete_min_m_s: 40,
+        },
+      ],
+    }),
+  );
+
+  // At rest, 120 m before the ramp (past the 80 m look-ahead): no hint yet.
+  assert.equal(game.hud()[HudField.ApproachHint], 0);
+  // Driving up to it, slower than 40 m/s: the hint is the needed speed.
+  let hinted = false;
+  for (let i = 0; i < 12 * 120 && !hinted; i += 1) {
+    tickMany(game, FULL_THROTTLE, 1);
+    hinted = game.hud()[HudField.ApproachHint] === 40;
+  }
+  assert.ok(hinted, 'the hint shows once the ramp is inside the look-ahead');
+  // Once fast enough it clears, still before the ramp.
+  let cleared = false;
+  for (let i = 0; i < 6 * 120 && !cleared; i += 1) {
+    tickMany(game, FULL_THROTTLE, 1);
+    const x = game.chassis_pose()[0];
+    cleared = x < 119 && game.hud()[HudField.ApproachHint] === 0;
+  }
+  assert.ok(cleared, 'the hint clears at 40 m/s');
 });

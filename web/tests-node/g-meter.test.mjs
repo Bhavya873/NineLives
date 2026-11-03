@@ -8,6 +8,7 @@ import {
   newTooSlowState,
   outsideEnvelope,
   scrapeSpeeds,
+  approachHintText,
   tooSlowWarning,
   updateTooSlow,
 } from '../src/hud/approach-hud.ts';
@@ -110,6 +111,12 @@ test('too-slow warning comes from event 16 and times out', () => {
   assert.match(updateTooSlow(state, events, 5), /Too slow/);
   assert.match(updateTooSlow(state, new Float32Array(0), 7), /Too slow/);
   assert.equal(updateTooSlow(state, new Float32Array(0), 9), '');
+});
+
+test('the approach hint names the needed speed before the piece and is empty at 0', () => {
+  assert.equal(approachHintText(0), '');
+  assert.equal(approachHintText(Number.NaN), '');
+  assert.equal(approachHintText(14), 'Too slow to clear this piece: need 51 km/h');
 });
 
 test('scrape events give their normal speeds; sparks burst, fall and die', () => {
