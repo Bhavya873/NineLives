@@ -208,11 +208,18 @@ pub fn shape_collider(shape: &CourseShape, friction: f32) -> Option<ColliderBuil
     } else {
         0
     };
+    // The floor's contacts go through `floor_hook`, which keeps their normal vertical.
+    let hooks = if shape.surface == Surface::Floor {
+        ActiveHooks::MODIFY_SOLVER_CONTACTS
+    } else {
+        ActiveHooks::empty()
+    };
     Some(
         builder
             .position(shape.pose.to_rapier())
             .friction(shape.friction.unwrap_or(friction))
-            .user_data(user_data),
+            .user_data(user_data)
+            .active_hooks(hooks),
     )
 }
 

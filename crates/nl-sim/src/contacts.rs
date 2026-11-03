@@ -207,7 +207,7 @@ const FLOOR_TOP_MIN_Y_M: f32 = -0.05;
 /// tipped far from vertical (R2c found 244 such crashes of 1295, with "impact speeds"
 /// up to 48 m/s for a car sliding at 50 m/s with its rear edge on the ground). The speed
 /// into the floor is the speed along its true normal, straight down.
-fn is_flat_floor(collider: &Collider) -> bool {
+pub(crate) fn is_flat_floor(collider: &Collider) -> bool {
     collider.shape().shape_type() == ShapeType::Cuboid && collider.user_data == 0
 }
 
