@@ -16,7 +16,7 @@
   ],
   "physics_hash": "5cf7862fd0ccf2b2",
   "controller_config_hash": "97d538933dfef088",
-  "git_sha": "f1cbf0defe530990085b1ef2522a731a1075babf",
+  "git_sha": "f0bce333fdfac7feb629319cdc3d4ccbaa78d856-dirty",
   "checkpoints": [
     {
       "file": "1.json",
@@ -39,7 +39,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -76,7 +76,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -113,7 +113,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -150,7 +150,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -160,9 +160,9 @@
           "crash_rate": 0.09000000357627869
         },
         "F": {
-          "success_rate": 0.9100000262260437,
-          "save_rate": 0.9599999785423279,
-          "crash_rate": 0.03500000014901161
+          "success_rate": 0.9150000214576721,
+          "save_rate": 0.9649999737739563,
+          "crash_rate": 0.029999999329447746
         }
       }
     },
@@ -187,7 +187,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -224,7 +224,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -261,7 +261,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
@@ -298,7 +298,7 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 0.9900000095367432,
+          "success_rate": 1.0,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.0
         },
