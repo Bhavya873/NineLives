@@ -1,6 +1,6 @@
-// Training viewer smoke test (SPEC §11.6): the page loads the newest run's checkpoints,
-// the crowd flies, cars land, and nothing logs an error, on the flat arena and on the
-// obstacle arena.
+// Training viewer smoke tests (SPEC §11.6): the page loads the newest run's checkpoints, every
+// stage's crowd flies at once (each stage stepped in its own worker), cars land, the courses
+// are drawn, a tab or a key focuses one stage, and nothing logs an error.
 import { type Page, expect, test } from '@playwright/test';
 
 import { collectConsoleErrors } from './console-errors.ts';
@@ -8,48 +8,49 @@ import { collectConsoleErrors } from './console-errors.ts';
 /** Generous limit for slow CI machines with software graphics. */
 const SLOW_MACHINE_TIMEOUT_MS = 90_000;
 
-/** What the viewer's test hook reports, read in one go (null until the page sets it up). */
-interface ViewerReading {
-  landed: number;
+/** One stage as the viewer's test hook reports it. */
+interface StageReading {
   arena: string;
-  courseShapeCount: number;
+  round: number;
+  rows: number;
+  landed: number;
+  crashed: number;
+  shapeCount: number;
+  running: boolean;
+  visible: boolean;
 }
 
 interface ViewerHook {
   checkpointCount: () => number;
   landed: () => number;
   arena: () => string;
-  courseShapeCount: () => number;
+  focus: () => string | null;
+  courseShapeCount: (arena?: string) => number;
+  stages: () => StageReading[];
 }
 
-/** Reads the viewer's test hook. */
-function readViewer(page: Page): Promise<ViewerReading | null> {
+/** Every stage's state (empty until the page sets up its hook). */
+function readStages(page: Page): Promise<StageReading[]> {
   return page.evaluate(() => {
     const hook = (window as unknown as { ninelivesViewer?: ViewerHook }).ninelivesViewer;
-    if (!hook) {
-      return null;
-    }
-    return {
-      landed: hook.landed(),
-      arena: hook.arena(),
-      courseShapeCount: hook.courseShapeCount(),
-    };
+    return hook ? hook.stages() : [];
   });
 }
 
-/** Cars landed so far (-1 before the hook exists). */
+/** Cars landed so far over every stage (-1 before the hook exists). */
 async function readLanded(page: Page): Promise<number> {
-  return (await readViewer(page))?.landed ?? -1;
+  const stages = await readStages(page);
+  return stages.length === 0 ? -1 : stages.reduce((sum, stage) => sum + stage.landed, 0);
 }
 
-/** Waits until the status line names `label` ("flat arena" or "obstacle arena"). */
-async function expectArena(page: Page, label: string): Promise<void> {
-  await expect(page.locator('#viewer-status')).toContainText(label, {
-    timeout: SLOW_MACHINE_TIMEOUT_MS,
-  });
+/** One stage's reading. */
+async function readStage(page: Page, arena: string): Promise<StageReading | undefined> {
+  return (await readStages(page)).find((stage) => stage.arena === arena);
 }
 
-test('the training viewer flies every checkpoint at once and cars land', async ({ page }) => {
+const ARENAS = ['flat', 'side', 'obstacles', 'driving', 'flight'];
+
+test('the training viewer flies every stage at once and cars land', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
 
@@ -58,95 +59,169 @@ test('the training viewer flies every checkpoint at once and cars land', async (
   await expect(page.locator('#viewer-status')).toContainText('checkpoints at once', {
     timeout: SLOW_MACHINE_TIMEOUT_MS,
   });
+  await expect(page.locator('#viewer-status')).toContainText('all stages');
   await expect(page.locator('#viewer-board')).toContainText('Checkpoint');
+  // Five stage panels, one title each.
+  await expect(page.locator('.panel-title')).toHaveCount(5);
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5);
+  // Every stage's worker has posted all eight checkpoint rows.
+  await expect
+    .poll(async () => (await readStages(page)).map((stage) => stage.arena), {
+      timeout: SLOW_MACHINE_TIMEOUT_MS,
+    })
+    .toEqual(ARENAS);
+  await expect
+    .poll(async () => (await readStages(page)).every((stage) => stage.rows === 8), {
+      timeout: SLOW_MACHINE_TIMEOUT_MS,
+    })
+    .toBe(true);
   await expect
     .poll(() => readLanded(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(0);
   expect(consoleErrors).toEqual([]);
 });
 
-test('the viewer switches to the obstacle arena, draws it, and cars land there', async ({
-  page,
-}) => {
+test('every course stage draws its shapes and the drop stages draw none', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/viewer.html');
-  await expectArena(page, 'flat arena');
 
-  await page.locator('#arena-toggle').click();
-
-  await expectArena(page, 'obstacle arena');
-  await expect(page).toHaveURL(/arena=obstacles/);
   await expect
-    .poll(async () => (await readViewer(page))?.courseShapeCount ?? 0)
+    .poll(async () => (await readStage(page, 'obstacles'))?.shapeCount ?? 0, {
+      timeout: SLOW_MACHINE_TIMEOUT_MS,
+    })
     .toBeGreaterThan(20);
-  expect((await readViewer(page))?.arena).toBe('obstacles');
   await expect
-    .poll(() => readLanded(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
-    .toBeGreaterThan(0);
+    .poll(async () => (await readStage(page, 'driving'))?.shapeCount ?? 0, {
+      timeout: SLOW_MACHINE_TIMEOUT_MS,
+    })
+    .toBeGreaterThan(1);
+  await expect
+    .poll(async () => (await readStage(page, 'flight'))?.shapeCount ?? 0, {
+      timeout: SLOW_MACHINE_TIMEOUT_MS,
+    })
+    .toBeGreaterThan(1);
+  expect((await readStage(page, 'flat'))?.shapeCount).toBe(0);
+  expect((await readStage(page, 'side'))?.shapeCount).toBe(0);
   expect(consoleErrors).toEqual([]);
 });
 
-test('?arena=obstacles opens on the obstacle arena and O goes back to flat', async ({ page }) => {
+test('a stage tab focuses that stage and All shows every stage again', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
-  const consoleErrors = collectConsoleErrors(page);
-  await page.goto('/viewer.html?arena=obstacles');
-  await expectArena(page, 'obstacle arena');
-
-  await page.keyboard.press('KeyO');
-
-  await expectArena(page, 'flat arena');
-  await expect.poll(async () => (await readViewer(page))?.courseShapeCount ?? -1).toBe(0);
-  expect(consoleErrors).toEqual([]);
-});
-
-test('the stage picker flies Stage D, Stage F and the Gauntlet with the Hybrid', async ({
-  page,
-}) => {
-  test.setTimeout(3 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/viewer.html');
-  await expectArena(page, 'flat arena');
-  await expect(page.locator('#stage-select option')).toHaveText([
-    'Flat arena',
-    'Stage B on its side',
-    'Obstacle arena',
-    'Stage D course',
-    'Stage F flip plate',
-    'Gauntlet',
-  ]);
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
 
-  const stages = [
-    { value: 'driving', label: 'stage d course' },
-    { value: 'flight', label: 'stage f flip plate' },
-    { value: 'gauntlet', label: 'gauntlet' },
-  ];
-  for (const { value, label } of stages) {
-    await page.locator('#stage-select').selectOption(value);
+  await page.locator('#stage-tabs button', { hasText: /^D$/ }).click();
 
-    await expectArena(page, label);
-    await expect(page).toHaveURL(new RegExp(`arena=${value}`));
-    // Every course is drawn from the crowd's shapes (at least a floor and a piece).
-    await expect
-      .poll(async () => (await readViewer(page))?.courseShapeCount ?? 0)
-      .toBeGreaterThan(1);
-    expect((await readViewer(page))?.arena).toBe(value);
-  }
+  await expect(page.locator('.panel-title:visible')).toHaveCount(1);
+  await expect(page.locator('.panel-title:visible')).toContainText('Stage D course');
+  await expect(page).toHaveURL(/arena=driving/);
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as { ninelivesViewer: ViewerHook }).ninelivesViewer.arena(),
+    ),
+  ).toBe('driving');
+  // The stages nobody can see stop stepping; the focused one keeps going.
+  const stages = await readStages(page);
+  expect(stages.filter((stage) => stage.visible).map((stage) => stage.arena)).toEqual(['driving']);
+
+  await page.locator('#stage-tabs button', { hasText: /^All$/ }).click();
+
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5);
+  await expect(page).not.toHaveURL(/arena=/);
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as { ninelivesViewer: ViewerHook }).ninelivesViewer.arena(),
+    ),
+  ).toBe('all');
+  expect(consoleErrors).toEqual([]);
+});
+
+test('clicking a panel title, a number key and Esc move the focus', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  const consoleErrors = collectConsoleErrors(page);
+  await page.goto('/viewer.html');
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+
+  await page.locator('.panel-title[data-arena="obstacles"]').click();
+  await expect(page).toHaveURL(/arena=obstacles/);
+  await expect(page.locator('.panel-title:visible')).toHaveCount(1);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5);
+
+  await page.keyboard.press('Digit5');
+  await expect(page).toHaveURL(/arena=flight/);
+  await expect(page.locator('.panel-title:visible')).toContainText('Stage F flip plate');
   // Stage F flights end within seconds; the cars land.
-  await page.locator('#stage-select').selectOption('flight');
   await expect
-    .poll(() => readLanded(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .poll(async () => (await readStage(page, 'flight'))?.landed ?? 0, {
+      timeout: SLOW_MACHINE_TIMEOUT_MS,
+    })
     .toBeGreaterThan(0);
   expect(consoleErrors).toEqual([]);
 });
 
-test('?arena=gauntlet opens on the Gauntlet', async ({ page }) => {
+test('?arena=driving opens focused on Stage D and has no Gauntlet anywhere', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
+  await page.goto('/viewer.html?arena=driving');
+
+  await expect(page.locator('.panel-title:visible')).toHaveCount(1, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+  await expect(page.locator('.panel-title:visible')).toContainText('Stage D course');
+  await expect(page.locator('body')).not.toContainText(/gauntlet/i);
+
+  // The old Gauntlet link now opens the all-stages view.
   await page.goto('/viewer.html?arena=gauntlet');
-
-  await expectArena(page, 'gauntlet');
-
-  await expect(page.locator('#stage-select')).toHaveValue('gauntlet');
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
   expect(consoleErrors).toEqual([]);
+});
+
+test('the stage panels tile the canvas beside the side column', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto('/viewer.html');
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+
+  const side = await page.locator('#viewer-side').boundingBox();
+  const titles = await page.locator('.panel-title').evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top };
+    }),
+  );
+  expect(side).not.toBeNull();
+  for (const title of titles) {
+    // No title sits under the side column.
+    expect(title.right).toBeLessThanOrEqual((side?.x ?? 0) + 1);
+  }
+  // Two rows of panels: the titles have two distinct heights.
+  expect(new Set(titles.map((title) => Math.round(title.top))).size).toBe(2);
+});
+
+test("F3 shows the frame rate and the workers' stepping cost", async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/viewer.html');
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+  await expect(page.locator('#hud-perf')).toBeHidden();
+
+  await page.keyboard.press('F3');
+
+  await expect(page.locator('#hud-perf')).toContainText('fps', {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+  await expect(page.locator('#hud-perf-steps')).toContainText('worker ms per tick');
 });

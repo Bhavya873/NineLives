@@ -342,6 +342,139 @@
         font-size: 14px;
       }
 
+      /* Stunt-ready hint, under the other top-left notes. */
+      #hud-stunt-ready {
+        font-size: 13px;
+        color: #b8f0c4;
+      }
+
+      /* The keys list can fold away on small screens. */
+      #hud-keys-toggle {
+        display: none;
+        position: fixed;
+        left: var(--edge);
+        bottom: 132px;
+        padding: 4px 12px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      /* The title screen: the game's clock waits behind it. */
+      #title {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        background: radial-gradient(ellipse at 50% 40%, #1c2b3d 0%, #070b10 75%);
+        text-align: center;
+        animation: title-in 0.6s ease-out;
+      }
+      @keyframes title-in {
+        from {
+          opacity: 0;
+          transform: scale(1.03);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      #title .wordmark {
+        margin: 0;
+        font-size: 56px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      #title .tagline {
+        margin: 0;
+        max-width: 34em;
+        color: var(--muted);
+      }
+      #title-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      #title button,
+      #title a.button {
+        padding: 10px 28px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel-solid);
+        color: var(--text);
+        font: inherit;
+        font-size: 17px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      #title-play {
+        border: 0;
+        background: var(--accent);
+        font-weight: 600;
+      }
+      #title-help {
+        max-width: 36em;
+        padding: 12px 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        text-align: left;
+        font-size: 14px;
+      }
+      #title-help p {
+        margin: 0 0 8px;
+      }
+
+      /* Results: the game-over list and the T overlay share one look. */
+      #results {
+        position: fixed;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: rgb(0 0 0 / 72%);
+        text-align: center;
+      }
+      #results h2 {
+        margin: 0;
+        font-size: 32px;
+        letter-spacing: 0.06em;
+      }
+      #results p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .results-list {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 6px 22px;
+        margin: 0;
+        text-align: left;
+        font-variant-numeric: tabular-nums;
+      }
+      .results-list dt {
+        color: var(--muted);
+      }
+      .results-list dd {
+        margin: 0;
+      }
+
       /* Phones: the keys sit above the dashboard instead of beside the hearts. */
       @media (max-width: 640px) {
         #hud-keys {
@@ -364,7 +497,31 @@
           height: 18px;
         }
       }
+      /* Small screens: the keys start folded; the Keys button opens them. */
+      @media (max-width: 640px) {
+        #hud-keys-toggle {
+          display: block;
+        }
+        #hud-keys[data-collapsed='true'] {
+          display: none;
+        }
+        #hud-keys {
+          bottom: 166px;
+        }
+        #title .wordmark {
+          font-size: 36px;
+        }
+      }
+      /* Reduced motion (SPEC §11.4): no animations or transitions anywhere. */
       @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
         #hud-air.low #hud-air-fill {
           animation: none;
         }
@@ -380,7 +537,11 @@
       <div id="hud-too-slow" class="hud" hidden></div>
       <div id="hud-envelope" class="hud" hidden>AI outside envelope</div>
       <div id="hud-g-record" class="hud" hidden></div>
+      <div id="hud-stunt-ready" class="hud" hidden></div>
     </div>
+    <button type="button" id="hud-keys-toggle" aria-controls="hud-keys" aria-expanded="false">
+      Keys
+    </button>
     <dl id="hud-keys" class="hud" aria-label="Keys">
       <dt>W S / ↑ ↓</dt>
       <dd>drive, brake</dd>
@@ -394,6 +555,10 @@
       <dd>barrel roll</dd>
       <dt>Z / B</dt>
       <dd>front / back flip</dd>
+      <dt>Tab</dt>
+      <dd>results</dd>
+      <dt>G</dt>
+      <dd>ghost</dd>
       <dt>X</dt>
       <dd>drop test</dd>
       <dt>R</dt>
@@ -428,7 +593,7 @@
         </div>
       </div>
     </div>
-    <!-- Out of the Tab order: Enter starts the Gauntlet, so a focused link would leave the game. -->
+    <!-- Out of the Tab order: a focused link would leave the game when Enter is pressed. -->
     <a id="hud-watch" class="hud" href="./viewer.html" tabindex="-1">Watch AI training</a>
     <div id="hud-toast" class="hud" hidden></div>
     <div id="hud-perf" class="hud" hidden></div>
@@ -441,10 +606,41 @@
       <h1 class="wordmark">Nine Lives</h1>
       <h2>Out of lives</h2>
       <p id="game-over-summary"></p>
+      <dl id="game-over-results" class="results-list"></dl>
       <button type="button" id="restart">Restart</button>
       <a href="https://github.com/Bhavya873/NineLives" target="_blank" rel="noopener"
         >Source and write-up on GitHub</a
       >
+    </section>
+    <section id="results" hidden>
+      <h2>Results so far</h2>
+      <dl id="results-list" class="results-list"></dl>
+      <p>Press Tab or Esc to go on</p>
+    </section>
+    <section id="title" aria-labelledby="title-name">
+      <h1 id="title-name" class="wordmark">Nine Lives</h1>
+      <p class="tagline">
+        An AI fires a car's 10 cold-gas thrusters so it always lands on its wheels. Drive, jump,
+        flip, and watch it save you nine times.
+      </p>
+      <div id="title-buttons">
+        <button type="button" id="title-play">Play</button>
+        <button type="button" id="title-how" aria-expanded="false" aria-controls="title-help">
+          How it works
+        </button>
+        <a class="button" id="title-watch" href="./viewer.html">Watch AI training</a>
+      </div>
+      <div id="title-help" hidden>
+        <p>
+          The car carries ten air nozzles and a limited tank. The AI fires them in the air to turn
+          the car so the wheels touch first. Each crash costs a life; you have nine.
+        </p>
+        <p>
+          W S drive and brake, A D steer, Space hops, Shift boosts. Q / E barrel-roll and Z / B flip
+          when the planner says a stunt is ready. Tab shows your results, G toggles the ghost of
+          your best run, Esc pauses.
+        </p>
+      </div>
     </section>
     <script type="module" src="/src/main.ts"></script>
   </body>

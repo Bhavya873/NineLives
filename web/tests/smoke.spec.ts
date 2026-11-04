@@ -50,7 +50,7 @@ test('holding W drives the car forward without console errors', async ({ page })
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
 
-  await page.goto('/');
+  await page.goto('/?play=1');
   await expect.poll(() => readDebug(page, 'x'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).not.toBeNaN();
   const startX = await readDebug(page, 'x');
   const startTimeS = await readDebug(page, 'time');
@@ -68,7 +68,7 @@ test('holding W drives the car forward without console errors', async ({ page })
 
 test('the game flies PD alone by default', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
-  await page.goto('/');
+  await page.goto('/?play=1');
   await expect
     .poll(() => readDebug(page, 'time'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .not.toBeNaN();
@@ -84,7 +84,7 @@ test('the game flies PD alone by default', async ({ page }) => {
 
 test('?controller=hybrid switches to Hybrid once the policy has loaded', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
-  await page.goto('/?controller=hybrid');
+  await page.goto('/?play=1&controller=hybrid');
 
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
@@ -95,7 +95,7 @@ test('?controller=hybrid switches to Hybrid once the policy has loaded', async (
 test('a drop test runs clean under the Hybrid', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
-  await page.goto('/?controller=hybrid');
+  await page.goto('/?play=1&controller=hybrid');
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBe(CONTROLLER_CODE_HYBRID_PD);
