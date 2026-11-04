@@ -34,7 +34,7 @@ never re-implement any of it.
 | `python/ninelives` | Gymnasium/SB3 adapter, training, curriculum, eval, export, charts |
 | `web/` | Vite + TypeScript + three.js game and training viewer |
 | `configs/` | TOML for vehicle, modes, controllers, reward and scenarios; YAML for PPO runs |
-| `courses/` | course JSON (playground, Gauntlet, the viewer's obstacle arena) |
+| `courses/` | course JSON (playground, the Gauntlet (cut from the game, kept for sim and eval), the viewer's obstacle arena) |
 
 ## 3. Conventions
 

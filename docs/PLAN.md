@@ -181,7 +181,7 @@ This goes into `CLAUDE.md` § Style. Readable beats clever, everywhere.
 | 6 | Training guide | `docs/TRAINING.md` | you can run it on your own machine |
 | 7 | Trained policy | `models/policy.json` | eval results |
 | 8 | Evals + charts (Off/PD/AI × Stages A–E × both modes, Gauntlet completion) | `results/` | committed JSON/CSV/SVG |
-| 9 | Browser game: Gauntlet, explosion + respawn, HUD, modes, controllers, ghost | `web/`, `crates/nl-wasm` | Playwright smoke, 60 fps measurement |
+| 9 | Browser game: (Gauntlet, later cut), explosion + respawn, HUD, modes, controllers, ghost | `web/`, `crates/nl-wasm` | Playwright smoke, 60 fps measurement |
 | 10 | Hover-hack experiment | `docs/EXPERIMENTS.md`, README | two clips + metrics |
 | 11 | Static deploy | Railway (static file server container) | URL |
 | 12 | README | `README.md` | your review |

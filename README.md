@@ -23,9 +23,9 @@ cd web && npm install && npm run wasm && npm run dev    # http://localhost:5173
 | Q / E | barrel roll left / right (the planner only agrees if the car can also land) |
 | Z / B | front / back flip |
 | X | drop test: throw the car into a random Stage A start and watch it save |
-| C | Chaos: a random knock |
-| T | controller: Off, PD, AI |
-| M, V | Realistic / Arcade air, wind |
+| G | show or hide the ghost of your best run |
+| Tab | results so far (pauses like Esc) |
+| M, V | Realistic / Arcade air, wind level |
 | R, Esc, F3 | respawn, pause, frame-rate overlay |
 
 **Watch AI training** (the link in the corner, or `viewer.html`) replays eight checkpoints of the policy at once: a crowd of cars per checkpoint, dropped from the same starts, so you can see the same drop go from a crash to a clean landing as training goes on.
@@ -99,13 +99,18 @@ Pay for landing, charge for airtime, never pay for merely surviving. The small b
 
 ## Limits
 
-- The AI does not beat PD on every stage and mode (see above). The game starts with PD; the AI is one key press away.
+- The AI does not beat PD on every stage and mode (see above). The game flies PD alone by default; the Hybrid (PD plus the policy) is opt-in with `?controller=hybrid`.
 - Stages B and C were never trained (PD flies them, the Hybrid hands over only past 120°). Stage A is the hard one for everyone: about 19% of the hardest Stage A drops (Hybrid, Realistic) still end in a crash.
 - Physics numbers are plausible, not official. Air, thrust and mass are tuned for play.
 - The AI is only trusted inside the speed range it was trained on (55 m/s observed speed); above it, PD takes over.
 - The training viewer cannot show Stages C and E: each seed builds its own course, so cars cannot share one drawn course.
 - The hover-hack runs are small (12 million steps, one seed each, a single fixed set of 200 drops), so treat the numbers as a demonstration, not a benchmark.
 - On a slow machine the sim runs in slow motion rather than dropping frames (at most 8 ticks per frame).
+
+## Not verified
+
+- The Docker image has not been built end to end here (`docker build` and `docker run` below are untested); the web build, the size budget and the nginx config are checked separately.
+- Frame rate on a real GPU: the 60 fps figures come from software rendering in headless Chromium, not from measured hardware.
 
 ## Deploy
 
