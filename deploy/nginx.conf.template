@@ -12,7 +12,7 @@ server {
     gzip on;
     gzip_comp_level 6;
     gzip_min_length 1024;
-    gzip_types application/wasm application/javascript text/css application/json image/svg+xml;
+    gzip_types application/wasm application/javascript text/javascript text/css application/json image/svg+xml;
 
     # Hashed build output never changes under the same name.
     location /assets/ {

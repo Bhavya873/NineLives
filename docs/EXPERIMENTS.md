@@ -442,6 +442,6 @@ Branch `claude/ship`. Two runs, identical except for the reward: `configs/train/
 | Broken | 35.5% | 27.5% | 37.0% | 3.61 s | 8.0 s | 135 kg |
 | Fixed | 89.5% | 10.5% | 0.0% | 1.06 s | 1.9 s | 35 kg |
 
-- **Outcome:** the expected hover appears. 37% of the broken policy's drops end only at the 8 s time limit, with the car held upright in the air; the fixed policy has none. The broken policy is a mix (it also lands or crashes in the rest), so this is a partial hover at this budget, not every episode.
-- **Limits:** one seed per run, 12 M steps, a single set of 200 drops. The clips the SPEC asks for are height traces (three drops per policy) instead of video. The broken run's curriculum never left level 1 (best eval 69.5%); the fixed run reached level 4. The numbers are not comparable with the shipped policy (`models/policy.json`, Stages A, D, E, F).
+- **Outcome:** the expected hover appears. 37% of the broken policy's drops end only at the 8 s time limit, (attitude was not measured, only that the episode did not end); the fixed policy has none. The broken policy is a mix (it also lands or crashes in the rest), so this is a partial hover at this budget, not every episode.
+- **Limits:** one seed per run, 12 M steps, a single set of 200 drops. The clips the SPEC asks for are height traces (three drops per policy) instead of video. Training-time eval and curriculum levels were not kept (runs/ is gitignored), so none are claimed here. The numbers are not comparable with the shipped policy (`models/policy.json`, Stages A, D, E, F).
 - **CI:** a one-seed speed sweep (768 runs) must report 0 crashes; the wasm size check reports about 1.05 MB gzipped against the 2.5 MB budget.

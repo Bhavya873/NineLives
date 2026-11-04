@@ -91,7 +91,7 @@ An RL agent finds the cheapest way to collect reward. If being alive pays, hover
 | Longest time in the air | 8.0 s | 1.9 s |
 | Mean air used | 135 kg | 35 kg |
 
-With the survival bonus, more than a third of the drops never end: the car holds itself upright in the air and collects 0.1 a step until the clock runs out. With the default reward no episode times out and the car is down in about a second.
+With the survival bonus, more than a third of the drops never end: the policy is still flying when the 8 s clock runs out (we measured time-outs and airtime, not the car's attitude). With the default reward no episode times out and the car is down in about a second.
 
 ![Heights of three episodes per policy](docs/images/hover-hack.svg)
 
