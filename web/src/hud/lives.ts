@@ -1,7 +1,7 @@
 // The nine lives: a row of pixel hearts, one emptied per crash, and the black game-over
 // screen once all nine are gone. It reads the sim's crash count; it never touches physics.
 
-import { setText } from '../dom.ts';
+import { focusDialog, setText } from '../dom.ts';
 import { formatTime, type HudValues } from './hud.ts';
 
 /** Lives per run: the game's name. */
@@ -40,6 +40,8 @@ export interface Lives {
   gameOverAtMs: number | null;
   /** True while the game-over screen is up. */
   over: boolean;
+  /** Gives focus back when the game-over screen closes. */
+  restoreFocus: (() => void) | null;
 }
 
 /** Builds the nine hearts in `row` and wraps the game-over screen (it starts hidden). */
@@ -62,6 +64,7 @@ export function createLives(row: HTMLElement, gameOver: HTMLElement, summary: HT
     timeAtStartS: 0,
     gameOverAtMs: null,
     over: false,
+    restoreFocus: null,
   };
 }
 
@@ -81,6 +84,10 @@ export function updateLives(lives: Lives, values: HudValues, nowMs: number): voi
     lives.over = true;
     setText(lives.summary, runSummary(lives, values));
     lives.gameOver.hidden = false;
+    lives.restoreFocus = focusDialog(
+      lives.gameOver,
+      lives.gameOver.querySelector('button') ?? lives.gameOver,
+    );
   }
 }
 
@@ -92,6 +99,8 @@ export function restartLives(lives: Lives, values: HudValues): void {
   lives.gameOverAtMs = null;
   lives.over = false;
   lives.gameOver.hidden = true;
+  lives.restoreFocus?.();
+  lives.restoreFocus = null;
 }
 
 /** This run's saves and time, for the game-over screen. */

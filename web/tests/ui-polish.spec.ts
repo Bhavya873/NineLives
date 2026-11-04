@@ -7,7 +7,7 @@ import { collectConsoleErrors } from './console-errors.ts';
 
 /** Generous limit for slow CI machines. */
 const SLOW_MACHINE_TIMEOUT_MS = 60_000;
-const GHOST_KEY = 'ninelives.ghost.v1';
+const GHOST_KEY = 'ninelives.ghost.v1:playground';
 
 interface Debug {
   started: () => boolean;
@@ -16,6 +16,8 @@ interface Debug {
   ghost: () => { loaded: boolean; visible: boolean; position: number[] };
   ghostSamples: () => number;
   ghostEnabled: () => boolean;
+  ghostScope: () => string;
+  ghostTainted: () => boolean;
 }
 
 /** Calls a debug hook by name, or returns `fallback` before the game is up. */
@@ -253,4 +255,67 @@ test('no stunt-ready hint shows on the ground, and the g peak has a raw-spike to
   await waitForHook(page);
   await expect(page.locator('#hud-stunt-ready')).toBeHidden();
   await expect(page.locator('#hud-g-peak')).toHaveAttribute('title', /raw contact spike/);
+});
+
+test('Tab moves focus on the title and the dialogs announce themselves', async ({ page }) => {
+  await page.goto('/');
+  await waitForHook(page);
+  for (const id of ['title', 'results', 'game-over']) {
+    await expect(page.locator(`#${id}`)).toHaveAttribute('role', 'dialog');
+    await expect(page.locator(`#${id}`)).toHaveAttribute('aria-modal', 'true');
+  }
+  // Focus starts on Play; Tab is not swallowed, so it reaches the next control.
+  await expect(page.locator('#title-play')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#title-how')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#title-watch')).toBeFocused();
+  await page.locator('#title-play').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#title')).toBeHidden();
+  await expect(page.locator('#title-play')).not.toBeFocused();
+});
+
+test('the results dialog takes focus and gives it back', async ({ page }) => {
+  await page.goto('/?play=1');
+  await waitForHook(page);
+  await page.locator('#hud-keys-toggle').evaluate((element) => element.focus());
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#results')).toBeVisible();
+  await expect(page.locator('#results')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#results')).toBeHidden();
+  await expect(page.locator('#results')).not.toBeFocused();
+});
+
+test('a drop test is not recorded, and ghosts are kept per course', async ({ page }) => {
+  await page.goto('/?play=1');
+  await waitForHook(page);
+  expect(await debugCall(page, 'ghostScope', '')).toBe('playground');
+  await expect
+    .poll(() => debugCall(page, 'ghostSamples', 0), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBeGreaterThanOrEqual(2);
+
+  await page.keyboard.press('KeyX');
+  expect(await debugCall(page, 'ghostTainted', false)).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  expect(await page.evaluate((key) => window.localStorage.getItem(key), GHOST_KEY)).toBeNull();
+
+  // Another course has its own scope, and the playground's stored ghost does not follow.
+  await page.evaluate(
+    (json) => {
+      const hook = (window as unknown as { ninelivesDebug: { loadCourse: (j: string) => void } })
+        .ninelivesDebug;
+      hook.loadCourse(json);
+    },
+    JSON.stringify({
+      version: 1,
+      name: 'scope',
+      start: { pos: [0, 0.7, 0], yaw: 0 },
+      bounds: { min: [-50, -20, -50], max: [600, 60, 50] },
+      pieces: [],
+    }),
+  );
+  expect(await debugCall(page, 'ghostScope', '')).toMatch(/^course-/);
+  expect(await debugCall(page, 'ghostTainted', true)).toBe(false);
 });

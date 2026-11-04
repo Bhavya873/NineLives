@@ -4,7 +4,8 @@ import { test } from 'node:test';
 
 import {
   GHOST_FLOATS,
-  GHOST_KEY,
+  courseScope,
+  ghostKey,
   GHOST_MAX_S,
   createGhostRecorder,
   finishGhostRun,
@@ -92,10 +93,10 @@ test('a run is stored only when it beats the stored one', () => {
   const recorder = createGhostRecorder();
   recordLine(recorder, 3);
   const run = finishGhostRun(recorder, 2);
-  assert.equal(saveGhostIfBetter(storage, run), true);
-  assert.deepEqual(loadGhost(storage)?.saves, 2);
-  assert.equal(saveGhostIfBetter(storage, { ...run, saves: 1 }), false);
-  assert.equal(loadGhost(storage)?.saves, 2);
+  assert.equal(saveGhostIfBetter(storage, run, 'playground'), true);
+  assert.deepEqual(loadGhost(storage, 'playground')?.saves, 2);
+  assert.equal(saveGhostIfBetter(storage, { ...run, saves: 1 }, 'playground'), false);
+  assert.equal(loadGhost(storage, 'playground')?.saves, 2);
 });
 
 test('unknown, broken or blocked storage gives no ghost and never throws', () => {
@@ -107,9 +108,13 @@ test('unknown, broken or blocked storage gives no ghost and never throws', () =>
     '{"version":1,"hz":10,"saves":1,"durationS":1,"poses":[1,2,3]}',
     '{"version":1,"hz":10,"saves":1,"durationS":1,"poses":[1,2,3,4,5,6,7,8,9,10,11,12,13,"x"]}',
   ]) {
-    assert.equal(loadGhost(memoryStorage({ [GHOST_KEY]: raw })), null, raw);
+    assert.equal(
+      loadGhost(memoryStorage({ [ghostKey('playground')]: raw }), 'playground'),
+      null,
+      raw,
+    );
   }
-  assert.equal(loadGhost(null), null);
+  assert.equal(loadGhost(null, 'playground'), null);
   const blocked = {
     getItem: () => {
       throw new Error('blocked');
@@ -118,10 +123,10 @@ test('unknown, broken or blocked storage gives no ghost and never throws', () =>
       throw new Error('blocked');
     },
   };
-  assert.equal(loadGhost(blocked), null);
+  assert.equal(loadGhost(blocked, 'playground'), null);
   const recorder = createGhostRecorder();
   recordLine(recorder, 2);
-  assert.equal(saveGhostIfBetter(blocked, finishGhostRun(recorder, 1)), false);
+  assert.equal(saveGhostIfBetter(blocked, finishGhostRun(recorder, 1), 'playground'), false);
 });
 
 test('replay blends positions and stops at the end of the run', () => {
@@ -152,4 +157,30 @@ test('replay rotates the short way round and keeps the quaternion unit length', 
   const length = Math.hypot(out[3], out[4], out[5], out[6]);
   assert.ok(Math.abs(length - 1) < 1e-6);
   assert.ok(Math.abs(out[6]) > 0.99, 'stays near the identity, not through zero');
+});
+
+test('a ghost is kept per course and never replays on another one', () => {
+  const storage = memoryStorage();
+  const recorder = createGhostRecorder();
+  recordLine(recorder, 3);
+  const run = finishGhostRun(recorder, 2);
+  assert.equal(saveGhostIfBetter(storage, run, 'playground'), true);
+
+  assert.ok(loadGhost(storage, 'playground'));
+  assert.equal(loadGhost(storage, 'flat'), null);
+  assert.equal(loadGhost(storage, courseScope('{"shapes":[]}')), null);
+  // The old single global key is not read any more.
+  assert.equal(
+    loadGhost(memoryStorage({ 'ninelives.ghost.v1': JSON.stringify(run) }), 'playground'),
+    null,
+  );
+  // A better run on another course does not touch this one.
+  assert.equal(saveGhostIfBetter(storage, { ...run, saves: 9 }, 'flat'), true);
+  assert.equal(loadGhost(storage, 'playground')?.saves, 2);
+});
+
+test('course scopes are stable and differ per course text', () => {
+  assert.equal(courseScope('abc'), courseScope('abc'));
+  assert.notEqual(courseScope('abc'), courseScope('abd'));
+  assert.match(courseScope('abc'), /^course-[0-9a-f]+$/);
 });

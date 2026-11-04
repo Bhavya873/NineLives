@@ -1,5 +1,6 @@
 // The title screen: Play, How it works and a link to the training viewer. The game's clock
 // waits behind it. `?play` (any value) skips it, which the tests and shared links use.
+import { focusDialog } from '../dom.ts';
 
 /** True when the page address does not ask to skip the title. */
 export function titleWanted(params: URLSearchParams): boolean {
@@ -28,12 +29,15 @@ export function createTitle(
   const title: Title = { root, help, visible: wanted };
   root.hidden = !wanted;
   help.hidden = true;
+  // The title is a dialog: focus starts on Play and goes back where it was when it closes.
+  const restoreFocus = wanted ? focusDialog(root, playButton) : () => undefined;
   const play = () => {
     if (!title.visible) {
       return;
     }
     title.visible = false;
     root.hidden = true;
+    restoreFocus();
     onPlay();
   };
   playButton.addEventListener('click', play);

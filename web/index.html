@@ -602,9 +602,15 @@
       <p>Press Esc to resume</p>
       <a href="./viewer.html">Watch AI training</a>
     </section>
-    <section id="game-over" hidden>
+    <section
+      id="game-over"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="game-over-title"
+      hidden
+    >
       <h1 class="wordmark">Nine Lives</h1>
-      <h2>Out of lives</h2>
+      <h2 id="game-over-title">Out of lives</h2>
       <p id="game-over-summary"></p>
       <dl id="game-over-results" class="results-list"></dl>
       <button type="button" id="restart">Restart</button>
@@ -612,12 +618,19 @@
         >Source and write-up on GitHub</a
       >
     </section>
-    <section id="results" hidden>
-      <h2>Results so far</h2>
+    <section
+      id="results"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="results-title"
+      tabindex="-1"
+      hidden
+    >
+      <h2 id="results-title">Results so far</h2>
       <dl id="results-list" class="results-list"></dl>
       <p>Press Tab or Esc to go on</p>
     </section>
-    <section id="title" aria-labelledby="title-name">
+    <section id="title" role="dialog" aria-modal="true" aria-labelledby="title-name">
       <h1 id="title-name" class="wordmark">Nine Lives</h1>
       <p class="tagline">
         An AI fires a car's 10 cold-gas thrusters so it always lands on its wheels. Drive, jump,
