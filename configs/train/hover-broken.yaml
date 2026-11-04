@@ -1,0 +1,65 @@
+# Hover-hack experiment (SPEC 9.11, docs/EXPERIMENTS.md): BROKEN reward: +0.1 per upright step, no airborne cost.
+# Stage A only, Arcade (unlimited air), no randomization, the same seed and budget as its
+# twin (hover-broken.yaml / hover-fixed.yaml). A small budget on purpose: it is a demo of
+# reward design, not a shipped policy.
+#   python -m ninelives.train --config configs/train/hover-broken.yaml --run-id hover-broken
+# PPO training run settings (SPEC §9.9, §9.10). Every number is a starting value to
+# tune; log each run in docs/EXPERIMENTS.md. Paths are relative to the repo root.
+
+seed: 0
+mode: arcade           # unlimited air (SPEC 9.11)
+stages: [A]            # Stage A alone
+randomize: false
+total_steps: 12_000_000
+
+ppo:
+  n_envs: 64
+  n_steps: 512         # 64 × 512 = 32,768 samples per update
+  batch_size: 4096
+  n_epochs: 10
+  learning_rate: 3.0e-4   # decays linearly to 0 over total_steps
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  net_arch: [128, 128]    # the same for the policy and the value network
+  activation: tanh
+  # Start each throttle's mean at −1, the edge of zero throttle (SB3 clips actions to
+  # [−1, 1]): the deterministic policy idles at exactly 0, as the quiet-throttle success
+  # rule needs, while half the samples still fire so braking gets explored. A mean of −2
+  # sampled almost no firing and never learned to brake (EXPERIMENTS m7-smoke runs).
+  log_std_init: 0.0
+  initial_action_bias: -1.0
+
+normalize:
+  clip_obs: 10.0       # VecNormalize(norm_obs=True, norm_reward=True)
+
+curriculum:
+  window: 500          # success rate over the last this many episodes at the level
+  # Bar to move up a level, per level (the last repeats): strict on the easy Stage A
+  # levels, reachable on the hard ones (PD itself manages 58% at full difficulty).
+  advance_at: [0.85, 0.85, 0.75, 0.65]
+  # Unlocking the next stage (eval mode): once the newest stage matches PD at its hardest
+  # level on the validation seeds, or after every_steps without an unlock, so later stages
+  # are never starved (owner's gate-2 choice, 2026-10-19).
+  unlock:
+    beat_pd: true
+    every_steps: 15_000_000
+  # Promote on a deterministic eval at each checkpoint (current level, the eval seeds), not
+  # on training episodes: their exploration noise alone breaks the quiet-throttle success
+  # rule, so the window never passes (EXPERIMENTS m7-full-001).
+  promote_on: eval
+  # How often each unlocked stage comes up (SPEC §9.9); sampled in Rust per episode.
+  # B and C already match PD; D and E get the practice (owner's round-2 choice, 2026-10-19).
+  stage_weights: {A: 1.0}
+
+checkpoint:
+  every_steps: 1_000_000
+  eval_episodes: 200   # fixed-seed episodes per stage at its hardest level, to keep the best
+  eval_seed: 1_000_000 # first eval seed, far from training seeds
+
+# The broken reward: a survival bonus of 0.1 per step while upright (up_alignment > 0.8,
+# added in python/ninelives/env.py) and no airborne-time cost.
+survival_bonus: 0.1
+reward_overrides:
+  airborne: 0.0
