@@ -15,6 +15,8 @@ export default defineConfig({
       },
     },
   },
+  // Each stage of the training viewer is stepped in its own module worker.
+  worker: { format: 'es' },
   server: {
     // The game imports configs/*.toml and models/policy.json from the repo root. Allow
     // only those folders (plus this one), so the dev server never serves other repo files.

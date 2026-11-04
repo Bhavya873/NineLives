@@ -462,12 +462,15 @@ separate modules. The look is a physics simulator's: a checkered floor, a gradie
 The game flies PD alone (`?controller=hybrid` loads the policy and flies the Hybrid), shows the keys at all times,
 pauses on Esc, and gives the player nine lives, one lost per crash.
 
-The training viewer (`web/viewer.html`) builds one wasm `Crowd` per exported checkpoint and flies
-them all at once on the same episodes: one labelled row of translucent cars per checkpoint,
-plus a table of landings and crashes. Every car is flown by the Hybrid (`build_controller("hybrid", ...)`,
+The training viewer (`web/viewer.html`) flies every stage at once: Stage A (flat arena), Stage B, the
+obstacle arena, Stage D and Stage F, each with one wasm `Crowd` per exported checkpoint on the same
+episodes (one labelled row of translucent cars per checkpoint, plus a table of landings and crashes).
+Each stage runs in its own Web Worker (`web/src/viewer/stage-worker.ts`) and posts pose snapshots; the page
+(`main.ts`, `stage-panel.ts`) only draws, one scissor viewport per stage in one canvas, blending between
+the last two snapshots (`snapshot-clock.ts`). Every car is flown by the Hybrid (`build_controller("hybrid", ...)`,
 the hand-over from `controllers.toml`) with the checkpoint as its AI. `Crowd::for_stage` covers Stage A
-drops (flat and the obstacle arena), Stage D and F on a generated course (`episode::course_for_stage`, one
-course per crowd, drawn from `course_shapes()`) and the Gauntlet; a stage picker (or `?arena=`) chooses.
+drops (flat and the obstacle arena), Stage B, and Stage D and F on a generated course (`episode::course_for_stage`, one
+course per crowd, drawn from `course_shapes()`); a tab, a panel title, the keys 1-5 or `?arena=` focuses one.
 `cargo run --release -p nl-wasm --example viewer_rates` flies the same crowds natively and records the
 landing rates (`results/baseline_2026-10/viewer_landing_rates.json`).
 

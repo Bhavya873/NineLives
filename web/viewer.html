@@ -10,7 +10,7 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #2a3d52;
+        background: #16202b;
         font-family: system-ui, sans-serif;
       }
       #viewer {
@@ -18,21 +18,57 @@
         inset: 0;
       }
       .panel {
-        position: fixed;
-        left: 16px;
         padding: 8px 12px;
         border-radius: 6px;
         background: rgba(12, 18, 26, 0.75);
         color: #e8eef5;
         font-size: 14px;
       }
-      #viewer-status {
-        top: 16px;
+      /* The titles of the stage panels, laid over the canvas by the page. */
+      #viewer-panels {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      .panel-title {
+        position: absolute;
+        pointer-events: auto;
+        padding: 4px 10px;
+        border: 1px solid #3a4a5c;
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+        font-variant-numeric: tabular-nums;
+        text-align: left;
+        white-space: pre-line;
+        line-height: 1.3;
+      }
+      .panel-title:hover {
+        background: rgba(30, 44, 60, 0.9);
+      }
+      /* The column on the right: status, tabs, camera, curve, board, help. */
+      #viewer-side {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 336px;
+        box-sizing: border-box;
+        padding: 16px 16px 16px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow-y: auto;
+        pointer-events: none;
+      }
+      #viewer-side > * {
+        pointer-events: auto;
       }
       #viewer-board {
-        top: 56px;
-        border-spacing: 14px 3px;
+        border-spacing: 6px 3px;
+        white-space: nowrap;
         font-variant-numeric: tabular-nums;
+        font-size: 12px;
       }
       #viewer-board th {
         color: #a9b6c4;
@@ -44,31 +80,10 @@
         text-align: right;
       }
       #viewer-help {
-        bottom: 16px;
         color: #a9b6c4;
-      }
-      #arena-toggle {
-        top: 16px;
-        left: auto;
-        right: 16px;
-        border: 1px solid #3a4a5c;
-        cursor: pointer;
-        font: inherit;
-      }
-      #stage-select {
-        top: 56px;
-        left: auto;
-        right: 16px;
-        border: 1px solid #3a4a5c;
-        font: inherit;
-      }
-      #arena-toggle:hover {
-        background: rgba(30, 44, 60, 0.9);
+        font-size: 13px;
       }
       #stage-tabs {
-        top: 96px;
-        left: auto;
-        right: 16px;
         display: flex;
         gap: 4px;
       }
@@ -85,17 +100,6 @@
         background: #9fd1ff;
         color: #0c121a;
       }
-      #camera-toggle {
-        top: 136px;
-        left: auto;
-        right: 16px;
-      }
-      #curve-panel {
-        top: 176px;
-        left: auto;
-        right: 16px;
-        width: 320px;
-      }
       #curve-title {
         margin: 0 0 4px;
         font-size: 13px;
@@ -106,11 +110,23 @@
         color: #a9b6c4;
         font-size: 12px;
       }
-      #hud-perf {
-        top: 16px;
+      #hud-perf,
+      #hud-perf-steps {
+        position: fixed;
         left: 50%;
         transform: translateX(-50%);
         font-size: 13px;
+      }
+      #hud-perf {
+        top: 8px;
+      }
+      #hud-perf-steps {
+        top: 44px;
+      }
+      @media (max-width: 899px) {
+        #viewer-side {
+          width: 280px;
+        }
       }
       a {
         color: #9fd1ff;
@@ -130,23 +146,26 @@
   </head>
   <body>
     <div id="viewer"></div>
+    <div id="viewer-panels"></div>
     <div id="hud-perf" class="panel" hidden></div>
-    <div id="viewer-status" class="panel">Loading checkpoints…</div>
-    <table id="viewer-board" class="panel"></table>
-    <button id="arena-toggle" class="panel" type="button">Switch arena</button>
-    <select id="stage-select" class="panel" aria-label="Stage"></select>
-    <div id="stage-tabs" class="panel" role="group" aria-label="Stage tabs"></div>
-    <button id="camera-toggle" class="panel" type="button">Camera: crowd (L)</button>
-    <div id="curve-panel" class="panel">
-      <h2 id="curve-title"></h2>
-      <div id="curve-chart"></div>
-    </div>
-    <div id="viewer-help" class="panel">
-      Each row of cars is one checkpoint, flown by the Hybrid (PD flies until the car tips past the
-      hand-over, then the checkpoint's AI), on the same drops. Faded cars crashed. O switches arena;
-      the picker adds Stage B, Stage D, Stage F and the Gauntlet. L follows the leading car on the
-      courses. F3 shows the frame rate.
-      <a href="./">Back to the game</a>
+    <div id="hud-perf-steps" class="panel" hidden></div>
+    <div id="viewer-side">
+      <div id="viewer-status" class="panel">Loading checkpoints…</div>
+      <div id="stage-tabs" class="panel" role="group" aria-label="Stage tabs"></div>
+      <button id="camera-toggle" class="panel" type="button">Camera: crowd (L)</button>
+      <div id="curve-panel" class="panel">
+        <h2 id="curve-title"></h2>
+        <div id="curve-chart"></div>
+      </div>
+      <table id="viewer-board" class="panel"></table>
+      <div id="viewer-help" class="panel">
+        Every stage flies at once. Each row of cars is one checkpoint, flown by the Hybrid (PD flies
+        until the car tips past the hand-over, then the checkpoint's AI), on the same drops. Faded
+        cars crashed. Click a panel's title or a tab (or press 1–5) to focus one stage; Esc shows
+        all again. L switches the course cameras between the crowd and the leading car. F3 shows the
+        frame rate.
+        <a href="./">Back to the game</a>
+      </div>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>
   </body>
