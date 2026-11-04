@@ -13,7 +13,14 @@ import {
   scrapeSpeeds,
   updateTooSlow,
 } from './hud/approach-hud.ts';
-import { type GMeter, createGMeter, updateGMeter } from './hud/g-meter.ts';
+import {
+  type GMeter,
+  type GPeakTracker,
+  createGMeter,
+  createGPeakTracker,
+  updateGMeter,
+  updateGPeak,
+} from './hud/g-meter.ts';
 import {
   type GRecord,
   browserStorage,
@@ -40,6 +47,8 @@ export type WindLevel = (typeof WIND_LEVELS)[number];
 /** Everything the screen effects keep between frames. */
 export interface ScreenEffects {
   gMeter: GMeter;
+  /** The headline peak the meter shows (raw peak stays in the sim). */
+  gPeak: GPeakTracker;
   gRecord: GRecord;
   gRecordElement: HTMLElement;
   sparks: Sparks;
@@ -61,6 +70,7 @@ export function createScreenEffects(scene: Scene): ScreenEffects {
       requireElement('hud-g-live'),
       requireElement('hud-g-peak'),
     ),
+    gPeak: createGPeakTracker(),
     gRecord: createGRecord(browserStorage()),
     gRecordElement: requireElement('hud-g-record'),
     sparks: createSparks(scene),
@@ -107,7 +117,8 @@ export interface EffectsFrame {
 
 /** Updates the g-meter, approach HUD, wind readout and streaks for one rendered frame. */
 export function renderScreenEffects(effects: ScreenEffects, frame: EffectsFrame): void {
-  updateGMeter(effects.gMeter, frame.crashed ? 1 : frame.gLoad, frame.peakG);
+  const liveG = frame.crashed ? 1 : frame.gLoad;
+  updateGMeter(effects.gMeter, liveG, updateGPeak(effects.gPeak, liveG, frame.peakG), frame.peakG);
   recordPeak(effects.gRecord, frame.peakG);
   recordLandings(effects.gRecord, frame.events, frame.nowS);
   const line = recordLine(effects.gRecord, frame.nowS);
