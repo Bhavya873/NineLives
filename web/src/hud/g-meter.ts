@@ -33,6 +33,41 @@ export function formatG(g: number): string {
   return `${(Number.isFinite(g) ? Math.max(0, g) : 0).toFixed(1)} g`;
 }
 
+/**
+ * The headline peak g (docs/contracts/g-meter.md, UI note 2026-11-03). The sim's raw peak
+ * can be one 120 Hz contact tick (a drop test reads 39 g), which says more about the
+ * solver than the car. The headline is the largest displayed (0.1 s smoothed) g since the
+ * raw peak last reset, capped by the raw peak itself. The raw peak stays in HudField 23
+ * and in the Save event untouched.
+ */
+export interface GPeakTracker {
+  /** Largest displayed g since the current stunt window opened, in g. */
+  windowMaxG: number;
+  /** The raw peak seen last frame, to notice a reset. */
+  lastRawPeakG: number;
+  /** What the meter shows as the peak, in g. */
+  headlineG: number;
+}
+
+export function createGPeakTracker(): GPeakTracker {
+  return { windowMaxG: 0, lastRawPeakG: 0, headlineG: 0 };
+}
+
+/** Feeds one frame's displayed g and the raw peak; returns the headline peak. */
+export function updateGPeak(tracker: GPeakTracker, liveG: number, rawPeakG: number): number {
+  const raw = Number.isFinite(rawPeakG) ? Math.max(0, rawPeakG) : 0;
+  if (raw < tracker.lastRawPeakG - 1e-3) {
+    // The raw peak dropped: a new stunt window opened (take-off, respawn or placement).
+    tracker.windowMaxG = 0;
+  }
+  tracker.lastRawPeakG = raw;
+  if (Number.isFinite(liveG)) {
+    tracker.windowMaxG = Math.max(tracker.windowMaxG, liveG);
+  }
+  tracker.headlineG = Math.min(raw, tracker.windowMaxG);
+  return tracker.headlineG;
+}
+
 /** The meter's elements. */
 export interface GMeter {
   root: HTMLElement;
@@ -52,19 +87,29 @@ export function createGMeter(
   return { root, fill, live, peak, lastKey: '' };
 }
 
-/** Draws live g and the raw peak; skips the DOM when nothing changed. */
-export function updateGMeter(meter: GMeter, liveG: number, peakG: number): void {
+/**
+ * Draws live g and the peak; skips the DOM when nothing changed. `peakG` is the headline
+ * peak (see `updateGPeak`); `rawPeakG`, if different, goes in the tooltip.
+ */
+export function updateGMeter(
+  meter: GMeter,
+  liveG: number,
+  peakG: number,
+  rawPeakG: number = peakG,
+): void {
   const liveText = formatG(liveG);
   const peakText = formatG(peakG);
+  const rawText = formatG(rawPeakG);
   const level = gLevel(liveG);
   const width = `${(gNeedleFraction(liveG) * 100).toFixed(0)}%`;
-  const key = `${liveText}|${peakText}|${level}|${width}`;
+  const key = `${liveText}|${peakText}|${rawText}|${level}|${width}`;
   if (key === meter.lastKey) {
     return;
   }
   meter.lastKey = key;
   meter.live.textContent = liveText;
   meter.peak.textContent = `peak ${peakText}`;
+  meter.peak.title = `raw contact spike ${rawText}`;
   meter.fill.style.width = width;
   meter.root.dataset['level'] = level;
 }

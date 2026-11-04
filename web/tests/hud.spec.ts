@@ -27,7 +27,7 @@ async function waitForGame(page: Page): Promise<void> {
 
 test('the keys panel and nine full hearts show from the start', async ({ page }) => {
   const consoleErrors = collectConsoleErrors(page);
-  await page.goto('/');
+  await page.goto('/?play=1');
   await waitForGame(page);
 
   await expect(page.locator('#hud-keys')).toBeVisible();
@@ -42,7 +42,7 @@ test('the keys panel and nine full hearts show from the start', async ({ page })
 });
 
 test('Esc pauses the game and Esc again resumes it', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play=1');
   await waitForGame(page);
   const paused = page.locator('#paused');
   await expect(paused).toBeHidden();
@@ -61,7 +61,7 @@ test('Esc pauses the game and Esc again resumes it', async ({ page }) => {
 });
 
 test('F3 shows the frame rate and milliseconds per tick', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play=1');
   await waitForGame(page);
   const perf = page.locator('#hud-perf');
   await expect(perf).toBeHidden();
@@ -108,7 +108,7 @@ test('the HUD warns before a piece that needs more speed, and the warning clears
   page,
 }) => {
   const consoleErrors = collectConsoleErrors(page);
-  await page.goto('/');
+  await page.goto('/?play=1');
   await waitForGame(page);
 
   // The ramp is 60 m ahead of a car at rest: inside the 80 m look-ahead, far too slow.

@@ -35,6 +35,7 @@ The Hybrid gate is held to PD for the whole stunt and for **1 s** after `Settled
 - **Events** (5 floats): `StuntStart` `[11, code, 0, 0, 0]`; `StuntLanded` `[12, code, peak_g, rotation_rad, 0]`; `StuntRefused` `[13, code, reason, 0, 0]`; `StuntAborted` `[14, code, reason, rotation_rad, 0]`.
 - **Reason:** 0 not enough air time (time, air, start state), 1 landing blocked (no landing, tilted, too short), 2 request expired (no take-off within the timeout), 3 control lost (aborted in the air).
 - **Request:** the wasm `Game.request_stunt(code)` queues one request and returns false for an unknown code, a crashed car or a stunt already queued or flying; the planner decides at the next control step in the air.
+- **Ready mask (read-only):** the wasm `Game.stunt_ready_mask()` runs the planner's four rules (`authorize`) for each stunt on a fresh landing forecast and returns a bit mask, bit `code - 1` set when that stunt would be authorized now. It returns 0 on the ground, while crashed or while a stunt is queued or flying, starts nothing and changes no sim state. It costs one forecast, so the web asks only while airborne, to show "Stunt ready: Q E Z B".
 - The executor is `nl_control::stunt::StuntDirector`: it runs the planner each control tick, turns the spin command into throttles through PD's allocation, and PD flies the catch. With no stunt requested it does nothing, so stunt-free behaviour (and the golden trace) is unchanged.
 
 ## `[stunt]` settings
