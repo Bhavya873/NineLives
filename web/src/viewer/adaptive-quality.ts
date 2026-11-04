@@ -7,6 +7,9 @@
 export const QUALITY_WINDOW_FRAMES = 60;
 /** A frame slower than this on average (about 40 fps) triggers a step down, in ms. */
 export const SLOW_FRAME_MS = 25;
+/** A gap longer than this (a hidden tab, a debugger pause) is not slowness the picture can fix,
+ * so it is not counted. */
+export const MAX_COUNTED_FRAME_MS = 250;
 /** How much one step lowers the pixel ratio. */
 export const RATIO_STEP = 0.25;
 /** The pixel ratio never goes below this (at 0.75 the picture is soft but readable). */
@@ -29,6 +32,9 @@ export function newQuality(ratio: number): QualityState {
  * returns the lower ratio to switch to when frames were slow; otherwise null.
  */
 export function recordQualityFrame(state: QualityState, frameMs: number): number | null {
+  if (frameMs > MAX_COUNTED_FRAME_MS) {
+    return null;
+  }
   state.frames += 1;
   state.elapsedMs += frameMs;
   if (state.frames < QUALITY_WINDOW_FRAMES) {

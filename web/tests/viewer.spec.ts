@@ -17,6 +17,7 @@ interface StageReading {
   crashed: number;
   shapeCount: number;
   running: boolean;
+  stepping: boolean;
   visible: boolean;
 }
 
@@ -224,4 +225,44 @@ test("F3 shows the frame rate and the workers' stepping cost", async ({ page }) 
     timeout: SLOW_MACHINE_TIMEOUT_MS,
   });
   await expect(page.locator('#hud-perf-steps')).toContainText('worker ms per tick');
+});
+
+test('a hidden tab stops every stage and showing it again starts them', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/viewer.html');
+  await expect(page.locator('.panel-title:visible')).toHaveCount(5, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+  const setHidden = (hidden: boolean) =>
+    page.evaluate((value) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+
+  await setHidden(true);
+  await expect
+    .poll(async () => (await readStages(page)).every((stage) => !stage.stepping))
+    .toBe(true);
+
+  await setHidden(false);
+  await expect
+    .poll(async () => (await readStages(page)).every((stage) => stage.stepping))
+    .toBe(true);
+});
+
+test('blocked workers give one clear message, not "undefined"', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.addInitScript(() => {
+    (window as unknown as { Worker: unknown }).Worker = function BlockedWorker() {
+      throw new Error('workers are blocked');
+    };
+  });
+  const status = page.locator('#viewer-status');
+  await page.goto('/viewer.html');
+
+  await expect(status).toContainText('all stages failed', { timeout: SLOW_MACHINE_TIMEOUT_MS });
+  await expect(status).toContainText('could not start');
+  await expect(status).not.toContainText('undefined');
+  // One message for five stages, not five copies.
+  expect(((await status.textContent()) ?? '').match(/could not start/g)).toHaveLength(1);
 });

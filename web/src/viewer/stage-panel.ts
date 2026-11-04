@@ -35,7 +35,8 @@ export interface StagePanel {
   arena: ArenaKind;
   /** The three.js layer the panel's cars and course are on. */
   layer: number;
-  worker: Worker;
+  /** The stage's worker, or null when the browser could not start one (see `error`). */
+  worker: Worker | null;
   camera: PerspectiveCamera;
   clock: ReturnType<typeof newSnapshotClock>;
   rowLabels: string[];
@@ -61,6 +62,8 @@ export interface StagePanel {
   centre: { x: number; z: number; cars: number };
   leader: { x: number; z: number } | null;
   error: string | null;
+  /** False while the stage has been told to stop (hidden tab, or another stage in focus). */
+  stepping: boolean;
 }
 
 /** What a panel needs to start. */
@@ -76,7 +79,7 @@ export interface StagePanelConfig {
 
 /** Starts the stage's worker and returns its (still empty) panel. */
 export function createStagePanel(scene: Scene, config: StagePanelConfig): StagePanel {
-  const worker = new Worker(new URL('./stage-worker.ts', import.meta.url), { type: 'module' });
+  const { worker, failure } = startWorker();
   const camera = new PerspectiveCamera(60, 1, 0.1, 1500);
   camera.layers.enable(config.layer);
   aimFixedCamera(camera, config.arena);
@@ -101,8 +104,13 @@ export function createStagePanel(scene: Scene, config: StagePanelConfig): StageP
     crashed: config.policies.map(() => 0),
     centre: { x: 0, z: 0, cars: 0 },
     leader: null,
-    error: null,
+    error: failure,
+    stepping: true,
   };
+  if (worker === null) {
+    console.error(`Stage ${config.arena}: ${failure ?? 'no worker'}`);
+    return panel;
+  }
   worker.onmessage = (event: MessageEvent<FromStageWorker>) => {
     const message = event.data;
     if (message.type === 'round') {
@@ -115,8 +123,11 @@ export function createStagePanel(scene: Scene, config: StagePanelConfig): StageP
     }
   };
   worker.onerror = (event) => {
-    panel.error = event.message;
-    console.error(`Stage ${config.arena} worker: ${event.message}`);
+    panel.error = event.message || WORKER_LOAD_FAILED;
+    console.error(`Stage ${config.arena} worker: ${panel.error}`);
+  };
+  worker.onmessageerror = () => {
+    panel.error = 'a worker message could not be read';
   };
   const init: StageInit = {
     type: 'init',
@@ -132,11 +143,31 @@ export function createStagePanel(scene: Scene, config: StagePanelConfig): StageP
 }
 
 function send(panel: StagePanel, message: ToStageWorker): void {
-  panel.worker.postMessage(message);
+  panel.worker?.postMessage(message);
+}
+
+/** What the page says when a worker's script could not be loaded or started. */
+const WORKER_LOAD_FAILED =
+  'the stage worker could not start (blocked, or the browser has no module workers)';
+
+/** Starts a stage worker, or says why it could not. */
+function startWorker(): { worker: Worker | null; failure: string | null } {
+  if (typeof Worker === 'undefined') {
+    return { worker: null, failure: WORKER_LOAD_FAILED };
+  }
+  try {
+    // The URL must stay inline in this call: Vite only bundles a worker it can see here.
+    const worker = new Worker(new URL('./stage-worker.ts', import.meta.url), { type: 'module' });
+    return { worker, failure: null };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { worker: null, failure: `${WORKER_LOAD_FAILED}: ${reason}` };
+  }
 }
 
 /** Starts or stops the stage's stepping (a stage nobody can see does not need to run). */
 export function setStageRunning(panel: StagePanel, on: boolean): void {
+  panel.stepping = on;
   send(panel, { type: 'run', on });
 }
 
