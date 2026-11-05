@@ -3,6 +3,20 @@
 // Node. Every storage access is in try/catch and an unknown stored shape is dropped.
 
 export const GHOST_KEY = 'ninelives.ghost.v1';
+
+/** The storage key for one course or world: a ghost only replays where it was driven. */
+export function ghostKey(scope: string): string {
+  return `${GHOST_KEY}:${scope}`;
+}
+
+/** A short stable scope name for a course's JSON text (FNV-1a), for courses without a name. */
+export function courseScope(courseJson: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < courseJson.length; index += 1) {
+    hash = Math.imul(hash ^ courseJson.charCodeAt(index), 0x01000193) >>> 0;
+  }
+  return `course-${hash.toString(16)}`;
+}
 export const GHOST_VERSION = 1;
 /** Samples per second of run time. */
 export const GHOST_HZ = 10;
@@ -118,9 +132,9 @@ function isGhostRun(value: unknown): value is GhostRun {
 }
 
 /** The stored best run, or null (nothing stored, blocked storage or an unknown shape). */
-export function loadGhost(storage: GhostStorage | null): GhostRun | null {
+export function loadGhost(storage: GhostStorage | null, scope: string): GhostRun | null {
   try {
-    const raw = storage?.getItem(GHOST_KEY);
+    const raw = storage?.getItem(ghostKey(scope));
     if (!raw) {
       return null;
     }
@@ -132,12 +146,16 @@ export function loadGhost(storage: GhostStorage | null): GhostRun | null {
 }
 
 /** Stores `run` if it beats the stored best. Returns true if it was stored. */
-export function saveGhostIfBetter(storage: GhostStorage | null, run: GhostRun): boolean {
-  if (!isBetterRun(run, loadGhost(storage))) {
+export function saveGhostIfBetter(
+  storage: GhostStorage | null,
+  run: GhostRun,
+  scope: string,
+): boolean {
+  if (!isBetterRun(run, loadGhost(storage, scope))) {
     return false;
   }
   try {
-    storage?.setItem(GHOST_KEY, JSON.stringify(run));
+    storage?.setItem(ghostKey(scope), JSON.stringify(run));
     return storage !== null;
   } catch {
     // Storage may be blocked or full; the ghost then lasts for this visit only.

@@ -7,11 +7,12 @@ import vehicleToml from '../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { prefersReducedMotion, requireElement, setText } from './dom.ts';
+import { focusDialog, prefersReducedMotion, requireElement, setText } from './dom.ts';
 import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import {
   GHOST_FLOATS,
+  courseScope,
   createGhostRecorder,
   finishGhostRun,
   loadGhost,
@@ -199,11 +200,15 @@ async function start(): Promise<void> {
     resetScreenEffects(effects);
   };
   // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
+  // The ghost is kept per course: a playground ghost never replays on another course.
+  let ghostScope = 'playground';
   const startFreeDrive = () => {
     if (params.get('world') === 'flat') {
+      ghostScope = 'flat';
       game.load_flat_ground();
       startCourse(null);
     } else {
+      ghostScope = 'playground';
       startCourse(game.load_course(playgroundJson));
     }
   };
@@ -225,16 +230,29 @@ async function start(): Promise<void> {
   let started = false;
   // Ghost run (src/ghost.ts): the best earlier run replays as a see-through car.
   const ghostStorage = browserStorage();
-  let ghostRun = loadGhost(ghostStorage);
+  let ghostRun = loadGhost(ghostStorage, ghostScope);
+  // X throws the car to a random start: that run is not a drive, so it is not recorded.
+  let ghostTainted = false;
   const ghostRecorder = createGhostRecorder();
   const ghostCar = createGhostCar(view.scene);
   const ghostPose: number[] = new Array<number>(GHOST_FLOATS).fill(0);
   /** Stores this run's path if it beats the stored best; the replay itself stays as it was. */
   const commitGhost = () => {
+    if (ghostTainted) {
+      return;
+    }
     const run = finishGhostRun(ghostRecorder, hudValues.saves - runStats.savesAtStart);
     if (run) {
-      saveGhostIfBetter(ghostStorage, run);
+      saveGhostIfBetter(ghostStorage, run, ghostScope);
     }
+  };
+  /** A new course: keep the old course's run, then start recording and replaying the new one. */
+  const switchGhostScope = (scope: string) => {
+    commitGhost();
+    ghostScope = scope;
+    ghostTainted = false;
+    resetGhostRecorder(ghostRecorder);
+    ghostRun = loadGhost(ghostStorage, ghostScope);
   };
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -253,7 +271,8 @@ async function start(): Promise<void> {
     restartLives(lives, hudValues);
     resetRunStats(runStats, hudValues);
     resetGhostRecorder(ghostRecorder);
-    ghostRun = loadGhost(ghostStorage);
+    ghostTainted = false;
+    ghostRun = loadGhost(ghostStorage, ghostScope);
     wasOver = false;
   });
   // Esc pauses and resumes; nothing moves while paused or after the last life.
@@ -261,12 +280,17 @@ async function start(): Promise<void> {
   let paused = false;
   let resultsOpen = false;
   let wasOver = false;
+  let restoreResultsFocus: (() => void) | null = null;
   const setResults = (open: boolean) => {
     resultsOpen = open;
     paused = open;
     resultsPanel.hidden = !open;
     if (open) {
       fillResults(resultsList);
+      restoreResultsFocus = focusDialog(resultsPanel);
+    } else {
+      restoreResultsFocus?.();
+      restoreResultsFocus = null;
     }
   };
   onKeyPress('Escape', () => {
@@ -283,9 +307,10 @@ async function start(): Promise<void> {
   // Tab: the results so far, in the middle of a run (pauses like Esc). Tab would move the
   // focus otherwise, so the page keeps it.
   window.addEventListener('keydown', (event) => {
-    if (event.code === 'Tab') {
+    // Only while the game runs: on the title and game-over screens Tab moves focus as usual.
+    if (event.code === 'Tab' && started && !lives.over) {
       event.preventDefault();
-      if (started && !lives.over && (resultsOpen || !paused)) {
+      if (resultsOpen || !paused) {
         setResults(!resultsOpen);
       }
     }
@@ -320,6 +345,8 @@ async function start(): Promise<void> {
   // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
   onKeyPress('KeyX', () => {
     game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
+    ghostTainted = true;
+    hideGhost(ghostCar);
     // A drop during the respawn wait clears the crash without a Respawn event.
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
@@ -420,12 +447,13 @@ async function start(): Promise<void> {
       recordRunPeaks(runStats, effects.gPeak.headlineG, hudValues.peakG);
       // The run's clock, from its first tick; the ghost and the recording both follow it.
       const runTimeS = hudValues.timeS - runStats.timeAtStartS;
-      if (started && !paused && !lives.over) {
+      if (started && !paused && !lives.over && !ghostTainted) {
         recordGhostSample(ghostRecorder, runTimeS, frames.latestChassis);
       }
       if (
         started &&
         ghostEnabled &&
+        !ghostTainted &&
         !lives.over &&
         ghostRun &&
         sampleGhost(ghostRun, runTimeS, ghostPose)
@@ -462,7 +490,12 @@ async function start(): Promise<void> {
       courseMeshCount: () => course.view?.children.length ?? 0,
       checkpointCount: () => game.hud()[HudField.CheckpointCount] ?? 0,
       // Tests start a course of their own (the playground has no piece that needs speed).
-      loadCourse: (courseJson: string) => startCourse(game.load_course(courseJson)),
+      loadCourse: (courseJson: string) => {
+        startCourse(game.load_course(courseJson));
+        switchGhostScope(courseScope(courseJson));
+      },
+      ghostScope: () => ghostScope,
+      ghostTainted: () => ghostTainted,
       started: () => started,
       resultsOpen: () => resultsOpen,
       ghost: () => ({
