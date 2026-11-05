@@ -552,12 +552,6 @@ impl World {
         &self.traversal
     }
 
-    /// Replaces the clean-entry limits and scrape numbers (tests and tuning).
-    pub fn set_approach_config(&mut self, approach: ApproachConfig) {
-        self.approach = approach;
-        self.traversal.set_limits(approach);
-    }
-
     /// Acts on the course triggers the car entered this step.
     fn update_triggers(&mut self) {
         if self.triggers.is_empty() {

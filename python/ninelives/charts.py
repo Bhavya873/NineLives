@@ -1,6 +1,6 @@
 """Draws the README charts (SVG, no plotting library) from the committed results.
 
-    python -m ninelives.report_charts --repo . --out docs/images
+    python -m ninelives.charts --repo . --out docs/images
 
 Writes `results-by-stage.svg` (success rate per stage, Off / PD / Hybrid, both modes, from
 `results/eval_*.json`) and `viewer-curve.svg` (the training viewer's checkpoint curve, from
@@ -9,6 +9,7 @@ Writes `results-by-stage.svg` (success rate per stage, Off / PD / Hybrid, both m
 
 import argparse
 import json
+import logging
 from pathlib import Path
 
 STAGES = "ABCDE"
@@ -18,6 +19,8 @@ CONTROLLERS = [
     ("hybrid", "Hybrid (PD + AI)", "#e4572e"),
 ]
 MODES = ["realistic", "arcade"]
+
+log = logging.getLogger(__name__)
 
 
 def success_rate(results: Path, controller: str, stage: str, mode: str) -> float | None:
@@ -131,10 +134,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--repo", type=Path, default=Path("."), help="repo root")
     parser.add_argument("--out", type=Path, default=Path("docs/images"), help="folder for the SVGs")
     args = parser.parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "results-by-stage.svg").write_text(by_stage_svg(args.repo / "results") + "\n")
+    # chart 1: success rate per stage
+    by_stage_path = args.out / "results-by-stage.svg"
+    by_stage_path.write_text(by_stage_svg(args.repo / "results") + "\n")
+    log.info(f"wrote {by_stage_path}")
+    # chart 2: the viewer's training curve
     curve = args.repo / "web" / "public" / "checkpoints" / "flight-r4" / "curve.json"
-    (args.out / "viewer-curve.svg").write_text(curve_svg(curve) + "\n")
+    curve_path = args.out / "viewer-curve.svg"
+    curve_path.write_text(curve_svg(curve) + "\n")
+    log.info(f"wrote {curve_path}")
 
 
 if __name__ == "__main__":

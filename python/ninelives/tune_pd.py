@@ -18,6 +18,7 @@ with `--keep N` the next best and CMA-ES's final mean beside it, for validation.
 
 import argparse
 import json
+import logging
 import math
 import re
 import tomllib
@@ -27,6 +28,8 @@ import cma
 
 from ninelives.sim_config import CONFIGS_DIR, REPO_ROOT, load_sim_config
 from ninelives_sim import driving_air_kg, run_eval
+
+log = logging.getLogger(__name__)
 
 # Every stage, in both modes, on the plain car and with domain randomization: B and C
 # are no longer at 100% on the new car, and F (strong flip plates) is where PD gains most.
@@ -202,7 +205,7 @@ def tune(generations: int, popsize: int, episodes: int, sigma: float) -> list[st
             if candidate_score > repo_score:
                 winners.append((candidate_score - repo_score, text))
         top = max(scores)
-        print(f"generation {generation}: best {top:.3f}, repo {repo_score:.3f}", flush=True)
+        log.info(f"generation {generation}: best {top:.3f}, repo {repo_score:.3f}")
     winners.sort(key=lambda winner: winner[0], reverse=True)
     best_first = [text for _, text in winners] or [base_toml]
     mean = list(strategy.result.xfavorite)
@@ -220,9 +223,11 @@ def main(argv: list[str] | None = None) -> None:
         "--keep", type=int, default=0, help="also write the next N best and the CMA-ES mean"
     )
     args = parser.parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     ranked = tune(args.generations, args.popsize, args.episodes, args.sigma)
     args.out.write_text(ranked[0])
-    print(f"wrote {args.out}:\n" + json.dumps(tunables(ranked[0]), indent=2))
+    log.info(f"wrote {args.out}:\n" + json.dumps(tunables(ranked[0]), indent=2))
     if args.keep > 0:
         for rank, text in enumerate(ranked[1:-1][: args.keep], start=2):
             args.out.with_name(f"{args.out.stem}-top{rank}.toml").write_text(text)

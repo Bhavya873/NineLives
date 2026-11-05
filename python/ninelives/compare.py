@@ -13,11 +13,14 @@ failing row, so the bar never passes by its absence.
 
 import argparse
 import json
+import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
 
 from ninelives.sim_config import REPO_ROOT
+
+log = logging.getLogger(__name__)
 
 STAGES = ("A", "B", "C", "D", "E")
 # Older results lack these; a missing one shows as a failing row, never silently.
@@ -179,8 +182,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--results", type=Path, default=REPO_ROOT / "results")
     parser.add_argument("--dr", action="store_true", help="compare the _dr files")
     args = parser.parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     suffix = "_dr" if args.dr else ""
-    print("\n".join(compare(args.results, args.baseline, args.candidate, suffix)))
+    log.info("\n".join(compare(args.results, args.baseline, args.candidate, suffix)))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ it stops, even on Ctrl-C, so `--resume` loses at most the last rollout.
 
 import argparse
 import json
+import logging
 import pickle
 import shutil
 from pathlib import Path
@@ -33,6 +34,8 @@ from ninelives.eval import evaluate
 from ninelives.run_files import RUNS_DIR, RunState, load_checkpoint, save_checkpoint
 from ninelives.sim_config import CONFIGS_DIR
 from ninelives.train_config import TrainConfig, load_train_config
+
+log = logging.getLogger(__name__)
 
 # Activation names a training YAML may use, and the torch layer each one means.
 ACTIVATIONS = {"tanh": torch.nn.Tanh, "relu": torch.nn.ReLU}
@@ -88,7 +91,7 @@ def pd_baseline(config: TrainConfig) -> dict[str, float]:
     for stage in config.stages:
         report = evaluate("pd", stage, config.mode, config.eval_episodes, config.eval_seed)
         rates[stage] = float(report["summary"]["success_rate"])
-    print(f"PD baseline on the validation seeds: {rates}")
+    log.info(f"PD baseline on the validation seeds: {rates}")
     return rates
 
 
@@ -100,7 +103,7 @@ def warm_start(model: PPO, normalizer: VecNormalize, checkpoint: Path) -> None:
     model.policy.load_state_dict(old.policy.state_dict())
     with (checkpoint / "vecnormalize.pkl").open("rb") as file:
         normalizer.obs_rms = pickle.load(file).obs_rms
-    print(f"warm start from {checkpoint}")
+    log.info(f"warm start from {checkpoint}")
 
 
 def start_with_action_bias(model: PPO, action_bias: float) -> None:
@@ -167,7 +170,7 @@ def new_run(
         curriculum.restore(saved)
         curriculum.last_unlock_step = 0
         env.env_method("set_stage_mix", curriculum.mix())
-        print(f"curriculum carried over from {init_from}: {curriculum.mix()}")
+        log.info(f"curriculum carried over from {init_from}: {curriculum.mix()}")
     if config.curriculum_promote_on == "eval" and config.curriculum_unlock_on_pd:
         curriculum.pd_success = pd_baseline(config)
     state = RunState(
@@ -186,8 +189,8 @@ def resume_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tupl
     model, _, state = load_checkpoint(run_dir / "latest", env, fresh_curriculum(config, env))
     model.set_random_seed(config.seed + state.steps)
     if state.total_steps and state.total_steps != config.total_steps:
-        print(
-            f"warning: this run was planned for {state.total_steps} steps, the config now says "
+        log.warning(
+            f"this run was planned for {state.total_steps} steps, the config now says "
             f"{config.total_steps}; the learning rate schedule will jump"
         )
     state.total_steps = config.total_steps
@@ -197,6 +200,8 @@ def resume_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tupl
 def train(argv: list[str] | None = None) -> RunState:
     """Runs (or resumes) training until total_steps or the time limit; returns the state."""
     args = parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     config = load_train_config(args.config)
     if args.total_steps is not None:
         config.total_steps = args.total_steps
@@ -249,14 +254,14 @@ def train(argv: list[str] | None = None) -> RunState:
             tb_log_name="ppo",
         )
     except KeyboardInterrupt:
-        print("stopped by Ctrl-C")
+        log.info("stopped by Ctrl-C")
     # Saved on a normal end, the time limit or Ctrl-C, but not after an error: a
     # diverged model must not overwrite the last good latest/.
     checkpoints.record_progress(model.num_timesteps)
     normalizer = model.get_vec_normalize_env()
     if normalizer is not None:
         save_checkpoint(run_dir / "latest", model, normalizer, state)
-    print(f"saved {run_dir / 'latest'} at {state.steps} steps")
+    log.info(f"saved {run_dir / 'latest'} at {state.steps} steps")
     return state
 
 

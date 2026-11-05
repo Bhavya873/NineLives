@@ -54,7 +54,7 @@ pub enum CrowdStage {
     Driving,
     /// Stage F: the bot rolls onto a flip plate, all cars on the same generated straight.
     Flight,
-    /// Stage D on the Gauntlet (`courses/gauntlet.json`).
+    /// Stage D on the Gauntlet (`courses/gauntlet.json`). Historical: the viewer does not show it.
     Gauntlet,
 }
 

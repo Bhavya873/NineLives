@@ -38,9 +38,6 @@ pub const NOZZLE_NAMES: [&str; NOZZLE_COUNT] = [
     "L_FL", "L_FR", "L_RL", "L_RR", "S_FL", "S_RL", "S_FR", "S_RR", "B_L", "B_R",
 ];
 
-/// Wheel names in their fixed index order (SPEC §4).
-pub const WHEEL_NAMES: [&str; WHEEL_COUNT] = ["FL", "FR", "RL", "RR"];
-
 /// A car tipped past this from upright counts as turned over, in degrees (flip tests
 /// and the eval summary's `inversion_rate`).
 pub const INVERTED_TILT_DEG: f32 = 150.0;

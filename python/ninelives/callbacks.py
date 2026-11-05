@@ -2,6 +2,7 @@
 with a best-by-eval copy (SPEC §9.10), and a wall-clock limit for `--max-minutes`.
 They share one `RunState`, which is what `state.json` saves."""
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ from ninelives.rollout import (
 )
 from ninelives.run_files import RunState, record_progress, save_checkpoint
 from ninelives.train_config import TrainConfig
+
+log = logging.getLogger(__name__)
 
 
 class CurriculumCallback(BaseCallback):
@@ -66,7 +69,7 @@ def send_mix(training_env: VecEnv, state: RunState) -> None:
     """Sends the curriculum's unlocked stages, weights and levels to every env."""
     mix = state.curriculum.mix()
     training_env.env_method("set_stage_mix", mix)
-    print(f"curriculum: {mix}")
+    log.info(f"curriculum: {mix}")
 
 
 class RunCheckpointCallback(BaseCallback):
@@ -128,7 +131,9 @@ class RunCheckpointCallback(BaseCallback):
             rows = self.eval_rows(normalizer, stage, level, self.promotion_seed())
             success = success_and_crash_rates(rows)[0]
             self.logger.record(f"curriculum/{stage}/eval_success", success)
-            print(f"{self.num_timesteps} steps: {stage} level {level} eval success {success:.3f}")
+            log.info(
+                f"{self.num_timesteps} steps: {stage} level {level} eval success {success:.3f}"
+            )
             changed = curriculum.judge_eval(stage, success, self.num_timesteps) or changed
         changed = curriculum.unlock_if_due(self.num_timesteps) or changed
         if changed:
@@ -179,7 +184,7 @@ class RunCheckpointCallback(BaseCallback):
         self.logger.record("eval/success_rate", success)
         self.logger.record("eval/crash_rate", crash)
         covered = ", ".join(stages)
-        print(
+        log.info(
             f"{self.num_timesteps} steps: eval success {success:.3f}, crash {crash:.3f} "
             f"(stages {covered})"
         )

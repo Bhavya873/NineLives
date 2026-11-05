@@ -13,6 +13,7 @@ instead. Every report also carries `physics_hash`, `controller_config_hash`, `po
 import argparse
 import csv
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,8 @@ from ninelives.run_files import DEFAULT_POLICY_PATH
 from ninelives.sim_config import REPO_ROOT, load_sim_config
 from ninelives.train_config import STAGE_NAMES
 from ninelives_sim import run_eval
+
+log = logging.getLogger(__name__)
 
 RESULTS_DIR = REPO_ROOT / "results"
 
@@ -99,6 +102,8 @@ def main(argv: list[str] | None = None) -> None:
         "--out", type=Path, default=RESULTS_DIR, help="the folder to write the results in"
     )
     args = parser.parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     report = evaluate(
         args.controller,
         args.stage,
@@ -109,8 +114,8 @@ def main(argv: list[str] | None = None) -> None:
         args.dr,
         not args.keep_mode,
     )
-    print(json.dumps(report["summary"], indent=2))
-    print(f"wrote {write_report(report, args.out)}")
+    log.info(json.dumps(report["summary"], indent=2))
+    log.info(f"wrote {write_report(report, args.out)}")
 
 
 if __name__ == "__main__":
