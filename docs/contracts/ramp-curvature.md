@@ -35,7 +35,9 @@ Example on flat ground at 55.6 m/s: a mid-piece crest needs R ≥ 55.6² / 9.81 
 The piece is built from a polyline. The angle between two neighbouring segments must be **≤ 1.5°**. G2 builds them at **≤ 1.2°** (`MAX_KINK_DEG`, more segments for steeper ramps), leaving rounding margin.
 
 ## Lip height and landing (added in G2)
-A car leaving a lip at 55.6 m/s lands with a fall speed of √((v·sin θ)² + 2·g·H), where H is the lip height. R2c's sweep (12° lips, H ≈ 2.4 m, 13 m/s) crashed a few landings; 8° lips (H ≈ 1.1 m, 9 m/s) did not. So generated and playground jump ramps, kickers and corkscrews use lip angles of **8° or less**. A taller piece must be a table top (a wall with a ramp is one: ramp, deck, ramp back down).
+A car leaving a lip at 55.6 m/s lands with a fall speed of √((v·sin θ)² + 2·g·H), where H is the lip height. R2c's sweep (12° lips, H ≈ 2.4 m, 13 m/s) crashed a few landings; 8° lips (H ≈ 1.1 m, 9 m/s) did not. So generated and training jump ramps, kickers and corkscrews use lip angles of **8° or less**. A taller piece must be a table top (a wall with a ramp is one: ramp, deck, ramp back down).
+
+**The playground is the exception.** `courses/playground.json` is hand-made for manual back flips and barrel rolls, which need 2.5 s or more of air (`docs/research/playground-ramps.md`), and nothing trains or scores on it. Its ramps, kickers and corkscrews keep the 110 m concave radius (length = 110 m × lip angle in rad) and the kink limit, but their lips go from 14° to **28°** (`MAX_PLAYGROUND_LIP_DEG` in `piece_geometry.rs`). A clean level approach under PD still lands them without a crash at 20–35 m/s (`crates/nl-control/tests/playground_stunts.rs`).
 
 ## Tests that pin this (plan §3)
 - **Survival:** the 0-crash clean-entry sweep up to 55.6 m/s (`survival.md`).

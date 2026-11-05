@@ -16,6 +16,10 @@ use nl_sim::course_gen::{
 const SEEDS: u64 = 300;
 /// The largest lip angle of a piece that throws the car (see ramp-curvature.md).
 const MAX_LIP_DEG: f32 = 8.0;
+/// The playground is hand-made for manual stunts and keeps the same concave radius but
+/// allows steeper lips, up to this angle (docs/contracts/ramp-curvature.md, "Playground").
+/// Generated and training courses keep `MAX_LIP_DEG`.
+const MAX_PLAYGROUND_LIP_DEG: f32 = 28.0;
 
 fn catalog() -> PieceCatalog {
     PieceCatalog::from_json_str(DEFAULT_PIECES_JSON).unwrap()
@@ -68,17 +72,20 @@ fn every_generated_curved_piece_has_the_design_radius_and_a_safe_lip() {
 }
 
 #[test]
-fn the_playgrounds_curved_pieces_have_the_design_radius_and_a_safe_lip() {
+fn the_playgrounds_curved_pieces_have_the_design_radius_and_a_documented_steeper_lip() {
     let course = CourseSpec::from_json_str(PLAYGROUND_JSON).unwrap();
+    let mut steepest_deg: f32 = 0.0;
     for piece in &course.pieces {
         if let Some((radius_m, angle_deg)) = concave_radius_m(piece) {
             assert!(
                 radius_m >= MIN_CONCAVE_RADIUS_M - 0.5,
                 "{piece:?}: {radius_m} m"
             );
-            assert!(angle_deg <= MAX_LIP_DEG + 1e-3, "{piece:?}");
+            assert!(angle_deg <= MAX_PLAYGROUND_LIP_DEG + 1e-3, "{piece:?}");
+            steepest_deg = steepest_deg.max(angle_deg);
         }
     }
+    assert!(steepest_deg > MAX_LIP_DEG, "the playground has steep ramps");
 }
 
 /// The side profile of a piece's solid at the edge `z`: (x, y) of its top points.
