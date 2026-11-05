@@ -11,6 +11,7 @@ how long it stays in the air, then writes a JSON report and an SVG of the height
 
 import argparse
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,8 @@ from ninelives.env import finished_episode
 from ninelives.run_files import load_model_and_normalizer
 from ninelives.sim_config import load_sim_config
 from ninelives_sim import BatchedSim, obs_spec
+
+log = logging.getLogger(__name__)
 
 STAGE = "A"
 MODE = "arcade"
@@ -169,13 +172,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--out", type=Path, required=True, help="JSON report to write")
     parser.add_argument("--svg", type=Path, required=True, help="SVG chart to write")
     args = parser.parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     result = report(args.broken, args.fixed)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     args.svg.parent.mkdir(parents=True, exist_ok=True)
     args.svg.write_text(svg_of(result) + "\n")
     for label in ("broken", "fixed"):
         m = result[label]
-        print(
+        log.info(
             f"{label}: success {m['success_rate']:.3f} crash {m['crash_rate']:.3f} "
             f"timeout {m['timeout_rate']:.3f} mean airtime {m['mean_flight_s']:.2f}s "
             f"episode {m['mean_duration_s']:.2f}s"

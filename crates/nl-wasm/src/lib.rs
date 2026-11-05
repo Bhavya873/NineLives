@@ -579,7 +579,7 @@ impl Game {
     }
 
     /// Identifies this build, so saved ghosts from an incompatible build are ignored.
-    /// For now it is the crate version and snapshot format; M8 adds the physics hash.
+    /// It is the crate version and the snapshot format.
     pub fn build_hash() -> String {
         format!(
             "nl-wasm-{}-snapshot-v{}",

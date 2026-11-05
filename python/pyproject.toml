@@ -45,7 +45,7 @@ known-first-party = ["ninelives", "ninelives_sim"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ANN"]
 # SVG templates: long f-string lines read better unbroken.
-"ninelives/report_charts.py" = ["E501"]
+"ninelives/charts.py" = ["E501"]
 "ninelives/hover_experiment.py" = ["E501"]
 
 [tool.pytest.ini_options]

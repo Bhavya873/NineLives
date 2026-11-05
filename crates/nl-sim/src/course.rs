@@ -9,7 +9,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// The demo course (SPEC §7.11), built into the binary so the game and tests share it.
+/// The Gauntlet demo course (SPEC §7.11), built into the binary so the game and tests share it.
+/// Historical: the game UI no longer offers it; tests and the wasm crowd viewer still use it.
 pub const GAUNTLET_JSON: &str = include_str!("../../../courses/gauntlet.json");
 /// The training viewer's obstacle arena (SPEC §11.6): ramps and blocks around an open
 /// drop zone at the origin, where Stage A drops start.

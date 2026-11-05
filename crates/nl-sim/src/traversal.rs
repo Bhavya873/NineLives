@@ -428,11 +428,6 @@ impl TraversalTracker {
         &self.limits
     }
 
-    /// Replaces the limits.
-    pub fn set_limits(&mut self, limits: ApproachConfig) {
-        self.limits = limits;
-    }
-
     /// The approach hint (`HudField` 26): when a piece with a `v_complete_min_m_s` is
     /// ahead and the car is slower than it, that piece's `v_complete_min_m_s` in m/s, else
     /// 0. A piece is "ahead" when the car is before its entry line (no further than

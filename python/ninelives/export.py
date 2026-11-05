@@ -17,6 +17,7 @@ physics, not the training history, and the file says so (`CURVE_TITLE`).
 
 import argparse
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ from ninelives.provenance import git_sha
 from ninelives.run_files import DEFAULT_POLICY_PATH, load_model_and_normalizer
 from ninelives.sim_config import REPO_ROOT
 from ninelives_sim import obs_schema_hash, policy_format
+
+log = logging.getLogger(__name__)
 
 VIEWER_DIR = REPO_ROOT / "web" / "public" / "checkpoints"
 VIEWER_MAX_CHECKPOINTS = 8
@@ -231,10 +234,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--run-id", default=None, help="with --viewer-curve (default: newest)")
     parser.add_argument("--episodes", type=int, default=CURVE_EPISODES, help="per stage")
     args = parser.parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     if args.viewer_curve:
         index = json.loads((VIEWER_DIR / "index.json").read_text())
         run_id = args.run_id or index["runs"][-1]["run_id"]
-        print(f"wrote {write_curve(VIEWER_DIR / run_id, args.episodes)}")
+        log.info(f"wrote {write_curve(VIEWER_DIR / run_id, args.episodes)}")
         return
     if args.run is None:
         parser.error("--run is required (or use --viewer-curve)")
@@ -249,10 +254,10 @@ def main(argv: list[str] | None = None) -> None:
     model, normalizer = load_model_and_normalizer(folder)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(export_policy(model, normalizer, args.run.name)))
-    print(f"wrote {args.out} ({model.num_timesteps} steps)")
+    log.info(f"wrote {args.out} ({model.num_timesteps} steps)")
     if args.viewer:
         for path in export_viewer_checkpoints(args.run, folder):
-            print(f"wrote {path}")
+            log.info(f"wrote {path}")
 
 
 if __name__ == "__main__":

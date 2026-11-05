@@ -48,9 +48,6 @@ pub enum Stage {
 }
 
 impl Stage {
-    /// Every stage, in curriculum order.
-    pub const ALL: [Stage; 6] = [Stage::A, Stage::B, Stage::C, Stage::D, Stage::E, Stage::F];
-
     /// "A" to "F" (either case), as on the eval runner's command line.
     pub fn from_name(name: &str) -> Option<Stage> {
         match name {
