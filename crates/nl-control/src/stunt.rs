@@ -14,7 +14,7 @@
 use std::f32::consts::TAU;
 
 use nl_sim::car_state::CarState;
-use nl_sim::conventions::NOZZLE_COUNT;
+use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT};
 use nl_sim::forecast::{ForecastSettings, LandingForecast};
 use nl_sim::world::World;
 
@@ -364,7 +364,7 @@ pub fn authorize(
         0.0
     } else {
         config.air_margin * (air_rate * (spin_up_s + brake_s) + config.catch_air_kg)
-            + config.landing_reserve_kg
+            + landing_reserve_kg(config, &inputs.state, &landing)
     };
     if !inputs.unlimited_air && inputs.air_kg < air_needed_kg {
         return refuse(StuntReason::NotEnoughAir);
@@ -378,6 +378,18 @@ pub fn authorize(
         required_s,
         air_needed_kg,
     })
+}
+
+/// The air kept for the PD landing after the stunt, in kg: `landing_air_kg_per_m_s` times
+/// the fall speed the forecast says the car has at touchdown. A stunt that would eat it is
+/// refused (`NotEnoughAir`).
+pub fn landing_reserve_kg(
+    config: &StuntConfig,
+    state: &CarState,
+    landing: &LandingForecast,
+) -> f32 {
+    let fall_m_s = (state.falling_speed_m_s() + GRAVITY_M_S2 * landing.time_s).max(0.0);
+    config.landing_air_kg_per_m_s * fall_m_s
 }
 
 /// One stunt's state machine. Make one per car, call `request` when the player presses a
@@ -613,8 +625,8 @@ impl StuntPlanner {
                 cfg.roll_air_kg_s
             };
             let firing_s = (omega - rate).max(0.0) / alpha + (omega - handover).max(0.0) / alpha;
-            let needed =
-                cfg.air_margin * (air_rate * firing_s + cfg.catch_air_kg) + cfg.landing_reserve_kg;
+            let needed = cfg.air_margin * (air_rate * firing_s + cfg.catch_air_kg)
+                + landing_reserve_kg(cfg, &inputs.state, &landing);
             if inputs.air_kg < needed {
                 return Some(StuntReason::NotEnoughAir);
             }

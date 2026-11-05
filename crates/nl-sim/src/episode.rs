@@ -19,6 +19,7 @@ use crate::conventions::{NOZZLE_COUNT, PHYSICS_HZ, WHEEL_COUNT};
 use crate::course::CourseSpec;
 use crate::driver_bot::{BotView, DriverBot};
 use crate::events::{CrashCause, SimEvent};
+use crate::forecast::LandingView;
 use crate::input::{BUTTON_CHAOS, InputFrame};
 use crate::landing::LandingQuality;
 use crate::obs::{Observation, PREV_ACTION_INDEX, observe};
@@ -260,6 +261,13 @@ impl Episode {
         let prev_action = PREV_ACTION_INDEX..PREV_ACTION_INDEX + NOZZLE_COUNT;
         observation[prev_action].copy_from_slice(&self.commanded_throttles);
         (state, observation)
+    }
+
+    /// The cheap landing summary a controller sees now while airborne (see
+    /// `World::landing_view`), from the true car: a sensor-noise-free path, as the stunt
+    /// forecast does.
+    pub fn landing_view(&self) -> Option<LandingView> {
+        self.world.landing_view()
     }
 
     /// The observation a controller sees now (see `controller_view`).

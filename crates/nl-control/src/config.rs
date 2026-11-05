@@ -73,6 +73,36 @@ pub struct PdConfig {
     pub quiet_max_tilt_deg: f32,
     /// See `quiet_max_tilt_deg`, in rad/s.
     pub quiet_max_spin_rad_s: f32,
+    /// Landing on an obstacle top, the brake height grows by this much: the nose can
+    /// overhang the edge and meet it first, in m.
+    pub obstacle_margin_m: f32,
+    /// PD wants the car settled and braking this long before touchdown, in s.
+    pub catch_window_s: f32,
+    /// Limited air, touchdown still far (more than the braking time plus `catch_window_s`
+    /// away): PD leaves a tilt below this alone, in degrees, to save air.
+    pub hold_deadband_deg: f32,
+    /// ... and a spin below this, in rad/s.
+    pub hold_max_spin_rad_s: f32,
+    /// The landing air reserve counts this many times the air the final braking needs.
+    pub reserve_safety: f32,
+    /// ... plus the air the last catch needs, in kg.
+    pub reserve_catch_air_kg: f32,
+    /// Limited air, below this much air the attitude gains slide down towards
+    /// `low_air_gain_share` (not a cliff), in kg.
+    pub low_air_floor_kg: f32,
+    /// The share of the attitude gains left with an empty tank, 0..1.
+    pub low_air_gain_share: f32,
+    /// Extra lateral damping at an edge: the gain is multiplied by 1 + this × how close
+    /// the edge is (0 at `EDGE_FAR_M` or more, 1 at the edge).
+    pub edge_damping_boost: f32,
+    /// Landing on a short surface, PD tips the nose up or down by this much (rad) per
+    /// m/s of forward speed to slow the slide, up to `edge_pitch_max_rad`.
+    pub edge_pitch_rad_per_m_s: f32,
+    /// See `edge_pitch_rad_per_m_s`, in rad.
+    pub edge_pitch_max_rad: f32,
+    /// The catch aims the car's up axis at the surface normal when it is tilted at most
+    /// this much from level, in degrees.
+    pub normal_aim_max_deg: f32,
 }
 
 /// The Hybrid's gate, `[hybrid]` in controllers.toml. Optional: left out, the gate uses
@@ -133,8 +163,9 @@ pub struct StuntConfig {
     pub forecast_pitch_spread_deg: f32,
     /// Safety factor on the air a stunt needs.
     pub air_margin: f32,
-    /// Air kept for a normal PD landing, kg.
-    pub landing_reserve_kg: f32,
+    /// Air kept for the PD landing per m/s of fall speed at touchdown (from the forecast),
+    /// kg: mass × (1 + g ÷ braking deceleration) ÷ exhaust speed, with some margin.
+    pub landing_air_kg_per_m_s: f32,
     /// A stunt may only start at most this tilted, degrees.
     pub start_max_tilt_deg: f32,
     /// ... and spinning at most this fast, rad/s.
@@ -167,7 +198,7 @@ impl Default for StuntConfig {
             forecast_speed_spread: 0.02,
             forecast_pitch_spread_deg: 1.0,
             air_margin: 1.25,
-            landing_reserve_kg: 60.0,
+            landing_air_kg_per_m_s: 6.0,
             start_max_tilt_deg: 25.0,
             start_max_spin_rad_s: 1.5,
             request_timeout_s: 3.0,
@@ -223,7 +254,7 @@ impl StuntConfig {
                 self.forecast_pitch_spread_deg,
             ),
             ("stunt.air_margin", self.air_margin),
-            ("stunt.landing_reserve_kg", self.landing_reserve_kg),
+            ("stunt.landing_air_kg_per_m_s", self.landing_air_kg_per_m_s),
             ("stunt.start_max_tilt_deg", self.start_max_tilt_deg),
             ("stunt.start_max_spin_rad_s", self.start_max_spin_rad_s),
             ("stunt.request_timeout_s", self.request_timeout_s),
@@ -302,6 +333,15 @@ impl ControllersConfig {
             ("pd.air_wish_min_height_m", pd.air_wish_min_height_m),
             ("pd.quiet_max_tilt_deg", pd.quiet_max_tilt_deg),
             ("pd.quiet_max_spin_rad_s", pd.quiet_max_spin_rad_s),
+            ("pd.obstacle_margin_m", pd.obstacle_margin_m),
+            ("pd.catch_window_s", pd.catch_window_s),
+            ("pd.hold_deadband_deg", pd.hold_deadband_deg),
+            ("pd.hold_max_spin_rad_s", pd.hold_max_spin_rad_s),
+            ("pd.reserve_safety", pd.reserve_safety),
+            ("pd.reserve_catch_air_kg", pd.reserve_catch_air_kg),
+            ("pd.low_air_floor_kg", pd.low_air_floor_kg),
+            ("pd.edge_pitch_max_rad", pd.edge_pitch_max_rad),
+            ("pd.normal_aim_max_deg", pd.normal_aim_max_deg),
             ("allocation.force_weight", allocation.force_weight),
             ("allocation.torque_weight", allocation.torque_weight),
             ("allocation.regularisation", allocation.regularisation),

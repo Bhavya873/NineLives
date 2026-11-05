@@ -3,8 +3,9 @@
 //! touchdown, and roll back onto the wheels when lying on the ground (the side boosters
 //! pushing too). It decides a wanted force and torque, then the allocation picks throttles.
 
-use nl_sim::car_state::{CarModel, CarState, WRENCH_SIZE, Wrench};
+use nl_sim::car_state::{CarModel, CarState, MAX_HEIGHT_M, WRENCH_SIZE, Wrench};
 use nl_sim::conventions::{GRAVITY_M_S2, NOZZLE_COUNT};
+use nl_sim::forecast::{EDGE_FAR_M, LandingView};
 use nl_sim::input::InputFrame;
 use nl_sim::modes::ModeParams;
 use nl_sim::vehicle_config::VehicleConfig;
@@ -23,6 +24,11 @@ const MIN_TILT_ERROR: f32 = 0.1;
 /// Wheels that must touch for PD's quiet rule (`driving_on_wheels`) on a calm car.
 const QUIET_MIN_WHEELS: usize = 2;
 
+/// Centring never counts on less time than this, in s, nor asks for more speed than
+/// `MAX_CENTRING_M_S`.
+const MIN_CENTRING_TIME_S: f32 = 0.5;
+const MAX_CENTRING_M_S: f32 = 3.0;
+
 /// The PD controller with its allocation, for one car.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pd {
@@ -31,6 +37,8 @@ pub struct Pd {
     inertia_kg_m2: [f32; 3],
     /// Upward push of every nozzle at full throttle in a ×1 mode, along body +Y, in N.
     full_lift_n: f32,
+    /// How fast the air leaves a nozzle, in m/s (air used per second = push / this).
+    exhaust_speed_m_s: f32,
     allocator: Allocator,
     /// Which allocation `act` uses (`[allocation] model`).
     allocation_model: AllocationModel,
@@ -48,6 +56,7 @@ impl Pd {
             mass_kg: model.mass_kg,
             inertia_kg_m2: model.principal_inertia_kg_m2,
             full_lift_n: full_lift_n(&model.nozzle_wrenches),
+            exhaust_speed_m_s: model.exhaust_speed_m_s,
             allocator: Allocator::new(&model.nozzle_wrenches, &config.allocation),
             allocation_model: config.allocation.model,
             throttles: [0.0; NOZZLE_COUNT],
@@ -76,15 +85,32 @@ impl Pd {
     /// as air-control wishes (steer turns the heading, throttle tilts the nose). All
     /// zero while the car drives on its wheels, to save air.
     pub fn wanted_wrench_for(&self, state: &CarState, input: &InputFrame) -> Wrench {
+        self.wanted_wrench_with(state, input, None)
+    }
+
+    /// As `wanted_wrench_for`, looking ahead with the landing summary: braking from the
+    /// real surface below the path, the catch aimed at its normal, sideways damping
+    /// stronger near its edge, and (limited air) a long fall left alone.
+    pub fn wanted_wrench_with(
+        &self,
+        state: &CarState,
+        input: &InputFrame,
+        landing: Option<&LandingView>,
+    ) -> Wrench {
         if self.driving_on_wheels(state) {
             return [0.0; WRENCH_SIZE];
         }
-        let mut torque = self.attitude_torque(state, &self.air_wish(state, input));
+        let far = self.touchdown_far(state, landing);
+        let mut wish = self.air_wish(state, input);
+        if let (Some(view), false) = (landing, far) {
+            wish.nose_down_rad += self.edge_pitch_rad(state, view);
+        }
+        let mut torque = self.attitude_torque(state, &wish, landing, far);
         // Low, tipped over and nearly still: lying on the ground, not falling past it.
         let lying_on_ground = state.height_m < self.config.on_ground_height_m
             && state.up_alignment() < self.config.upright_alignment
             && state.falling_speed_m_s().abs() < self.config.lying_max_fall_speed_m_s;
-        let mut force = self.braking_force_body(state);
+        let mut force = self.braking_force_body(state, landing);
         if lying_on_ground {
             // SPEC §8: roll torque only, to flip back onto the wheels. Lifting the car
             // over its side edge takes far more torque than turning it in the air.
@@ -93,7 +119,7 @@ impl Pd {
             torque[2] = 0.0;
             force[2] = self.side_push_n(state);
         } else {
-            force[2] = self.lateral_damping_n(state);
+            force[2] = self.lateral_damping_n(state, landing, far);
         }
         [
             force[0], force[1], force[2], torque[0], torque[1], torque[2],
@@ -136,9 +162,26 @@ impl Pd {
     /// `max_angular_accel_rad_s2` for the passenger (SPEC §9.4 g-load); τ = I · that.
     /// A car already spinning fast towards upright the long way round keeps going
     /// (`keep_spin_through`) instead of being stopped and turned back.
-    fn attitude_torque(&self, state: &CarState, wish: &AirWish) -> [f32; 3] {
+    fn attitude_torque(
+        &self,
+        state: &CarState,
+        wish: &AirWish,
+        landing: Option<&LandingView>,
+        far: bool,
+    ) -> [f32; 3] {
         let [gx, gy, gz] = state.gravity_dir_body;
-        let up_wanted = [-gx, -gy, -gz];
+        let mut up_wanted = [-gx, -gy, -gz];
+        if let (Some(view), false) = (landing, far) {
+            // Near touchdown on a tilted surface: land flat on it, not flat to the world.
+            let min_normal_y = libm::cosf(self.config.normal_aim_max_deg.to_radians());
+            let normal = view.normal_body;
+            if normal[1] >= min_normal_y && view.gap_m.is_finite() {
+                up_wanted = normal;
+            }
+        }
+        if far && self.holds_attitude(state, &up_wanted) {
+            return [0.0; 3];
+        }
         let (sin_p, cos_p) = (
             libm::sinf(wish.nose_down_rad),
             libm::cosf(wish.nose_down_rad),
@@ -155,6 +198,12 @@ impl Pd {
         let spin = state.angular_velocity_body_rad_s;
         let wished_spin = [0.0, wish.yaw_rate_rad_s, 0.0];
         let (kp, kd) = self.attitude_gains(state);
+        let air_scale = if far {
+            self.low_air_gain_scale(landing)
+        } else {
+            1.0
+        };
+        let (kp, kd) = (kp * air_scale, kd * air_scale);
         let mut accel = [0.0; 3];
         for axis in 0..3 {
             let mut damped_spin = spin[axis] - wished_spin[axis];
@@ -204,8 +253,8 @@ impl Pd {
     /// (`should_brake`), push up with F = m·(g + kv·(v_down − target)) along the body's
     /// +Y (w = [0, F_y, 0, …]), which only the lift nozzles provide; otherwise nothing, to
     /// save air.
-    fn braking_force_body(&self, state: &CarState) -> [f32; 3] {
-        if !self.should_brake(state) {
+    fn braking_force_body(&self, state: &CarState, landing: Option<&LandingView>) -> [f32; 3] {
+        if !self.should_brake(state, landing) {
             return [0.0; 3];
         }
         let falling_m_s = state.falling_speed_m_s();
@@ -216,11 +265,24 @@ impl Pd {
 
     /// Airborne, upright enough, falling faster than `brake_speed_m_s`, and at or below
     /// the height where braking must start (`brake_start_height_m`).
-    fn should_brake(&self, state: &CarState) -> bool {
+    fn should_brake(&self, state: &CarState, landing: Option<&LandingView>) -> bool {
+        // The surface the path comes down on, not only the ground straight below: a
+        // parked car or table top ahead is higher, so braking starts sooner.
+        // The height ray stops at MAX_HEIGHT_M; with limited air the true gap is used past
+        // it, so a long fall is not braked from 60 m up (Arcade keeps the old behaviour).
+        let height_m = match landing {
+            Some(view) if view.limited_air && state.height_m >= MAX_HEIGHT_M => view.gap_m,
+            Some(view) => state.height_m.min(view.gap_m),
+            None => state.height_m,
+        };
+        let margin_m = match landing {
+            Some(view) if view.on_obstacle => self.config.obstacle_margin_m,
+            _ => 0.0,
+        };
         state.wheels_down() == 0
             && state.up_alignment() > self.config.upright_alignment
             && state.falling_speed_m_s() > self.config.brake_speed_m_s
-            && state.height_m < self.brake_start_height_m(state)
+            && height_m < self.brake_start_height_m(state) + margin_m
     }
 
     /// How high braking must start to slow the fall to `target_descent_m_s` before
@@ -244,12 +306,108 @@ impl Pd {
 
     /// In the air and roughly upright: a sideways force −m·kv_lateral·v_z along body Z,
     /// so the side boosters cancel a slide before touchdown; 0 otherwise.
-    fn lateral_damping_n(&self, state: &CarState) -> f32 {
-        let damp = state.wheels_down() == 0 && state.up_alignment() > self.config.upright_alignment;
+    fn lateral_damping_n(&self, state: &CarState, landing: Option<&LandingView>, far: bool) -> f32 {
+        let damp = state.wheels_down() == 0
+            && state.up_alignment() > self.config.upright_alignment
+            && !far;
         if !damp {
             return 0.0;
         }
-        -self.mass_kg * self.config.kv_lateral * state.linear_velocity_body_m_s[2]
+        let mut sideways_m_s = state.linear_velocity_body_m_s[2];
+        let mut boost = 1.0;
+        if let Some(view) = landing {
+            let edge_index = if sideways_m_s > 0.0 { 2 } else { 3 };
+            boost += self.config.edge_damping_boost * edge_closeness(view, edge_index);
+            sideways_m_s -= centring_speed_m_s(view, 2, 3);
+        }
+        -self.mass_kg * self.config.kv_lateral * boost * sideways_m_s
+    }
+
+    /// Landing view in hand, the nose tip (rad, positive nose down) that slows a slide
+    /// towards a near edge: nose up when sliding forward, down when backing.
+    fn edge_pitch_rad(&self, state: &CarState, view: &LandingView) -> f32 {
+        if state.up_alignment() <= self.config.upright_alignment {
+            return 0.0;
+        }
+        let drive_m_s = state.linear_velocity_body_m_s[0];
+        if drive_m_s.abs() > MAX_CENTRING_M_S {
+            // Too fast to stop on this surface: tipping the nose would only perch the car
+            // on its edge. Let it roll through.
+            return 0.0;
+        }
+        let forward_m_s = drive_m_s - centring_speed_m_s(view, 0, 1);
+        let tip = (self.config.edge_pitch_rad_per_m_s * forward_m_s).clamp(
+            -self.config.edge_pitch_max_rad,
+            self.config.edge_pitch_max_rad,
+        );
+        -tip
+    }
+
+    /// Time the final braking takes from the fall speed at touchdown, in s.
+    fn braking_time_s(&self, state: &CarState, view: &LandingView) -> f32 {
+        let speed_m_s = self.touchdown_fall_speed_m_s(state, view);
+        let lift_n = self.full_lift_n * state.mode_thrust_scale * self.config.brake_usable_fraction;
+        let deceleration_m_s2 = lift_n / self.mass_kg - GRAVITY_M_S2;
+        if deceleration_m_s2 <= 0.0 {
+            return f32::INFINITY;
+        }
+        (speed_m_s - self.config.target_descent_m_s).max(0.0) / deceleration_m_s2
+    }
+
+    /// Fall speed when the nominal path reaches the surface, in m/s.
+    fn touchdown_fall_speed_m_s(&self, state: &CarState, view: &LandingView) -> f32 {
+        (state.falling_speed_m_s() + GRAVITY_M_S2 * view.time_s).max(0.0)
+    }
+
+    /// Limited air only: touchdown is still farther than the braking time plus the catch
+    /// window, so attitude holds and sideways damping can wait. False in unlimited air, on
+    /// the ground and where nobody filled the landing view in.
+    fn touchdown_far(&self, state: &CarState, landing: Option<&LandingView>) -> bool {
+        let Some(view) = landing else {
+            return false;
+        };
+        if !view.limited_air {
+            return false;
+        }
+        if !view.time_s.is_finite() {
+            return true;
+        }
+        view.time_s > self.braking_time_s(state, view) + self.config.catch_window_s
+    }
+
+    /// Far from touchdown and nearly level and quiet: leave the attitude alone.
+    fn holds_attitude(&self, state: &CarState, up_wanted: &[f32; 3]) -> bool {
+        let tilt_deg = libm::acosf(up_wanted[1].clamp(-1.0, 1.0)).to_degrees();
+        tilt_deg < self.config.hold_deadband_deg
+            && state.spin_rad_s() < self.config.hold_max_spin_rad_s
+    }
+
+    /// The share of the attitude gains kept when the tank is low: full above
+    /// `low_air_floor_kg`, sliding down to `low_air_gain_share` with an empty tank.
+    fn low_air_gain_scale(&self, landing: Option<&LandingView>) -> f32 {
+        let Some(view) = landing else {
+            return 1.0;
+        };
+        let share = self.config.low_air_gain_share;
+        let filled = (view.air_kg / self.config.low_air_floor_kg).clamp(0.0, 1.0);
+        share + (1.0 - share) * filled
+    }
+
+    /// The air the landing needs from here, in kg: the final braking from the fall speed
+    /// at touchdown (push × time ÷ exhaust speed, with the weight it also carries) times
+    /// `reserve_safety`, plus the last catch. 0 where there is no landing view.
+    pub fn landing_reserve_kg(&self, state: &CarState, landing: Option<&LandingView>) -> f32 {
+        let Some(view) = landing else {
+            return 0.0;
+        };
+        let speed_m_s = self.touchdown_fall_speed_m_s(state, view);
+        let time_s = self.braking_time_s(state, view);
+        if !time_s.is_finite() {
+            return f32::INFINITY;
+        }
+        let momentum = self.mass_kg * (speed_m_s + GRAVITY_M_S2 * time_s);
+        self.config.reserve_safety * momentum / self.exhaust_speed_m_s
+            + self.config.reserve_catch_air_kg
     }
 
     /// Lying on its side: push along body Z towards world up with `ground_side_push` ×
@@ -259,6 +417,23 @@ impl Pd {
         let up_along_side = -state.gravity_dir_body[2];
         self.config.ground_side_push * self.mass_kg * GRAVITY_M_S2 * up_along_side
     }
+}
+
+/// 0 far from the edge in direction `edge_index` (`LandingView::edge_m` order), 1 at it.
+fn edge_closeness(view: &LandingView, edge_index: usize) -> f32 {
+    (1.0 - view.edge_m[edge_index] / EDGE_FAR_M).clamp(0.0, 1.0)
+}
+
+/// The speed along an axis that would bring the touchdown point to the middle of the
+/// surface by touchdown, in m/s: the offset to the middle (half the difference of the two
+/// edge distances, `plus_edge` and `minus_edge` indices into `LandingView::edge_m`) over
+/// the time left, at most `MAX_CENTRING_M_S`.
+fn centring_speed_m_s(view: &LandingView, plus_edge: usize, minus_edge: usize) -> f32 {
+    if !view.time_s.is_finite() {
+        return 0.0;
+    }
+    let to_middle_m = 0.5 * (view.edge_m[plus_edge] - view.edge_m[minus_edge]);
+    (to_middle_m / view.time_s.max(MIN_CENTRING_TIME_S)).clamp(-MAX_CENTRING_M_S, MAX_CENTRING_M_S)
 }
 
 /// What the driver asks of the car in the air (`Pd::air_wish`).
@@ -330,7 +505,7 @@ impl Controller for Pd {
     }
 
     fn act(&mut self, ctx: &ControlCtx) -> [f32; NOZZLE_COUNT] {
-        let wrench = self.wanted_wrench_for(&ctx.state, &ctx.input);
+        let wrench = self.wanted_wrench_with(&ctx.state, &ctx.input, ctx.landing.as_ref());
         self.allocate(wrench, ctx)
     }
 }

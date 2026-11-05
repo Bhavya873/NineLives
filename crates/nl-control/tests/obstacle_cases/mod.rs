@@ -158,12 +158,7 @@ fn fly(world: &mut World, pd: &mut Pd) -> DropResult {
 
 /// One drop onto `surface` from `height_m` above it, falling at `fall_m_s` and drifting
 /// `drift_m_s` along +X, aimed so the ballistic path comes down on the aim point.
-pub fn drop_onto(
-    surface: &Surface,
-    height_m: f32,
-    fall_m_s: f32,
-    drift_m_s: f32,
-) -> DropResult {
+pub fn drop_onto(surface: &Surface, height_m: f32, fall_m_s: f32, drift_m_s: f32) -> DropResult {
     let course = course(&surface.piece_json);
     let (mut pd, mut world) = pd_and_world(&course);
     // h = v·t + g·t²/2, solved for t.

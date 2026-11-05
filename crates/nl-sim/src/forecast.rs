@@ -81,6 +81,43 @@ struct Touchdown {
     time_s: f32,
     point: Vector,
     normal: Vector,
+    /// The surface hit is an obstacle (a parked car, a wall), not the floor or a ramp.
+    on_obstacle: bool,
+}
+
+/// Spacing of the cheap landing view's path samples, in s (twice `STEP_S`: it runs every
+/// control step while airborne).
+const VIEW_STEP_S: f32 = 1.0 / 30.0;
+/// The landing view gives up after this long in the air, in s.
+const VIEW_MAX_TIME_S: f32 = 12.0;
+/// Edge probes run out to this distance from the touchdown point, in m, in steps of
+/// `GROUND_STEP_M`; an edge farther than this is "none".
+pub const EDGE_FAR_M: f32 = 6.0;
+/// Between two edge probes the surface may change height by this much and still count
+/// as the same surface, in m (a 40 degree slope over one step).
+const EDGE_MAX_RISE_M: f32 = 0.42;
+
+/// The cheap landing summary a controller gets every control step while airborne: the
+/// nominal path only (no uncertainty samples), flown with a coarser step than the stunt
+/// forecast.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LandingView {
+    /// Seconds until touchdown on the ballistic path; infinite if nothing is hit in time.
+    pub time_s: f32,
+    /// How far the centre of mass is above the surface point it will come down on, in m;
+    /// infinite with no touchdown.
+    pub gap_m: f32,
+    /// Unit surface normal there, in the body frame (up when there is no touchdown).
+    pub normal_body: [f32; 3],
+    /// The touchdown is on an obstacle top, so a nose or tail can overhang an edge.
+    pub on_obstacle: bool,
+    /// Distance from the touchdown point to where the surface ends or steps away, towards
+    /// the car's front, back, right and left, in m, at most `EDGE_FAR_M`.
+    pub edge_m: [f32; 4],
+    /// The mode has a limited tank (the world fills this in; the forecast does not know).
+    pub limited_air: bool,
+    /// Air left in the tank, in kg.
+    pub air_kg: f32,
 }
 
 /// Forecasts the landing of a body at `position` with `velocity`, or None if it does not
@@ -93,7 +130,7 @@ pub(crate) fn forecast(
     settings: &ForecastSettings,
 ) -> Option<LandingForecast> {
     let gravity = physics.gravity;
-    let nominal = touch_down(physics, car, position, velocity, gravity, settings)?;
+    let nominal = touch_down(physics, car, position, velocity, gravity, settings, STEP_S)?;
     let mut time_spread = 0.0_f32;
     let mut position_spread = 0.0_f32;
     for speed_scale in [
@@ -106,7 +143,15 @@ pub(crate) fn forecast(
                 continue;
             }
             let sample_velocity = tilt_pitch(velocity * speed_scale, pitch_deg.to_radians());
-            match touch_down(physics, car, position, sample_velocity, gravity, settings) {
+            match touch_down(
+                physics,
+                car,
+                position,
+                sample_velocity,
+                gravity,
+                settings,
+                STEP_S,
+            ) {
                 Some(sample) => {
                     time_spread = time_spread.max((sample.time_s - nominal.time_s).abs());
                     let offset = sample.point - nominal.point;
@@ -146,22 +191,23 @@ fn touch_down(
     velocity: Vector,
     gravity: Vector,
     settings: &ForecastSettings,
+    step_s: f32,
 ) -> Option<Touchdown> {
     let filter = QueryFilter::default().exclude_rigid_body(car.chassis);
     let down = Vector::new(0.0, -1.0, 0.0);
-    let steps = (settings.max_time_s / STEP_S).ceil() as u32;
+    let steps = (settings.max_time_s / step_s).ceil() as u32;
     let reach = settings.rest_height_m + 60.0;
     let mut previous_gap: Option<f32> = None;
     for step in 0..=steps {
-        let t = step as f32 * STEP_S;
+        let t = step as f32 * step_s;
         let position = start + velocity * t + gravity * (0.5 * t * t);
         let ray = Ray::new(position, down);
-        if let Some((_, hit)) = physics.cast_ray_and_get_normal(&ray, reach, true, filter) {
+        if let Some((handle, hit)) = physics.cast_ray_and_get_normal(&ray, reach, true, filter) {
             let gap = hit.time_of_impact - settings.rest_height_m;
             if gap <= 0.0 {
                 // Interpolate where the gap closed between the last sample and this one.
                 let time_s = match previous_gap {
-                    Some(before) if before > 0.0 => t - STEP_S * (-gap) / (before - gap),
+                    Some(before) if before > 0.0 => t - step_s * (-gap) / (before - gap),
                     _ => t,
                 };
                 let point = position + down * hit.time_of_impact;
@@ -169,6 +215,7 @@ fn touch_down(
                     time_s: time_s.max(0.0),
                     point,
                     normal: hit.normal,
+                    on_obstacle: physics.colliders[handle].user_data == OBSTACLE_USER_DATA,
                 });
             }
             previous_gap = Some(gap);
@@ -237,4 +284,84 @@ fn usable_length(
         length
     };
     extent(1.0, settings.max_length_ahead_m) + extent(-1.0, settings.max_length_behind_m)
+}
+
+/// The landing view for a body at `position` with `velocity`: the nominal touchdown, its
+/// surface normal (turned into the body frame by `to_body`), whether it is an obstacle
+/// top, and the edge distances along the body's `front` and `right` axes. Always Some;
+/// with no touchdown in `VIEW_MAX_TIME_S` the time and gap are infinite.
+pub(crate) fn landing_view(
+    physics: &PhysicsWorld,
+    car: &Car,
+    position: Vector,
+    velocity: Vector,
+    to_body: impl Fn(Vector) -> [f32; 3],
+) -> LandingView {
+    let settings = ForecastSettings {
+        max_time_s: VIEW_MAX_TIME_S,
+        ..ForecastSettings::default()
+    };
+    let touchdown = touch_down(
+        physics,
+        car,
+        position,
+        velocity,
+        physics.gravity,
+        &settings,
+        VIEW_STEP_S,
+    );
+    let Some(touchdown) = touchdown else {
+        return LandingView {
+            time_s: f32::INFINITY,
+            gap_m: f32::INFINITY,
+            normal_body: to_body(Vector::Y),
+            limited_air: false,
+            air_kg: 0.0,
+            on_obstacle: false,
+            edge_m: [EDGE_FAR_M; 4],
+        };
+    };
+    let rotation = *physics.bodies[car.chassis].rotation();
+    let front = horizontal(rotation * Vector::X).unwrap_or(Vector::X);
+    let right = horizontal(rotation * Vector::Z).unwrap_or(Vector::Z);
+    let edge_m = [front, -front, right, -right]
+        .map(|direction| edge_distance(physics, car, &touchdown, direction));
+    LandingView {
+        time_s: touchdown.time_s,
+        gap_m: position.y - touchdown.point.y,
+        normal_body: to_body(touchdown.normal),
+        limited_air: false,
+        air_kg: 0.0,
+        on_obstacle: touchdown.on_obstacle,
+        edge_m,
+    }
+}
+
+/// How far from the touchdown point along `direction` the surface stays at about the same
+/// height (no step down, no wall), in m, at most `EDGE_FAR_M`.
+fn edge_distance(
+    physics: &PhysicsWorld,
+    car: &Car,
+    touchdown: &Touchdown,
+    direction: Vector,
+) -> f32 {
+    let filter = QueryFilter::default().exclude_rigid_body(car.chassis);
+    let height_at = |offset_m: f32| -> Option<f32> {
+        let from = touchdown.point + direction * offset_m + Vector::new(0.0, GROUND_LIFT_M, 0.0);
+        let ray = Ray::new(from, Vector::new(0.0, -1.0, 0.0));
+        let (_, hit) = physics.cast_ray_and_get_normal(&ray, GROUND_REACH_M, true, filter)?;
+        Some(from.y - hit.time_of_impact)
+    };
+    let mut last = touchdown.point.y;
+    let mut length = 0.0;
+    while length + GROUND_STEP_M <= EDGE_FAR_M {
+        match height_at(length + GROUND_STEP_M) {
+            Some(height) if (height - last).abs() <= EDGE_MAX_RISE_M => {
+                last = height;
+                length += GROUND_STEP_M;
+            }
+            _ => break,
+        }
+    }
+    length
 }

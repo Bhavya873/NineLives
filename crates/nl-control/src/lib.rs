@@ -9,6 +9,7 @@ use nl_sim::actuator_model::ActuatorState;
 use nl_sim::car_state::CarState;
 use nl_sim::conventions::NOZZLE_COUNT;
 use nl_sim::episode::Episode;
+use nl_sim::forecast::LandingView;
 use nl_sim::input::InputFrame;
 use nl_sim::obs::{OBS_DIM, Observation, observe};
 use nl_sim::world::World;
@@ -52,6 +53,10 @@ pub struct ControlCtx {
     /// The thrusters' own state, for the actuator-aware allocation; None where the
     /// next command is not what the valves get (latency) or nobody filled it in.
     pub actuators: Option<ActuatorState>,
+    /// Where and when the airborne car comes down on its nominal path, the surface there
+    /// and the air left (`World::landing_view`); None on the ground, and where nobody
+    /// filled it in (then `Pd` flies as it did before it looked ahead).
+    pub landing: Option<LandingView>,
 }
 
 impl ControlCtx {
@@ -64,6 +69,7 @@ impl ControlCtx {
             state,
             observation: observe(world, &state),
             actuators: Some(world.actuator_state()),
+            landing: world.landing_view(),
         }
     }
 }
@@ -79,6 +85,7 @@ impl ControlCtx {
             state,
             observation,
             actuators: episode.actuator_state(),
+            landing: episode.landing_view(),
         }
     }
 }
@@ -91,6 +98,7 @@ impl Default for ControlCtx {
             state: CarState::default(),
             observation: [0.0; OBS_DIM],
             actuators: None,
+            landing: None,
         }
     }
 }
