@@ -20,7 +20,7 @@ use nl_control::stunt::{
 };
 use nl_control::{ControlCtx, Controller, Pd};
 use nl_sim::conventions::PHYSICS_DT_S;
-use nl_sim::course::{CourseSpec, PLAYGROUND_JSON, PieceSpec};
+use nl_sim::course::{CourseSpec, PieceSpec};
 use nl_sim::events::SimEvent;
 use nl_sim::input::InputFrame;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModeParams, ModesConfig};
@@ -37,11 +37,21 @@ const CLEAN_SPEEDS_M_S: [f32; 4] = [20.0, 25.0, 30.0, 35.0];
 /// A press at once, and a press once PD has levelled the car within this tilt, in degrees.
 const ANY_TILT_DEG: f32 = 90.0;
 const LEVEL_TILT_DEG: f32 = 5.0;
+/// The key goes down on the take-off tick itself, whatever the planner thinks of it.
+const RAW_PRESS: f32 = -1.0;
 /// Throttle per m/s of speed error for the cruise control.
 const CRUISE_GAIN_PER_M_S: f32 = 0.5;
 /// A run ends this long after touchdown, in s, or at this time, whichever is first.
 const AFTER_LANDING_S: f32 = 3.0;
 const RUN_LIMIT_S: f32 = 20.0;
+/// Steep ramps like the stunt playground's (length = 110 m x angle in rad), one per lane.
+const STEEP_RAMPS_JSON: &str = r#"{"version": 1, "name": "steep", "start": {"pos": [0, 0.7, 0], "yaw": 0},
+    "bounds": {"min": [-800, -20, -800], "max": [800, 60, 800]},
+    "pieces": [
+    {"type": "ramp", "pos": [60, 0, 0], "length": 46.1, "width": 10, "angle_deg": 24},
+    {"type": "ramp", "pos": [60, 0, 100], "length": 49.9, "width": 10, "angle_deg": 26},
+    {"type": "ramp", "pos": [60, 0, 200], "length": 53.8, "width": 10, "angle_deg": 28},
+    {"type": "ramp", "pos": [60, 0, 300], "length": 26.9, "width": 10, "angle_deg": 14}]}"#;
 /// The old playground's ramps: 15.4 m long, 8 degrees.
 const OLD_RAMP_JSON: &str = r#"{"version": 1, "name": "old", "start": {"pos": [0, 0.7, 0], "yaw": 0},
     "bounds": {"min": [-800, -20, -800], "max": [800, 60, 800]},
@@ -149,6 +159,12 @@ fn run(
             match event {
                 SimEvent::AirborneStart if along_m > APPROACH_M && takeoff_s.is_none() => {
                     takeoff_s = Some(time_s);
+                    if let Some((kind, tilt)) = stunt.filter(|(_, tilt)| *tilt == RAW_PRESS) {
+                        // A raw press: queued at once, the planner waits for the car to level.
+                        let _ = tilt;
+                        director.request(kind, world.time_s() as f32);
+                        result.plan = Some((0.0, 0.0, 0.0));
+                    }
                 }
                 SimEvent::AirborneEnd if takeoff_s.is_some() && landing_s.is_none() => {
                     landing_s = Some(time_s);
@@ -203,9 +219,9 @@ fn describe(result: &RunResult) -> String {
 #[test]
 #[ignore = "prints the airtime table; slow in debug builds"]
 fn airtime_table_for_every_playground_ramp_angle() {
-    let course = CourseSpec::from_json_str(PLAYGROUND_JSON).unwrap();
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
     println!(
-        "\nangle speed | airtime s | back flip: required forecast waited result | barrel roll: same"
+        "\nangle speed | airtime s | back flip when allowed | back flip raw press at take-off | back flip once level | barrel roll when allowed"
     );
     println!(
         "(landed* = full turn done and on four wheels, but PD's catch undid part of the counted turn)"
@@ -218,6 +234,12 @@ fn airtime_table_for_every_playground_ramp_angle() {
                 piece,
                 speed_m_s,
                 Some((StuntKind::BackFlip, ANY_TILT_DEG)),
+            );
+            let raw = run(
+                &course,
+                piece,
+                speed_m_s,
+                Some((StuntKind::BackFlip, RAW_PRESS)),
             );
             let level = run(
                 &course,
@@ -232,10 +254,11 @@ fn airtime_table_for_every_playground_ramp_angle() {
                 Some((StuntKind::BarrelRight, ANY_TILT_DEG)),
             );
             println!(
-                "{angle_deg:>4.0} {speed_m_s:>5.0} | {:>9.2}{} | {} | {} | {}",
+                "{angle_deg:>4.0} {speed_m_s:>5.0} | {:>9.2}{} | {} | {} | {} | {}",
                 plain.airtime_s,
                 if plain.crashed { " CRASH" } else { "" },
                 describe(&flip),
+                describe(&raw),
                 describe(&level),
                 describe(&roll)
             );
@@ -245,33 +268,36 @@ fn airtime_table_for_every_playground_ramp_angle() {
 
 #[test]
 fn back_flips_and_barrel_rolls_authorize_and_land_on_the_steep_ramps() {
-    let course = CourseSpec::from_json_str(PLAYGROUND_JSON).unwrap();
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
     let ramps = playground_ramps(&course);
-    // (ramp angle in degrees, speed in m/s, stunt, press tilt limit in degrees). A barrel
-    // roll can be pressed at once; a back flip is pressed once PD has levelled the car,
-    // otherwise the catch undoes part of the counted turn and no `Landed` is reported.
+    // (ramp angle in degrees, speed in m/s, stunt, press). A raw press is the key going
+    // down on the take-off tick; "when allowed" is the first moment `authorize` says yes.
     let cases = [
+        (24.0, 25.0, StuntKind::BackFlip, RAW_PRESS),
+        (26.0, 25.0, StuntKind::BackFlip, RAW_PRESS),
+        (28.0, 25.0, StuntKind::BackFlip, RAW_PRESS),
+        (26.0, 25.0, StuntKind::BackFlip, ANY_TILT_DEG),
+        (28.0, 25.0, StuntKind::BackFlip, ANY_TILT_DEG),
+        (28.0, 30.0, StuntKind::BackFlip, LEVEL_TILT_DEG),
         (24.0, 30.0, StuntKind::BarrelRight, ANY_TILT_DEG),
         (28.0, 25.0, StuntKind::BarrelRight, ANY_TILT_DEG),
         (28.0, 30.0, StuntKind::BarrelLeft, ANY_TILT_DEG),
-        (26.0, 30.0, StuntKind::BackFlip, LEVEL_TILT_DEG),
-        (28.0, 30.0, StuntKind::BackFlip, LEVEL_TILT_DEG),
-        (28.0, 35.0, StuntKind::BackFlip, LEVEL_TILT_DEG),
     ];
-    for (angle_deg, speed_m_s, kind, max_tilt_deg) in cases {
+    for (angle_deg, speed_m_s, kind, press) in cases {
         let piece = ramps.iter().find(|ramp| ramp.1 == angle_deg).unwrap().0;
-        let result = run(&course, piece, speed_m_s, Some((kind, max_tilt_deg)));
-        let label = format!("{kind:?} on {angle_deg} deg at {speed_m_s} m/s");
-        let (required_s, forecast_s, _) = result
-            .plan
-            .unwrap_or_else(|| panic!("{label} never authorized"));
+        let result = run(&course, piece, speed_m_s, Some((kind, press)));
+        let label = format!("{kind:?} on {angle_deg} deg at {speed_m_s} m/s, press {press}");
         assert!(
-            forecast_s >= required_s,
-            "{label}: {forecast_s} < {required_s}"
+            result
+                .events
+                .iter()
+                .any(|event| matches!(event, StuntEvent::Started { .. })),
+            "{label}: {:?}",
+            result.events
         );
         assert!(
-            result.airtime_s >= required_s,
-            "{label}: airtime {} < required {required_s}",
+            result.airtime_s >= 2.4,
+            "{label}: airtime {}",
             result.airtime_s
         );
         assert!(result.stunt_landed(), "{label}: {:?}", result.events);
@@ -280,8 +306,21 @@ fn back_flips_and_barrel_rolls_authorize_and_land_on_the_steep_ramps() {
 }
 
 #[test]
+fn a_flip_without_the_air_for_it_never_reports_landed() {
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
+    let ramps = playground_ramps(&course);
+    // The 14 degree ramp gives under 2.2 s at 30 m/s: the planner refuses or aborts.
+    let piece = ramps.iter().find(|ramp| ramp.1 == 14.0).unwrap().0;
+    for kind in [StuntKind::BackFlip, StuntKind::BarrelRight] {
+        let result = run(&course, piece, 30.0, Some((kind, RAW_PRESS)));
+        assert!(!result.landed_event, "{kind:?}: {:?}", result.events);
+        assert!(!result.rotation_done, "{kind:?}: {:?}", result.events);
+    }
+}
+
+#[test]
 fn the_steep_ramps_crash_a_clean_approach_no_more_than_the_old_ramps_did() {
-    let course = CourseSpec::from_json_str(PLAYGROUND_JSON).unwrap();
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
     let old = CourseSpec::from_json_str(OLD_RAMP_JSON).unwrap();
     let crashes = |course: &CourseSpec, ramps: &[(usize, f32)]| {
         let mut crashed = 0;

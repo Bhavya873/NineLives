@@ -8,7 +8,7 @@ Idle → Requested → Authorized → SpinUp → Coast → Brake → Catch → S
                                     \________\________\→ Aborted
 ```
 - **Idle:** no stunt.
-- **Requested:** the player pressed a stunt key (Q/E barrel roll left/right, Z front flip, B back flip). A request not authorized within 3 s expires.
+- **Requested:** the player pressed a stunt key (Q/E barrel roll left/right, Z front flip, B back flip). A request not authorized within 3 s expires. A request made while the car is not yet airborne, or is still tilted past the start limit (a steep ramp launches it nose up while PD levels it), waits in Requested instead of being refused; any other failed rule refuses it at once.
 - **Authorized:** the planner checked the landing forecast, time and air, and said yes. Otherwise it emits `StuntRefused` and returns to Idle.
 - **SpinUp:** nozzles push to build the spin.
 - **Coast:** the car rotates on its own momentum.
@@ -17,7 +17,7 @@ Idle → Requested → Authorized → SpinUp → Coast → Brake → Catch → S
 - **Settled:** on the wheels, stable. Emits `StuntLanded`.
 - **Aborted:** the planner, replanning every control tick, saw the landing window shrink below the catch time. It hands over to Catch (recovery first) and emits `StuntAborted`.
 
-A stunt is **complete** only if the integrated rotation about the stunt axis is ≥ 2π − 0.15 rad. Being upright at the end is not enough.
+A stunt is **complete** only if the integrated rotation about the stunt axis is ≥ 2π − 0.15 rad. Being upright at the end is not enough. Completion is **latched**: once the integrated rotation first reaches 2π − 0.15 rad it stays complete for the rest of the stunt, so PD's catch turning a ramp-launched car back to level (which lowers the counted rotation again) cannot cancel a turn already made. The latch clears when the stunt ends (Idle, `reset`) or a new one is authorized. A stunt aborted before the turn completed never reports `StuntLanded`.
 
 ## Who owns the nozzles
 Exactly **one** owner each tick:

@@ -594,3 +594,52 @@ fn a_world_forecast_feeds_the_planner() {
         }]
     );
 }
+
+#[test]
+fn a_completed_turn_stays_complete_when_pd_turns_the_car_back_to_level() {
+    // A ramp launch leaves the car nose up: after a full turn PD levels it, which turns the
+    // car back and shrinks the counted rotation. The turn already made still counts.
+    let mut planner = StuntPlanner::new(config());
+    planner.request(StuntKind::BackFlip, 0.0);
+    planner.tick(&inputs(0.0, 4.0));
+    let sign = StuntKind::BackFlip.sign();
+    let mut time_s = DT;
+    let mut spin = |planner: &mut StuntPlanner, rate: f32, count: usize| {
+        for _ in 0..count {
+            let mut input = inputs(time_s, 3.5);
+            input.state.angular_velocity_body_rad_s[StuntKind::BackFlip.axis()] = sign * rate;
+            planner.tick(&input);
+            time_s += DT;
+        }
+    };
+    spin(&mut planner, 6.4, 66); // about 7 rad: a full turn
+    assert!(planner.rotation_complete());
+    spin(&mut planner, -3.0, 60); // PD levelling: counted rotation drops by about 3 rad
+    assert!(planner.rotation_rad() < std::f32::consts::TAU - 0.15);
+    assert!(planner.rotation_complete(), "the latch must hold");
+    let mut landed = inputs(time_s, 0.0);
+    landed.state.wheel_contact = [true; 4];
+    landed.forecast = None;
+    let tick = planner.tick(&landed);
+    assert!(
+        tick.events
+            .iter()
+            .any(|e| matches!(e, StuntEvent::Landed { .. })),
+        "{:?}",
+        tick.events
+    );
+}
+
+#[test]
+fn a_queued_request_waits_while_a_ramp_launch_has_the_car_tilted_too_far() {
+    let mut planner = StuntPlanner::new(config());
+    planner.request(StuntKind::BackFlip, 0.0);
+    let mut tilted = inputs(0.0, 4.0);
+    tilted.state.gravity_dir_body = [0.8, -0.6, 0.0]; // about 53 degrees from upright
+    let tick = planner.tick(&tilted);
+    assert_eq!(planner.phase(), StuntPhase::Requested, "{:?}", tick.events);
+    assert!(tick.events.is_empty());
+    // Levelled a moment later, the same request is authorized.
+    let tick = planner.tick(&inputs(0.1, 3.9));
+    assert!(matches!(tick.events[0], StuntEvent::Started { .. }));
+}
