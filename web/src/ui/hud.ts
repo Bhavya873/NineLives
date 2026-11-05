@@ -18,8 +18,8 @@ const HOP_BLOCKED_TEXT: Record<number, string> = {
 
 /** Mode names, by wasm `ModeCode` value. */
 const MODE_TEXT: Record<number, string> = {
-  [ModeCode.Realistic]: 'Realistic',
-  [ModeCode.Arcade]: 'Arcade',
+  [ModeCode.Realistic]: 'Limited air',
+  [ModeCode.Arcade]: 'Unlimited air',
   [ModeCode.Custom]: 'Custom',
 };
 
@@ -30,7 +30,7 @@ export interface HudValues {
   mode: number;
   /** A wasm `ControllerCode` value. */
   controller: number;
-  /** Air left, 0..1. Arcade has unlimited air. */
+  /** Air left, 0..1. unlimited air mode has no limit. */
   airFraction: number;
   unlimitedAir: boolean;
   /** A HopBlocked value: 0 means a Hop is allowed. */
@@ -125,11 +125,4 @@ function courseText(values: HudValues): string {
     return '';
   }
   return `Checkpoint ${values.checkpointsReached}/${values.checkpointCount}`;
-}
-
-/** Minutes and seconds with tenths, e.g. 1:05.3. */
-export function formatTime(timeS: number): string {
-  const minutes = Math.floor(timeS / 60);
-  const seconds = (timeS - minutes * 60).toFixed(1).padStart(4, '0');
-  return `${minutes}:${seconds}`;
 }

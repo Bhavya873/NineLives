@@ -3,7 +3,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createToasts, showNoAirIfNew, showToast, toastForEvents } from '../src/ui/toasts.ts';
+import {
+  createToasts,
+  showNoAirIfNew,
+  showToast,
+  toastForEvents,
+  toastTone,
+} from '../src/ui/toasts.ts';
 import { CrashCode, EventKind } from './load-wasm.mjs';
 
 /** The sim's flipped mark (150°), in radians. */
@@ -55,9 +61,9 @@ test('airborne and respawn events get no toast', () => {
   assert.equal(toastForEvents(events, INVERTED_TILT_RAD), null);
 });
 
-/** A stand-in for the toast's page element: only the two fields the module uses. */
+/** A stand-in for the toast's page element: only the fields the module uses. */
 function fakeElement() {
-  return { hidden: true, textContent: '' };
+  return { hidden: true, textContent: '', dataset: {} };
 }
 
 test('Out of air shows once, and again only after the tank was full', () => {
@@ -82,4 +88,11 @@ test('Out of air never covers a toast that is already showing', () => {
   showNoAirIfNew(toasts, true, 0.01, 10);
 
   assert.equal(toasts.element.textContent, 'Saved with 3.0 kg of air');
+});
+
+test('crashes and running out of air read as danger, everything else as plain', () => {
+  assert.equal(toastTone('Crashed: hit too hard'), 'danger');
+  assert.equal(toastTone('Out of air'), 'danger');
+  assert.equal(toastTone('Saved with 2.0 kg of air'), 'plain');
+  assert.equal(toastTone('Back flip! max 3.8 g'), 'plain');
 });
