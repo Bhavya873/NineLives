@@ -13,24 +13,15 @@
     <div id="hud-perf" class="tile" hidden></div>
     <div id="hud-perf-steps" class="tile" hidden></div>
     <div id="viewer-side">
-      <h1 id="viewer-status" class="tile tile-display">Loading checkpoints…</h1>
+      <h1 id="viewer-status" class="tile tile-display">Loading…</h1>
+      <a id="viewer-back" class="tile" href="./?play=1&resume=1">back to game</a>
       <div id="stage-tabs" class="tile" role="group" aria-label="Stage tabs"></div>
-      <button id="camera-toggle" class="tile tile-display" type="button">Camera: crowd (L)</button>
+      <button id="camera-toggle" class="tile tile-display" type="button">camera: crowd</button>
       <div id="curve-panel" class="tile">
         <h2 id="curve-title" class="tile-label"></h2>
         <div id="curve-chart"></div>
       </div>
       <table id="viewer-board" class="tile"></table>
-      <div id="viewer-help" class="tile">
-        <p>
-          Each row of cars is one checkpoint, flown on the same drops. Faded cars crashed. The
-          Hybrid flies until the car tips, then the checkpoint's AI.
-        </p>
-        <p>
-          Click a title or a tab, or press 1–5, to focus a stage. Esc shows all. L: camera. F3: fps.
-        </p>
-        <a href="./">Back to the game</a>
-      </div>
     </div>
     <script type="module" src="/src/viewer/main.ts"></script>
   </body>

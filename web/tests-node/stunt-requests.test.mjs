@@ -25,10 +25,10 @@ const ev = (...values) => {
 
 test('keys map to the four stunts', () => {
   assert.deepEqual(STUNT_KEYS, {
-    KeyQ: StuntCode.BarrelLeft,
-    KeyE: StuntCode.BarrelRight,
-    KeyZ: StuntCode.FrontFlip,
-    KeyB: StuntCode.BackFlip,
+    KeyA: StuntCode.BarrelLeft,
+    KeyS: StuntCode.BarrelRight,
+    KeyD: StuntCode.FrontFlip,
+    KeyF: StuntCode.BackFlip,
   });
 });
 
@@ -88,22 +88,16 @@ test('start and refused events resolve the request', () => {
   assert.equal(queue.pending, null);
 });
 
-test('toasts use the contract wording and the real peak g', () => {
-  assert.equal(
-    stuntToastForEvents(ev(StuntEvent.Landed, StuntCode.BackFlip, 3.84)),
-    'Back flip! max 3.8 g',
-  );
-  assert.equal(
-    stuntToastForEvents(ev(StuntEvent.Landed, StuntCode.FrontFlip, 5.0)),
-    'Front flip! max 5.0 g',
-  );
+test('toasts are short plain words with no exclamation mark or g number', () => {
+  assert.equal(stuntToastForEvents(ev(StuntEvent.Landed, StuntCode.BackFlip, 3.84)), 'back flip');
+  assert.equal(stuntToastForEvents(ev(StuntEvent.Landed, StuntCode.FrontFlip, 5.0)), 'front flip');
   assert.equal(
     stuntToastForEvents(ev(StuntEvent.Refused, 3, RefusedReason.NotEnoughAir)),
-    'Not enough air time',
+    'not enough air',
   );
   assert.equal(
     stuntToastForEvents(ev(StuntEvent.Refused, 3, RefusedReason.LandingBlocked)),
-    'Landing blocked',
+    'landing blocked',
   );
   assert.equal(
     stuntToastForEvents(ev(StuntEvent.Refused, 3, RefusedReason.Expired)),
@@ -112,11 +106,19 @@ test('toasts use the contract wording and the real peak g', () => {
   );
   assert.equal(
     stuntToastForEvents(ev(StuntEvent.Aborted, 3, RefusedReason.ControlLost)),
-    'Stunt aborted',
+    'stunt aborted',
   );
   assert.equal(
     stuntToastForEvents(ev(StuntEvent.Aborted, 3, RefusedReason.LandingBlocked)),
-    'Landing blocked',
+    'landing blocked',
+  );
+  assert.equal(
+    stuntToastForEvents(ev(StuntEvent.Landed, StuntCode.BarrelLeft, 2.0)),
+    'barrel roll',
+  );
+  assert.equal(
+    stuntToastForEvents(ev(StuntEvent.Landed, StuntCode.BarrelRight, 2.0)),
+    'barrel roll',
   );
   assert.equal(stuntToastForEvents(ev(StuntEvent.Start, 3)), null);
   assert.equal(stuntToastForEvents(new Float32Array(0)), null);

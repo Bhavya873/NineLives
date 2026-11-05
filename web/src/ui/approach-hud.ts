@@ -28,16 +28,16 @@ export function approachHintText(neededSpeedMS: number): string {
   if (!(neededSpeedMS > 0)) {
     return '';
   }
-  return `Too slow to clear this piece: need ${Math.ceil(neededSpeedMS * 3.6)} km/h`;
+  return `need ${Math.ceil(neededSpeedMS * 3.6)} km/h`;
 }
 
-/** The warning text for TooSlowFallback events in a batch (the last one), or null. */
+/** The warning text for TooSlowFallback events in a batch (the last one), or null. The event
+ * carries the speed the car had, not the one it needed, so the text names no number. */
 export function tooSlowWarning(events: Float32Array): string | null {
   let text: string | null = null;
   for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
     if (events[start] === APPROACH_EVENT.TooSlowFallback) {
-      const kmH = Math.abs(events[start + 2] ?? 0) * 3.6;
-      text = `Too slow to clear this piece (${kmH.toFixed(0)} km/h)`;
+      text = 'too slow';
     }
   }
   return text;

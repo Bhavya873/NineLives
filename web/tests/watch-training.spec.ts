@@ -14,7 +14,7 @@ test('the corner link opens the training viewer and its back link returns', asyn
   await expect(page).toHaveURL(/viewer\.html$/);
   await expect(page.locator('#viewer-status')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Back to the game' }).click();
+  await page.getByRole('link', { name: 'back to game' }).click();
   await expect(page.locator('#hud-watch')).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
 });
 
@@ -30,4 +30,48 @@ test('the pause menu offers the training viewer', async ({ page }) => {
 
   await pauseLink.click();
   await expect(page).toHaveURL(/viewer\.html$/);
+});
+
+/** Calls a debug hook and returns its value. */
+async function hook(page: import('@playwright/test').Page, name: string): Promise<unknown> {
+  return page.evaluate((hookName) => {
+    const debug = (window as unknown as { ninelivesDebug?: Record<string, () => unknown> })
+      .ninelivesDebug;
+    return debug?.[hookName]?.();
+  }, name);
+}
+
+test('the back button returns to the game with the same lives and no title', async ({ page }) => {
+  await page.goto('/?play=1');
+  await expect.poll(() => hook(page, 'heartsLeft'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(9);
+  await hook(page, 'loseLife');
+  await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(1);
+
+  await page.locator('#hud-watch').click();
+  await expect(page).toHaveURL(/viewer\.html$/);
+  await page.locator('#viewer-back').click();
+
+  await expect(page).toHaveURL(/play=1/);
+  await expect(page.locator('#title')).toBeHidden();
+  await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(1, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+});
+
+test('a fresh tab or a plain ?play=1 starts with nine lives', async ({ page, context }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/?play=1');
+  await expect.poll(() => hook(page, 'heartsLeft'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(9);
+  await hook(page, 'loseLife');
+  await page.locator('#hud-watch').click();
+  await expect(page).toHaveURL(/viewer\.html$/);
+
+  const fresh = await context.newPage();
+  await fresh.goto('/?play=1&resume=1');
+  await expect(fresh.locator('#hud-hearts .heart')).toHaveCount(9, {
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
+  await expect(fresh.locator('#hud-hearts .heart.lost')).toHaveCount(0);
+  await fresh.goto('/');
+  await expect(fresh.locator('#title')).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
 });

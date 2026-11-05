@@ -1,10 +1,13 @@
 // The training viewer's curve (plan G5): how each committed checkpoint flies in the CURRENT
 // physics, per stage. `python -m ninelives.export --viewer-curve` writes `curve.json`; this
 // module types it and draws one stage's line as an SVG string. Pure: no DOM, no wasm. The
-// marks carry classes; viewer.css colours them with the Racing paper tokens.
+// marks carry classes; viewer.css colours them with the theme tokens.
 
 /** The title the plan requires: it is a re-evaluation, not the training history. */
 export const CURVE_TITLE = 'Checkpoint evaluation under current physics';
+
+/** What the page shows for it: the full title stays the exporter's key. */
+export const CURVE_LABEL = 'Checkpoint results';
 
 /** One stage's rates for one checkpoint, each 0..1. */
 interface StageRates {
@@ -78,7 +81,7 @@ const HEIGHT = 140;
 const PAD = { left: 34, right: 10, top: 10, bottom: 24 };
 
 /** An SVG (as text) of `stage`'s success rate against training steps; the best point is
- * filled orange. Rates run 0..100 % up the page. */
+ * filled rust. Rates run 0..100 % up the page. */
 export function curveSvg(curve: CurveFile, stage: string): string {
   const points = curveSeries(curve, stage);
   const best = bestCheckpoint(curve, stage);

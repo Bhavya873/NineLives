@@ -2,24 +2,34 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { gMeterWanted, newZoneHolds, nozzleMapWanted } from '../src/ui/hud-zones.ts';
+import { gMeterWanted, newZoneHolds, nozzleMapWanted, zoneOpacity } from '../src/ui/hud-zones.ts';
 
-test('the g-meter shows in the air or under load, and holds a moment after', () => {
+test('the g-meter stays hidden in the air and while driving calmly', () => {
   const holds = newZoneHolds();
   assert.equal(gMeterWanted(holds, false, 1, 0), false);
-  assert.equal(gMeterWanted(holds, true, 1, 100), true);
-  // Landed and calm: still shown inside the hold, gone after it.
-  assert.equal(gMeterWanted(holds, false, 1, 1000), true);
-  assert.equal(gMeterWanted(holds, false, 1, 5000), false);
-  assert.equal(gMeterWanted(holds, false, 3.2, 6000), true);
+  assert.equal(gMeterWanted(holds, false, 2.4, 100), false);
 });
 
-test('the nozzle map shows while a nozzle fires, and holds a moment after', () => {
+test('the g-meter shows on a thruster key or a hard landing, then goes quickly', () => {
   const holds = newZoneHolds();
-  assert.equal(nozzleMapWanted(holds, new Float32Array(10), 0), false);
-  const firing = new Float32Array(10);
-  firing[3] = 0.6;
-  assert.equal(nozzleMapWanted(holds, firing, 100), true);
-  assert.equal(nozzleMapWanted(holds, new Float32Array(10), 800), true);
-  assert.equal(nozzleMapWanted(holds, new Float32Array(10), 3000), false);
+  assert.equal(gMeterWanted(holds, true, 1, 100), true);
+  assert.equal(gMeterWanted(holds, false, 1, 900), true, 'inside the hold');
+  assert.equal(gMeterWanted(holds, false, 1, 3000), false, 'gone after it');
+  assert.equal(gMeterWanted(holds, false, 3.2, 4000), true, 'a hard landing');
+});
+
+test('the nozzle map follows the same two reasons', () => {
+  const holds = newZoneHolds();
+  assert.equal(nozzleMapWanted(holds, false, 1, 0), false);
+  assert.equal(nozzleMapWanted(holds, true, 1, 100), true);
+  assert.equal(nozzleMapWanted(holds, false, 1, 700), true);
+  assert.equal(nozzleMapWanted(holds, false, 1, 3000), false);
+  assert.equal(nozzleMapWanted(holds, false, 4, 5000), true);
+});
+
+test('a tile fades over the end of its hold', () => {
+  assert.equal(zoneOpacity(1000, 0), 1);
+  assert.equal(zoneOpacity(1000, 850), 0.5);
+  assert.equal(zoneOpacity(1000, 1000), 0);
+  assert.equal(zoneOpacity(1000, 2000), 0);
 });

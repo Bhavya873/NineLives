@@ -1,5 +1,5 @@
 // UI polish (SPEC M8): the title screen, reduced motion, the folding key card and the
-// Racing paper look. The CI runner draws about 3 frames a second, so nothing here
+// Scene-theme look. The CI runner draws about 3 frames a second, so nothing here
 // relies on driving in real time: tests read the sim's own clock or use the debug hooks.
 import { expect, test, type Page } from '@playwright/test';
 
@@ -45,10 +45,12 @@ test('the title waits for Play, and the clock does not run behind it', async ({ 
   expect(await debugCall(page, 'started', true)).toBe(false);
   expect(await debugCall(page, 'simTimeS', -1)).toBe(0);
 
-  await expect(page.locator('#title-help')).toBeHidden();
-  await page.locator('#title-how').click();
-  await expect(page.locator('#title-help')).toBeVisible();
-  await expect(page.locator('#title-how')).toHaveAttribute('aria-expanded', 'true');
+  // one line of copy, Play and the viewer link; no How it works block
+  await expect(page.locator('#title')).toContainText(
+    'Jump, flip, land on your wheels. Nine tries.',
+  );
+  await expect(page.locator('#title-how')).toHaveCount(0);
+  await expect(page.locator('#title-help')).toHaveCount(0);
 
   await page.locator('#title-play').click();
   await expect(page.locator('#title')).toBeHidden();
@@ -113,6 +115,10 @@ test('the key card starts open on a wide screen and can be folded', async ({ pag
   await expect(page.locator('#hud-keys')).toContainText('barrel roll');
   // The ghost and the results screen are gone, so their keys are not listed.
   await expect(page.locator('#hud-keys')).not.toContainText(/ghost|results/i);
+  // A S roll, D F flip, arrows drive; R respawns but is not listed
+  await expect(page.locator('#hud-keys')).toContainText('A S');
+  await expect(page.locator('#hud-keys')).toContainText('D F');
+  await expect(page.locator('#hud-keys')).not.toContainText(/W S|Q \/ E|respawn/);
   await page.locator('#hud-keys-toggle').click();
   await expect(page.locator('#hud-keys')).toBeHidden();
   await expect(page.locator('#hud-keys-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -136,7 +142,8 @@ test('Tab is not swallowed in a run, and there is no results screen or ghost', a
 test('the bottom-centre tiles stay hidden while the car sits on the ground', async ({ page }) => {
   await page.goto('/?play=1');
   await waitForHook(page);
-  await expect(page.locator('#hud-stunt-ready')).toBeHidden();
+  await expect(page.locator('#hud-stunt-ready')).toHaveCount(0);
+  await expect(page.locator('#hud-g-record')).toHaveCount(0);
   await expect(page.locator('#hud-g-tile')).toBeHidden();
   await expect(page.locator('#hud-nozzle-tile')).toBeHidden();
   await expect(page.locator('#hud-g-peak')).toHaveAttribute('title', /raw contact spike/);
@@ -152,8 +159,6 @@ test('Tab moves focus on the title and the dialogs announce themselves', async (
   // Focus starts on Play; Tab is not swallowed, so it reaches the next control.
   await expect(page.locator('#title-play')).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.locator('#title-how')).toBeFocused();
-  await page.keyboard.press('Tab');
   await expect(page.locator('#title-watch')).toBeFocused();
   await page.locator('#title-play').focus();
   await page.keyboard.press('Enter');
@@ -161,7 +166,7 @@ test('Tab moves focus on the title and the dialogs announce themselves', async (
   await expect(page.locator('#title-play')).not.toBeFocused();
 });
 
-test('the Racing paper fonts load and the tiles are flat paper', async ({ page }) => {
+test('the Barlow fonts load and the tiles are flat slate', async ({ page }) => {
   await page.goto('/?play=1');
   await waitForHook(page);
   const fonts = await page.evaluate(async () => {
@@ -183,7 +188,7 @@ test('the Racing paper fonts load and the tiles are flat paper', async ({ page }
       shadow: style.boxShadow,
     };
   });
-  expect(dash.background).toBe('rgb(241, 234, 216)');
+  expect(dash.background).toBe('rgb(31, 43, 56)');
   expect(dash.filter).toBe('none');
   expect(dash.shadow).toBe('none');
 });

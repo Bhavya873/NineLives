@@ -30,7 +30,7 @@ import {
   loadNewestRun,
   loadShowcase,
 } from './checkpoints.ts';
-import { CURVE_TITLE, type CurveFile, curveSvg } from './curve.ts';
+import { CURVE_LABEL, type CurveFile, curveSvg } from './curve.ts';
 import { type Rect, layoutPanels } from './panel-layout.ts';
 import { STAGE_TABS, type StageTab, arenaTab, showcaseSeed, tabArena } from './showcase.ts';
 import {
@@ -120,6 +120,7 @@ async function start(): Promise<void> {
   const labelsLayer = requireElement('viewer-panels');
   const panelLabels = new Map<ArenaKind, PanelLabel>();
   const cameraButton = requireElement('camera-toggle');
+  cameraButton.setAttribute('aria-keyshortcuts', 'L');
   // A stage runs only while it can be seen: it is in the focus and the tab is showing.
   const applyRunning = () => {
     for (const panel of panels) {
@@ -212,7 +213,7 @@ async function start(): Promise<void> {
     try {
       const realDtS = Math.min((frameStartMs - lastFrameStartMs) / 1000, MAX_FRAME_S);
       drawFrame(state, arena, panelLabels, realDtS, perf, perfSteps);
-      setText(cameraButton, state.camera === 'leader' ? 'Camera: leader (L)' : 'Camera: crowd (L)');
+      setText(cameraButton, state.camera === 'leader' ? 'camera: leader' : 'camera: crowd');
       setText(status, statusText(state));
       updateBoard(board, state.panels);
       const frameEndMs = performance.now();
@@ -348,10 +349,7 @@ function placeLabel(label: PanelLabel, rect: Rect | undefined, panel: StagePanel
   const totals = stageTotals(panel);
   const cars = panel.rows.length * CARS_PER_CHECKPOINT;
   setText(label.heading, arenaLabel(panel.arena));
-  setText(
-    label.detail,
-    `${totals.landed}/${cars} landed · ${totals.crashed} crashed · round ${Math.max(panel.round, 0) + 1}`,
-  );
+  setText(label.detail, `${totals.landed}/${cars} landed`);
 }
 
 /** The stage tabs, the All tab and the curve under them: the chart of the selected stage,
@@ -364,7 +362,7 @@ function createCurvePanel(
 ): { select: (tab: StageTab) => void; markFocus: (focus: ArenaKind | null) => void } {
   const tabs = requireElement('stage-tabs');
   const chart = requireElement('curve-chart');
-  setText(requireElement('curve-title'), CURVE_TITLE);
+  setText(requireElement('curve-title'), CURVE_LABEL);
   const buttons = new Map<StageTab, HTMLButtonElement>();
   const all = document.createElement('button');
   all.type = 'button';
@@ -378,11 +376,11 @@ function createCurvePanel(
       button.setAttribute('aria-pressed', String(name === tab && state.focus !== null));
     }
     if (!curve) {
-      chart.textContent = 'No curve.json: run `python -m ninelives.export --viewer-curve`';
+      chart.textContent = 'no curve data';
       return;
     }
-    const note = tabArena(tab) ? '' : '<p>No crowd for this stage: curve only.</p>';
-    const facts = `<p>${curve.episodes} episodes per point, physics ${curve.physics_hash}</p>`;
+    const note = tabArena(tab) ? '' : '<p>curve only</p>';
+    const facts = `<p>${curve.episodes} episodes per point</p>`;
     chart.innerHTML = curveSvg(curve, tab) + note + facts;
   };
   const markFocus = (focus: ArenaKind | null) => {
@@ -483,19 +481,18 @@ function updateBoard(board: Board, panels: StagePanel[]): void {
   });
 }
 
-/** The headline, e.g. "Run flight-r4 · 8 checkpoints at once · all stages". */
+/** The headline, e.g. "8 checkpoints, 5 stages" (or the focused stage's name). */
 function statusText(state: ViewerState): string {
-  const checkpoints = `${state.run.checkpoints.length} checkpoints at once`;
-  const where = state.focus === null ? 'all stages' : arenaLabel(state.focus).toLowerCase();
+  const where = state.focus === null ? `${state.panels.length} stages` : arenaLabel(state.focus);
   const reasons = new Set(
     state.panels.flatMap((panel) => (panel.error === null ? [] : [panel.error])),
   );
   const failedCount = state.panels.filter((panel) => panel.error !== null).length;
   const problem =
     reasons.size > 0
-      ? ` — ${failedCount === state.panels.length ? 'all stages' : `${failedCount} stage(s)`} failed: ${[...reasons].join('; ')}`
+      ? ` - ${failedCount === state.panels.length ? 'all stages' : `${failedCount} stage(s)`} failed: ${[...reasons].join('; ')}`
       : '';
-  return `Run ${state.run.run_id} · ${checkpoints} · ${where}${problem}`;
+  return `${state.run.checkpoints.length} checkpoints, ${where}${problem}`;
 }
 
 start().catch((error: unknown) => {

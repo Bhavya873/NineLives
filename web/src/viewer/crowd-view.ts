@@ -251,24 +251,24 @@ function setDrawOrder(wheels: Slot[], body: Slot[]): void {
   });
 }
 
-/** The tag colours: theme.css's --cream and --ink (a canvas cannot read CSS variables cheaply). */
-const LABEL_CREAM = '#f1ead8';
-const LABEL_INK = '#1b1a17';
+/** The tag colours: theme.css's --slate and --sand (a canvas cannot read CSS variables cheaply). */
+const LABEL_SLATE = '#1f2b38';
+const LABEL_SAND = '#e9dcc0';
 const LABEL_FONT_PX = 40;
 
-/** A canvas with `text` on a cream ticket, for a car's label. */
+/** A canvas with `text` on a slate ticket, for a car's label. */
 function drawLabel(text: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   [canvas.width, canvas.height] = LABEL_CANVAS_PX;
   const context = canvas.getContext('2d');
   if (context) {
-    // a cream ticket with an ink border, like the page's tiles (theme.css)
-    context.fillStyle = LABEL_CREAM;
+    // a slate ticket with a sand border, like the page's tiles (theme.css)
+    context.fillStyle = LABEL_SLATE;
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.strokeStyle = LABEL_INK;
+    context.strokeStyle = LABEL_SAND;
     context.lineWidth = 6;
     context.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
-    context.fillStyle = LABEL_INK;
+    context.fillStyle = LABEL_SAND;
     context.font = `700 ${LABEL_FONT_PX}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';

@@ -1,10 +1,9 @@
-// Unit tests for the title, headline g peak and stunt-ready hint. Plain Node.
+// Unit tests for the title and headline g peak. Plain Node.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { URLSearchParams } from 'node:url';
 
 import { createGPeakTracker, formatG, updateGPeak } from '../src/ui/g-meter.ts';
-import { stuntReadyText } from '../src/ui/stunt-ready.ts';
 import { titleWanted } from '../src/ui/title.ts';
 import { stuntReadyMaskFromSim } from '../src/wasm-bridge/stunt-adapter.ts';
 
@@ -40,12 +39,6 @@ test('the headline peak starts over when the raw peak resets', () => {
   assert.equal(updateGPeak(tracker, 1, 0), 0);
   // Bad numbers read as 0 and do not throw.
   assert.equal(updateGPeak(tracker, Number.NaN, Number.NaN), 0);
-});
-
-test('the stunt-ready hint lists the keys a mask allows', () => {
-  assert.equal(stuntReadyText(0), '');
-  assert.equal(stuntReadyText(0b1111), 'Stunt ready: Q E Z B');
-  assert.equal(stuntReadyText(0b0100), 'Stunt ready: Z');
 });
 
 test('an older wasm without stunt_ready_mask reads as nothing ready', () => {

@@ -1,4 +1,4 @@
-// The title screen: Play, How it works and a link to the training viewer. The game's clock
+// The title screen: Play and a link to the training viewer. The game's clock
 // waits behind it. `?play` (any value) skips it, which the tests and shared links use.
 import { focusDialog } from '../shared/dom.ts';
 
@@ -10,7 +10,6 @@ export function titleWanted(params: URLSearchParams): boolean {
 /** The title's elements and whether it is up. */
 interface Title {
   root: HTMLElement;
-  help: HTMLElement;
   visible: boolean;
 }
 
@@ -20,15 +19,12 @@ interface Title {
  */
 export function createTitle(
   root: HTMLElement,
-  help: HTMLElement,
   playButton: HTMLElement,
-  helpButton: HTMLElement,
   wanted: boolean,
   onPlay: () => void,
 ): Title {
-  const title: Title = { root, help, visible: wanted };
+  const title: Title = { root, visible: wanted };
   root.hidden = !wanted;
-  help.hidden = true;
   // The title is a dialog: focus starts on Play and goes back where it was when it closes.
   const restoreFocus = wanted ? focusDialog(root, playButton) : () => undefined;
   const play = () => {
@@ -41,13 +37,10 @@ export function createTitle(
     onPlay();
   };
   playButton.addEventListener('click', play);
-  helpButton.addEventListener('click', () => {
-    help.hidden = !help.hidden;
-    helpButton.setAttribute('aria-expanded', String(!help.hidden));
-  });
   window.addEventListener('keydown', (event) => {
     if (title.visible && (event.code === 'Enter' || event.code === 'Space')) {
-      if (event.target === helpButton) {
+      // a key on the watch link belongs to the link
+      if (event.target instanceof HTMLAnchorElement) {
         return;
       }
       event.preventDefault();
