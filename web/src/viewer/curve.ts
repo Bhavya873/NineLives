@@ -1,6 +1,7 @@
 // The training viewer's curve (plan G5): how each committed checkpoint flies in the CURRENT
 // physics, per stage. `python -m ninelives.export --viewer-curve` writes `curve.json`; this
-// module types it and draws one stage's line as an SVG string. Pure: no DOM, no wasm.
+// module types it and draws one stage's line as an SVG string. Pure: no DOM, no wasm. The
+// marks carry classes; viewer.css colours them with the Racing paper tokens.
 
 /** The title the plan requires: it is a re-evaluation, not the training history. */
 export const CURVE_TITLE = 'Checkpoint evaluation under current physics';
@@ -77,7 +78,7 @@ const HEIGHT = 140;
 const PAD = { left: 34, right: 10, top: 10, bottom: 24 };
 
 /** An SVG (as text) of `stage`'s success rate against training steps; the best point is
- * ringed. Rates run 0..100 % up the page. */
+ * filled orange. Rates run 0..100 % up the page. */
 export function curveSvg(curve: CurveFile, stage: string): string {
   const points = curveSeries(curve, stage);
   const best = bestCheckpoint(curve, stage);
@@ -87,23 +88,23 @@ export function curveSvg(curve: CurveFile, stage: string): string {
   const grid = [0, 0.5, 1]
     .map(
       (rate) =>
-        `<line x1="${PAD.left}" x2="${WIDTH - PAD.right}" y1="${y(rate)}" y2="${y(rate)}" stroke="#3a4a5c"/>` +
-        `<text x="${PAD.left - 4}" y="${y(rate) + 4}" text-anchor="end" fill="#a9b6c4" font-size="10">${rate * 100}%</text>`,
+        `<line x1="${PAD.left}" x2="${WIDTH - PAD.right}" y1="${y(rate)}" y2="${y(rate)}" class="chart-grid"/>` +
+        `<text x="${PAD.left - 4}" y="${y(rate) + 4}" text-anchor="end" class="chart-text">${rate * 100}%</text>`,
     )
     .join('');
   const line = points.map((point) => `${x(point.steps).toFixed(1)},${y(point.rate).toFixed(1)}`);
   const dots = points
     .map((point) => {
-      const ring = point.file === best?.file ? ' stroke="#ffd166" stroke-width="2"' : '';
+      const kind = point.file === best?.file ? 'chart-best' : 'chart-dot';
       return (
-        `<circle cx="${x(point.steps).toFixed(1)}" cy="${y(point.rate).toFixed(1)}" r="4" fill="#9fd1ff"${ring}>` +
+        `<circle cx="${x(point.steps).toFixed(1)}" cy="${y(point.rate).toFixed(1)}" r="${kind === 'chart-best' ? 6 : 4.5}" class="${kind}">` +
         `<title>${point.file}: ${(point.rate * 100).toFixed(0)}% at ${(point.steps / 1e6).toFixed(0)}M steps</title></circle>`
       );
     })
     .join('');
-  const axis = `<text x="${WIDTH / 2}" y="${HEIGHT - 4}" text-anchor="middle" fill="#a9b6c4" font-size="10">training steps (max ${(maxSteps / 1e6).toFixed(0)}M)</text>`;
+  const axis = `<text x="${WIDTH / 2}" y="${HEIGHT - 4}" text-anchor="middle" class="chart-text">training steps (max ${(maxSteps / 1e6).toFixed(0)}M)</text>`;
   return (
     `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" width="${WIDTH}" height="${HEIGHT}" role="img" aria-label="Stage ${stage} success rate per checkpoint">` +
-    `${grid}<polyline fill="none" stroke="#9fd1ff" stroke-width="2" points="${line.join(' ')}"/>${dots}${axis}</svg>`
+    `${grid}<polyline class="chart-line" points="${line.join(' ')}"/>${dots}${axis}</svg>`
   );
 }

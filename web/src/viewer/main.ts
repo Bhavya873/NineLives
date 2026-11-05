@@ -57,6 +57,9 @@ const NARROW_PX = 900;
 /** The longest frame the cars are moved for, in s, so a hidden tab does not jump the picture. */
 const MAX_FRAME_S = 0.1;
 
+/** The font of the car labels (crowd-view.ts), loaded before they are drawn. */
+const CAR_LABEL_FONT = '700 40px "Barlow Condensed"';
+
 /** Where the viewer is: the run, its stages' panels, the focus and the camera. */
 interface ViewerState {
   run: RunEntry;
@@ -72,7 +75,8 @@ interface ViewerState {
 /** A stage panel's title on the page, and the rectangle it sits in. */
 interface PanelLabel {
   element: HTMLButtonElement;
-  text: HTMLElement;
+  heading: HTMLElement;
+  detail: HTMLElement;
 }
 
 async function start(): Promise<void> {
@@ -84,6 +88,8 @@ async function start(): Promise<void> {
   });
   const showcase = await loadShowcase(run).catch(() => null);
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
+  // The car labels are drawn once onto canvases, so the font must be there before they are.
+  await document.fonts.load(CAR_LABEL_FONT).catch(() => []);
   const arena = createArena(requireElement('viewer'), VIEWER_MAX_PIXEL_RATIO);
   arena.renderer.setClearColor('#16202b');
   // The sun's shadow box covers only 30 m around the origin and the crowd casts no shadows, so
@@ -149,15 +155,18 @@ async function start(): Promise<void> {
   for (const panel of panels) {
     const element = document.createElement('button');
     element.type = 'button';
-    element.className = 'panel panel-title';
+    element.className = 'tile panel-title';
     element.dataset.arena = panel.arena;
-    const text = document.createElement('span');
-    element.appendChild(text);
+    const heading = document.createElement('span');
+    heading.className = 'panel-heading';
+    const detail = document.createElement('span');
+    detail.className = 'panel-detail';
+    element.append(heading, detail);
     element.addEventListener('click', () =>
       setFocus(state.focus === panel.arena ? null : panel.arena),
     );
     labelsLayer.appendChild(element);
-    panelLabels.set(panel.arena, { element, text });
+    panelLabels.set(panel.arena, { element, heading, detail });
   }
   setFocus(focus);
   const toggleCamera = () => {
@@ -338,9 +347,10 @@ function placeLabel(label: PanelLabel, rect: Rect | undefined, panel: StagePanel
   label.element.style.top = `${rect.y + 8}px`;
   const totals = stageTotals(panel);
   const cars = panel.rows.length * CARS_PER_CHECKPOINT;
+  setText(label.heading, arenaLabel(panel.arena));
   setText(
-    label.text,
-    `${arenaLabel(panel.arena)}\n${totals.landed}/${cars} landed · ${totals.crashed} crashed · round ${Math.max(panel.round, 0) + 1}`,
+    label.detail,
+    `${totals.landed}/${cars} landed · ${totals.crashed} crashed · round ${Math.max(panel.round, 0) + 1}`,
   );
 }
 
@@ -359,6 +369,7 @@ function createCurvePanel(
   const all = document.createElement('button');
   all.type = 'button';
   all.textContent = 'All';
+  all.setAttribute('aria-keyshortcuts', 'Escape');
   all.addEventListener('click', onAll);
   tabs.appendChild(all);
   const select = (tab: StageTab) => {
@@ -384,6 +395,13 @@ function createCurvePanel(
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = tab;
+    // the number key that focuses this stage (the curve-only tabs have none)
+    const kind = tabArena(tab);
+    if (kind) {
+      const key = String(ARENAS.indexOf(kind) + 1);
+      button.dataset.key = key;
+      button.setAttribute('aria-keyshortcuts', key);
+    }
     button.addEventListener('click', () => {
       select(tab);
       onTab(tab);
@@ -453,19 +471,19 @@ function shortLabel(kind: ArenaKind): string {
   }
 }
 
-/** Writes "landed / crashed" for each checkpoint and stage. */
+/** Writes "landed/crashed" for each checkpoint and stage. */
 function updateBoard(board: Board, panels: StagePanel[]): void {
   board.cells.forEach((row, checkpoint) => {
     row.forEach((cell, stage) => {
       const panel = panels[stage];
       if (panel && panel.rows.length > checkpoint) {
-        setText(cell, `${panel.landed[checkpoint] ?? 0} / ${panel.crashed[checkpoint] ?? 0}`);
+        setText(cell, `${panel.landed[checkpoint] ?? 0}/${panel.crashed[checkpoint] ?? 0}`);
       }
     });
   });
 }
 
-/** "Run flight-r4: 8 checkpoints at once on 5 stages, 8 drops each, all stages". */
+/** The headline, e.g. "Run flight-r4 · 8 checkpoints at once · all stages". */
 function statusText(state: ViewerState): string {
   const checkpoints = `${state.run.checkpoints.length} checkpoints at once`;
   const where = state.focus === null ? 'all stages' : arenaLabel(state.focus).toLowerCase();
@@ -477,7 +495,7 @@ function statusText(state: ViewerState): string {
     reasons.size > 0
       ? ` — ${failedCount === state.panels.length ? 'all stages' : `${failedCount} stage(s)`} failed: ${[...reasons].join('; ')}`
       : '';
-  return `Run ${state.run.run_id}: ${checkpoints}, ${CARS_PER_CHECKPOINT} drops each, ${state.panels.length} stages, showing ${where}${problem}`;
+  return `Run ${state.run.run_id} · ${checkpoints} · ${where}${problem}`;
 }
 
 start().catch((error: unknown) => {
