@@ -13,6 +13,13 @@
           "landed_rate": 0.71875,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -22,23 +29,23 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 59,
-          "landed": 4,
-          "landed_rate": 0.0625,
+          "crashed": 57,
+          "landed": 6,
+          "landed_rate": 0.09375,
           "still_flying": 1
         },
         "arena": {
           "cars": 64,
-          "crashed": 28,
-          "landed": 31,
-          "landed_rate": 0.484375,
-          "still_flying": 5
+          "crashed": 26,
+          "landed": 32,
+          "landed_rate": 0.5,
+          "still_flying": 6
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -53,6 +60,13 @@
           "crashed": 11,
           "landed": 53,
           "landed_rate": 0.828125,
+          "still_flying": 0
+        },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         },
         "D": {
@@ -71,16 +85,16 @@
         },
         "arena": {
           "cars": 64,
-          "crashed": 19,
-          "landed": 39,
-          "landed_rate": 0.609375,
-          "still_flying": 6
+          "crashed": 17,
+          "landed": 40,
+          "landed_rate": 0.625,
+          "still_flying": 7
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -97,6 +111,13 @@
           "landed_rate": 0.859375,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -106,23 +127,23 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 19,
-          "landed": 45,
-          "landed_rate": 0.703125,
+          "crashed": 15,
+          "landed": 49,
+          "landed_rate": 0.765625,
           "still_flying": 0
         },
         "arena": {
           "cars": 64,
-          "crashed": 18,
-          "landed": 39,
-          "landed_rate": 0.609375,
-          "still_flying": 7
+          "crashed": 16,
+          "landed": 40,
+          "landed_rate": 0.625,
+          "still_flying": 8
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -139,6 +160,13 @@
           "landed_rate": 0.84375,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -148,23 +176,23 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 17,
-          "landed": 47,
-          "landed_rate": 0.734375,
+          "crashed": 13,
+          "landed": 51,
+          "landed_rate": 0.796875,
           "still_flying": 0
         },
         "arena": {
           "cars": 64,
-          "crashed": 22,
-          "landed": 38,
-          "landed_rate": 0.59375,
-          "still_flying": 4
+          "crashed": 20,
+          "landed": 39,
+          "landed_rate": 0.609375,
+          "still_flying": 5
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -181,6 +209,13 @@
           "landed_rate": 0.796875,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -190,23 +225,23 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 19,
-          "landed": 45,
-          "landed_rate": 0.703125,
+          "crashed": 13,
+          "landed": 51,
+          "landed_rate": 0.796875,
           "still_flying": 0
         },
         "arena": {
           "cars": 64,
-          "crashed": 18,
-          "landed": 42,
-          "landed_rate": 0.65625,
-          "still_flying": 4
+          "crashed": 16,
+          "landed": 43,
+          "landed_rate": 0.671875,
+          "still_flying": 5
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -223,6 +258,13 @@
           "landed_rate": 0.8125,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -232,23 +274,23 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 17,
-          "landed": 47,
-          "landed_rate": 0.734375,
+          "crashed": 13,
+          "landed": 51,
+          "landed_rate": 0.796875,
           "still_flying": 0
         },
         "arena": {
           "cars": 64,
-          "crashed": 19,
-          "landed": 40,
-          "landed_rate": 0.625,
-          "still_flying": 5
+          "crashed": 17,
+          "landed": 41,
+          "landed_rate": 0.640625,
+          "still_flying": 6
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -265,6 +307,13 @@
           "landed_rate": 0.78125,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -274,23 +323,23 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 8,
-          "landed": 56,
-          "landed_rate": 0.875,
+          "crashed": 14,
+          "landed": 50,
+          "landed_rate": 0.78125,
           "still_flying": 0
         },
         "arena": {
           "cars": 64,
-          "crashed": 19,
-          "landed": 41,
-          "landed_rate": 0.640625,
-          "still_flying": 4
+          "crashed": 17,
+          "landed": 42,
+          "landed_rate": 0.65625,
+          "still_flying": 5
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
@@ -307,6 +356,13 @@
           "landed_rate": 0.828125,
           "still_flying": 0
         },
+        "B": {
+          "cars": 64,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
+          "still_flying": 0
+        },
         "D": {
           "cars": 64,
           "crashed": 0,
@@ -316,32 +372,32 @@
         },
         "F": {
           "cars": 64,
-          "crashed": 10,
-          "landed": 54,
-          "landed_rate": 0.84375,
+          "crashed": 12,
+          "landed": 52,
+          "landed_rate": 0.8125,
           "still_flying": 0
         },
         "arena": {
           "cars": 64,
-          "crashed": 21,
-          "landed": 36,
-          "landed_rate": 0.5625,
-          "still_flying": 7
+          "crashed": 19,
+          "landed": 37,
+          "landed_rate": 0.578125,
+          "still_flying": 8
         },
         "gauntlet": {
           "cars": 64,
-          "crashed": 7,
-          "landed": 57,
-          "landed_rate": 0.890625,
+          "crashed": 1,
+          "landed": 63,
+          "landed_rate": 0.984375,
           "still_flying": 0
         }
       },
       "steps": 90000000
     }
   ],
-  "controller_config_hash": "97d538933dfef088",
+  "controller_config_hash": "727118f1fa27ec3d",
   "first_seed": 0,
-  "git_sha": "f0bce333fdfac7feb629319cdc3d4ccbaa78d856-dirty",
+  "git_sha": "75f55175a39ba166c2ab6b2f84204ff21f82ae77",
   "mode": "realistic",
   "outcome_meaning": {
     "crashed": "crashed, hit a parked car or turned over on a landing",
@@ -353,6 +409,7 @@
   "seeds": "0..64",
   "stages": [
     "A",
+    "B",
     "arena",
     "D",
     "F",

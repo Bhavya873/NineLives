@@ -15,8 +15,8 @@
     "F"
   ],
   "physics_hash": "5cf7862fd0ccf2b2",
-  "controller_config_hash": "97d538933dfef088",
-  "git_sha": "f0bce333fdfac7feb629319cdc3d4ccbaa78d856-dirty",
+  "controller_config_hash": "727118f1fa27ec3d",
+  "git_sha": "75f55175a39ba166c2ab6b2f84204ff21f82ae77",
   "checkpoints": [
     {
       "file": "1.json",
@@ -24,9 +24,9 @@
       "policy_hash": "ada0d13b05fc1b4c",
       "stages": {
         "A": {
-          "success_rate": 0.7099999785423279,
-          "save_rate": 0.6949999928474426,
-          "crash_rate": 0.2849999964237213
+          "success_rate": 0.7049999833106995,
+          "save_rate": 0.6899999976158142,
+          "crash_rate": 0.28999999165534973
         },
         "B": {
           "success_rate": 0.9950000047683716,
@@ -39,19 +39,19 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 1.0,
+          "success_rate": 0.9950000047683716,
           "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
+          "crash_rate": 0.004999999888241291
         },
         "E": {
-          "success_rate": 0.8600000143051147,
-          "save_rate": 0.8600000143051147,
-          "crash_rate": 0.13500000536441803
+          "success_rate": 0.8550000190734863,
+          "save_rate": 0.8550000190734863,
+          "crash_rate": 0.14000000059604645
         },
         "F": {
-          "success_rate": 0.20999999344348907,
-          "save_rate": 0.2750000059604645,
-          "crash_rate": 0.7250000238418579
+          "success_rate": 0.2150000035762787,
+          "save_rate": 0.26499998569488525,
+          "crash_rate": 0.7350000143051147
         }
       }
     },
@@ -61,9 +61,9 @@
       "policy_hash": "266594364a7dd0e0",
       "stages": {
         "A": {
-          "success_rate": 0.7950000166893005,
-          "save_rate": 0.7799999713897705,
-          "crash_rate": 0.20499999821186066
+          "success_rate": 0.7900000214576721,
+          "save_rate": 0.7749999761581421,
+          "crash_rate": 0.20999999344348907
         },
         "B": {
           "success_rate": 0.9950000047683716,
@@ -76,19 +76,19 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 1.0,
+          "success_rate": 0.9950000047683716,
           "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
+          "crash_rate": 0.004999999888241291
         },
         "E": {
-          "success_rate": 0.8849999904632568,
-          "save_rate": 0.8849999904632568,
-          "crash_rate": 0.10999999940395355
+          "success_rate": 0.8799999952316284,
+          "save_rate": 0.8799999952316284,
+          "crash_rate": 0.11500000208616257
         },
         "F": {
-          "success_rate": 0.7250000238418579,
-          "save_rate": 0.8500000238418579,
-          "crash_rate": 0.15000000596046448
+          "success_rate": 0.7450000047683716,
+          "save_rate": 0.8700000047683716,
+          "crash_rate": 0.12999999523162842
         }
       }
     },
@@ -96,6 +96,43 @@
       "file": "3.json",
       "steps": 30000000,
       "policy_hash": "e70b6da6888536fc",
+      "stages": {
+        "A": {
+          "success_rate": 0.824999988079071,
+          "save_rate": 0.8100000023841858,
+          "crash_rate": 0.17499999701976776
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
+        },
+        "F": {
+          "success_rate": 0.8849999904632568,
+          "save_rate": 0.9449999928474426,
+          "crash_rate": 0.04500000178813934
+        }
+      }
+    },
+    {
+      "file": "4.json",
+      "steps": 46000000,
+      "policy_hash": "2cb9dc30bf4a41c6",
       "stages": {
         "A": {
           "success_rate": 0.8299999833106995,
@@ -113,56 +150,19 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 1.0,
-          "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
-        },
-        "E": {
-          "success_rate": 0.8999999761581421,
-          "save_rate": 0.8999999761581421,
-          "crash_rate": 0.0949999988079071
-        },
-        "F": {
-          "success_rate": 0.8799999952316284,
-          "save_rate": 0.9399999976158142,
-          "crash_rate": 0.05000000074505806
-        }
-      }
-    },
-    {
-      "file": "4.json",
-      "steps": 46000000,
-      "policy_hash": "2cb9dc30bf4a41c6",
-      "stages": {
-        "A": {
-          "success_rate": 0.8349999785423279,
-          "save_rate": 0.8199999928474426,
-          "crash_rate": 0.16500000655651093
-        },
-        "B": {
           "success_rate": 0.9950000047683716,
           "save_rate": 0.9950000047683716,
           "crash_rate": 0.004999999888241291
         },
-        "C": {
-          "success_rate": 1.0,
-          "save_rate": 1.0,
-          "crash_rate": 0.0
-        },
-        "D": {
-          "success_rate": 1.0,
-          "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
-        },
         "E": {
-          "success_rate": 0.9049999713897705,
-          "save_rate": 0.9100000262260437,
-          "crash_rate": 0.09000000357627869
+          "success_rate": 0.8999999761581421,
+          "save_rate": 0.9049999713897705,
+          "crash_rate": 0.0949999988079071
         },
         "F": {
-          "success_rate": 0.9150000214576721,
-          "save_rate": 0.9649999737739563,
-          "crash_rate": 0.029999999329447746
+          "success_rate": 0.8999999761581421,
+          "save_rate": 0.9549999833106995,
+          "crash_rate": 0.03999999910593033
         }
       }
     },
@@ -170,80 +170,6 @@
       "file": "5.json",
       "steps": 60000000,
       "policy_hash": "768ee9fce90f41d1",
-      "stages": {
-        "A": {
-          "success_rate": 0.8050000071525574,
-          "save_rate": 0.7900000214576721,
-          "crash_rate": 0.19499999284744263
-        },
-        "B": {
-          "success_rate": 0.9950000047683716,
-          "save_rate": 0.9950000047683716,
-          "crash_rate": 0.004999999888241291
-        },
-        "C": {
-          "success_rate": 1.0,
-          "save_rate": 1.0,
-          "crash_rate": 0.0
-        },
-        "D": {
-          "success_rate": 1.0,
-          "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
-        },
-        "E": {
-          "success_rate": 0.8999999761581421,
-          "save_rate": 0.8999999761581421,
-          "crash_rate": 0.0949999988079071
-        },
-        "F": {
-          "success_rate": 0.9150000214576721,
-          "save_rate": 0.9750000238418579,
-          "crash_rate": 0.02500000037252903
-        }
-      }
-    },
-    {
-      "file": "6.json",
-      "steps": 74000000,
-      "policy_hash": "149a071ec8b38cbe",
-      "stages": {
-        "A": {
-          "success_rate": 0.8149999976158142,
-          "save_rate": 0.800000011920929,
-          "crash_rate": 0.1850000023841858
-        },
-        "B": {
-          "success_rate": 0.9950000047683716,
-          "save_rate": 0.9950000047683716,
-          "crash_rate": 0.004999999888241291
-        },
-        "C": {
-          "success_rate": 1.0,
-          "save_rate": 1.0,
-          "crash_rate": 0.0
-        },
-        "D": {
-          "success_rate": 1.0,
-          "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
-        },
-        "E": {
-          "success_rate": 0.8999999761581421,
-          "save_rate": 0.8999999761581421,
-          "crash_rate": 0.0949999988079071
-        },
-        "F": {
-          "success_rate": 0.9150000214576721,
-          "save_rate": 0.9649999737739563,
-          "crash_rate": 0.03500000014901161
-        }
-      }
-    },
-    {
-      "file": "7.json",
-      "steps": 88000000,
-      "policy_hash": "9707cfb508120e64",
       "stages": {
         "A": {
           "success_rate": 0.800000011920929,
@@ -261,26 +187,26 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 1.0,
+          "success_rate": 0.9950000047683716,
           "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
+          "crash_rate": 0.004999999888241291
         },
         "E": {
-          "success_rate": 0.8849999904632568,
-          "save_rate": 0.8849999904632568,
-          "crash_rate": 0.10999999940395355
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
         },
         "F": {
-          "success_rate": 0.925000011920929,
+          "success_rate": 0.9150000214576721,
           "save_rate": 0.9750000238418579,
           "crash_rate": 0.02500000037252903
         }
       }
     },
     {
-      "file": "8.json",
-      "steps": 90000000,
-      "policy_hash": "42f43e85dbb34270",
+      "file": "6.json",
+      "steps": 74000000,
+      "policy_hash": "149a071ec8b38cbe",
       "stages": {
         "A": {
           "success_rate": 0.8100000023841858,
@@ -298,19 +224,93 @@
           "crash_rate": 0.0
         },
         "D": {
-          "success_rate": 1.0,
+          "success_rate": 0.9950000047683716,
           "save_rate": 0.9950000047683716,
-          "crash_rate": 0.0
+          "crash_rate": 0.004999999888241291
         },
         "E": {
-          "success_rate": 0.8999999761581421,
-          "save_rate": 0.8999999761581421,
-          "crash_rate": 0.0949999988079071
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
         },
         "F": {
           "success_rate": 0.925000011920929,
-          "save_rate": 0.9750000238418579,
-          "crash_rate": 0.02500000037252903
+          "save_rate": 0.9800000190734863,
+          "crash_rate": 0.019999999552965164
+        }
+      }
+    },
+    {
+      "file": "7.json",
+      "steps": 88000000,
+      "policy_hash": "9707cfb508120e64",
+      "stages": {
+        "A": {
+          "success_rate": 0.7950000166893005,
+          "save_rate": 0.7799999713897705,
+          "crash_rate": 0.20499999821186066
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8799999952316284,
+          "save_rate": 0.8799999952316284,
+          "crash_rate": 0.11500000208616257
+        },
+        "F": {
+          "success_rate": 0.9350000023841858,
+          "save_rate": 0.9850000143051147,
+          "crash_rate": 0.014999999664723873
+        }
+      }
+    },
+    {
+      "file": "8.json",
+      "steps": 90000000,
+      "policy_hash": "42f43e85dbb34270",
+      "stages": {
+        "A": {
+          "success_rate": 0.8050000071525574,
+          "save_rate": 0.7900000214576721,
+          "crash_rate": 0.19499999284744263
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
+        },
+        "F": {
+          "success_rate": 0.9300000071525574,
+          "save_rate": 0.9800000190734863,
+          "crash_rate": 0.019999999552965164
         }
       }
     }
