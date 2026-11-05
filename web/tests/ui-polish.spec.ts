@@ -1,5 +1,5 @@
-// UI polish (SPEC M8): the title screen, the results overlay, the ghost run, reduced motion
-// and the folding key list. The CI runner draws about 3 frames a second, so nothing here
+// UI polish (SPEC M8): the title screen, reduced motion, the folding key card and the
+// Racing paper look. The CI runner draws about 3 frames a second, so nothing here
 // relies on driving in real time: tests read the sim's own clock or use the debug hooks.
 import { expect, test, type Page } from '@playwright/test';
 
@@ -7,17 +7,10 @@ import { collectConsoleErrors } from './console-errors.ts';
 
 /** Generous limit for slow CI machines. */
 const SLOW_MACHINE_TIMEOUT_MS = 60_000;
-const GHOST_KEY = 'ninelives.ghost.v1:playground';
 
 interface Debug {
   started: () => boolean;
   simTimeS: () => number;
-  resultsOpen: () => boolean;
-  ghost: () => { loaded: boolean; visible: boolean; position: number[] };
-  ghostSamples: () => number;
-  ghostEnabled: () => boolean;
-  ghostScope: () => string;
-  ghostTainted: () => boolean;
 }
 
 /** Calls a debug hook by name, or returns `fallback` before the game is up. */
@@ -34,41 +27,12 @@ async function debugCall<K extends keyof Debug>(
   return (value ?? fallback) as ReturnType<Debug[K]>;
 }
 
-/** One field of the ghost hook's state. */
-async function ghostField<F extends 'loaded' | 'visible'>(
-  page: Page,
-  field: F,
-  fallback: boolean,
-): Promise<boolean> {
-  return (await ghostState(page))?.[field] ?? fallback;
-}
-
-/** The ghost hook's state, or null before the game is up. */
-async function ghostState(page: Page): Promise<ReturnType<Debug['ghost']> | null> {
-  return debugCall(page, 'ghost', null as unknown as ReturnType<Debug['ghost']>);
-}
-
 async function waitForHook(page: Page): Promise<void> {
   await expect
     .poll(() => debugCall(page, 'simTimeS', Number.NaN), {
       timeout: SLOW_MACHINE_TIMEOUT_MS,
     })
     .toBeGreaterThanOrEqual(0);
-}
-
-/** A ghost run of `samples` points along +x, 10 Hz, upright. */
-function ghostRun(samples: number): string {
-  const poses: number[] = [];
-  for (let index = 0; index < samples; index += 1) {
-    poses.push(index * 0.5, 1, 4, 0, 0, 0, 1);
-  }
-  return JSON.stringify({
-    version: 1,
-    hz: 10,
-    saves: 2,
-    durationS: (samples - 1) / 10,
-    poses,
-  });
 }
 
 test('the title waits for Play, and the clock does not run behind it', async ({ page }) => {
@@ -124,35 +88,9 @@ test('reduced motion turns the title animation off', async ({ page }) => {
   expect(normal).toBeGreaterThan(0.1);
 });
 
-test('Tab opens the results, pauses the game, and Tab or Esc closes them', async ({ page }) => {
-  await page.goto('/?play=1');
-  await waitForHook(page);
-  await expect(page.locator('#results')).toBeHidden();
-
-  await page.keyboard.press('Tab');
-  await expect(page.locator('#results')).toBeVisible();
-  const labels = await page.locator('#results-list dt').allTextContents();
-  expect(labels).toEqual([
-    'Saves',
-    'Air used',
-    'Peak g',
-    'Stunts landed',
-    'Time',
-    'Best spike ever',
-  ]);
-  const pausedAtS = await debugCall(page, 'simTimeS', -1);
-  await page.waitForTimeout(500);
-  expect(await debugCall(page, 'simTimeS', -2)).toBe(pausedAtS);
-
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#results')).toBeHidden();
-  await page.keyboard.press('Tab');
-  await expect(page.locator('#results')).toBeVisible();
-  await page.keyboard.press('Tab');
-  await expect(page.locator('#results')).toBeHidden();
-});
-
-test('the key list folds on a small screen and the Keys button opens it', async ({ page }) => {
+test('the key card starts folded on a small screen and its Keys button opens it', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 500, height: 800 });
   await page.goto('/?play=1');
   await waitForHook(page);
@@ -161,106 +99,53 @@ test('the key list folds on a small screen and the Keys button opens it', async 
   await expect(page.locator('#hud-keys')).toBeHidden();
   await page.locator('#hud-keys-toggle').click();
   await expect(page.locator('#hud-keys')).toBeVisible();
-  await expect(page.locator('#hud-keys')).toContainText('results');
+  await expect(page.locator('#hud-keys')).toContainText('barrel roll');
   await expect(page.locator('#hud-keys-toggle')).toHaveAttribute('aria-expanded', 'true');
   await page.locator('#hud-keys-toggle').click();
   await expect(page.locator('#hud-keys')).toBeHidden();
 });
 
-test('the key list stays open on a wide screen, with no Keys button', async ({ page }) => {
+test('the key card starts open on a wide screen and can be folded', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto('/?play=1');
   await waitForHook(page);
   await expect(page.locator('#hud-keys')).toBeVisible();
-  await expect(page.locator('#hud-keys-toggle')).toBeHidden();
   await expect(page.locator('#hud-keys')).toContainText('barrel roll');
+  // The ghost and the results screen are gone, so their keys are not listed.
+  await expect(page.locator('#hud-keys')).not.toContainText(/ghost|results/i);
+  await page.locator('#hud-keys-toggle').click();
+  await expect(page.locator('#hud-keys')).toBeHidden();
+  await expect(page.locator('#hud-keys-toggle')).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('a stored ghost replays, and this run is recorded and stored on page hide', async ({
-  page,
-}) => {
-  const consoleErrors = collectConsoleErrors(page);
-  await page.addInitScript(
-    ([key, value]) => {
-      window.localStorage.setItem(key as string, value as string);
-    },
-    [GHOST_KEY, ghostRun(100)],
-  );
+test('Tab is not swallowed in a run, and there is no results screen or ghost', async ({ page }) => {
   await page.goto('/?play=1');
   await waitForHook(page);
-
-  await expect
-    .poll(() => ghostField(page, 'loaded', false), {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    .toBe(true);
-  await expect
-    .poll(() => ghostField(page, 'visible', false), {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    .toBe(true);
-
-  // The run records at 10 Hz of sim time; two samples are enough to store.
-  await expect
-    .poll(() => debugCall(page, 'ghostSamples', 0), {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    .toBeGreaterThanOrEqual(2);
-  // A stored run with 2 saves only gives way to a better one, so this short run keeps it.
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-  const stored = await page.evaluate((key) => window.localStorage.getItem(key), GHOST_KEY);
-  expect(JSON.parse(stored ?? '{}').saves).toBe(2);
-  expect(consoleErrors).toEqual([]);
-});
-
-test('a first run is stored on page hide when no ghost exists yet', async ({ page }) => {
-  await page.goto('/?play=1');
-  await waitForHook(page);
-  expect(await ghostField(page, 'loaded', true)).toBe(false);
-  await expect
-    .poll(() => debugCall(page, 'ghostSamples', 0), {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    .toBeGreaterThanOrEqual(2);
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-  const stored = await page.evaluate((key) => window.localStorage.getItem(key), GHOST_KEY);
-  expect(JSON.parse(stored ?? '{}').version).toBe(1);
-});
-
-test('G hides the ghost and brings it back', async ({ page }) => {
-  await page.goto('/?play=1');
-  await waitForHook(page);
-  expect(await debugCall(page, 'ghostEnabled', false)).toBe(true);
+  await page.keyboard.press('Tab');
   await page.keyboard.press('KeyG');
-  expect(await debugCall(page, 'ghostEnabled', true)).toBe(false);
-  await page.keyboard.press('KeyG');
-  expect(await debugCall(page, 'ghostEnabled', false)).toBe(true);
+  expect(await page.locator('#results').count()).toBe(0);
+  expect(await page.locator('#game-over-results').count()).toBe(0);
+  await expect(page.locator('#paused')).toBeHidden();
+  // The sim keeps running: neither key pauses it.
+  const before = await debugCall(page, 'simTimeS', -1);
+  await expect
+    .poll(() => debugCall(page, 'simTimeS', -1), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBeGreaterThan(before);
 });
 
-test('a broken stored ghost is ignored', async ({ page }) => {
-  const consoleErrors = collectConsoleErrors(page);
-  await page.addInitScript(() => {
-    window.localStorage.setItem('ninelives.ghost.v1', '{"version":1,"poses":"x"}');
-  });
-  await page.goto('/?play=1');
-  await waitForHook(page);
-  expect(await ghostField(page, 'loaded', true)).toBe(false);
-  expect(consoleErrors).toEqual([]);
-});
-
-test('no stunt-ready hint shows on the ground, and the g peak has a raw-spike tooltip', async ({
-  page,
-}) => {
+test('the bottom-centre tiles stay hidden while the car sits on the ground', async ({ page }) => {
   await page.goto('/?play=1');
   await waitForHook(page);
   await expect(page.locator('#hud-stunt-ready')).toBeHidden();
+  await expect(page.locator('#hud-g-tile')).toBeHidden();
+  await expect(page.locator('#hud-nozzle-tile')).toBeHidden();
   await expect(page.locator('#hud-g-peak')).toHaveAttribute('title', /raw contact spike/);
 });
 
 test('Tab moves focus on the title and the dialogs announce themselves', async ({ page }) => {
   await page.goto('/');
   await waitForHook(page);
-  for (const id of ['title', 'results', 'game-over']) {
+  for (const id of ['title', 'game-over']) {
     await expect(page.locator(`#${id}`)).toHaveAttribute('role', 'dialog');
     await expect(page.locator(`#${id}`)).toHaveAttribute('aria-modal', 'true');
   }
@@ -276,46 +161,29 @@ test('Tab moves focus on the title and the dialogs announce themselves', async (
   await expect(page.locator('#title-play')).not.toBeFocused();
 });
 
-test('the results dialog takes focus and gives it back', async ({ page }) => {
+test('the Racing paper fonts load and the tiles are flat paper', async ({ page }) => {
   await page.goto('/?play=1');
   await waitForHook(page);
-  await page.locator('#hud-keys-toggle').evaluate((element) => element.focus());
-  await page.keyboard.press('Tab');
-  await expect(page.locator('#results')).toBeVisible();
-  await expect(page.locator('#results')).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#results')).toBeHidden();
-  await expect(page.locator('#results')).not.toBeFocused();
-});
-
-test('a drop test is not recorded, and ghosts are kept per course', async ({ page }) => {
-  await page.goto('/?play=1');
-  await waitForHook(page);
-  expect(await debugCall(page, 'ghostScope', '')).toBe('playground');
-  await expect
-    .poll(() => debugCall(page, 'ghostSamples', 0), { timeout: SLOW_MACHINE_TIMEOUT_MS })
-    .toBeGreaterThanOrEqual(2);
-
-  await page.keyboard.press('KeyX');
-  expect(await debugCall(page, 'ghostTainted', false)).toBe(true);
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
-  expect(await page.evaluate((key) => window.localStorage.getItem(key), GHOST_KEY)).toBeNull();
-
-  // Another course has its own scope, and the playground's stored ghost does not follow.
-  await page.evaluate(
-    (json) => {
-      const hook = (window as unknown as { ninelivesDebug: { loadCourse: (j: string) => void } })
-        .ninelivesDebug;
-      hook.loadCourse(json);
-    },
-    JSON.stringify({
-      version: 1,
-      name: 'scope',
-      start: { pos: [0, 0.7, 0], yaw: 0 },
-      bounds: { min: [-50, -20, -50], max: [600, 60, 50] },
-      pieces: [],
-    }),
-  );
-  expect(await debugCall(page, 'ghostScope', '')).toMatch(/^course-/);
-  expect(await debugCall(page, 'ghostTainted', true)).toBe(false);
+  const fonts = await page.evaluate(async () => {
+    await Promise.all([
+      document.fonts.load('700 20px "Barlow Condensed"'),
+      document.fonts.load('600 16px "Barlow"'),
+    ]);
+    return [
+      document.fonts.check('700 20px "Barlow Condensed"'),
+      document.fonts.check('600 16px "Barlow"'),
+    ];
+  });
+  expect(fonts).toEqual([true, true]);
+  const dash = await page.locator('#hud-dash').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      filter: style.backdropFilter,
+      shadow: style.boxShadow,
+    };
+  });
+  expect(dash.background).toBe('rgb(241, 234, 216)');
+  expect(dash.filter).toBe('none');
+  expect(dash.shadow).toBe('none');
 });

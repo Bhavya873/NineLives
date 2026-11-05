@@ -1,4 +1,4 @@
-// Centre-screen toasts (SPEC §11.5): "Saved" (or "Flip saved" after the car went past
+// Toasts in the centre-low message stack (SPEC §11.5): "Saved" (or "Flip saved" after the car went past
 // upside down) with the air used, "Crashed" with the cause, and "Out of air". It turns
 // drained sim events into short messages; it never touches physics.
 import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
@@ -61,9 +61,15 @@ export function toastForEvents(events: Float32Array, invertedTiltRad: number): s
   return text;
 }
 
+/** The ticket's colour: crashes and running out of air read as danger. */
+export function toastTone(text: string): string {
+  return text.startsWith('Crashed') || text === 'Out of air' ? 'danger' : 'plain';
+}
+
 /** Shows `text` from `nowMs` for a couple of seconds, replacing any toast showing. */
 export function showToast(toasts: Toasts, text: string, nowMs: number): void {
   toasts.element.textContent = text;
+  toasts.element.dataset['tone'] = toastTone(text);
   toasts.element.hidden = false;
   toasts.hideAtMs = nowMs + TOAST_SHOW_MS;
 }

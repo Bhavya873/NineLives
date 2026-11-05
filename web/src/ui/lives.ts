@@ -2,7 +2,7 @@
 // screen once all nine are gone. It reads the sim's crash count; it never touches physics.
 
 import { focusDialog, setText } from '../shared/dom.ts';
-import { formatTime, type HudValues } from './hud.ts';
+import type { HudValues } from './hud.ts';
 
 /** Lives per run: the game's name. */
 export const LIVES = 9;
@@ -32,10 +32,9 @@ interface Lives {
   hearts: HTMLElement[];
   gameOver: HTMLElement;
   summary: HTMLElement;
-  /** The sim's crash, save and time counts when this run began (they never reset). */
+  /** The sim's crash and save counts when this run began (they never reset). */
   crashesAtStart: number;
   savesAtStart: number;
-  timeAtStartS: number;
   /** When to show the game-over screen, once the last life is gone; null before. */
   gameOverAtMs: number | null;
   /** True while the game-over screen is up. */
@@ -61,7 +60,6 @@ export function createLives(row: HTMLElement, gameOver: HTMLElement, summary: HT
     summary,
     crashesAtStart: 0,
     savesAtStart: 0,
-    timeAtStartS: 0,
     gameOverAtMs: null,
     over: false,
     restoreFocus: null,
@@ -95,7 +93,6 @@ export function updateLives(lives: Lives, values: HudValues, nowMs: number): voi
 export function restartLives(lives: Lives, values: HudValues): void {
   lives.crashesAtStart = values.crashes;
   lives.savesAtStart = values.saves;
-  lives.timeAtStartS = values.timeS;
   lives.gameOverAtMs = null;
   lives.over = false;
   lives.gameOver.hidden = true;
@@ -103,12 +100,10 @@ export function restartLives(lives: Lives, values: HudValues): void {
   lives.restoreFocus = null;
 }
 
-/** This run's saves and time, for the game-over screen. */
+/** This run's saves, for the game-over screen. */
 function runSummary(lives: Lives, values: HudValues): string {
   const saves = values.saves - lives.savesAtStart;
-  const time = formatTime(values.timeS - lives.timeAtStartS);
-  const savesText = saves === 1 ? '1 save' : `${saves} saves`;
-  return `${savesText} in ${time}`;
+  return saves === 1 ? '1 save' : `${saves} saves`;
 }
 
 /** One heart as an SVG of square pixels. */
