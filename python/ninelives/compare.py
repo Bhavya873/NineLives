@@ -185,7 +185,8 @@ def main(argv: list[str] | None = None) -> None:
     # progress messages go to the console
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     suffix = "_dr" if args.dr else ""
-    log.info("\n".join(compare(args.results, args.baseline, args.candidate, suffix)))
+    # the table is the result, so it goes to stdout
+    print("\n".join(compare(args.results, args.baseline, args.candidate, suffix)))
 
 
 if __name__ == "__main__":
