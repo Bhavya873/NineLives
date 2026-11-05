@@ -1,4 +1,4 @@
-// The HUD's air gauge (SPEC §11.5): a bar showing the air left, "∞" in Arcade, and a red
+// The HUD's air gauge (SPEC §11.5): a bar showing the air left, "∞" in unlimited air, and a red
 // flash below 15%. Plain DOM; it reads the air fraction from the game and never
 // touches physics.
 import { setText } from '../shared/dom.ts';

@@ -6,79 +6,92 @@
     <title>Nine Lives</title>
     <!-- Empty icon so the browser does not request a missing /favicon.ico. -->
     <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/ui/theme.css" />
     <link rel="stylesheet" href="/src/ui/game.css" />
   </head>
   <body>
     <div id="game"></div>
-    <div id="hud-top-left">
+    <!-- Top-left: the nine hearts. -->
+    <div id="hud-top-left" class="tile">
       <div id="hud-hearts" aria-label="Lives"></div>
-      <div id="hud-status" class="hud">Realistic</div>
-      <div id="hud-alert" class="hud" hidden></div>
-      <div id="hud-too-slow" class="hud" hidden></div>
-      <div id="hud-envelope" class="hud" hidden>AI outside envelope</div>
-      <div id="hud-g-record" class="hud" hidden></div>
-      <div id="hud-stunt-ready" class="hud" hidden></div>
     </div>
-    <button type="button" id="hud-keys-toggle" aria-controls="hud-keys" aria-expanded="false">
-      Keys
-    </button>
-    <dl id="hud-keys" class="hud" aria-label="Keys">
-      <dt>W S / ↑ ↓</dt>
-      <dd>drive, brake</dd>
-      <dt>A D / ← →</dt>
-      <dd>steer</dd>
-      <dt>Space</dt>
-      <dd>hop</dd>
-      <dt>Shift</dt>
-      <dd>boost</dd>
-      <dt>Q / E</dt>
-      <dd>barrel roll</dd>
-      <dt>Z / B</dt>
-      <dd>front / back flip</dd>
-      <dt>Tab</dt>
-      <dd>results</dd>
-      <dt>G</dt>
-      <dd>ghost</dd>
-      <dt>X</dt>
-      <dd>drop test</dd>
-      <dt>R</dt>
-      <dd>respawn</dd>
-      <dt>M</dt>
-      <dd>mode</dd>
-      <dt>V</dt>
-      <dd>wind</dd>
-      <dt>Esc</dt>
-      <dd>pause</dd>
-    </dl>
-    <div id="hud-wind" class="hud" hidden>
-      <span id="hud-wind-arrow">
-        <svg viewBox="-12 -12 24 24" aria-hidden="true">
-          <path d="M0 -10 L7 2 L2 1 L2 10 L-2 10 L-2 1 L-7 2 Z" fill="#d6ecff" />
-        </svg>
-      </span>
-      <span id="hud-wind-label">Off</span>
+    <!-- Top-right: the key card, which folds, and the way to the training viewer. -->
+    <div id="hud-top-right">
+      <section id="hud-keycard" class="tile" aria-label="Keys">
+        <button type="button" id="hud-keys-toggle" aria-controls="hud-keys" aria-expanded="true">
+          Keys
+        </button>
+        <dl id="hud-keys">
+          <dt>W S / ↑ ↓</dt>
+          <dd>drive, brake</dd>
+          <dt>A D / ← →</dt>
+          <dd>steer</dd>
+          <dt>Space</dt>
+          <dd>hop</dd>
+          <dt>Shift</dt>
+          <dd>boost</dd>
+          <dt>Q / E</dt>
+          <dd>barrel roll</dd>
+          <dt>Z / B</dt>
+          <dd>front / back flip</dd>
+          <dt>X</dt>
+          <dd>drop test</dd>
+          <dt>R</dt>
+          <dd>respawn</dd>
+          <dt>M</dt>
+          <dd>limited / unlimited air</dd>
+          <dt>V</dt>
+          <dd>wind</dd>
+          <dt>Esc</dt>
+          <dd>pause</dd>
+        </dl>
+      </section>
+      <!-- Out of the Tab order: a focused link would leave the game when Enter is pressed. -->
+      <a id="hud-watch" class="tile" href="./viewer.html" tabindex="-1">Watch AI training</a>
     </div>
-    <div id="hud-dash" class="hud">
-      <div id="hud-nozzles"></div>
-      <div class="dash-readouts">
-        <div id="hud-speed"><span id="hud-speed-value">0</span><small>km/h</small></div>
+    <!-- Bottom-left: the gauge card, speed and air. -->
+    <div id="hud-dash" class="tile">
+      <div id="hud-status" class="tile-label">Limited air</div>
+      <div id="hud-speed"><span id="hud-speed-value">0</span><small>km/h</small></div>
+      <div id="hud-air">
+        <span class="tile-label">Air</span>
+        <div id="hud-air-track"><div id="hud-air-fill"></div></div>
+        <span id="hud-air-label">100%</span>
+      </div>
+    </div>
+    <!-- Bottom-centre: shown only while they matter (see ui/hud-zones.ts). -->
+    <div id="hud-center">
+      <div id="hud-stunt-ready" class="tile" hidden></div>
+      <div id="hud-g-tile" class="tile" hidden>
         <div id="hud-g">
           <span id="hud-g-live">1.0 g</span> <span id="hud-g-peak">peak 0.0 g</span>
           <div id="hud-g-track"><div id="hud-g-fill"></div></div>
         </div>
-        <div id="hud-air">
-          Air
-          <div id="hud-air-track"><div id="hud-air-fill"></div></div>
-          <span id="hud-air-label">100%</span>
-        </div>
+      </div>
+      <div id="hud-nozzle-tile" class="tile" hidden>
+        <div id="hud-nozzles"></div>
       </div>
     </div>
-    <!-- Out of the Tab order: a focused link would leave the game when Enter is pressed. -->
-    <a id="hud-watch" class="hud" href="./viewer.html" tabindex="-1">Watch AI training</a>
-    <div id="hud-toast" class="hud" hidden></div>
-    <div id="hud-perf" class="hud" hidden></div>
-    <section id="paused" class="hud" hidden>
-      <h2>Paused</h2>
+    <!-- Bottom-right: the wind, only while there is any. -->
+    <div id="hud-wind" class="tile" hidden>
+      <span id="hud-wind-arrow">
+        <svg viewBox="-12 -12 24 24" aria-hidden="true">
+          <path d="M0 -10 L7 2 L2 1 L2 10 L-2 10 L-2 1 L-7 2 Z" fill="currentColor" />
+        </svg>
+      </span>
+      <span id="hud-wind-label">Off</span>
+    </div>
+    <!-- Centre-low: toasts and hints, one stack of tickets. -->
+    <div id="hud-messages">
+      <div id="hud-toast" class="tile" hidden></div>
+      <div id="hud-too-slow" class="tile" hidden></div>
+      <div id="hud-alert" class="tile" hidden></div>
+      <div id="hud-g-record" class="tile" hidden></div>
+      <div id="hud-envelope" class="tile" hidden>AI outside envelope</div>
+    </div>
+    <div id="hud-perf" class="tile" hidden></div>
+    <section id="paused" class="tile" hidden>
+      <h2 class="tile-display">Paused</h2>
       <p>Press Esc to resume</p>
       <a href="./viewer.html">Watch AI training</a>
     </section>
@@ -89,50 +102,41 @@
       aria-labelledby="game-over-title"
       hidden
     >
-      <h1 class="wordmark">Nine Lives</h1>
-      <h2 id="game-over-title">Out of lives</h2>
-      <p id="game-over-summary"></p>
-      <dl id="game-over-results" class="results-list"></dl>
-      <button type="button" id="restart">Restart</button>
-      <a href="https://github.com/Bhavya873/NineLives" target="_blank" rel="noopener"
-        >Source and write-up on GitHub</a
-      >
-    </section>
-    <section
-      id="results"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="results-title"
-      tabindex="-1"
-      hidden
-    >
-      <h2 id="results-title">Results so far</h2>
-      <dl id="results-list" class="results-list"></dl>
-      <p>Press Tab or Esc to go on</p>
+      <div class="card tile">
+        <p class="wordmark">Nine Lives</p>
+        <h2 id="game-over-title" class="tile-display">Out of lives</h2>
+        <p id="game-over-summary"></p>
+        <button type="button" id="restart" class="primary">Restart</button>
+        <a href="https://github.com/Bhavya873/NineLives" target="_blank" rel="noopener"
+          >Source and write-up on GitHub</a
+        >
+      </div>
     </section>
     <section id="title" role="dialog" aria-modal="true" aria-labelledby="title-name">
-      <h1 id="title-name" class="wordmark">Nine Lives</h1>
-      <p class="tagline">
-        An AI fires a car's 10 cold-gas thrusters so it always lands on its wheels. Drive, jump,
-        flip, and watch it save you nine times.
-      </p>
-      <div id="title-buttons">
-        <button type="button" id="title-play">Play</button>
-        <button type="button" id="title-how" aria-expanded="false" aria-controls="title-help">
-          How it works
-        </button>
-        <a class="button" id="title-watch" href="./viewer.html">Watch AI training</a>
-      </div>
-      <div id="title-help" hidden>
-        <p>
-          The car carries ten air nozzles and a limited tank. The AI fires them in the air to turn
-          the car so the wheels touch first. Each crash costs a life; you have nine.
+      <div class="card tile">
+        <h1 id="title-name" class="wordmark">Nine Lives</h1>
+        <p class="tagline">
+          An AI fires a car's 10 cold-gas thrusters so it always lands on its wheels. Drive, jump,
+          flip, and watch it save you nine times.
         </p>
-        <p>
-          W S drive and brake, A D steer, Space hops, Shift boosts. Q / E barrel-roll and Z / B flip
-          when the planner says a stunt is ready. Tab shows your results, G toggles the ghost of
-          your best run, Esc pauses.
-        </p>
+        <div id="title-buttons">
+          <button type="button" id="title-play" class="primary">Play</button>
+          <button type="button" id="title-how" aria-expanded="false" aria-controls="title-help">
+            How it works
+          </button>
+          <a class="button" id="title-watch" href="./viewer.html">Watch AI training</a>
+        </div>
+        <div id="title-help" hidden>
+          <p>
+            The car carries ten air nozzles and a tank. In limited air the tank runs down; in
+            unlimited air it never does (M switches). The AI fires the nozzles in the air to turn
+            the car so the wheels touch first. Each crash costs a life; you have nine.
+          </p>
+          <p>
+            W S drive and brake, A D steer, Space hops, Shift boosts. Q / E barrel-roll and Z / B
+            flip when the planner says a stunt is ready. Esc pauses.
+          </p>
+        </div>
       </div>
     </section>
     <script type="module" src="/src/game/main.ts"></script>

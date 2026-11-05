@@ -79,7 +79,7 @@ test('the game flies PD alone by default', async ({ page }) => {
     .toBeGreaterThan(startTimeS + SETTLE_SIM_S);
 
   expect(await readControllerCode(page)).toBe(CONTROLLER_CODE_PD);
-  await expect(page.locator('#hud-status')).toHaveText('Realistic');
+  await expect(page.locator('#hud-status')).toHaveText('Limited air');
 });
 
 test('?controller=hybrid switches to Hybrid once the policy has loaded', async ({ page }) => {
@@ -89,7 +89,7 @@ test('?controller=hybrid switches to Hybrid once the policy has loaded', async (
   await expect
     .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBe(CONTROLLER_CODE_HYBRID_PD);
-  await expect(page.locator('#hud-status')).toHaveText('Realistic');
+  await expect(page.locator('#hud-status')).toHaveText('Limited air');
 });
 
 test('a drop test runs clean under the Hybrid', async ({ page }) => {
