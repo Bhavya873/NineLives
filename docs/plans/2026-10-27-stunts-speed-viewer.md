@@ -21,7 +21,7 @@ The owner played the latest demo (origin/main + R4/obs v2/half loop/viewer butto
 - Survival rule: **never crash, may not complete** (§1).
 
 **Explore findings behind each change:**
-- **G-load:** computed in `crates/nl-sim/src/g_load.rs`. The blackout is web-only (`web/src/hud/g-blackout.ts`). Nothing records a peak.
+- **G-load:** computed in `crates/nl-sim/src/g_load.rs`. The blackout was web-only (`web/src/hud/g-blackout.ts`, since removed). Nothing records a peak.
 - **Stunts:**
   - PD only aims upright (`crates/nl-control/src/pd.rs:139`). There is no planner and no landing forecast.
   - A Realistic flip is about 1.4 s and about 55 kg of air.

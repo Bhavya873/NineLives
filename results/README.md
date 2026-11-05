@@ -28,3 +28,5 @@ Name pattern: `eval_<controller>_<stage>_<mode>.json` (+ `.csv` from the Python 
 ## Removed in the repo cleanup
 
 Raw per-candidate eval files under `control_upgrade/*/candidates/` and `control_upgrade/2026-10-26-pd-model-fix/hybrid_r2_latest/` (their numbers stay in the manifests), and the superseded speed sweeps `speed_sweep_after_drive`, `speed_sweep_after_merge` and `speed_sweep_drive_candidate` (their numbers stay in docs/EXPERIMENTS.md and docs/research/speed-survival.md). 66 files, about 12 MB.
+
+The SVG charts in `docs/images/` are drawn from these files by `python -m ninelives.charts` (the old `report_charts` module was merged into it).
