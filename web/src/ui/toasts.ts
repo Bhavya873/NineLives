@@ -1,7 +1,7 @@
 // Centre-screen toasts (SPEC §11.5): "Saved" (or "Flip saved" after the car went past
 // upside down) with the air used, "Crashed" with the cause, and "Out of air". It turns
 // drained sim events into short messages; it never touches physics.
-import { FLOATS_PER_EVENT } from '../sim-events.ts';
+import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
 import { CrashCode, EventKind } from '../wasm/nl_wasm.js';
 
 /** How long a toast stays on screen. */
@@ -16,7 +16,7 @@ const CRASH_CAUSE_TEXT: Record<number, string> = {
 };
 
 /** The toast element and when it should disappear. */
-export interface Toasts {
+interface Toasts {
   /** The centre element the text goes in. */
   element: HTMLElement;
   /** When to hide it, in `performance.now()` milliseconds. */

@@ -15,7 +15,7 @@ const RESET_KEYS = ['KeyR'];
 
 /**
  * Button bits, matching the BUTTON_* constants in crates/nl-sim/src/input.rs.
- * main.ts checks them against the wasm build at start-up.
+ * layout-check.ts checks them against the wasm build at start-up.
  */
 export const BUTTON_HOP = 1 << 0;
 export const BUTTON_BOOST = 1 << 1;
@@ -24,7 +24,7 @@ export const BUTTON_CHAOS = 1 << 2;
 export const BUTTON_RESET = 1 << 3;
 /** Bit of the first manual nozzle button; nozzle `i` uses this bit + `i` (SPEC §11.3). */
 export const FIRST_MANUAL_NOZZLE_BIT = 4;
-/** Nozzles the keys 1–0 can fire; main.ts checks it against the wasm nozzle count. */
+/** Nozzles the keys 1–0 can fire; layout-check.ts checks it against the wasm nozzle count. */
 export const MANUAL_NOZZLE_COUNT = 10;
 
 /** Each button bit and the keys that press it. */

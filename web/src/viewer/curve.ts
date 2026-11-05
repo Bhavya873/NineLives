@@ -6,14 +6,14 @@
 export const CURVE_TITLE = 'Checkpoint evaluation under current physics';
 
 /** One stage's rates for one checkpoint, each 0..1. */
-export interface StageRates {
+interface StageRates {
   success_rate: number;
   save_rate: number;
   crash_rate: number;
 }
 
 /** One checkpoint's row of the curve file. */
-export interface CurveCheckpoint {
+interface CurveCheckpoint {
   file: string;
   steps: number;
   policy_hash: string | null;
@@ -33,7 +33,7 @@ export interface CurveFile {
 }
 
 /** One plotted point. */
-export interface CurvePoint {
+interface CurvePoint {
   steps: number;
   rate: number;
   file: string;

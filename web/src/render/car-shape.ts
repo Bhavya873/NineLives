@@ -165,7 +165,7 @@ const NOSE_TAPER = 0.16;
  * between the wheels, narrowing toward the nose and tail for a rounded plan view.
  * (The bevel on the body's edges already makes it narrower at the top.)
  */
-export function bodyWidthScale(xM: number): number {
+function bodyWidthScale(xM: number): number {
   const taperLengthM = 2.1 - NOSE_TAPER_START_M;
   const noseAmount = Math.min(1, Math.max(0, (Math.abs(xM) - NOSE_TAPER_START_M) / taperLengthM));
   // Squared, so the nose curves in rather than cutting a straight wedge.
@@ -196,7 +196,7 @@ export function warpToBodyShape(original: BufferGeometry): BufferGeometry {
 }
 
 /** How a side outline becomes a solid: its width and how much its edges are rounded. */
-export interface ExtrudeOptions {
+interface ExtrudeOptions {
   widthM: number;
   /** Edge rounding in metres; 0 for sharp edges. */
   bevelM: number;

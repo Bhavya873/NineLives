@@ -7,7 +7,7 @@ const RUNNING = 0;
 const LANDED = 1;
 
 /** Where the leader is and which of the given cars it is. */
-export interface Leader {
+interface Leader {
   /** Index into the list of cars given to `pickLeader`. */
   car: number;
   x: number;

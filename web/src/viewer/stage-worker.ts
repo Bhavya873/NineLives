@@ -2,7 +2,7 @@
 // time on its own thread and posts their poses, so the five stages never block the page's
 // frames. It owns the rounds too: when every drop has ended it waits a moment, then builds the
 // next block of drops. The page only draws what it is sent (stage-protocol.ts).
-import { planTicks } from '../game-loop.ts';
+import { planTicks } from '../game/game-loop.ts';
 import { FLOATS_PER_POSE } from '../render/pose-blend.ts';
 import initWasm, { type Crowd, Game } from '../wasm/nl_wasm.js';
 import { newCrowd } from './arena-choice.ts';

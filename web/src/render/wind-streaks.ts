@@ -1,7 +1,7 @@
 // Wind streaks (rendering only): faint white lines drifting with the wind around the
 // car, so a breeze or storm is visible in the scene. They live in a box that follows
 // the car and wrap around its edges, and hide entirely while the wind is off.
-// The wind itself will come from the sim; this file only draws it.
+// The wind comes from the sim (HudField WindXMS/WindZMS); this file only draws it.
 import {
   AdditiveBlending,
   BufferAttribute,

@@ -1,7 +1,7 @@
 // The HUD's top-down nozzle map (SPEC §11.5): a car outline with one dot per nozzle that
 // glows with its effective throttle, so the player can see which thrusters the AI fires.
 // Plain DOM elements; it reads numbers from the game and never touches physics.
-import type { NozzlePlace } from '../nozzle-layout.ts';
+import type { NozzlePlace } from '../wasm-bridge/nozzle-layout.ts';
 
 /** Space around the car on the map, in metres, so dots at the very edge still show. */
 const MARGIN_M = 0.4;

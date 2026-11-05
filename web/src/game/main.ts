@@ -1,13 +1,13 @@
 // Entry point for the web game. It wires the pieces together:
 // keyboard → wasm physics (Game) at 120 Hz → the scene draws blended poses each frame.
-import controllersToml from '../../configs/controllers.toml?raw';
-import modesToml from '../../configs/modes.toml?raw';
-import playgroundJson from '../../courses/playground.json?raw';
-import vehicleToml from '../../configs/vehicle.toml?raw';
+import controllersToml from '../../../configs/controllers.toml?raw';
+import modesToml from '../../../configs/modes.toml?raw';
+import playgroundJson from '../../../courses/playground.json?raw';
+import vehicleToml from '../../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { focusDialog, prefersReducedMotion, requireElement, setText } from './dom.ts';
+import { focusDialog, prefersReducedMotion, requireElement, setText } from '../shared/dom.ts';
 import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import {
@@ -21,64 +21,54 @@ import {
   sampleGhost,
   saveGhostIfBetter,
 } from './ghost.ts';
-import { createAirGauge, updateAirGauge } from './hud/air-gauge.ts';
-import { browserStorage } from './hud/g-record.ts';
-import { findHud, type HudValues, updateHud } from './hud/hud.ts';
-import { createLives, restartLives, updateLives } from './hud/lives.ts';
-import { createNozzleMap, updateNozzleMap } from './hud/nozzle-map.ts';
-import { renderResults } from './hud/results.ts';
+import { createAirGauge, updateAirGauge } from '../ui/air-gauge.ts';
+import { browserStorage } from '../ui/g-record.ts';
+import { findHud, updateHud } from '../ui/hud.ts';
+import { createLives, restartLives, updateLives } from '../ui/lives.ts';
+import { createNozzleMap, updateNozzleMap } from '../ui/nozzle-map.ts';
+import { renderResults } from '../ui/results.ts';
 import {
   createRunStats,
   recordRunEvents,
   recordRunPeaks,
   resetRunStats,
   resultsRows,
-} from './hud/run-stats.ts';
-import { stuntReadyText } from './hud/stunt-ready.ts';
-import { createTitle, titleWanted } from './hud/title.ts';
+} from '../ui/run-stats.ts';
+import { stuntReadyText } from '../ui/stunt-ready.ts';
+import { createTitle, titleWanted } from '../ui/title.ts';
 import {
   createPerfOverlay,
   recordFrame,
   recordTick,
   togglePerfOverlay,
-} from './hud/perf-overlay.ts';
+} from '../ui/perf-overlay.ts';
 import {
   createToasts,
   showNoAirIfNew,
   showToast,
   toastForEvents,
   updateToasts,
-} from './hud/toasts.ts';
-import {
-  BUTTON_BOOST,
-  BUTTON_CHAOS,
-  BUTTON_HOP,
-  BUTTON_RESET,
-  FIRST_MANUAL_NOZZLE_BIT,
-  MANUAL_NOZZLE_COUNT,
-  onKeyPress,
-  readInputFrame,
-  startKeyboard,
-} from './input/keyboard.ts';
-import { followCar, snapCamera, widenWithSpeed } from './render/chase-camera.ts';
+} from '../ui/toasts.ts';
+import { onKeyPress, readInputFrame, startKeyboard } from '../ui/keyboard.ts';
+import { followCar, snapCamera, widenWithSpeed } from '../render/chase-camera.ts';
 import {
   cameraShake,
   createExplosion,
   startExplosion,
   stopExplosion,
   updateExplosion,
-} from './render/explosion.ts';
-import { createFlames, updateFlames } from './render/flames.ts';
-import { createGhostCar, hideGhost, placeGhost } from './render/ghost-car.ts';
-import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from './render/pose-blend.ts';
+} from '../render/explosion.ts';
+import { createFlames, updateFlames } from '../render/flames.ts';
+import { createGhostCar, hideGhost, placeGhost } from '../render/ghost-car.ts';
+import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from '../render/pose-blend.ts';
 import {
   createGameScene,
   type GameScene,
   type PhysicsFrames,
   placeCar,
   setCarVisible,
-} from './render/scene.ts';
-import { loadPolicy } from './policy.ts';
+} from '../render/scene.ts';
+import { loadPolicy } from '../wasm-bridge/policy.ts';
 import {
   createScreenEffects,
   renderScreenEffects,
@@ -86,9 +76,9 @@ import {
   resetScreenEffects,
   startingWindLevel,
   type WindLevel,
-} from './screen-effects.ts';
-import { containsEvent, FLOATS_PER_EVENT } from './sim-events.ts';
-import { requestStuntInSim, stuntReadyMaskFromSim } from './stunt-adapter.ts';
+} from '../render/screen-effects.ts';
+import { containsEvent } from '../wasm-bridge/sim-events.ts';
+import { requestStuntInSim, stuntReadyMaskFromSim } from '../wasm-bridge/stunt-adapter.ts';
 import {
   STUNT_KEYS,
   applyStuntEvents,
@@ -98,39 +88,18 @@ import {
   stuntToastForEvents,
   submitPendingStunt,
 } from './stunt-requests.ts';
-import { FLOATS_PER_NOZZLE, readNozzleLayout } from './nozzle-layout.ts';
-import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from './wasm/nl_wasm.js';
+import { fillHudValues, newHudValues } from '../wasm-bridge/hud-values.ts';
+import { checkWasmLayout } from '../wasm-bridge/layout-check.ts';
+import { readNozzleLayout } from '../wasm-bridge/nozzle-layout.ts';
+import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from '../wasm/nl_wasm.js';
 
 /** Reused each frame so the render loop allocates nothing for these. */
 const shake = new Vector3();
 const crashPosition = new Vector3();
-const hudValues: HudValues = {
-  speedMS: 0,
-  mode: ModeCode.Realistic,
-  controller: ControllerCode.Off,
-  airFraction: 1,
-  unlimitedAir: false,
-  hopBlocked: 0,
-  crashed: false,
-  saves: 0,
-  crashes: 0,
-  timeS: 0,
-  hopCooldownS: 0,
-  wheelsTouching: 4,
-  outOfAir: false,
-  airUsedKg: 0,
-  checkpointsReached: 0,
-  checkpointCount: 0,
-  finished: false,
-  finishTimeS: 0,
-  gLoad: 1,
-  peakG: 0,
-  policyOutOfEnvelope: 0,
-  approachHintMS: 0,
-  windWorldM_S: [0, 0, 0],
-};
+const hudValues = newHudValues();
 
 async function start(): Promise<void> {
+  // load the wasm physics and check it matches this page
   await initWasm();
   checkWasmLayout();
   // A new random seed each visit; the game itself draws nothing from it.
@@ -150,6 +119,7 @@ async function start(): Promise<void> {
       }
     });
   }
+  // f3 performance overlay
   const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
   onKeyPress('F3', () => togglePerfOverlay(perf));
   // Stunt keys only queue a request; the sim's planner decides (see stunt-requests.ts).
@@ -158,6 +128,7 @@ async function start(): Promise<void> {
     onKeyPress(code, () => pressStunt(stuntQueue, stunt, performance.now() / 1000));
   }
 
+  // the last two physics states, blended each frame for smooth motion
   const frames: PhysicsFrames = {
     previousChassis: game.chassis_pose(),
     latestChassis: game.chassis_pose(),
@@ -165,6 +136,7 @@ async function start(): Promise<void> {
     latestWheels: game.wheel_poses(),
   };
   const wheelCount = frames.latestWheels.length / FLOATS_PER_POSE;
+  // scene, hud parts and effects
   const view = createGameScene(requireElement('game'), wheelCount);
   const hud = findHud();
   const toasts = createToasts(requireElement('hud-toast'));
@@ -177,6 +149,7 @@ async function start(): Promise<void> {
     requireElement('hud-air-fill'),
     requireElement('hud-air-label'),
   );
+  // keyboard and the first picture
   startKeyboard(window);
 
   const carPose = newBlendedPose();
@@ -228,7 +201,7 @@ async function start(): Promise<void> {
   const stuntReady = requireElement('hud-stunt-ready');
   // The title keeps the game's clock still until the player starts (?play skips it).
   let started = false;
-  // Ghost run (src/ghost.ts): the best earlier run replays as a see-through car.
+  // Ghost run (ghost.ts): the best earlier run replays as a see-through car.
   const ghostStorage = browserStorage();
   let ghostRun = loadGhost(ghostStorage, ghostScope);
   // X throws the car to a random start: that run is not a drive, so it is not recorded.
@@ -382,6 +355,7 @@ async function start(): Promise<void> {
     }
   };
 
+  // the game loop: physics ticks at 120 hz, one render per browser frame
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
       if (!started || paused || lives.over) {
@@ -509,29 +483,6 @@ async function start(): Promise<void> {
   });
 }
 
-/** Throws if this page and the wasm build disagree on a shared layout or bit. */
-function checkWasmLayout(): void {
-  if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
-    throw new Error('The wasm build and the renderer disagree on the pose layout');
-  }
-  if (Game.floats_per_nozzle() !== FLOATS_PER_NOZZLE) {
-    throw new Error('The wasm build and the renderer disagree on the nozzle layout');
-  }
-  if (Game.floats_per_event() !== FLOATS_PER_EVENT) {
-    throw new Error('The wasm build and the game disagree on the event layout');
-  }
-  const buttonsMatch =
-    Game.button_hop() === BUTTON_HOP &&
-    Game.button_boost() === BUTTON_BOOST &&
-    Game.button_chaos() === BUTTON_CHAOS &&
-    Game.button_reset() === BUTTON_RESET &&
-    Game.first_manual_nozzle_bit() === FIRST_MANUAL_NOZZLE_BIT &&
-    Game.nozzle_count() === MANUAL_NOZZLE_COUNT;
-  if (!buttonsMatch) {
-    throw new Error('The wasm build and the keyboard disagree on the button bits');
-  }
-}
-
 /** Shows the car exactly where the sim has it, with no blending or camera easing. */
 function snapViewToGame(
   game: Game,
@@ -543,34 +494,6 @@ function snapViewToGame(
   frames.previousWheels = frames.latestWheels = game.wheel_poses();
   placeCar(view, frames, 1, carPose);
   snapCamera(view.camera, carPose);
-}
-
-/** Copies the values the HUD shows out of `Game.hud()`'s array into `out`. */
-function fillHudValues(values: Float32Array, out: HudValues): void {
-  out.speedMS = values[HudField.SpeedMS] ?? 0;
-  out.mode = values[HudField.Mode] ?? ModeCode.Custom;
-  out.controller = values[HudField.Controller] ?? ControllerCode.Off;
-  out.airFraction = values[HudField.AirFraction] ?? 1;
-  out.unlimitedAir = values[HudField.UnlimitedAir] === 1;
-  out.hopBlocked = values[HudField.HopBlocked] ?? 0;
-  out.crashed = values[HudField.Crashed] === 1;
-  out.saves = values[HudField.Saves] ?? 0;
-  out.crashes = values[HudField.Crashes] ?? 0;
-  out.timeS = values[HudField.TimeS] ?? 0;
-  out.hopCooldownS = values[HudField.HopCooldownS] ?? 0;
-  out.wheelsTouching = values[HudField.WheelsTouching] ?? 0;
-  out.outOfAir = values[HudField.OutOfAir] === 1;
-  out.airUsedKg = values[HudField.AirUsedKg] ?? 0;
-  out.checkpointsReached = values[HudField.CheckpointsReached] ?? 0;
-  out.checkpointCount = values[HudField.CheckpointCount] ?? 0;
-  out.finished = values[HudField.Finished] === 1;
-  out.finishTimeS = values[HudField.FinishTimeS] ?? 0;
-  out.gLoad = values[HudField.GLoad] ?? 1;
-  out.peakG = values[HudField.PeakGLoad] ?? 0;
-  out.policyOutOfEnvelope = values[HudField.PolicyOutOfEnvelope] ?? 0;
-  out.approachHintMS = values[HudField.ApproachHint] ?? 0;
-  out.windWorldM_S[0] = values[HudField.WindXMS] ?? 0;
-  out.windWorldM_S[2] = values[HudField.WindZMS] ?? 0;
 }
 
 start().catch((error: unknown) => {

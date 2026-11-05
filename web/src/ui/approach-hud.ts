@@ -3,15 +3,15 @@
 // HudField PolicyOutOfEnvelope is 1. Before a piece, HudField 26 (ApproachHint) holds the
 // entry speed the piece ahead needs while the car is too slow for it, and the HUD names
 // it; after the entry, TooSlowFallback keeps the warning up for a few seconds. Pure logic.
-import { FLOATS_PER_EVENT } from '../sim-events.ts';
+import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
 
 /** Event kinds this HUD reads (docs/contracts/events-hud.md). */
-export const APPROACH_EVENT = { Scrape: 15, TooSlowFallback: 16 } as const;
+const APPROACH_EVENT = { Scrape: 15, TooSlowFallback: 16 } as const;
 
 /** Amber above this speed: 200 km/h. */
 export const FAST_SPEED_M_S = 200 / 3.6;
 /** How long the too-slow warning stays. */
-export const TOO_SLOW_SHOW_S = 3;
+const TOO_SLOW_SHOW_S = 3;
 
 /** True when the speed readout should be amber. */
 export function isFast(speedMS: number): boolean {

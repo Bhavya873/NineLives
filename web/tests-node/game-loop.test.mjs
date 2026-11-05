@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { planTicks } from '../src/game-loop.ts';
+import { planTicks } from '../src/game/game-loop.ts';
 
 const TICK_S = 1 / 120;
 

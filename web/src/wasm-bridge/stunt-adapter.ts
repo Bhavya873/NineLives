@@ -1,6 +1,6 @@
 // The ONE call from the web into the sim for stunts: the wasm `Game.request_stunt`.
 // An older wasm without it returns false, so the request just waits and expires.
-import type { StuntCodeValue } from './stunt-requests.ts';
+import type { StuntCodeValue } from '../game/stunt-requests.ts';
 
 /** The wasm `Game` method (crates/nl-wasm). */
 interface StuntCapableGame {

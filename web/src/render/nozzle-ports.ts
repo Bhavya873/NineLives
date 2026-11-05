@@ -6,7 +6,7 @@
 // is at most a few tenths of a metre from where its force acts.
 import { CylinderGeometry, Mesh, MeshStandardMaterial, Vector3 } from 'three';
 
-import type { NozzlePlace } from '../nozzle-layout.ts';
+import type { NozzlePlace } from '../wasm-bridge/nozzle-layout.ts';
 import { BODY_BOTTOM_M, bodyHalfWidthM, solidUndersideXM } from './car-shape.ts';
 
 /**
@@ -49,7 +49,7 @@ const sidePortGeometry = new CylinderGeometry(
 const CYLINDER_AXIS = new Vector3(0, 1, 0);
 
 /** Which part of the body a port sits on: a flank, the underside, or the tail. */
-export type PortSurface = 'side' | 'under' | 'tail';
+type PortSurface = 'side' | 'under' | 'tail';
 
 /** Picks a port's surface by the main axis of its nozzle's exhaust. */
 export function portSurface(place: NozzlePlace): PortSurface {

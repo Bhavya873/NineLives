@@ -1,12 +1,12 @@
 // The F3 performance overlay (SPEC §11.7): frames per second, and the milliseconds a
-// frame spends on physics ticks and on drawing. main.ts times the work and hands the
+// frame spends on physics ticks and on drawing. game/main.ts times the work and hands the
 // numbers in; this module only adds them up and shows them.
 
 /** How often the readout refreshes, in milliseconds: steady numbers, not a flicker. */
 const REFRESH_MS = 500;
 
 /** The overlay element and what it has counted since its last refresh. */
-export interface PerfOverlay {
+interface PerfOverlay {
   /** The corner element the text goes in. */
   element: HTMLElement;
   /** Frames drawn since the last refresh. */

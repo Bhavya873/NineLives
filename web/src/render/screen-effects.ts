@@ -1,10 +1,10 @@
-// Wires the HUD's screen effects to the game: the g-meter and g record (hud/g-meter.ts,
-// hud/g-record.ts), the approach HUD (hud/approach-hud.ts, render/sparks.ts) and the wind readout and streaks (hud/wind-indicator.ts,
-// render/wind-streaks.ts), plus the wind level setting. main.ts calls it once per
-// frame with values from `Game.hud()`. Rendering and HUD only.
+// Draws the screen effects of the game and updates their HUD parts, once per frame:
+// the g-meter and g record (ui/g-meter.ts, ui/g-record.ts), the approach HUD (ui/approach-hud.ts,
+// sparks.ts), the wind readout and streaks (ui/wind-indicator.ts, wind-streaks.ts) and the wind level.
+// game/main.ts calls it with values from `Game.hud()`. Rendering and HUD only.
 import { type PerspectiveCamera, type Scene, Vector3 } from 'three';
 
-import { requireElement } from './dom.ts';
+import { requireElement } from '../shared/dom.ts';
 import {
   type TooSlowState,
   newTooSlowState,
@@ -12,7 +12,7 @@ import {
   outsideEnvelope,
   scrapeSpeeds,
   updateTooSlow,
-} from './hud/approach-hud.ts';
+} from '../ui/approach-hud.ts';
 import {
   type GMeter,
   type GPeakTracker,
@@ -20,7 +20,7 @@ import {
   createGPeakTracker,
   updateGMeter,
   updateGPeak,
-} from './hud/g-meter.ts';
+} from '../ui/g-meter.ts';
 import {
   type GRecord,
   browserStorage,
@@ -28,24 +28,24 @@ import {
   recordLandings,
   recordLine,
   recordPeak,
-} from './hud/g-record.ts';
+} from '../ui/g-record.ts';
 import {
   cameraYawRad,
   createWindIndicator,
   updateWindIndicator,
   type WindIndicator,
-} from './hud/wind-indicator.ts';
-import { type Sparks, createSparks, updateSparks } from './render/sparks.ts';
-import { createWindStreaks, updateWindStreaks, type WindStreaks } from './render/wind-streaks.ts';
+} from '../ui/wind-indicator.ts';
+import { type Sparks, createSparks, updateSparks } from './sparks.ts';
+import { createWindStreaks, updateWindStreaks, type WindStreaks } from './wind-streaks.ts';
 
 /** The wind settings `Game.set_wind_level` takes, in the order V cycles them. */
-export const WIND_LEVELS = ['off', 'breeze', 'storm'] as const;
+const WIND_LEVELS = ['off', 'breeze', 'storm'] as const;
 
 /** One of the `WIND_LEVELS`. */
 export type WindLevel = (typeof WIND_LEVELS)[number];
 
 /** Everything the screen effects keep between frames. */
-export interface ScreenEffects {
+interface ScreenEffects {
   gMeter: GMeter;
   /** The headline peak the meter shows (raw peak stays in the sim). */
   gPeak: GPeakTracker;
@@ -94,7 +94,7 @@ export function resetScreenEffects(effects: ScreenEffects): void {
 }
 
 /** What one frame of effects needs to know. */
-export interface EffectsFrame {
+interface EffectsFrame {
   /** The sim's passenger g at the seat (smoothed over 0.1 s). */
   gLoad: number;
   /** The raw peak g of the current stunt window (HudField PeakGLoad). */

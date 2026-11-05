@@ -7,7 +7,7 @@
 const MAX_TICKS_PER_FRAME = 8;
 
 /** What the loop needs from the rest of the game. */
-export interface LoopCallbacks {
+interface LoopCallbacks {
   /** Advance the physics by one fixed step. `lastOfFrame` is true on the frame's last tick,
    * so a caller that blends between the last two ticks knows when to snapshot. */
   tick: (lastOfFrame: boolean) => void;

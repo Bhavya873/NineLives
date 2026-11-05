@@ -1,13 +1,13 @@
 // What one run did, for the results screen: saves, air used, peak g, stunts landed and
 // time. It only reads the HUD values and drained events; it never touches physics. The sim's
 // counts never reset (see lives.ts), so a run remembers where its counts started.
-import { FLOATS_PER_EVENT } from '../sim-events.ts';
-import { STUNT_NAME, StuntEvent } from '../stunt-requests.ts';
+import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
+import { STUNT_NAME, StuntEvent } from '../game/stunt-requests.ts';
 import { formatG } from './g-meter.ts';
 import { formatTime, type HudValues } from './hud.ts';
 
 /** The numbers a run collects. */
-export interface RunStats {
+interface RunStats {
   savesAtStart: number;
   airUsedAtStartKg: number;
   timeAtStartS: number;

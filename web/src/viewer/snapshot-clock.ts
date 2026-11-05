@@ -6,7 +6,7 @@
 // picture slows down honestly instead of jumping). Pure.
 
 /** The times, in simulated seconds, the picture is drawn between. */
-export interface SnapshotClock {
+interface SnapshotClock {
   previousS: number;
   latestS: number;
   displayS: number;

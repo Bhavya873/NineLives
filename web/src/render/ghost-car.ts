@@ -8,7 +8,7 @@ import { buildCarBody } from './car-mesh.ts';
 const GHOST_OPACITY = 0.35;
 
 /** The ghost's mesh group. */
-export interface GhostCar {
+interface GhostCar {
   body: Group;
 }
 

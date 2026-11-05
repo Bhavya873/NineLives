@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { requestStuntInSim } from '../src/stunt-adapter.ts';
+import { requestStuntInSim } from '../src/wasm-bridge/stunt-adapter.ts';
 import {
   STUNT_KEYS,
   STUNT_REQUEST_TIMEOUT_S,
@@ -15,7 +15,7 @@ import {
   pressStunt,
   stuntToastForEvents,
   submitPendingStunt,
-} from '../src/stunt-requests.ts';
+} from '../src/game/stunt-requests.ts';
 
 const ev = (...values) => {
   const out = new Float32Array(5);

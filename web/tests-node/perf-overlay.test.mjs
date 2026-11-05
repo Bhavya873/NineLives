@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { perfText } from '../src/hud/perf-overlay.ts';
+import { perfText } from '../src/ui/perf-overlay.ts';
 
 test('30 frames in half a second read as 60 fps with mean tick and render times', () => {
   // 60 ticks took 30 ms in all (0.5 ms each); 30 frames took 120 ms (4 ms each).

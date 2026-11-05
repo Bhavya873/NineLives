@@ -17,22 +17,22 @@ export function courseScope(courseJson: string): string {
   }
   return `course-${hash.toString(16)}`;
 }
-export const GHOST_VERSION = 1;
+const GHOST_VERSION = 1;
 /** Samples per second of run time. */
-export const GHOST_HZ = 10;
+const GHOST_HZ = 10;
 /** A run longer than this stops recording (keeps the stored run small), in s. */
 export const GHOST_MAX_S = 300;
 /** Floats per sample: x, y, z, qx, qy, qz, qw. */
 export const GHOST_FLOATS = 7;
 
 /** The slice of `Storage` the ghost needs. */
-export interface GhostStorage {
+interface GhostStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
 
 /** One stored run. */
-export interface GhostRun {
+interface GhostRun {
   version: number;
   hz: number;
   /** Saves in the run; the better run has more, then the longer one. */
@@ -43,7 +43,7 @@ export interface GhostRun {
 }
 
 /** A run being recorded. */
-export interface GhostRecorder {
+interface GhostRecorder {
   poses: number[];
   /** Run time of the next sample, in s. */
   nextS: number;

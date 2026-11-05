@@ -2,7 +2,7 @@
 // A pose is 7 floats: position x, y, z, then quaternion x, y, z, w.
 import { Quaternion, Vector3 } from 'three';
 
-/** Floats in one pose. main.ts checks this against Game.floats_per_pose() at start-up. */
+/** Floats in one pose. layout-check.ts checks this against Game.floats_per_pose() at start-up. */
 export const FLOATS_PER_POSE = 7;
 
 /** One pose as three.js objects. */
@@ -35,13 +35,6 @@ export function blendPose(
   readQuaternion(previous, start + 3, fromRotation);
   readQuaternion(latest, start + 3, toRotation);
   out.rotation.slerpQuaternions(fromRotation, toRotation, blend);
-}
-
-/** Writes pose number `index` of a packed array into `out`, unblended. */
-export function readPose(poses: Float32Array, index: number, out: BlendedPose): void {
-  const start = index * FLOATS_PER_POSE;
-  out.position.set(poses[start] ?? 0, poses[start + 1] ?? 0, poses[start + 2] ?? 0);
-  readQuaternion(poses, start + 3, out.rotation);
 }
 
 /** Makes an empty pose to blend into. */

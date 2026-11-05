@@ -21,7 +21,7 @@ export interface StageInit {
 }
 
 /** Page to worker: start or stop stepping (a stage nobody can see does not need to run). */
-export interface StageRun {
+interface StageRun {
   type: 'run';
   on: boolean;
 }
@@ -58,7 +58,7 @@ export interface StageSnapshot {
 }
 
 /** Worker to page: something failed. */
-export interface StageError {
+interface StageError {
   type: 'error';
   message: string;
 }

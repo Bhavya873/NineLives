@@ -1,9 +1,9 @@
-// Loads the trained AI policy (models/policy.json, SPEC §9.12) into the game, so the T key
-// can reach the AI controller. The file ships as a separate asset and is fetched once at
-// start; if it is missing or refused (wrong schema hash), the game runs without the AI.
-import policyUrl from '../../models/policy.json?url';
+// Loads the trained AI policy (models/policy.json, SPEC §9.12) into the game, for the
+// ?controller=hybrid page. The file is a separate asset fetched once at start; if it is
+// missing or refused (wrong schema hash), the game runs without the AI.
+import policyUrl from '../../../models/policy.json?url';
 
-import type { Game } from './wasm/nl_wasm.js';
+import type { Game } from '../wasm/nl_wasm.js';
 
 /** Fetches the policy and hands it to `game`. Resolves to false (with a console warning)
  * when it cannot be loaded; the rest of the game works either way. */

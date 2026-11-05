@@ -42,7 +42,7 @@ interface Debris {
 }
 
 /** The explosion's three.js objects and how far through the effect it is. */
-export interface Explosion {
+interface Explosion {
   /** The ring and debris; visible exactly while the effect plays. */
   group: Group;
   /**

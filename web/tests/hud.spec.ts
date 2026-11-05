@@ -6,7 +6,7 @@ import { collectConsoleErrors } from './console-errors.ts';
 
 /** Generous limit for slow CI machines. */
 const SLOW_MACHINE_TIMEOUT_MS = 60_000;
-/** Lives per run (src/hud/lives.ts). */
+/** Lives per run (src/ui/lives.ts). */
 const LIVES = 9;
 
 /** Simulated seconds so far, or NaN before the game has started. */

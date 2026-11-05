@@ -2,16 +2,16 @@
 // localStorage under `ninelives.g.v1`, and the best g per stunt for this session.
 // Shown for a few seconds after a landing. Every storage access is in try/catch, and an
 // unknown or older stored shape is dropped.
-import { FLOATS_PER_EVENT } from '../sim-events.ts';
-import { STUNT_NAME, StuntEvent } from '../stunt-requests.ts';
+import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
+import { STUNT_NAME, StuntEvent } from '../game/stunt-requests.ts';
 
 export const G_RECORD_KEY = 'ninelives.g.v1';
-export const G_RECORD_VERSION = 1;
+const G_RECORD_VERSION = 1;
 /** How long the record line stays after a landing. */
-export const G_RECORD_SHOW_S = 4;
+const G_RECORD_SHOW_S = 4;
 
 /** The slice of `Storage` the record needs. */
-export interface GStorage {
+interface GStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }

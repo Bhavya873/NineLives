@@ -1,13 +1,13 @@
 // The HUD's air gauge (SPEC §11.5): a bar showing the air left, "∞" in Arcade, and a red
 // flash below 15%. Plain DOM; it reads the air fraction from the game and never
 // touches physics.
-import { setText } from '../dom.ts';
+import { setText } from '../shared/dom.ts';
 
 /** Below this fraction of the tank the gauge flashes red (SPEC §11.5). */
-export const LOW_AIR_FRACTION = 0.15;
+const LOW_AIR_FRACTION = 0.15;
 
 /** The gauge's elements. */
-export interface AirGauge {
+interface AirGauge {
   /** The outer box; gets the `low` class to flash red. */
   box: HTMLElement;
   /** The coloured bar; its width is the air left. */

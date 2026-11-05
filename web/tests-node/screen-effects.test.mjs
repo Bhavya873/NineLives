@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { URLSearchParams } from 'node:url';
 
-import { cameraYawRad, windArrowAngleRad, windLabel } from '../src/hud/wind-indicator.ts';
+import { cameraYawRad, windArrowAngleRad, windLabel } from '../src/ui/wind-indicator.ts';
 import { wrap } from '../src/render/wind-streaks.ts';
-import { nextWindLevel, startingWindLevel } from '../src/screen-effects.ts';
+import { nextWindLevel, startingWindLevel } from '../src/render/screen-effects.ts';
 
 test('camera yaw is 0 looking along +X and a quarter turn looking along -Z', () => {
   assert.ok(Math.abs(cameraYawRad(1, 0)) < 1e-9);
