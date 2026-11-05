@@ -146,8 +146,8 @@ async function start(): Promise<void> {
   onKeyPress('KeyV', () => setWind(nextWindLevel(windLevel)));
   const course = createCourseSession(view.scene, view.ground);
   /** Puts the drawn course in step with a fresh run (null: the open arena). */
-  const startCourse = (shapesJson: string | null) => {
-    showCourse(course, shapesJson);
+  const startCourse = (shapesJson: string | null, courseJson?: string) => {
+    showCourse(course, shapesJson, courseJson);
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
     resetScreenEffects(effects);
@@ -158,7 +158,7 @@ async function start(): Promise<void> {
       game.load_flat_ground();
       startCourse(null);
     } else {
-      startCourse(game.load_course(playgroundJson));
+      startCourse(game.load_course(playgroundJson), playgroundJson);
     }
   };
   startFreeDrive();
@@ -347,7 +347,7 @@ async function start(): Promise<void> {
       checkpointCount: () => game.hud()[HudField.CheckpointCount] ?? 0,
       // Tests start a course of their own (the playground has no piece that needs speed).
       loadCourse: (courseJson: string) => {
-        startCourse(game.load_course(courseJson));
+        startCourse(game.load_course(courseJson), courseJson);
       },
       started: () => started,
     },

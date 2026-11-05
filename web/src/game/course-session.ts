@@ -18,7 +18,20 @@ export function createCourseSession(scene: Scene, ground: Mesh): CourseSession {
   return { scene, ground, view: null };
 }
 
-/** Draws the course whose shapes `Game.load_course` returned, or the open arena for null. */
-export function showCourse(session: CourseSession, shapesJson: string | null): void {
-  session.view = swapCourseView(session.scene, session.ground, session.view, shapesJson);
+/**
+ * Draws the course whose shapes `Game.load_course` returned, or the open arena for null.
+ * `courseJson` is the course file, so only its car rows are drawn as vehicles.
+ */
+export function showCourse(
+  session: CourseSession,
+  shapesJson: string | null,
+  courseJson?: string,
+): void {
+  session.view = swapCourseView(
+    session.scene,
+    session.ground,
+    session.view,
+    shapesJson,
+    courseJson,
+  );
 }

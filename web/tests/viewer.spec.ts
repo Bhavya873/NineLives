@@ -91,7 +91,8 @@ test('every course stage draws its shapes and the drop stages draw none', async 
     .poll(async () => (await readStage(page, 'obstacles'))?.shapeCount ?? 0, {
       timeout: SLOW_MACHINE_TIMEOUT_MS,
     })
-    .toBeGreaterThan(20);
+    // The arena's parked cars merge into a few vehicle meshes, so it has fewer children than shapes.
+    .toBeGreaterThan(10);
   await expect
     .poll(async () => (await readStage(page, 'driving'))?.shapeCount ?? 0, {
       timeout: SLOW_MACHINE_TIMEOUT_MS,

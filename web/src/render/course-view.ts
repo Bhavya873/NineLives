@@ -8,16 +8,24 @@ import {
   Float32BufferAttribute,
   Group,
   Material,
+  Matrix4,
   Mesh,
   MeshStandardMaterial,
   type Object3D,
   PlaneGeometry,
+  Quaternion,
   type Scene,
   Vector3,
 } from 'three';
 import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 
 import { buildCheckerMaterial } from './scene.ts';
+import {
+  type VehiclePlacement,
+  buildVehicleMaterial,
+  buildVehicleMeshes,
+  isParkedCarBox,
+} from './vehicle-model.ts';
 
 /** What a shape is for, as `nl_sim::course_build::Surface` names it. */
 type Surface =
@@ -25,6 +33,8 @@ type Surface =
 
 /** One shape as the wasm `Game.load_course` JSON gives it. */
 interface CourseShape {
+  /** Index of the course file's piece it belongs to; null for the floor. */
+  piece: number | null;
   surface: Surface;
   geometry:
     | { box: { half_extents_m: number[] } }
@@ -48,21 +58,65 @@ const SURFACE_LOOK: Record<Exclude<Surface, 'floor'>, { color: string; opacity: 
 const GATE_HEIGHT_M = 4;
 const GATE_OPACITY = 0.18;
 
-/** Builds every shape of a course into one group, ready to add to the scene. */
-export function buildCourseView(shapesJson: string): Group {
+/**
+ * Builds every shape of a course into one group, ready to add to the scene. With the
+ * course file's JSON (`courseJson`), only the shapes of `car_row` pieces become vehicles;
+ * without it a box with a parked car's footprint does. Walls and bumps stay plain.
+ */
+export function buildCourseView(shapesJson: string, courseJson?: string): Group {
   const shapes = JSON.parse(shapesJson) as CourseShape[];
+  const pieceTypes = courseJson === undefined ? null : readPieceTypes(courseJson);
   // One material per look, shared by every mesh that has it (floors each get their
   // own, since their checker repeat depends on their size).
   const materials = new Map<string, Material>();
   const group = new Group();
+  const vehicles: VehiclePlacement[] = [];
   for (const shape of shapes) {
+    const vehicle = vehicleOf(shape, pieceTypes);
+    if (vehicle) {
+      vehicles.push(vehicle);
+      continue;
+    }
     const mesh = buildShapeMesh(shape, materials);
     group.add(mesh);
     if (shape.surface === 'checkpoint' || shape.surface === 'finish') {
       group.add(buildGate(shape, mesh, materials));
     }
   }
+  if (vehicles.length > 0) {
+    group.add(...buildVehicleMeshes(vehicles, buildVehicleMaterial()));
+  }
   return group;
+}
+
+/** The `type` of each piece of a course file, in order. */
+export function readPieceTypes(courseJson: string): string[] {
+  const course = JSON.parse(courseJson) as { pieces: { type: string }[] };
+  return course.pieces.map((piece) => piece.type);
+}
+
+/** The vehicle a shape stands for, or null if it is drawn as a plain shape. */
+function vehicleOf(shape: CourseShape, pieceTypes: string[] | null): VehiclePlacement | null {
+  if (shape.surface !== 'obstacle' || !('box' in shape.geometry)) {
+    return null;
+  }
+  const isCar =
+    pieceTypes === null
+      ? isParkedCarBox(shape.geometry.box.half_extents_m)
+      : shape.piece !== null && pieceTypes[shape.piece] === 'car_row';
+  if (!isCar) {
+    return null;
+  }
+  const [x = 0, y = 0, z = 0] = shape.pose.position_m;
+  const [qx = 0, qy = 0, qz = 0, qw = 1] = shape.pose.rotation_xyzw;
+  return {
+    heightM: 2 * (shape.geometry.box.half_extents_m[1] ?? 0),
+    matrix: new Matrix4().compose(
+      new Vector3(x, y, z),
+      new Quaternion(qx, qy, qz, qw),
+      new Vector3(1, 1, 1),
+    ),
+  };
 }
 
 /** The material stored under `key`, built by `build` the first time it is asked for. */
@@ -90,12 +144,13 @@ export function swapCourseView(
   ground: Object3D,
   current: Group | null,
   shapesJson: string | null,
+  courseJson?: string,
 ): Group | null {
   if (current) {
     scene.remove(current);
     disposeCourseView(current);
   }
-  const next = shapesJson === null ? null : buildCourseView(shapesJson);
+  const next = shapesJson === null ? null : buildCourseView(shapesJson, courseJson);
   if (next) {
     scene.add(next);
   }

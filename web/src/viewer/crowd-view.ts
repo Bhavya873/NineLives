@@ -251,16 +251,25 @@ function setDrawOrder(wheels: Slot[], body: Slot[]): void {
   });
 }
 
-/** A canvas with `text` on a dark tag, for a car's label. */
+/** The tag colours: theme.css's --cream and --ink (a canvas cannot read CSS variables cheaply). */
+const LABEL_CREAM = '#f1ead8';
+const LABEL_INK = '#1b1a17';
+const LABEL_FONT_PX = 40;
+
+/** A canvas with `text` on a cream ticket, for a car's label. */
 function drawLabel(text: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   [canvas.width, canvas.height] = LABEL_CANVAS_PX;
   const context = canvas.getContext('2d');
   if (context) {
-    context.fillStyle = 'rgba(12, 17, 24, 0.75)';
+    // a cream ticket with an ink border, like the page's tiles (theme.css)
+    context.fillStyle = LABEL_CREAM;
     context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = '#f2f5f8';
-    context.font = '600 34px system-ui, sans-serif';
+    context.strokeStyle = LABEL_INK;
+    context.lineWidth = 6;
+    context.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+    context.fillStyle = LABEL_INK;
+    context.font = `700 ${LABEL_FONT_PX}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(text, canvas.width / 2, canvas.height / 2);

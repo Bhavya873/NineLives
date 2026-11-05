@@ -26,7 +26,7 @@ cd web && npm install && npm run wasm && npm run dev    # http://localhost:5173
 | M, V | Limited air / Unlimited air, wind level |
 | R, Esc, F3 | respawn, pause, frame-rate overlay |
 
-**Watch AI training** (the link in the corner, or `viewer.html`) replays eight checkpoints of the policy at once: a crowd of cars per checkpoint, dropped from the same starts, so you can see the same drop go from a crash to a clean landing as training goes on.
+**Watch AI training** (the link in the corner, or `viewer.html`) replays eight checkpoints of the policy at once: a crowd of cars per checkpoint, dropped from the same starts, so you can see the same drop go from a crash to a clean landing as training goes on. All five stages run at once; click a title, a tab or press 1-5 to focus one, Esc to see all, L for the leader camera.
 
 ![The training viewer: eight checkpoints, 8 cars each](docs/images/viewer.png)
 
