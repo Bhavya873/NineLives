@@ -1,6 +1,7 @@
 # Static file server for web/dist (SPEC 11.7). ${PORT} is filled in by the nginx image.
 types {
     application/wasm wasm;
+    font/woff2 woff2;
 }
 
 server {

@@ -28,7 +28,9 @@ run(
   repoDir,
 );
 
-const wasmFile = join(repoDir, 'target', 'wasm32-unknown-unknown', profileDir, 'nl_wasm.wasm');
+// CARGO_TARGET_DIR moves cargo's output folder; look where cargo put the file.
+const targetDir = process.env['CARGO_TARGET_DIR'] ?? join(repoDir, 'target');
+const wasmFile = join(targetDir, 'wasm32-unknown-unknown', profileDir, 'nl_wasm.wasm');
 run('wasm-bindgen', [wasmFile, '--target', 'web', '--out-dir', outDir], repoDir);
 
 if (isRelease) {
