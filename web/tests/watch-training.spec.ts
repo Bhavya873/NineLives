@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
 const SLOW_MACHINE_TIMEOUT_MS = 60_000;
 
 test('the corner link opens the training viewer and its back link returns', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play=1');
   const watch = page.locator('#hud-watch');
   await expect(watch).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
 
@@ -19,7 +19,7 @@ test('the corner link opens the training viewer and its back link returns', asyn
 });
 
 test('the pause menu offers the training viewer', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?play=1');
   await expect(page.locator('#hud-hearts .heart').first()).toBeVisible({
     timeout: SLOW_MACHINE_TIMEOUT_MS,
   });

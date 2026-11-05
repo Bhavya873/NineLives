@@ -63,6 +63,8 @@ export interface HudValues {
   peakG: number;
   /** HudField PolicyOutOfEnvelope: 1 when the AI is outside where it was validated. */
   policyOutOfEnvelope: number;
+  /** HudField ApproachHint: the entry speed the piece ahead needs, in m/s (0 = none). */
+  approachHintMS: number;
   /** The wind now, [x, y, z] in m/s in the world frame: where the air moves to. */
   windWorldM_S: [number, number, number];
 }

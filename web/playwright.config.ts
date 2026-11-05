@@ -3,7 +3,9 @@
 // the one `npx playwright install` downloads.
 import { defineConfig } from '@playwright/test';
 
-const PREVIEW_PORT = 4173;
+// Set PLAYWRIGHT_PREVIEW_PORT to run next to another preview server (Playwright reuses a server
+// that is already on the port, so a second checkout would test the first one's build).
+const PREVIEW_PORT = Number(process.env.PLAYWRIGHT_PREVIEW_PORT ?? 4173);
 
 export default defineConfig({
   testDir: 'tests',

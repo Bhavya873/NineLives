@@ -3,14 +3,14 @@
 Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.6). The numbers are reserved now so parallel PRs do not collide. They are also listed in a comment above `HudField` in `crates/nl-wasm/src/lib.rs`. `EventKind` 15 and 16 exist since G2 (`Scrape`: `[15, normal_speed_m_s, 0, 0, 0]`; `TooSlowFallback`: `[16, piece_index, entry_speed_m_s, 0, 0]`).
 
 ## HudField (the array from `Game::hud`)
-Today the last field in use is 27 `PolicyOutOfEnvelope` (G3); 24 `StuntPhase` and 25 `StuntCode` are in use since G4, and 26 is still reserved and reads 0, so the array has 28 values.
+Today the last field in use is 27 `PolicyOutOfEnvelope` (G3); 24 `StuntPhase` and 25 `StuntCode` are in use since G4, and 26 `ApproachHint` is in use since the wrap-up, so the array has 28 values.
 
 | Number | Name | Meaning | Added by |
 |---|---|---|---|
 | 23 | `PeakGLoad` | Raw peak g of the current stunt window, in g (see `g-meter.md`) | A1 `claude/g-peak-sim` |
 | 24 | `StuntPhase` | The stunt phase, 0 to 8 (see `stunt-states.md`) | G4 |
 | 25 | `StuntCode` | Which stunt: 1 barrel left, 2 barrel right, 3 front flip, 4 back flip, 0 none | G4 |
-| 26 | `ApproachHint` | What the approach HUD should say, e.g. "too slow to clear this gap" | G2 / G5 |
+| 26 | `ApproachHint` | The entry speed in m/s that the piece ahead needs (`v_complete_min_m_s`) while the car is driving up to it too slowly, else 0; the HUD says "Too slow to clear this piece: need N km/h". "Ahead": before its entry line by at most 80 m, within half its width + 2 m, nose within 60° of its axis, no record active; the nearest wins. Read-only, so it changes no run | G2 / G5 |
 | 27 | `PolicyOutOfEnvelope` | 1 when the AI is outside where it was validated (speed > 55 m/s or another observation clamp), so the Hybrid uses PD | G3 (in use; set under any controller, computed by `nl_control::PolicyEnvelope`, 0 while the wreck is frozen; the limit is `[hybrid] policy_max_speed_m_s`) |
 
 ## EventKind (the first float of each event from `Game::drain_events`)

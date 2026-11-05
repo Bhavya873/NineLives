@@ -56,8 +56,15 @@ interface Slot {
 }
 
 /** One checkpoint label and where its car sits on the grid. */
+/** A row's two label looks, shared by its cars: a crashed car's label swaps to the faded one. */
+interface LabelLooks {
+  full: SpriteMaterial;
+  faded: SpriteMaterial;
+}
+
 interface GhostCar {
   label: Sprite;
+  looks: LabelLooks;
   gridOffset: Vector3;
   crashed: boolean;
 }
@@ -73,7 +80,13 @@ export interface CrowdView {
   allSlots: Slot[];
   /** True to spread the cars on the grid; false to draw them at their true positions. */
   spreadOnGrid: boolean;
+  /** Which labels show: one over every car, one over the first car of each row, or none. */
+  labels: LabelMode;
 }
+
+/** Which labels a crowd shows. A crowd that shares a screen with others shows few, so the
+ * sprites do not cover the cars. */
+export type LabelMode = 'cars' | 'row' | 'off';
 
 /** No offset, for cars drawn at their true positions. */
 const NO_OFFSET = new Vector3();
@@ -84,36 +97,57 @@ const pose = newBlendedPose();
 const placed = new Matrix4();
 const instance = new Matrix4();
 
-/** Builds one row of `carsPerRow` cars per label in `rowLabels` and adds them to `scene`. */
+/** Builds one row of `carsPerRow` cars per label in `rowLabels` and adds them to `scene`, on
+ * three.js layer `layer` (a camera draws them only if it has that layer enabled). */
 export function createCrowdView(
   scene: Scene,
   rowLabels: string[],
   carsPerRow: number,
   wheelCount: number,
+  layer = 0,
 ): CrowdView {
   const looks = new Map<Material, { flying: Material; crashed: Material }>();
   const carCount = rowLabels.length * carsPerRow;
-  const bodySlots = slotsOf(buildCarBody(), carCount, looks, scene);
-  const wheelSlots = slotsOf(buildWheel(), carCount * wheelCount, looks, scene);
+  const bodySlots = slotsOf(buildCarBody(), carCount, looks, scene, layer);
+  const wheelSlots = slotsOf(buildWheel(), carCount * wheelCount, looks, scene, layer);
   const cars: GhostCar[] = [];
   rowLabels.forEach((text, row) => {
     const labelTexture = new CanvasTexture(drawLabel(text));
+    // One full and one faded material per row, not per car: fewer materials to bind.
+    const labelLooks: LabelLooks = {
+      full: new SpriteMaterial({ map: labelTexture, depthTest: false }),
+      faded: new SpriteMaterial({
+        map: labelTexture,
+        depthTest: false,
+        transparent: true,
+        opacity: CRASHED_LABEL_OPACITY,
+      }),
+    };
     for (let column = 0; column < carsPerRow; column += 1) {
-      // Each car gets its own material so a crashed car's label can fade alone.
-      const label = new Sprite(new SpriteMaterial({ map: labelTexture, depthTest: false }));
+      const label = new Sprite(labelLooks.full);
       label.scale.set(LABEL_WIDTH_M, LABEL_TALL_M, 1);
+      label.layers.set(layer);
       const gridOffset = new Vector3(
         (column - (carsPerRow - 1) / 2) * COLUMN_SPACING_M,
         0,
         (row - (rowLabels.length - 1) / 2) * ROW_SPACING_M,
       );
       scene.add(label);
-      cars.push({ label, gridOffset, crashed: false });
+      cars.push({ label, looks: labelLooks, gridOffset, crashed: false });
     }
   });
   const allSlots = [...wheelSlots, ...bodySlots];
   setDrawOrder(wheelSlots, bodySlots);
-  return { cars, carsPerRow, wheelCount, bodySlots, wheelSlots, allSlots, spreadOnGrid: true };
+  return {
+    cars,
+    carsPerRow,
+    wheelCount,
+    bodySlots,
+    wheelSlots,
+    allSlots,
+    spreadOnGrid: true,
+    labels: 'cars',
+  };
 }
 
 /** Starts a frame: every instanced mesh will be refilled by `updateCrowdRow`. */
@@ -163,6 +197,7 @@ export function updateCrowdRow(view: CrowdView, row: number, poses: RowPoses, bl
     const offset = view.spreadOnGrid ? car.gridOffset : NO_OFFSET;
     const crashed = poses.outcomes[index] === OUTCOME_CRASHED;
     blendPose(poses.previousChassis, poses.latestChassis, index, blend, pose);
+    car.label.visible = view.labels === 'cars' || (view.labels === 'row' && index === 0);
     car.label.position.copy(pose.position).add(offset);
     car.label.position.y += LABEL_HEIGHT_M;
     placeSlots(view.bodySlots, pose, offset, crashed);
@@ -173,7 +208,7 @@ export function updateCrowdRow(view: CrowdView, row: number, poses: RowPoses, bl
     }
     if (crashed !== car.crashed) {
       car.crashed = crashed;
-      car.label.material.opacity = crashed ? CRASHED_LABEL_OPACITY : 1;
+      car.label.material = crashed ? car.looks.faded : car.looks.full;
     }
   }
 }
@@ -241,6 +276,7 @@ function slotsOf(
   capacity: number,
   looks: Map<Material, { flying: Material; crashed: Material }>,
   scene: Scene,
+  layer: number,
 ): Slot[] {
   const slots: Slot[] = [];
   template.updateMatrixWorld(true);
@@ -261,6 +297,7 @@ function slotsOf(
       const mesh = new InstancedMesh(object.geometry, material, capacity);
       mesh.castShadow = false;
       mesh.frustumCulled = false;
+      mesh.layers.set(layer);
       mesh.count = 0;
       mesh.visible = false;
       scene.add(mesh);

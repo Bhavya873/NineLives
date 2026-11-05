@@ -11,7 +11,7 @@ In short: the car may fail to complete a piece, but it never crashes on one it e
 
 ## Minimum completion speed
 - Each piece will publish `v_complete_min_m_s` (m/s): the slowest clean entry that still completes it.
-- Before entry, the HUD shows "too slow to clear this gap" when the car is below it (`HudField` 26 `ApproachHint`, event 16 `TooSlowFallback`; see `events-hud.md`).
+- Before entry, the HUD shows "Too slow to clear this piece: need N km/h" when the car is below it (`HudField` 26 `ApproachHint`, built; after the entry, event 16 `TooSlowFallback` keeps the warning up for 3 s; see `events-hud.md`).
 - **Where it lives (G2):** `v_complete_min_m_s` is a required field of every template in `configs/pieces.json` (0 = any speed; ramp gap 14 m/s, checked by `piece_geometry.rs`) and an optional field of `ramp` and `half_loop` in course files (`course.rs`). The traversal tracker raises `TooSlowFallback` (event 16) on a clean entry below it.
 
 ## Fallbacks by piece
@@ -36,4 +36,4 @@ In short: the car may fail to complete a piece, but it never crashes on one it e
 ## What G2 built and what is not covered
 - Built: ramp gap catch pit (a 0.5 m sloped pit starting at the lip, 8° exit); wall with a ramp is a table top (ramp, deck, ramp down); jumps land on flat floor with lips of 8° or less; bumps with 4.6° faces.
 - **Not covered** (they still crash at some speeds or are untested): flip plates (made to flip the car; 3 Arcade crashes in the sweep), the **half loop** (a loop through which a 200 km/h car can pass has to be 160 m or more high, and a loop that lets cars through at all lets slower cars leave the road and fall, so only the `v_complete_min_m_s` hint exists), table tops over about 1 m (the playground's 2 to 3 m walls), `courses/gauntlet.json` and `arena.json` (their old steep ramps are not re-laid).
-- The sweep (`results/speed_sweep_after_pieces.json`) leaves 4 crashes on covered pieces in 15,360 runs; see `docs/EXPERIMENTS.md`.
+- The sweep (`results/speed_sweep_after_floor_hook.json`, 15,360 runs, 20 seeds) has **0 crashes**, on covered pieces and flip plates alike. Before the floor contact hook it left 9 (4 on covered pieces: the kicker and the 2 m wall ramp), all caused by a tipped floor contact normal in the solver; see `docs/EXPERIMENTS.md`.

@@ -27,3 +27,7 @@ runs/
 # Local agent worktrees and the graphify map (rebuilt with `graphify update .`)
 .claude/worktrees/
 graphify-out/
+
+# Stray per-agent Playwright configs (the real one is web/playwright.config.ts)
+web/playwright.*.config.ts
+web/playwright.*.config.js

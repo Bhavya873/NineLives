@@ -34,7 +34,7 @@ never re-implement any of it.
 | `python/ninelives` | Gymnasium/SB3 adapter, training, curriculum, eval, export, charts |
 | `web/` | Vite + TypeScript + three.js game and training viewer |
 | `configs/` | TOML for vehicle, modes, controllers, reward and scenarios; YAML for PPO runs |
-| `courses/` | course JSON (playground, Gauntlet, the viewer's obstacle arena) |
+| `courses/` | course JSON (playground, the Gauntlet (cut from the game, kept for sim and eval), the viewer's obstacle arena) |
 
 ## 3. Conventions
 
@@ -204,6 +204,9 @@ The world queues events and the caller drains them (`crates/nl-sim/src/events.rs
   the flat floor is judged on its true normal (straight up): Rapier's box-box manifold sometimes
   reports a tipped normal for the car's bevelled edge, which turned a car sliding at 50 m/s into a
   "46 m/s impact" (244 of the R2c baseline's 1,295 crashes).
+  The solver gets the same fix: `nl-sim/src/floor_hook.rs` puts the true vertical normal back on a
+  tipped chassis-versus-floor contact (top face only), so a 1.6 m/s rear-edge touchdown no longer
+  becomes a 7 m/s bounce and a -8.8 rad/s yaw.
 - **Scrape** (wasm `EventKind` 15): a body contact that is underbody (0.05 m inside the lower face),
   with its normal within 30° of body up, at most 4 m/s along it, with the tilt under 25°. Numbers in
   `configs/approach.toml`. It never counts toward a crash and reports once per scrape.
@@ -459,12 +462,15 @@ separate modules. The look is a physics simulator's: a checkered floor, a gradie
 The game flies PD alone (`?controller=hybrid` loads the policy and flies the Hybrid), shows the keys at all times,
 pauses on Esc, and gives the player nine lives, one lost per crash.
 
-The training viewer (`web/viewer.html`) builds one wasm `Crowd` per exported checkpoint and flies
-them all at once on the same episodes: one labelled row of translucent cars per checkpoint,
-plus a table of landings and crashes. Every car is flown by the Hybrid (`build_controller("hybrid", ...)`,
+The training viewer (`web/viewer.html`) flies every stage at once: Stage A (flat arena), Stage B, the
+obstacle arena, Stage D and Stage F, each with one wasm `Crowd` per exported checkpoint on the same
+episodes (one labelled row of translucent cars per checkpoint, plus a table of landings and crashes).
+Each stage runs in its own Web Worker (`web/src/viewer/stage-worker.ts`) and posts pose snapshots; the page
+(`main.ts`, `stage-panel.ts`) only draws, one scissor viewport per stage in one canvas, blending between
+the last two snapshots (`snapshot-clock.ts`). Every car is flown by the Hybrid (`build_controller("hybrid", ...)`,
 the hand-over from `controllers.toml`) with the checkpoint as its AI. `Crowd::for_stage` covers Stage A
-drops (flat and the obstacle arena), Stage D and F on a generated course (`episode::course_for_stage`, one
-course per crowd, drawn from `course_shapes()`) and the Gauntlet; a stage picker (or `?arena=`) chooses.
+drops (flat and the obstacle arena), Stage B, and Stage D and F on a generated course (`episode::course_for_stage`, one
+course per crowd, drawn from `course_shapes()`); a tab, a panel title, the keys 1-5 or `?arena=` focuses one.
 `cargo run --release -p nl-wasm --example viewer_rates` flies the same crowds natively and records the
 landing rates (`results/baseline_2026-10/viewer_landing_rates.json`).
 

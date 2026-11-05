@@ -418,3 +418,30 @@ PR `claude/roadster-drive`. Values from R2a candidate B (`configs/vehicle.toml`)
 PR `claude/policy-envelope`. No training and no `results/eval_*` regenerated (the PD retune runs on another branch). Check that the envelope is invisible inside it: the Rust Hybrid eval (`cargo run --release -p nl-control --example eval -- --controller hybrid --stage <S> --mode <M> --episodes <N> --seed 0`) on this branch against a build of `origin/main`, stages A–E, both modes, the committed episode counts.
 - **Result:** episodes and summaries are identical (every per-episode field) in all 10 cells. `results/eval_hybrid_A_realistic.json` also reproduces the committed file bit for bit except `git_sha` (and `controller_config_hash`, because `configs/controllers.toml` gained a comment; with the old file via `--controllers` the hash matches too). The other committed cells were already stale against main's physics before this change.
 - **Not validated:** the policy is not validated above 55 m/s. "Validated" means a logged Hybrid eval there, then `[hybrid] policy_max_speed_m_s` is raised. Above 60 m/s the body-velocity observation clamp still blocks the AI, so that needs a schema change first.
+### 2026-11-02 — Floor contact hook: the covered-piece sweep crashes
+PR `claude/piece-crashes`. Tools: `speed_sweep` (`results/speed_sweep_after_floor_hook.{json,csv}`, the same 15,360 runs as `after_merge`), `eval` and `ninelives.eval` (all 28 `results/eval_*`), `export --viewer-curve`, `viewer_rates` (`results/viewer_landing_rates_after_floor_hook.json`). No training.
+- **Cause:** on the flat floor Rapier sometimes returns a contact normal along the direction of travel for the car's bevelled rear edge (reported 42 m/s against a real closing speed of about 1.6 m/s). The crash rule already judged floor contacts on the true normal, but the solver still used the tipped one and spun the car (wall ramp 2 m, seed 7, 45 m/s Realistic: yaw -8.8 rad/s in one step). The four covered-piece crashes (kicker seed 4 at 52.5 m/s in both modes, wall ramp 2 m at 45 and 52.5 m/s) and the flip and corkscrew `landing_slam` crashes were this artifact.
+- **Ruled out:** chassis CCD off (identical crashes), floor size from 400 to 3000 m (3 to 9 crashes per 5,760 runs at every size), body chamfer 0 / 0.15 / 0.3 (0 chamfer adds concave bottoming; 0.15 only 41 -> 30).
+- **Fix:** `floor_hook.rs`, a Rapier `modify_solver_contacts` hook on floor colliders: a tipped chassis contact on the top face gets the vertical normal and the separation along it.
+- **Sweep:** 60 seeds, all pieces (46,080 runs): 41 crashes -> 0; timeouts unchanged (120, bumps 0.5). Default sweep: 9 -> 0.
+- **Golden trace:** hash `fb2efdedf3985d14` -> `72959553d1b9e680`, final position `[418.54468, 0.5930893, -124.57887]` unchanged. The hash moved because the collider flag is serialised in the final snapshot, not because the trajectory moved.
+- **Evals** (1000 episodes, seed 0, repo configs; `physics_hash` 5cf7862fd0ccf2b2 unchanged, `controller_config_hash` a56f9c07e5aa9fe0 -> 97d538933dfef088 because G4 added sections to `controllers.toml` after the G3 evals): 8 of 28 cells changed, all Stage D or E: PD D Arcade 99.2 -> 99.8, D Realistic 99.4 -> 99.7, E Arcade 91.9 -> 92.1, E Realistic 90.4 -> 90.7; Hybrid D Arcade 99.2 -> 99.8, D Realistic 99.4 -> 99.7, E Arcade 91.3 -> 91.5, E Realistic 90.5 -> 90.8. Stage A, B, C, Off, AI and the domain-randomized files are bit for bit as before. No cell is worse; PD mean 94.94 -> 95.08, Hybrid mean 94.60 -> 94.74.
+- **Viewer:** `curve.json` 9 of 48 cells changed, none worse (checkpoint 8 Stage D 99.0 -> 100.0). The committed showcase seeds still fly as recorded. Landing rates (64 cars per stage and checkpoint): mean 75.1% -> 79.0%; one cell is lower, checkpoint 5 Stage A 82.8% -> 79.7% (two cars of 64). The G1 baseline files in `results/baseline_2026-10/` are kept as the baseline.
+
+
+## 2026-11-03: the hover-hack experiment (SPEC 9.11, owner plan 2026-11-02)
+
+Branch `claude/ship`. Two runs, identical except for the reward: `configs/train/hover-broken.yaml` and `configs/train/hover-fixed.yaml`. Stage A only, Arcade (unlimited air), no randomization, seed 0, PPO as in `base.yaml`, **12,025,856 steps each** (the broken run took 762 s, the fixed run 585 s; both on a loaded laptop CPU). A small budget on purpose: the aim is to show the effect, not to ship a policy.
+
+- **Broken reward:** `survival_bonus: 0.1` (+0.1 per step while `up_alignment` > 0.8; Python-only, in `NineLivesVecEnv`, default 0 for every other run) and `reward_overrides: {airborne: 0.0}` (no airtime cost).
+- **Fixed reward:** the default (`configs/reward.toml`, SPEC 9.4).
+- **Measured** by `python -m ninelives.hover_experiment` (deterministic policy, 200 fixed seeds from 2,000,000, Stage A hardest level, Arcade; `results/hover_hack.json`, chart `docs/images/hover-hack.svg`):
+
+| | success | crash | time-out (still flying at 8 s) | mean airtime | longest airtime | mean air used |
+|---|---|---|---|---|---|---|
+| Broken | 35.5% | 27.5% | 37.0% | 3.61 s | 8.0 s | 135 kg |
+| Fixed | 89.5% | 10.5% | 0.0% | 1.06 s | 1.9 s | 35 kg |
+
+- **Outcome:** the expected hover appears. 37% of the broken policy's drops end only at the 8 s time limit, (attitude was not measured, only that the episode did not end); the fixed policy has none. The broken policy is a mix (it also lands or crashes in the rest), so this is a partial hover at this budget, not every episode.
+- **Limits:** one seed per run, 12 M steps, a single set of 200 drops. The clips the SPEC asks for are height traces (three drops per policy) instead of video. Training-time eval and curriculum levels were not kept (runs/ is gitignored), so none are claimed here. The numbers are not comparable with the shipped policy (`models/policy.json`, Stages A, D, E, F).
+- **CI:** a one-seed speed sweep (768 runs) must report 0 crashes; the wasm size check reports about 1.05 MB gzipped against the 2.5 MB budget.

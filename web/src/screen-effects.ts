@@ -8,11 +8,19 @@ import { requireElement } from './dom.ts';
 import {
   type TooSlowState,
   newTooSlowState,
+  approachHintText,
   outsideEnvelope,
   scrapeSpeeds,
   updateTooSlow,
 } from './hud/approach-hud.ts';
-import { type GMeter, createGMeter, updateGMeter } from './hud/g-meter.ts';
+import {
+  type GMeter,
+  type GPeakTracker,
+  createGMeter,
+  createGPeakTracker,
+  updateGMeter,
+  updateGPeak,
+} from './hud/g-meter.ts';
 import {
   type GRecord,
   browserStorage,
@@ -39,6 +47,8 @@ export type WindLevel = (typeof WIND_LEVELS)[number];
 /** Everything the screen effects keep between frames. */
 export interface ScreenEffects {
   gMeter: GMeter;
+  /** The headline peak the meter shows (raw peak stays in the sim). */
+  gPeak: GPeakTracker;
   gRecord: GRecord;
   gRecordElement: HTMLElement;
   sparks: Sparks;
@@ -60,6 +70,7 @@ export function createScreenEffects(scene: Scene): ScreenEffects {
       requireElement('hud-g-live'),
       requireElement('hud-g-peak'),
     ),
+    gPeak: createGPeakTracker(),
     gRecord: createGRecord(browserStorage()),
     gRecordElement: requireElement('hud-g-record'),
     sparks: createSparks(scene),
@@ -90,6 +101,8 @@ export interface EffectsFrame {
   peakG: number;
   /** HudField PolicyOutOfEnvelope. */
   policyOutOfEnvelope: number;
+  /** HudField ApproachHint: the entry speed the piece ahead needs, in m/s (0 = none). */
+  approachHintMS: number;
   /** This frame's drained events. */
   events: Float32Array;
   /** The sim's wind now, [x, y, z] in m/s in the world frame. */
@@ -104,14 +117,18 @@ export interface EffectsFrame {
 
 /** Updates the g-meter, approach HUD, wind readout and streaks for one rendered frame. */
 export function renderScreenEffects(effects: ScreenEffects, frame: EffectsFrame): void {
-  updateGMeter(effects.gMeter, frame.crashed ? 1 : frame.gLoad, frame.peakG);
+  const liveG = frame.crashed ? 1 : frame.gLoad;
+  updateGMeter(effects.gMeter, liveG, updateGPeak(effects.gPeak, liveG, frame.peakG), frame.peakG);
   recordPeak(effects.gRecord, frame.peakG);
   recordLandings(effects.gRecord, frame.events, frame.nowS);
   const line = recordLine(effects.gRecord, frame.nowS);
   effects.gRecordElement.textContent = line;
   effects.gRecordElement.hidden = line === '';
 
-  const tooSlow = updateTooSlow(effects.tooSlow, frame.events, frame.nowS);
+  // The warning after a too-slow entry wins; before the piece the live hint shows.
+  const tooSlow =
+    updateTooSlow(effects.tooSlow, frame.events, frame.nowS) ||
+    approachHintText(frame.approachHintMS);
   effects.tooSlowElement.textContent = tooSlow;
   effects.tooSlowElement.hidden = tooSlow === '';
   effects.envelopeBadge.hidden = !outsideEnvelope(frame.policyOutOfEnvelope);

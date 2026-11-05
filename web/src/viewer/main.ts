@@ -1,27 +1,28 @@
-// The training viewer (SPEC §11.6): every exported checkpoint of the newest training run
-// flies at once, one labelled row of translucent cars per checkpoint, all on the same
-// drops, so you can see the policy improve from row to row. The sim (one wasm Crowd per
-// checkpoint, every car flown by the Hybrid) flies every car; this page only draws them and
-// counts how the episodes end. The cars fly Stage A drops on the flat arena or the obstacle
-// arena (O key, the button or `?arena=obstacles`), or Stage D, Stage F and the Gauntlet
-// (the stage picker or `?arena=driving|flight|gauntlet`).
+// The training viewer (SPEC §11.6): every stage at once. Each stage (the flat arena, Stage B,
+// the obstacle arena, Stage D, Stage F) has its own panel; in each, every exported checkpoint
+// of the newest training run flies eight drops, one labelled row of translucent cars per
+// checkpoint, all on the same drops, so you can see the policy improve from row to row. Each
+// stage is stepped by its own Web Worker (stage-worker.ts), so this page only draws: one
+// renderer and one scene, with every stage drawn into its own rectangle of the canvas, and one
+// pool of instanced meshes per stage. The stage tabs, the number keys, a click on a panel's
+// title or `?arena=…` focus one panel; Esc or the All tab tiles them again.
 import { requireElement, setText } from '../dom.ts';
-import { startGameLoop } from '../game-loop.ts';
-import { FLOATS_PER_POSE } from '../render/pose-blend.ts';
-import { createArena } from '../render/scene.ts';
-import initWasm, { type Crowd, CrowdOutcome, Game } from '../wasm/nl_wasm.js';
+import {
+  createPerfOverlay,
+  recordFrame,
+  recordTick,
+  togglePerfOverlay,
+} from '../hud/perf-overlay.ts';
+import { createArena, setArenaPixelRatio } from '../render/scene.ts';
+import { newQuality, recordQualityFrame } from './adaptive-quality.ts';
 import {
   ARENAS,
   type ArenaKind,
   arenaFromUrl,
   arenaLabel,
   followsCars,
-  newCrowd,
-  otherArena,
-  rowsShareSeeds,
   searchWithArena,
 } from './arena-choice.ts';
-import { createArenaView, followCars, showArena } from './arena-view.ts';
 import {
   type RunEntry,
   loadCheckpoint,
@@ -29,304 +30,341 @@ import {
   loadNewestRun,
   loadShowcase,
 } from './checkpoints.ts';
-import {
-  type RowPoses,
-  beginCrowdFrame,
-  createCrowdView,
-  endCrowdFrame,
-  updateCrowdRow,
-} from './crowd-view.ts';
 import { CURVE_TITLE, type CurveFile, curveSvg } from './curve.ts';
-import { pickCrowdLeader } from './leader.ts';
+import { type Rect, layoutPanels } from './panel-layout.ts';
+import { STAGE_TABS, type StageTab, arenaTab, showcaseSeed, tabArena } from './showcase.ts';
 import {
-  STAGE_TABS,
-  type ShowcaseFile,
-  type StageTab,
-  arenaTab,
-  showcaseSeed,
-  tabArena,
-} from './showcase.ts';
+  type CameraMode,
+  type StagePanel,
+  aimStageCamera,
+  createStagePanel,
+  setStageAspect,
+  setStageRunning,
+  stageTotals,
+  updateStagePanel,
+} from './stage-panel.ts';
 
-/** Cars per checkpoint: 8 checkpoints × 8 cars is SPEC §11.6's crowd of about 64. */
+/** Cars per checkpoint: 8 checkpoints × 8 cars is SPEC §11.6's crowd of about 64 per stage. */
 const CARS_PER_CHECKPOINT = 8;
-/** How long the final picture stays before the next round of drops, in seconds. */
-const PAUSE_BETWEEN_S = 2.5;
+/** How long the final picture stays before the next round of drops, in ms. */
+const PAUSE_BETWEEN_MS = 2500;
 /** The crowd is many see-through cars, so the viewer draws at most this many pixels per CSS pixel. */
 const VIEWER_MAX_PIXEL_RATIO = 1.5;
+/** Width of the column on the right (tabs, camera button, curve), in CSS pixels. */
+const SIDEBAR_PX = 352;
+/** Below this window width the column floats over the panels instead of taking space. */
+const NARROW_PX = 900;
+/** The longest frame the cars are moved for, in s, so a hidden tab does not jump the picture. */
+const MAX_FRAME_S = 0.1;
 
-/** One checkpoint's crowd and whether its drops are still flying. */
-interface Row {
-  crowd: Crowd;
-  running: boolean;
-  /** The poses at the last two ticks, read once per frame (each read copies out of wasm). */
-  poses: RowPoses;
-  /** Ticks stepped since `poses.latest*` was read; 0 means they are current. */
-  ticksSinceRead: number;
-}
-
-/** A row that has just been built: its drops are at their start poses. */
-function newRow(crowd: Crowd): Row {
-  const chassis = crowd.chassis_poses();
-  const wheels = crowd.wheel_poses();
-  const poses = {
-    previousChassis: chassis,
-    latestChassis: chassis,
-    previousWheels: wheels,
-    latestWheels: wheels,
-    outcomes: crowd.outcomes(),
-  };
-  return { crowd, running: true, poses, ticksSinceRead: 0 };
-}
-
-/** Before a frame's last tick: remembers the poses the cars have now as "previous". */
-function snapshotPrevious(row: Row): void {
-  const { poses, crowd } = row;
-  if (row.ticksSinceRead === 0) {
-    // The cars have not moved since the last read: that read is already the previous pose.
-    poses.previousChassis = poses.latestChassis;
-    poses.previousWheels = poses.latestWheels;
-  } else {
-    poses.previousChassis = crowd.chassis_poses();
-    poses.previousWheels = crowd.wheel_poses();
-  }
-}
-
-/** Reads the cars' latest poses and outcomes once per frame, and only if they have moved. */
-function readLatest(row: Row): void {
-  if (row.ticksSinceRead === 0) {
-    return;
-  }
-  row.poses.latestChassis = row.crowd.chassis_poses();
-  row.poses.latestWheels = row.crowd.wheel_poses();
-  row.poses.outcomes = row.crowd.outcomes();
-  row.ticksSinceRead = 0;
-}
-
-/** Where the viewer is: the run, its checkpoints' policies and the current round. */
+/** Where the viewer is: the run, its stages' panels, the focus and the camera. */
 interface ViewerState {
   run: RunEntry;
-  /** Each checkpoint's policy file text, in training order. */
-  policies: string[];
-  arena: ArenaKind;
-  /** Round 0, 1, 2…: each round flies a new block of drops. */
-  round: number;
-  rows: Row[];
-  finishedAtMs: number | null;
-  /** The committed showcase seeds, or null when the file is absent. */
-  showcase: ShowcaseFile | null;
+  panels: StagePanel[];
+  /** The stage that fills the screen, or null to show them all. */
+  focus: ArenaKind | null;
   /** The tab (stage) the curve shows. */
   tab: StageTab;
-  /** True while the camera follows the best car instead of the crowd's centre. */
-  leaderCamera: boolean;
+  /** What the cameras of the course panels follow. */
+  camera: CameraMode;
+}
+
+/** A stage panel's title on the page, and the rectangle it sits in. */
+interface PanelLabel {
+  element: HTMLButtonElement;
+  text: HTMLElement;
 }
 
 async function start(): Promise<void> {
-  await initWasm();
-  if (Game.floats_per_pose() !== FLOATS_PER_POSE) {
-    throw new Error('The wasm build and the viewer disagree on the pose layout');
-  }
   const status = requireElement('viewer-status');
-  const toggle = requireElement('arena-toggle');
-  const picker = requireElement('stage-select') as HTMLSelectElement;
-  for (const kind of ARENAS) {
-    picker.add(new Option(arenaLabel(kind), kind));
-  }
   const run = await loadNewestRun();
   const curve = await loadCurve(run).catch((error: unknown) => {
     console.error(error);
     return null;
   });
   const showcase = await loadShowcase(run).catch(() => null);
-  const board = createBoard(requireElement('viewer-board'), run);
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
   const arena = createArena(requireElement('viewer'), VIEWER_MAX_PIXEL_RATIO);
-  const arenaView = createArenaView(arena.scene, arena.camera, arena.ground);
+  arena.renderer.setClearColor('#16202b');
+  // The sun's shadow box covers only 30 m around the origin and the crowd casts no shadows, so
+  // the viewer skips the shadow pass (it would run once per panel).
+  arena.renderer.shadowMap.enabled = false;
+  const labels = rowLabels(run);
+  const panels = ARENAS.map((kind, index) =>
+    createStagePanel(arena.scene, {
+      arena: kind,
+      layer: index + 1,
+      policies,
+      rowLabels: labels,
+      carsPerCheckpoint: CARS_PER_CHECKPOINT,
+      firstSeed: showcaseSeed(showcase, kind, 0, CARS_PER_CHECKPOINT),
+      pauseBetweenMs: PAUSE_BETWEEN_MS,
+    }),
+  );
+  const focus = arenaFromUrl(window.location.search);
   const state: ViewerState = {
     run,
-    policies,
-    arena: arenaFromUrl(window.location.search),
-    round: 0,
-    rows: [],
-    finishedAtMs: null,
-    showcase,
-    tab: arenaTab(arenaFromUrl(window.location.search)),
-    leaderCamera: new URLSearchParams(window.location.search).get('camera') === 'leader',
+    panels,
+    focus,
+    tab: arenaTab(focus ?? 'flat'),
+    camera:
+      new URLSearchParams(window.location.search).get('camera') === 'leader' ? 'leader' : 'crowd',
   };
-  startRound(state, state.arena, 0);
-  const panel = createCurvePanel(curve, state, (tab) => {
-    const kind = tabArena(tab);
-    if (kind) {
-      startRound(state, kind, 0);
-    }
-  });
+  const board = createBoard(requireElement('viewer-board'), run);
+  const labelsLayer = requireElement('viewer-panels');
+  const panelLabels = new Map<ArenaKind, PanelLabel>();
   const cameraButton = requireElement('camera-toggle');
+  // A stage runs only while it can be seen: it is in the focus and the tab is showing.
+  const applyRunning = () => {
+    for (const panel of panels) {
+      const shown = state.focus === null || state.focus === panel.arena;
+      setStageRunning(panel, shown && !document.hidden);
+    }
+  };
+  const setFocus = (next: ArenaKind | null) => {
+    state.focus = next;
+    if (next !== null) {
+      state.tab = arenaTab(next);
+    }
+    applyRunning();
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${searchWithArena(window.location.search, next)}`,
+    );
+    curvePanel.select(state.tab);
+    curvePanel.markFocus(next);
+  };
+  const curvePanel = createCurvePanel(
+    curve,
+    state,
+    (tab) => {
+      const kind = tabArena(tab);
+      if (kind) {
+        setFocus(kind);
+      }
+    },
+    () => setFocus(null),
+  );
+  for (const panel of panels) {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.className = 'panel panel-title';
+    element.dataset.arena = panel.arena;
+    const text = document.createElement('span');
+    element.appendChild(text);
+    element.addEventListener('click', () =>
+      setFocus(state.focus === panel.arena ? null : panel.arena),
+    );
+    labelsLayer.appendChild(element);
+    panelLabels.set(panel.arena, { element, text });
+  }
+  setFocus(focus);
   const toggleCamera = () => {
-    state.leaderCamera = !state.leaderCamera;
+    state.camera = state.camera === 'crowd' ? 'leader' : 'crowd';
   };
   cameraButton.addEventListener('click', toggleCamera);
-  // Wheels per car, read from the sim rather than assumed.
-  const wheelPoses = state.rows[0]?.crowd.wheel_poses().length ?? 0;
-  const wheelCount = wheelPoses / (CARS_PER_CHECKPOINT * FLOATS_PER_POSE);
-  const view = createCrowdView(arena.scene, rowLabels(run), CARS_PER_CHECKPOINT, wheelCount);
-  const switchArena = () => startRound(state, otherArena(state.arena), state.round);
-  picker.addEventListener('change', () => {
-    const kind = ARENAS.find((arenaKind) => arenaKind === picker.value);
-    if (kind) {
-      startRound(state, kind, state.round);
-    }
-  });
+  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
+  const perfSteps = requireElement('hud-perf-steps');
   window.addEventListener('keydown', (event) => {
-    if (event.code === 'KeyO') {
-      switchArena();
-    } else if (event.code === 'KeyL') {
+    if (event.code === 'KeyL') {
       toggleCamera();
+    } else if (event.code === 'F3') {
+      event.preventDefault();
+      togglePerfOverlay(perf);
+    } else if (event.code === 'Escape' || event.code === 'Digit0') {
+      setFocus(null);
+    } else if (/^Digit[1-9]$/.test(event.code)) {
+      const kind = ARENAS[Number(event.code.slice(5)) - 1];
+      if (kind) {
+        setFocus(kind);
+      }
     }
   });
-  toggle.addEventListener('click', switchArena);
 
-  startGameLoop(Game.physics_dt_s(), {
-    tick: (lastOfFrame) => {
-      for (const row of state.rows) {
-        if (row.running) {
-          if (lastOfFrame) {
-            snapshotPrevious(row);
-          }
-          row.running = row.crowd.step();
-          row.ticksSinceRead += 1;
-        }
-      }
-    },
-    render: (blend) => {
-      if (arenaView.kind !== state.arena) {
-        // Read the shapes only when the arena changes: each call copies them out of wasm.
-        showArena(arenaView, state.arena, state.rows[0]?.crowd.course_shapes());
-        view.spreadOnGrid = state.arena === 'flat';
-        setText(toggle, `Switch to the ${arenaLabel(otherArena(state.arena)).toLowerCase()}`);
-        picker.value = state.arena;
-        panel.select(arenaTab(state.arena));
-      }
-      const centre = { x: 0, z: 0, cars: 0 };
-      beginCrowdFrame(view);
-      state.rows.forEach((row, index) => {
-        readLatest(row);
-        const { outcomes, latestChassis } = row.poses;
-        // A finished row has stopped: draw it at its last tick, not part-way to it.
-        updateCrowdRow(view, index, row.poses, row.running ? blend : 1);
-        addRunningCars(centre, latestChassis, outcomes);
-        const cells = board[index];
-        if (cells) {
-          setText(cells.landed, String(count(outcomes, CrowdOutcome.Landed)));
-          setText(cells.crashed, String(count(outcomes, CrowdOutcome.Crashed)));
-        }
-      });
-      endCrowdFrame(view);
-      const follows = followsCars(state.arena);
-      setText(cameraButton, state.leaderCamera ? 'Camera: leader (L)' : 'Camera: crowd (L)');
-      if (follows && state.leaderCamera) {
-        const leader = pickCrowdLeader(
-          state.rows.map((row) => ({
-            poses: row.poses.latestChassis,
-            outcomes: row.poses.outcomes,
-          })),
-          FLOATS_PER_POSE,
-        );
-        if (leader) {
-          followCars(arenaView, leader.x, leader.z);
-        }
-      } else if (follows && centre.cars > 0) {
-        followCars(arenaView, centre.x / centre.cars, centre.z / centre.cars);
-      }
-      arena.renderer.render(arena.scene, arena.camera);
-      setText(status, statusText(state));
-      nextRoundWhenDone(state);
-    },
+  // On a slow GPU the resolution steps down by itself (adaptive-quality.ts).
+  const quality = newQuality(arena.renderer.getPixelRatio());
+  let lastFrameStartMs = performance.now();
+  // A hidden tab stops the workers (no stepping, no snapshots); showing it again starts the
+  // frame timing over so the pause is not counted as a slow frame.
+  document.addEventListener('visibilitychange', () => {
+    applyRunning();
+    if (!document.hidden) {
+      lastFrameStartMs = performance.now();
+    }
   });
+
+  let mainMsTotal = 0;
+  let mainFrames = 0;
+
+  const frame = (frameStartMs: number) => {
+    // Ask for the next frame first, so one error cannot stop the viewer for good.
+    requestAnimationFrame(frame);
+    try {
+      const realDtS = Math.min((frameStartMs - lastFrameStartMs) / 1000, MAX_FRAME_S);
+      drawFrame(state, arena, panelLabels, realDtS, perf, perfSteps);
+      setText(cameraButton, state.camera === 'leader' ? 'Camera: leader (L)' : 'Camera: crowd (L)');
+      setText(status, statusText(state));
+      updateBoard(board, state.panels);
+      const frameEndMs = performance.now();
+      mainMsTotal += frameEndMs - frameStartMs;
+      mainFrames += 1;
+      recordFrame(perf, frameEndMs - frameStartMs, frameEndMs);
+      const lowerRatio = recordQualityFrame(quality, frameStartMs - lastFrameStartMs);
+      if (lowerRatio !== null) {
+        setArenaPixelRatio(arena, lowerRatio);
+      }
+      lastFrameStartMs = frameStartMs;
+    } catch (error) {
+      console.error('Nine Lives viewer: error in the frame loop:', error);
+    }
+  };
+  requestAnimationFrame(frame);
 
   Object.assign(window, {
     ninelivesViewer: {
-      checkpointCount: () => state.rows.length,
-      landed: () => totalLanded(state),
-      arena: () => state.arena,
-      courseShapeCount: () => arenaView.shapeCount,
+      checkpointCount: () => run.checkpoints.length,
+      landed: () => panels.reduce((sum, panel) => sum + stageTotals(panel).landed, 0),
+      focus: () => state.focus,
+      /** The focused arena, or 'all'. */
+      arena: () => state.focus ?? 'all',
+      courseShapeCount: (kind?: ArenaKind) =>
+        panels
+          .filter((panel) => kind === undefined || panel.arena === kind)
+          .reduce((sum, panel) => sum + panel.shapeCount, 0),
+      stages: () =>
+        panels.map((panel) => ({
+          arena: panel.arena,
+          round: panel.round,
+          rows: panel.rows.length,
+          landed: stageTotals(panel).landed,
+          crashed: stageTotals(panel).crashed,
+          shapeCount: panel.shapeCount,
+          running: panel.running,
+          stepping: panel.stepping,
+          stepMs: panel.stepMs,
+          visible: state.focus === null || state.focus === panel.arena,
+        })),
       tab: () => state.tab,
-      leaderCamera: () => state.leaderCamera,
-      firstSeed: () => showcaseSeed(state.showcase, state.arena, state.round, CARS_PER_CHECKPOINT),
+      leaderCamera: () => state.camera === 'leader',
+      pixelRatio: () => arena.renderer.getPixelRatio(),
+      mainMsPerFrame: () => (mainFrames > 0 ? mainMsTotal / mainFrames : 0),
+      resetMainTiming: () => {
+        mainMsTotal = 0;
+        mainFrames = 0;
+      },
+      firstSeed: (kind: ArenaKind) => showcaseSeed(showcase, kind, 0, CARS_PER_CHECKPOINT),
     },
   });
 }
 
-/** Builds every checkpoint's crowd for round `round` in `arena`, replacing the old ones.
- * On the flat arena and the generated courses every row flies the same seeds (and so the same
- * course), so rows compare fairly; on the shared obstacle arena and the Gauntlet each row gets
- * its own seeds, so the cars do not sit on top of each other. */
-function startRound(state: ViewerState, arena: ArenaKind, round: number): void {
-  const rows = state.policies.length;
-  const shared = rowsShareSeeds(arena);
-  // Shared-seed arenas open on the committed showcase drops (see showcase.ts).
-  const roundSeed = shared
-    ? BigInt(showcaseSeed(state.showcase, arena, round, CARS_PER_CHECKPOINT))
-    : BigInt(round * CARS_PER_CHECKPOINT * rows);
-  // Build the new crowds first, so a bad file never leaves freed crowds behind.
-  const crowds = state.policies.map((policyJson, index) => {
-    const rowSeed = shared ? 0n : BigInt(index * CARS_PER_CHECKPOINT);
-    return newCrowd(arena, policyJson, roundSeed + rowSeed, CARS_PER_CHECKPOINT);
-  });
-  for (const row of state.rows) {
-    row.crowd.free();
-  }
-  state.rows = crowds.map(newRow);
-  state.arena = arena;
-  state.tab = arenaTab(arena);
-  state.round = round;
-  state.finishedAtMs = null;
-  // Keep the URL in step so a reload stays in this arena.
-  const search = searchWithArena(window.location.search, arena);
-  window.history.replaceState(null, '', `${window.location.pathname}${search}`);
+/** The rectangle the panels share: the window, less the column on the right. */
+function panelArea(): Rect {
+  const narrow = window.innerWidth < NARROW_PX;
+  return {
+    x: 0,
+    y: 0,
+    w: narrow ? window.innerWidth : window.innerWidth - SIDEBAR_PX,
+    h: window.innerHeight,
+  };
 }
 
-/** Once every drop has ended, waits a moment, then flies the next round of drops. */
-function nextRoundWhenDone(state: ViewerState): void {
-  if (state.rows.some((row) => row.running)) {
+/** Draws every visible stage panel into its rectangle of the canvas. */
+function drawFrame(
+  state: ViewerState,
+  arena: ReturnType<typeof createArena>,
+  panelLabels: Map<ArenaKind, PanelLabel>,
+  realDtS: number,
+  perf: ReturnType<typeof createPerfOverlay>,
+  perfSteps: HTMLElement,
+): void {
+  const { renderer, scene } = arena;
+  const rects = layoutPanels(panelArea(), state.focus);
+  // The gaps and the column on the right show the clear colour.
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+  renderer.clear();
+  renderer.setScissorTest(true);
+  let stepMsTotal = 0;
+  for (const panel of state.panels) {
+    const rect = rects.get(panel.arena);
+    const label = panelLabels.get(panel.arena);
+    if (label) {
+      placeLabel(label, rect, panel);
+    }
+    if (!rect) {
+      continue;
+    }
+    stepMsTotal += panel.stepMs;
+    const focused = state.focus === panel.arena;
+    updateStagePanel(panel, realDtS, labelMode(panel.arena, focused));
+    setStageAspect(panel, rect.w, rect.h);
+    aimStageCamera(panel, state.camera);
+    // A course brings its own floor; the endless floor is only for the drop arenas.
+    arena.ground.visible = panel.shapeCount === 0;
+    // three.js counts the viewport's y from the bottom of the canvas.
+    const bottomY = window.innerHeight - (rect.y + rect.h);
+    renderer.setViewport(rect.x, bottomY, rect.w, rect.h);
+    renderer.setScissor(rect.x, bottomY, rect.w, rect.h);
+    renderer.render(scene, panel.camera);
+  }
+  renderer.setScissorTest(false);
+  // The workers' stepping cost is what the F3 "tick" figure shows: all stages together.
+  recordTick(perf, stepMsTotal);
+  perfSteps.hidden = perf.element.hidden;
+  if (!perfSteps.hidden) {
+    perfSteps.textContent = `worker ms per tick: ${state.panels
+      .map((panel) => `${panel.arena} ${panel.stepMs.toFixed(2)}`)
+      .join(' · ')}`;
+  }
+}
+
+/** Which labels a panel shows: all of them when it has the screen to itself; otherwise one
+ * per checkpoint row on the drop grids and none on the courses (where the cars move). */
+function labelMode(arena: ArenaKind, focused: boolean): 'cars' | 'row' | 'off' {
+  if (focused) {
+    return 'cars';
+  }
+  return followsCars(arena) || arena === 'obstacles' ? 'off' : 'row';
+}
+
+/** Puts a panel's title over its rectangle's top-left corner, or hides it. */
+function placeLabel(label: PanelLabel, rect: Rect | undefined, panel: StagePanel): void {
+  label.element.hidden = !rect;
+  if (!rect) {
     return;
   }
-  const nowMs = performance.now();
-  if (state.finishedAtMs === null) {
-    state.finishedAtMs = nowMs;
-  } else if (nowMs - state.finishedAtMs > PAUSE_BETWEEN_S * 1000) {
-    startRound(state, state.arena, state.round + 1);
-  }
+  label.element.style.left = `${rect.x + 8}px`;
+  label.element.style.top = `${rect.y + 8}px`;
+  const totals = stageTotals(panel);
+  const cars = panel.rows.length * CARS_PER_CHECKPOINT;
+  setText(
+    label.text,
+    `${arenaLabel(panel.arena)}\n${totals.landed}/${cars} landed · ${totals.crashed} crashed · round ${Math.max(panel.round, 0) + 1}`,
+  );
 }
 
-/** Adds the position of every car still flying or driving to `centre`, for the camera. */
-function addRunningCars(
-  centre: { x: number; z: number; cars: number },
-  chassis: Float32Array,
-  outcomes: Uint8Array,
-): void {
-  outcomes.forEach((outcome, car) => {
-    if (outcome === CrowdOutcome.Running) {
-      centre.x += chassis[car * FLOATS_PER_POSE] ?? 0;
-      centre.z += chassis[car * FLOATS_PER_POSE + 2] ?? 0;
-      centre.cars += 1;
-    }
-  });
-}
-
-/** The stage tabs and the curve under them: the chart of the selected stage, titled as the
- * plan requires, with a note on tabs whose stage the crowd cannot fly. `select` re-draws. */
+/** The stage tabs, the All tab and the curve under them: the chart of the selected stage,
+ * titled as the plan requires, with a note on tabs whose stage the crowd cannot fly. */
 function createCurvePanel(
   curve: CurveFile | null,
   state: ViewerState,
   onTab: (tab: StageTab) => void,
-): { select: (tab: StageTab) => void } {
+  onAll: () => void,
+): { select: (tab: StageTab) => void; markFocus: (focus: ArenaKind | null) => void } {
   const tabs = requireElement('stage-tabs');
   const chart = requireElement('curve-chart');
   setText(requireElement('curve-title'), CURVE_TITLE);
   const buttons = new Map<StageTab, HTMLButtonElement>();
+  const all = document.createElement('button');
+  all.type = 'button';
+  all.textContent = 'All';
+  all.addEventListener('click', onAll);
+  tabs.appendChild(all);
   const select = (tab: StageTab) => {
     state.tab = tab;
     for (const [name, button] of buttons) {
-      button.setAttribute('aria-pressed', String(name === tab));
+      button.setAttribute('aria-pressed', String(name === tab && state.focus !== null));
     }
     if (!curve) {
       chart.textContent = 'No curve.json: run `python -m ninelives.export --viewer-curve`';
@@ -335,6 +373,12 @@ function createCurvePanel(
     const note = tabArena(tab) ? '' : '<p>No crowd for this stage: curve only.</p>';
     const facts = `<p>${curve.episodes} episodes per point, physics ${curve.physics_hash}</p>`;
     chart.innerHTML = curveSvg(curve, tab) + note + facts;
+  };
+  const markFocus = (focus: ArenaKind | null) => {
+    all.setAttribute('aria-pressed', String(focus === null));
+    for (const [name, button] of buttons) {
+      button.setAttribute('aria-pressed', String(focus !== null && name === state.tab));
+    }
   };
   for (const tab of STAGE_TABS) {
     const button = document.createElement('button');
@@ -348,7 +392,8 @@ function createCurvePanel(
     buttons.set(tab, button);
   }
   select(state.tab);
-  return { select };
+  markFocus(state.focus);
+  return { select, markFocus };
 }
 
 /** A checkpoint's training steps in millions, e.g. "16M". */
@@ -361,58 +406,78 @@ function rowLabels(run: RunEntry): string[] {
   return run.checkpoints.map((entry, index) => `#${index + 1} (${stepsText(entry.steps)})`);
 }
 
-/** The scoreboard cells a checkpoint's counts go in. */
-interface BoardCells {
-  landed: HTMLElement;
-  crashed: HTMLElement;
+/** The scoreboard: one row per checkpoint, one cell per stage with that stage's landed and
+ * crashed counts. */
+interface Board {
+  /** `cells[row][stage]` */
+  cells: HTMLElement[][];
 }
 
-/** Fills `table` with one row per checkpoint and returns each row's count cells. */
-function createBoard(table: HTMLElement, run: RunEntry): BoardCells[] {
-  const header = table.insertAdjacentElement('beforeend', document.createElement('tr'));
-  for (const title of ['Checkpoint', 'Steps', 'Landed', 'Crashed']) {
+/** Fills `table` with one row per checkpoint and one column per stage. */
+function createBoard(table: HTMLElement, run: RunEntry): Board {
+  const header = document.createElement('tr');
+  for (const title of ['Checkpoint', 'Steps', ...ARENAS.map(shortLabel)]) {
     const cell = document.createElement('th');
     cell.textContent = title;
-    header?.appendChild(cell);
+    header.appendChild(cell);
   }
-  return run.checkpoints.map((entry, index) => {
+  table.appendChild(header);
+  const cells = run.checkpoints.map((entry, index) => {
     const row = document.createElement('tr');
-    const cells = [`#${index + 1}`, stepsText(entry.steps), '0', '0'].map((text) => {
+    const texts = [`#${index + 1}`, stepsText(entry.steps), ...ARENAS.map(() => '–')];
+    const made = texts.map((text) => {
       const cell = document.createElement('td');
       cell.textContent = text;
       row.appendChild(cell);
       return cell;
     });
     table.appendChild(row);
-    return { landed: cells[2] as HTMLElement, crashed: cells[3] as HTMLElement };
+    return made.slice(2);
+  });
+  return { cells };
+}
+
+/** A column heading for a stage. */
+function shortLabel(kind: ArenaKind): string {
+  switch (kind) {
+    case 'flat':
+      return 'A';
+    case 'side':
+      return 'B';
+    case 'obstacles':
+      return 'Arena';
+    case 'driving':
+      return 'D';
+    case 'flight':
+      return 'F';
+  }
+}
+
+/** Writes "landed / crashed" for each checkpoint and stage. */
+function updateBoard(board: Board, panels: StagePanel[]): void {
+  board.cells.forEach((row, checkpoint) => {
+    row.forEach((cell, stage) => {
+      const panel = panels[stage];
+      if (panel && panel.rows.length > checkpoint) {
+        setText(cell, `${panel.landed[checkpoint] ?? 0} / ${panel.crashed[checkpoint] ?? 0}`);
+      }
+    });
   });
 }
 
-/** "Run flight-r4: 8 checkpoints at once, 8 drops each, flat arena, round 1". */
+/** "Run flight-r4: 8 checkpoints at once on 5 stages, 8 drops each, all stages". */
 function statusText(state: ViewerState): string {
-  const arena = arenaLabel(state.arena).toLowerCase();
-  const checkpoints = `${state.rows.length} checkpoints at once`;
-  return `Run ${state.run.run_id}: ${checkpoints}, ${CARS_PER_CHECKPOINT} drops each, ${arena}, round ${state.round + 1}`;
-}
-
-/** Cars landed so far, over every checkpoint. */
-function totalLanded(state: ViewerState): number {
-  let total = 0;
-  for (const row of state.rows) {
-    total += count(row.poses.outcomes, CrowdOutcome.Landed);
-  }
-  return total;
-}
-
-/** How many of `outcomes` equal `outcome`. */
-function count(outcomes: Uint8Array, outcome: CrowdOutcome): number {
-  let total = 0;
-  for (const value of outcomes) {
-    if (value === outcome) {
-      total += 1;
-    }
-  }
-  return total;
+  const checkpoints = `${state.run.checkpoints.length} checkpoints at once`;
+  const where = state.focus === null ? 'all stages' : arenaLabel(state.focus).toLowerCase();
+  const reasons = new Set(
+    state.panels.flatMap((panel) => (panel.error === null ? [] : [panel.error])),
+  );
+  const failedCount = state.panels.filter((panel) => panel.error !== null).length;
+  const problem =
+    reasons.size > 0
+      ? ` — ${failedCount === state.panels.length ? 'all stages' : `${failedCount} stage(s)`} failed: ${[...reasons].join('; ')}`
+      : '';
+  return `Run ${state.run.run_id}: ${checkpoints}, ${CARS_PER_CHECKPOINT} drops each, ${state.panels.length} stages, showing ${where}${problem}`;
 }
 
 start().catch((error: unknown) => {

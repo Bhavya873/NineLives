@@ -378,6 +378,14 @@ pub enum TraversalNote {
     },
 }
 
+/// How far before a piece's entry line the approach hint starts, in m.
+const APPROACH_LOOKAHEAD_M: f32 = 80.0;
+/// How far beside a piece's edge the car may be and still count as approaching it, in m.
+const APPROACH_SIDE_MARGIN_M: f32 = 2.0;
+/// The widest angle between the nose and the piece's forward axis for the hint, in rad
+/// (60 degrees).
+const APPROACH_HEADING_MAX_RAD: f32 = core::f32::consts::FRAC_PI_3;
+
 /// Most finished records kept.
 const MAX_FINISHED: usize = 64;
 
@@ -423,6 +431,44 @@ impl TraversalTracker {
     /// Replaces the limits.
     pub fn set_limits(&mut self, limits: ApproachConfig) {
         self.limits = limits;
+    }
+
+    /// The approach hint (`HudField` 26): when a piece with a `v_complete_min_m_s` is
+    /// ahead and the car is slower than it, that piece's `v_complete_min_m_s` in m/s, else
+    /// 0. A piece is "ahead" when the car is before its entry line (no further than
+    /// `APPROACH_LOOKAHEAD_M`), within its width plus `APPROACH_SIDE_MARGIN_M`, and the
+    /// nose points within `APPROACH_HEADING_MAX_RAD` of the piece's forward axis. Reads
+    /// only; it keeps no state, so it cannot change a run. The nearest such piece wins.
+    pub fn approach_hint_m_s(&self, sample: &CarSample) -> f32 {
+        if self.active.is_some() {
+            return 0.0;
+        }
+        let mut nearest: Option<(f32, f32)> = None;
+        for footprint in &self.footprints {
+            if footprint.v_complete_min_m_s <= 0.0 {
+                continue;
+            }
+            let [along_m, across_m] = footprint.local_xz_m(sample.position_m);
+            let distance_m = -along_m;
+            if !(0.0..=APPROACH_LOOKAHEAD_M).contains(&distance_m)
+                || across_m.abs() > 0.5 * footprint.width_m + APPROACH_SIDE_MARGIN_M
+            {
+                continue;
+            }
+            let [fx, fz] = footprint.forward_xz();
+            let nose_xz_len = libm::hypotf(sample.nose_world[0], sample.nose_world[2]).max(1e-6);
+            let aligned = (sample.nose_world[0] * fx + sample.nose_world[2] * fz) / nose_xz_len;
+            if libm::acosf(aligned.clamp(-1.0, 1.0)) > APPROACH_HEADING_MAX_RAD {
+                continue;
+            }
+            let speed_m_s = sample.velocity_m_s[0] * fx + sample.velocity_m_s[2] * fz;
+            if speed_m_s < footprint.v_complete_min_m_s
+                && nearest.is_none_or(|(best_m, _)| distance_m < best_m)
+            {
+                nearest = Some((distance_m, footprint.v_complete_min_m_s));
+            }
+        }
+        nearest.map_or(0.0, |(_, v_min_m_s)| v_min_m_s)
     }
 
     /// Forgets all records and positions (the car was moved).
@@ -699,6 +745,52 @@ mod tests {
             let record = tracker.active().copied();
             assert!(record.is_some_and(|r| r.approach.clean && r.too_slow == expect_too_slow));
         }
+    }
+
+    fn hint_at(x_m: f32, z_m: f32, speed_m_s: f32) -> f32 {
+        let tracker = TraversalTracker::for_course(&course_with_ramp(), limits());
+        let mut car = level_car_at(x_m, z_m);
+        car.velocity_m_s = [speed_m_s, 0.0, 0.0];
+        tracker.approach_hint_m_s(&car)
+    }
+
+    #[test]
+    fn the_hint_names_the_needed_speed_only_when_the_car_is_too_slow() {
+        assert_eq!(hint_at(60.0, 0.0, 8.0), 12.0);
+        assert_eq!(hint_at(60.0, 0.0, 12.0), 0.0);
+        assert_eq!(hint_at(60.0, 0.0, 30.0), 0.0);
+    }
+
+    #[test]
+    fn the_hint_needs_the_piece_to_be_ahead_close_and_in_line() {
+        // Too far (lookahead 80 m), already on the piece, past it, or beside it.
+        assert_eq!(hint_at(10.0, 0.0, 8.0), 0.0);
+        assert_eq!(hint_at(101.0, 0.0, 8.0), 0.0);
+        assert_eq!(hint_at(130.0, 0.0, 8.0), 0.0);
+        assert_eq!(hint_at(60.0, 20.0, 8.0), 0.0);
+        // Just inside the lookahead.
+        assert_eq!(hint_at(100.0 - APPROACH_LOOKAHEAD_M + 1.0, 0.0, 8.0), 12.0);
+        // Driving away from the piece (nose turned more than 60 degrees).
+        let tracker = TraversalTracker::for_course(&course_with_ramp(), limits());
+        let mut away = level_car_at(60.0, 0.0);
+        away.velocity_m_s = [-8.0, 0.0, 0.0];
+        away.nose_world = [-1.0, 0.0, 0.0];
+        assert_eq!(tracker.approach_hint_m_s(&away), 0.0);
+    }
+
+    #[test]
+    fn a_piece_that_takes_any_speed_gives_no_hint() {
+        let tracker = TraversalTracker::empty();
+        assert_eq!(tracker.approach_hint_m_s(&level_car_at(0.0, 0.0)), 0.0);
+    }
+
+    #[test]
+    fn the_hint_is_off_while_a_record_is_active() {
+        let mut tracker = TraversalTracker::for_course(&course_with_ramp(), limits());
+        tracker.update(0, 1.0 / 120.0, &level_car_at(99.0, 0.0));
+        tracker.update(1, 1.0 / 120.0, &level_car_at(101.0, 0.0));
+        assert!(tracker.active().is_some());
+        assert_eq!(tracker.approach_hint_m_s(&level_car_at(101.0, 0.0)), 0.0);
     }
 
     #[test]

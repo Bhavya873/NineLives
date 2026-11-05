@@ -86,7 +86,7 @@ test('a bad course is refused with the piece named', () => {
 });
 
 test('every car is flown by the Hybrid', () => {
-  for (const stage of ['A', 'arena', 'D', 'F', 'gauntlet']) {
+  for (const stage of ['A', 'B', 'arena', 'D', 'F', 'gauntlet']) {
     assert.equal(
       Crowd.for_stage(policyJson, 'realistic', stage, 0n, 2).controller_name(),
       'hybrid',
@@ -95,14 +95,14 @@ test('every car is flown by the Hybrid', () => {
   assert.equal(new Crowd(policyJson, 'realistic', 0n, 1).controller_name(), 'hybrid');
 });
 
-test('the crowd covers Stage A, the arena, Stage D, Stage F and the Gauntlet', () => {
-  for (const stage of ['A', 'arena', 'D', 'F', 'gauntlet']) {
+test('the crowd covers Stages A and B, the arena, Stage D, Stage F and the Gauntlet', () => {
+  for (const stage of ['A', 'B', 'arena', 'D', 'F', 'gauntlet']) {
     const crowd = Crowd.for_stage(policyJson, 'realistic', stage, 0n, 3);
 
     crowd.step();
 
     assert.equal(crowd.count(), 3, stage);
-    assert.equal(crowd.course_shapes() === undefined, stage === 'A', stage);
+    assert.equal(crowd.course_shapes() === undefined, stage === 'A' || stage === 'B', stage);
     assert.equal(crowd.chassis_poses().length, 3 * 7, stage);
   }
 });
@@ -121,6 +121,6 @@ test('a generated course is drawn from its shapes and the cars on it finish', ()
 test('an unknown stage is refused with the valid names', () => {
   assert.throws(
     () => Crowd.for_stage(policyJson, 'realistic', 'Z', 0n, 2),
-    /stage must be one of A, arena, D, F, gauntlet/,
+    /stage must be one of A, B, arena, D, F, gauntlet/,
   );
 });

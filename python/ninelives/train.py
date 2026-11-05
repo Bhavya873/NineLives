@@ -219,6 +219,7 @@ def train(argv: list[str] | None = None) -> RunState:
         config.randomize_mode,
         controller_json(config),
         randomize_share=config.randomize_share,
+        survival_bonus=config.survival_bonus,
     )
     if args.resume:
         model, state = resume_run(config, env, run_dir)

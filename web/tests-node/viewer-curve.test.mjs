@@ -106,9 +106,12 @@ test('tabs map to arenas the crowd can fly', () => {
   assert.equal(tabArena('A'), 'flat');
   assert.equal(tabArena('D'), 'driving');
   assert.equal(tabArena('F'), 'flight');
-  assert.equal(tabArena('B'), null);
+  assert.equal(tabArena('B'), 'side');
+  assert.equal(tabArena('C'), null);
+  assert.equal(tabArena('E'), null);
+  assert.equal(arenaTab('side'), 'B');
   assert.equal(arenaTab('obstacles'), 'A');
-  assert.equal(arenaTab('gauntlet'), 'D');
+  assert.equal(arenaTab('driving'), 'D');
 });
 
 test('showcaseSeed starts on the committed seed and steps by blocks', () => {

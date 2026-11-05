@@ -20,3 +20,16 @@ export function setText(element: HTMLElement, text: string): void {
     element.textContent = text;
   }
 }
+
+/** Moves focus into a dialog and returns a function that gives it back when the dialog closes. */
+export function focusDialog(dialog: HTMLElement, target: HTMLElement = dialog): () => void {
+  const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  target.focus();
+  return () => {
+    if (before && before !== document.body && before.isConnected) {
+      before.focus();
+    } else if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  };
+}

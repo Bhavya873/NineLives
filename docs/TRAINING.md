@@ -68,3 +68,17 @@ Scores alone can hide reward hacking: a policy can stop crashing by hovering unt
 ## After a run
 
 Log every run or chunk in `docs/EXPERIMENTS.md`: date, config, seed, steps, wall time, success per stage, and notes.
+
+## The hover-hack experiment
+
+SPEC 9.11: the same Stage A, Arcade run with a broken and with the fixed reward (about 10 to 13 minutes each at 12 M steps), then a report.
+
+```bash
+cd ~/Developer   # not under an iCloud Desktop (see above)
+python -m ninelives.train --config <repo>/configs/train/hover-broken.yaml --run-id hover-broken
+python -m ninelives.train --config <repo>/configs/train/hover-fixed.yaml  --run-id hover-fixed
+python -m ninelives.hover_experiment --broken runs/hover-broken --fixed runs/hover-fixed \
+    --out results/hover_hack.json --svg docs/images/hover-hack.svg
+```
+
+The broken reward is `survival_bonus: 0.1` in the YAML (Python-only, `NineLivesVecEnv`) plus `reward_overrides: {airborne: 0}`. Results: docs/EXPERIMENTS.md, 2026-11-03.

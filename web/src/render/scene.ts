@@ -150,6 +150,12 @@ export function createArena(container: HTMLElement, maxPixelRatio = 2): Arena {
 }
 
 /** Keeps the canvas and camera matched to the window size. */
+/** Redraws at `ratio` device pixels per CSS pixel (the viewer steps this down on a slow GPU). */
+export function setArenaPixelRatio({ renderer }: Arena, ratio: number): void {
+  renderer.setPixelRatio(ratio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
 function resizeToWindow({ renderer, camera }: Arena): void {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;

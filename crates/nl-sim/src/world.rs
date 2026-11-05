@@ -35,6 +35,7 @@ use crate::diagnostics::{
     ChassisContactPoint, WheelDiagnostics, chassis_contact_points, wheel_diagnostics,
 };
 use crate::events::{EventInputs, EventTracker, SimEvent};
+use crate::floor_hook::FloorNormalHook;
 use crate::forecast::{ForecastSettings, LandingForecast, forecast};
 use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
@@ -324,7 +325,7 @@ impl World {
         );
         // 9. The physics step. Impacts are judged on the speed from just before it.
         let motion_before = MotionBeforeStep::of(&self.physics.bodies[self.car.chassis]);
-        self.physics.step();
+        self.physics.step_with_events(&FloorNormalHook, &());
         self.update_g_load();
         let touching_after = self.wheels_touching();
         let wheels_down_after = count_true(touching_after);
@@ -528,6 +529,21 @@ impl World {
                 entry_speed_m_s,
             });
         }
+    }
+
+    /// The approach hint (`HudField` 26, docs/contracts/survival.md): the
+    /// `v_complete_min_m_s` of the piece the car is driving up to when it is too slow to
+    /// complete it, else 0. Read-only.
+    pub fn approach_hint_m_s(&self) -> f32 {
+        let body = &self.physics.bodies[self.car.chassis];
+        let sample = CarSample {
+            position_m: body.translation().to_array(),
+            velocity_m_s: body.linvel().to_array(),
+            nose_world: (body.rotation() * Vector::X).to_array(),
+            up_world: (body.rotation() * Vector::Y).to_array(),
+            wheels_down: 0,
+        };
+        self.traversal.approach_hint_m_s(&sample)
     }
 
     /// The records of the car's passes over the course's pieces (docs/contracts/
