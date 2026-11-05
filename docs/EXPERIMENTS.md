@@ -103,7 +103,7 @@ Notes:
 
 ### 2026-10-18/19 — M7: full A→E training runs (m7-full-001…003)
 
-`python -m ninelives.train --config configs/train/base.yaml --total-steps 150_000_000 --run-id m7-full-00N` (the runs used `configs/train/m7-full.yaml`, base.yaml with 150M steps, since replaced by the `--total-steps` flag): seed 0, 150M steps planned, all five stages via the curriculum, domain randomization on, 64 envs, ~26k steps/s (150M ≈ 95 min plus evals). Plan agreed with the owner (docs/PLAN.md §3.4): up to 3 runs, then review gate 2.
+`python -m ninelives.train --config configs/train/base.yaml --total-steps 150_000_000 --run-id m7-full-00N` (the runs used `configs/train/m7-full.yaml`, base.yaml with 150M steps, since replaced by the `--total-steps` flag): seed 0, 150M steps planned, all five stages via the curriculum, domain randomization on, 64 envs, ~26k steps/s (150M ≈ 95 min plus evals). Plan agreed with the owner (docs/BUILD-PLAN.md §3.4): up to 3 runs, then review gate 2.
 
 | Run | Code | Steps | Wall | Curriculum reached | Stage A full difficulty, eval (Realistic, 200 seeds) | Outcome |
 |---|---|---|---|---|---|---|
@@ -270,14 +270,14 @@ The `Hybrid` controller (SPEC §8) with the shipped `models/policy.json` (stage-
 - Next: R1, 100M steps on the same config (`--run-id flight-r1`, commit a392011).
 
 ## PD model fix, gain retune, R1/R2 scoring on the new car (2026-10-26)
-No training. Eval only, native release, no randomization. Results: `results/control_upgrade/2026-10-26-pd-model-fix/`.
+No training. Eval only, native release, no randomization. Results: `results/control_upgrade/2026-10-26-pd-model-fix/` (manifest with the per-cell numbers; the raw candidate and Hybrid files were removed in the repo cleanup).
 - Gain sweep on tuning seeds 2,000,000+ (300 per cell, A–F, both modes): kp 7–14 × kd 2.5–5, then tilt-blend bands. Best single pair kp 12 / kd 3.5 (89.6%) cost Stage D 2–4 points; scheduled gains (upright kp 7 / kd 4, tumble kp 12 / kd 3.5, blend 30–60°) 90.7% with D unchanged.
 - Validation (seeds 1,500,000+, 1000 per cell), mean success over 12 cells: old PD 86.74%, fixed PD 90.27%, fixed PD + actuator-aware allocation (`lag_compensation` 0.5) 90.77%.
 - Hybrid with the old PD on the new car: shipped policy 79.42% (Stage F 5–7%), R1 best 87.32%, R1 latest 87.50%, R2 best (4M) 88.00%, R2 latest (50M) 89.04%. R2 latest with the new PD: 89.13%. The Hybrid beats PD on A (+6) and E (+2–3) but loses on F (Realistic 64.7% vs 76.5%, Arcade 62.2% vs 84.7%).
 - Owner decision: ship the fixed PD alone (no Hybrid) and make actuator-aware allocation at `lag_compensation` 0.5 the default. Committed `results/eval_pd_*` and `eval_hybrid_*` regenerated with it (seed 0, 1000 per cell): PD A 66.8/68.7 → 76.0/79.2%, E 86.0/85.0 → 89.6/88.7% (Realistic/Arcade); other cells within 0.5 points.
 
 ## PD CMA-ES tune (2026-10-27)
-No training. Results: `results/control_upgrade/2026-10-27-pd-cma-tune/` (manifest, every candidate's config, per-cell summaries).
+No training. Results: `results/control_upgrade/2026-10-27-pd-cma-tune/` (manifest, per-cell summaries; the raw candidate files were removed in the repo cleanup).
 - Search: `python -m ninelives.tune_pd --generations 30 --popsize 12 --episodes 200 --sigma 0.25 --keep 5`, from the fixed PD with the actuator-aware allocation at 0.5. 12 numbers (PD's 11 gains plus `lag_compensation`); fresh tuning seeds from 2,000,000 each generation; 24 cells (A–F × both modes × plain/randomized); score = mean success − 0.05 per kg of bump air over 8 kg. Wall time 50 min on 8 cores. Objective: repo 0.79–0.81, best 0.88 (gen 0) → 0.918 (gen 29).
 - Validation, seeds 1,500,000+, 1000 per cell, mean success plain / randomized, bump air (worst mode):
 
@@ -371,7 +371,7 @@ Results: `results/baseline_2026-10/` (48 files, README there). PD and Hybrid, st
 - **Not recorded here yet:** the speed sweep (R2's tool is not on main). The viewer landing rates are in the D1 entry below.
 
 ### 2026-10-29 — R2: drive values, suspension limit and per-piece speed survival
-Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_load` (nl-sim examples) and `speed_sweep` (nl-control example); read-only diagnostics in `nl-sim/src/diagnostics.rs`. Results: `results/baseline_2026-10/speed_sweep.*` (today's physics) and `results/speed_sweep_drive_candidate.*`.
+Write-up: `docs/research/speed-survival.md`. Tools: `drive_target`, `suspension_load` (nl-sim examples) and `speed_sweep` (nl-control example); read-only diagnostics in `nl-sim/src/diagnostics.rs`. Results: `results/baseline_2026-10/speed_sweep.*` (today's physics) (the `speed_sweep_drive_candidate` file was removed in the repo cleanup; its numbers are in the write-up).
 - **Drive:** 7200 N per wheel, 800 kW, speed cap 103 m/s (boost 110) and `friction_slip` 1.9 give 0–100 km/h in 1.98 s (today 4.58 s) and a 103 m/s top speed, steady at 100 m/s.
 - **Suspension limit:** the stock car's body first touches at a design load of 3.8 g (last clean run 3.4 g; the contract assumed 3 g). A bump stop starting at 0.14 m with rate 300/s² lifts the clean load to 4.2 g with 0.087 m of rebound, which cuts the 200 km/h ramp-entry radius from 158 m to about 99 m.
 - **Speed sweep (today's physics):** 1,295 crashes in 16,320 runs; concave bottoming 598, bump faces 413, floor contact after flight 244, gap too slow 40. Only `bumps_0.2`, the halfpipe and the barrel flips never crash. The stronger drive barely changes this (1,239 crashes), so survival is a geometry, suspension and crash-rule problem.
@@ -384,7 +384,7 @@ Tools: `suspension_load` (bump stop re-measured: last clean 4.21 g at 30 m/s, fi
 - The residual is a spurious Rapier contact: at touchdown the car's rear corner gets a horizontal normal (0.87, -0.07, 0.49) with a reported 45 m/s, and the solver turns it into a 14 rad/s yaw. Chassis CCD (`claude/roadster-drive`) may remove it.
 - `pd_driving_over_bumps_uses_almost_no_air` kept passing once bumps became longer; with the old 5 m bumps and the stop the PD used 5 to 13 kg depending on the stop's rate (chaotic, no trend).
 - Golden trace: hash only; trajectory unchanged (frozen car, flat ground).
-- **After merging the drive PR** (chassis CCD on, grip 1.9; `results/speed_sweep_after_merge.{json,csv}`, same 15,360 runs): **9 crashes** (7 `landing_slam`, 2 `other_impact`), not 6. Covered pieces 4 (kicker 2, 2 m wall ramp 2); flip plates, which the contract does not cover, 5. CCD did not remove the residual; it moved a few cases, so the survival target (a clean entry up to 200 km/h never crashes) is close but not met: 4 covered-piece crashes remain in 11,520 runs on covered pieces.
+- **After merging the drive PR** (chassis CCD on, grip 1.9; `speed_sweep_after_merge` (file removed in the repo cleanup), same 15,360 runs): **9 crashes** (7 `landing_slam`, 2 `other_impact`), not 6. Covered pieces 4 (kicker 2, 2 m wall ramp 2); flip plates, which the contract does not cover, 5. CCD did not remove the residual; it moved a few cases, so the survival target (a clean entry up to 200 km/h never crashes) is close but not met: 4 covered-piece crashes remain in 11,520 runs on covered pieces.
 ### 2026-10-29 — D1: the viewer flies the Hybrid; viewer landing rates (G1)
 Results: `results/baseline_2026-10/viewer_landing_rates.json`; reproduce with `cargo run --release -p nl-wasm --example viewer_rates -- --checkpoints web/public/checkpoints --out results/baseline_2026-10/viewer_landing_rates.json`. The viewer's `Crowd` now flies the Hybrid (controllers.toml hand-over 120°) with each checkpoint as its AI; before, it flew the raw policy. The example drives that same crowd natively: 8 checkpoints of `flight-r4`, Realistic, 64 cars per stage from seed 0 (crowds of 8, so Stage D and F use 8 generated courses), physics hash `db310175722eef10`, controller hash `dd24c53fe5654c16`.
 
@@ -410,7 +410,7 @@ PR `claude/roadster-drive`. Values from R2a candidate B (`configs/vehicle.toml`)
 - **CCD:** identical results with CCD off and on on every wheel-contact run (flat, seams, ramp kinks) at 100 m/s; CCD only matters for the body, and it stops a 100 m/s car at a wall. The speed sweep has the same 1,239 crashes with CCD on as R2's candidate run without it.
 - **Arcade (double thrust, unlimited air) with Boost held:** 108.7 m/s (391 km/h), under the 110 m/s boost limit; without Boost 103 m/s. The boost fade keeps it bounded (it passed 860 km/h without it). Realistic with Boost 107.4 m/s until the tank runs dry, then 103.
 - **Driver bot:** holds the target speed (within 1 m/s) and stays within 2 m of the line at 10, 30, 45 and 55.6 m/s over 3 seeds with no crash (at 30 and 55.6 m/s: under 0.2 m off, tilt under 2°). No change to the bot was needed.
-- **Speed sweep** (`results/speed_sweep_after_drive.*`, repo config, PD, 20 seeds): **1,239 crashes in 16,320 runs** against 1,295 for the baseline (concave bottoming 609, bump faces 394, floor contact 193, gap 40, landing slam 2, other impact 1). The drive alone does not fix survival: that is G2 pieces and the bump stop.
+- **Speed sweep** (`speed_sweep_after_drive` (file removed in the repo cleanup), repo config, PD, 20 seeds): **1,239 crashes in 16,320 runs** against 1,295 for the baseline (concave bottoming 609, bump faces 394, floor contact 193, gap 40, landing slam 2, other impact 1). The drive alone does not fix survival: that is G2 pieces and the bump stop.
 - **Golden trace:** hash `130c64934abbb1e0` (main after A1) → `621afc64dc3f1fc1`, final position unchanged (418.54468, 0.5930893, −124.57887). The trace runs on a frozen car with its own drive; the hash moves because the snapshot now holds `ccd_enabled` and the chassis has CCD.
 - **Tests adjusted:** 0–100 km/h range, lateral-g window at 20 m/s, power-limit test (now at 80 m/s), Boost test (long runway, bounded and above the cap), Stage C seed (87 → 49), corkscrew speeds (20 and 25 m/s, entry speed held), PD bump-strip test and the PD tuner's `driving_air_kg` check (both at 40% throttle: at full throttle Arcade PD burns 21 kg over the bumps strip against the 8 kg limit; for G3). `eval_pd_A_realistic` regenerated (success 80.7% → 82.1%); G3 regenerates all `eval_*`.
 

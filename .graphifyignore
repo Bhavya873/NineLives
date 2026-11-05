@@ -1,9 +1,0 @@
-# Paths graphify skips when it maps the project (on top of .gitignore).
-# Agent worktrees are full copies of the repo.
-.claude/
-# Generated or data files, not source.
-web/src/wasm/
-web/public/checkpoints/
-results/
-models/
-graphify-out/

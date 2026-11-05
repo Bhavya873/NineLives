@@ -52,7 +52,7 @@ cd web && npm install && npm run wasm && npm run dev    # http://localhost:5173
 
 ## Results
 
-Success rate on fixed seeds, 1000 episodes per bar: four wheels down, quiet throttle, held for a second.
+Success rate on fixed seeds, 1000 episodes per bar: four wheels down, quiet throttle, held for a second. Every number comes from `results/eval_*.json` (see [results/README.md](results/README.md)).
 
 ![Success rate by stage and mode: Off, PD, Hybrid](docs/images/results-by-stage.svg)
 
@@ -155,4 +155,4 @@ npx playwright install chromium && npm run test:e2e
 
 - Inspired by the thruster-assisted Roadster demo of 2026-10-15: [TechCrunch](https://techcrunch.com/2026/10/15/tesla-reveals-spacex-powered-roadster-that-flies-and-falls-with-style/), [Glitchwire](https://glitchwire.com/news/the-tesla-roadster-hovered-flipped-and-landed-the-air-tank-weighed-260-kilos/). No affiliation; no logos or names from either company.
 - Built with [rapier](https://rapier.rs/) (physics), [three.js](https://threejs.org/) (graphics), [Stable-Baselines3](https://stable-baselines3.readthedocs.io/) PPO, [PyO3](https://pyo3.rs/) / maturin and wasm-bindgen.
-- Specification, plan, decisions and every training run: [SPEC.md](SPEC.md), [docs/PLAN.md](docs/PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md), [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), [docs/TECHNICAL.md](docs/TECHNICAL.md), [docs/TRAINING.md](docs/TRAINING.md).
+- Specification, plan, decisions and every training run: [SPEC.md](SPEC.md), [docs/BUILD-PLAN.md](docs/BUILD-PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md), [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), [docs/TECHNICAL.md](docs/TECHNICAL.md), [docs/TRAINING.md](docs/TRAINING.md). Index of all docs: [docs/README.md](docs/README.md); index of result files: [results/README.md](results/README.md).

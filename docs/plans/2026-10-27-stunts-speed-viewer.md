@@ -1,5 +1,7 @@
 # Plan v3: g-meter, planned stunts, roadster drive with obstacles that never crash, better training viewer
 
+> Historical. This plan is finished; its contracts now live in `docs/contracts/`. The Gauntlet it mentions is retired.
+
 > Approved by the owner on 2026-10-27 and committed in the contracts PR (Gate 0). The contracts in §1 are split out, one file each, under `docs/contracts/`.
 > v3 folds in the owner's review: an exact survival contract, approach kept apart from outcome, conservative stunt authorization, crash-rule safeguards, AI-envelope handling, stronger tests, and one dependency graph with gates.
 

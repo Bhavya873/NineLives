@@ -1,6 +1,6 @@
 # Training guide
 
-How to train, resume and inspect the Nine Lives policy on your own machine (ADR-003, PLAN §5.3). Training runs on the CPU; checkpoints stay in `runs/` (gitignored) on that machine.
+How to train, resume and inspect the Nine Lives policy on your own machine (ADR-003, BUILD-PLAN §5.3). Training runs on the CPU; checkpoints stay in `runs/` (gitignored) on that machine.
 
 ## One-time setup (macOS, Linux)
 

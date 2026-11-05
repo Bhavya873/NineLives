@@ -1,5 +1,7 @@
 # Nine Lives — Build Plan and Deliverables
 
+> Historical. This is the plan the build followed (M0 to M8). The current rules are in `SPEC.md`, `CLAUDE.md` and `docs/DECISIONS.md`. The Gauntlet course mentioned here is retired (DECISIONS 2026-11-03).
+
 Status: **approved 2026-10-17** · Based on `SPEC.md` (v1, 2026-10-16), `CLAUDE.md` and the owner's answers of 2026-10-17
 
 This plan turns the spec into an ordered build. It doesn't restate the spec. Section numbers like §7.4 point into `SPEC.md`. The owner approved it on 2026-10-17.
