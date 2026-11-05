@@ -41,7 +41,7 @@ const CHECKER_TEXTURE_PX = 64;
 const EXPOSURE = 1.15;
 
 /** The arena every view draws into (see `createArena`). */
-export interface Arena {
+interface Arena {
   renderer: WebGLRenderer;
   scene: Scene;
   camera: PerspectiveCamera;

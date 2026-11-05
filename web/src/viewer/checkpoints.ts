@@ -5,7 +5,7 @@ import { type CurveFile, parseCurve } from './curve.ts';
 import type { ShowcaseFile } from './showcase.ts';
 
 /** One exported checkpoint: where its file is and how far training had got. */
-export interface CheckpointEntry {
+interface CheckpointEntry {
   file: string;
   steps: number;
 }

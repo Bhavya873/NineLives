@@ -1,6 +1,6 @@
 // The title screen: Play, How it works and a link to the training viewer. The game's clock
 // waits behind it. `?play` (any value) skips it, which the tests and shared links use.
-import { focusDialog } from '../dom.ts';
+import { focusDialog } from '../shared/dom.ts';
 
 /** True when the page address does not ask to skip the title. */
 export function titleWanted(params: URLSearchParams): boolean {
@@ -8,7 +8,7 @@ export function titleWanted(params: URLSearchParams): boolean {
 }
 
 /** The title's elements and whether it is up. */
-export interface Title {
+interface Title {
   root: HTMLElement;
   help: HTMLElement;
   visible: boolean;

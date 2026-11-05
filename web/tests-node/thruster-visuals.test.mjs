@@ -6,9 +6,9 @@ import { test } from 'node:test';
 
 import { Box3, Group, Vector3 } from 'three';
 
-import { airGaugeText, createAirGauge, updateAirGauge } from '../src/hud/air-gauge.ts';
-import { mapPercent } from '../src/hud/nozzle-map.ts';
-import { readNozzleLayout } from '../src/nozzle-layout.ts';
+import { airGaugeText, createAirGauge, updateAirGauge } from '../src/ui/air-gauge.ts';
+import { mapPercent } from '../src/ui/nozzle-map.ts';
+import { readNozzleLayout } from '../src/wasm-bridge/nozzle-layout.ts';
 import { buildCarBody } from '../src/render/car-mesh.ts';
 import { createFlames, updateFlames } from '../src/render/flames.ts';
 import { BODY_BEVEL_M, bodyTopM, flankBottomM } from '../src/render/car-shape.ts';

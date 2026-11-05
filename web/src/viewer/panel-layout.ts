@@ -27,7 +27,7 @@ const ROWS: { arena: ArenaKind; weight: number }[][] = [
 ];
 
 /** Gap between panels, in CSS pixels. */
-export const PANEL_GAP_PX = 4;
+const PANEL_GAP_PX = 4;
 
 /** The rectangle of every panel inside `area`, or only `focus`'s (filling `area`) when a stage
  * is focused. Stages that are not drawn are absent from the result. */

@@ -3,7 +3,7 @@
 // us through events; this module never starts a stunt itself. No wasm import on purpose, so
 // it runs in plain Node and builds before the planner lands. Event kinds are the numbers
 // frozen in docs/contracts/events-hud.md.
-import { FLOATS_PER_EVENT } from './sim-events.ts';
+import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
 
 /** A queued request that is not resolved within this many seconds is dropped. */
 export const STUNT_REQUEST_TIMEOUT_S = 3;
@@ -54,7 +54,7 @@ export const STUNT_NAME: Record<number, string> = {
 };
 
 /** One waiting request. */
-export interface StuntRequest {
+interface StuntRequest {
   code: StuntCodeValue;
   /** When it was pressed, in seconds on the caller's clock. */
   requestedAtS: number;
@@ -63,7 +63,7 @@ export interface StuntRequest {
 }
 
 /** At most one request waits; a newer press replaces it. */
-export interface StuntQueue {
+interface StuntQueue {
   pending: StuntRequest | null;
 }
 
@@ -128,7 +128,7 @@ export function stuntToastForEvents(events: Float32Array): string | null {
 }
 
 /** True if the batch resolves the pending request (authorized or refused). */
-export function resolvesRequest(events: Float32Array): boolean {
+function resolvesRequest(events: Float32Array): boolean {
   for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
     if (events[start] === StuntEvent.Start || events[start] === StuntEvent.Refused) {
       return true;

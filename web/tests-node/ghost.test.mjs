@@ -15,7 +15,7 @@ import {
   resetGhostRecorder,
   sampleGhost,
   saveGhostIfBetter,
-} from '../src/ghost.ts';
+} from '../src/game/ghost.ts';
 
 function memoryStorage(initial = {}) {
   const data = new Map(Object.entries(initial));

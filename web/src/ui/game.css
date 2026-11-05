@@ -1,0 +1,520 @@
+/* styles of the game page (index.html): layout, hud, title, results and game-over screens */
+/* One look for every HUD piece: these tokens set its colours, sizes and spacing. */
+:root {
+  --edge: 16px;
+  --radius: 10px;
+  --panel: rgb(12 17 24 / 62%);
+  --panel-solid: rgb(12 17 24 / 90%);
+  --line: rgb(255 255 255 / 12%);
+  --text: #f2f5f8;
+  --muted: rgb(242 245 248 / 62%);
+  --accent: #e0542f;
+  --air: #8fd0ff;
+  --danger: #ff5a4f;
+  --link: #ffb59e;
+  --heart: #e8343a;
+  --heart-light: #ff8a8f;
+  --heart-edge: #3a0a0c;
+  --heart-lost: #2b2f36;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  /* Matches BACKDROP_HORIZON in src/render/backdrop.ts. */
+  background: #2a3d52;
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+}
+#game {
+  position: fixed;
+  inset: 0;
+}
+.hud {
+  position: fixed;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+[hidden] {
+  display: none !important;
+}
+
+/* Top-left: the nine hearts, what flies the car, and short notes. */
+#hud-top-left {
+  position: fixed;
+  left: var(--edge);
+  top: var(--edge);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+#hud-top-left > .hud {
+  position: static;
+}
+#hud-hearts {
+  display: flex;
+  gap: 3px;
+}
+.heart svg {
+  display: block;
+  width: 27px;
+  height: 24px;
+}
+.heart .o {
+  fill: var(--heart-edge);
+}
+.heart .f {
+  fill: var(--heart);
+}
+.heart .h {
+  fill: var(--heart-light);
+}
+.heart.lost .f,
+.heart.lost .h {
+  fill: var(--heart-lost);
+}
+#hud-status {
+  font-size: 14px;
+}
+#hud-alert {
+  font-size: 13px;
+  color: #ffd9a8;
+}
+
+/* Top-right: the keys, always on screen. */
+#hud-keys {
+  right: var(--edge);
+  top: var(--edge);
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 12px;
+  font-size: 13px;
+}
+#hud-keys dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+#hud-keys dd {
+  margin: 0;
+}
+
+/* Bottom-left: the dashboard, with the nozzle map beside speed and air. */
+#hud-dash {
+  left: var(--edge);
+  bottom: var(--edge);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+#hud-nozzles {
+  /* nozzle-map.ts sizes it from the nozzle positions, in metres. */
+  position: relative;
+  flex: none;
+}
+#hud-nozzles .car-outline {
+  /* nozzle-map.ts sets the inset so the outline matches the nozzle dots. */
+  position: absolute;
+  border: 2px solid rgb(255 255 255 / 40%);
+  border-radius: 12px 12px 7px 7px;
+}
+.nozzle-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: #d6ecff;
+  box-shadow: 0 0 8px 2px var(--air);
+}
+.dash-readouts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#hud-speed {
+  font-size: 34px;
+  font-weight: 650;
+  line-height: 1;
+}
+#hud-speed small {
+  margin-left: 4px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+}
+#hud-speed.fast {
+  color: #ffb347;
+}
+#hud-g {
+  font-size: 13px;
+  color: var(--muted);
+}
+#hud-g-track {
+  width: 120px;
+  height: 6px;
+  margin: 4px 0;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 15%);
+}
+#hud-g-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #d6ecff;
+}
+#hud-g[data-level='warn'] #hud-g-fill {
+  background: #ffb347;
+}
+#hud-g[data-level='high'] #hud-g-fill {
+  background: #ff6b5b;
+}
+#hud-g-live {
+  font-weight: 600;
+  color: #fff;
+}
+#hud-g-record,
+#hud-too-slow,
+#hud-envelope {
+  font-size: 13px;
+  color: #ffd9a8;
+}
+#hud-air {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+#hud-air-track {
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 15%);
+  overflow: hidden;
+}
+#hud-air-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--air);
+}
+#hud-air.low #hud-air-fill {
+  background: var(--danger);
+  animation: low-air-flash 0.6s steps(2, jump-none) infinite;
+}
+@keyframes low-air-flash {
+  to {
+    opacity: 0.25;
+  }
+}
+
+/* Bottom-right: a link to the training viewer, with the wind above it when there is any. */
+#hud-watch {
+  right: var(--edge);
+  bottom: var(--edge);
+  color: var(--text);
+  font-size: 14px;
+  text-decoration: none;
+  pointer-events: auto;
+}
+#hud-watch:hover,
+#hud-watch:focus-visible {
+  background: var(--panel-solid);
+  color: var(--link);
+}
+#hud-wind {
+  right: var(--edge);
+  bottom: 60px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+#hud-wind-arrow,
+#hud-wind-arrow svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+#hud-toast {
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+#hud-perf {
+  /* F3 (src/hud/perf-overlay.ts): fps and ms per tick and per frame. */
+  right: var(--edge);
+  top: 200px;
+  font-size: 13px;
+}
+
+/* Esc: the game stops until Esc again. */
+#paused {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 16px 28px;
+  background: var(--panel-solid);
+  text-align: center;
+}
+#paused h2 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.06em;
+}
+#paused p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+#paused a {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--link);
+  font-size: 14px;
+  pointer-events: auto;
+}
+
+/* All nine lives gone: a black screen to restart from. */
+#game-over {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #000;
+  text-align: center;
+}
+#game-over .wordmark {
+  margin: 0 0 18px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+#game-over h2 {
+  margin: 0;
+  font-size: 44px;
+  letter-spacing: 0.06em;
+}
+#game-over p {
+  margin: 0;
+  color: var(--muted);
+}
+#restart {
+  padding: 10px 34px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--text);
+  font: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#game-over a {
+  color: var(--link);
+  font-size: 14px;
+}
+
+/* Stunt-ready hint, under the other top-left notes. */
+#hud-stunt-ready {
+  font-size: 13px;
+  color: #b8f0c4;
+}
+
+/* The keys list can fold away on small screens. */
+#hud-keys-toggle {
+  display: none;
+  position: fixed;
+  left: var(--edge);
+  bottom: 132px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* The title screen: the game's clock waits behind it. */
+#title {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: radial-gradient(ellipse at 50% 40%, #1c2b3d 0%, #070b10 75%);
+  text-align: center;
+  animation: title-in 0.6s ease-out;
+}
+@keyframes title-in {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+#title .wordmark {
+  margin: 0;
+  font-size: 56px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+#title .tagline {
+  margin: 0;
+  max-width: 34em;
+  color: var(--muted);
+}
+#title-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+#title button,
+#title a.button {
+  padding: 10px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
+  color: var(--text);
+  font: inherit;
+  font-size: 17px;
+  text-decoration: none;
+  cursor: pointer;
+}
+#title-play {
+  border: 0;
+  background: var(--accent);
+  font-weight: 600;
+}
+#title-help {
+  max-width: 36em;
+  padding: 12px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+  font-size: 14px;
+}
+#title-help p {
+  margin: 0 0 8px;
+}
+
+/* Results: the game-over list and the T overlay share one look. */
+#results {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgb(0 0 0 / 72%);
+  text-align: center;
+}
+#results h2 {
+  margin: 0;
+  font-size: 32px;
+  letter-spacing: 0.06em;
+}
+#results p {
+  margin: 0;
+  color: var(--muted);
+}
+.results-list {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 22px;
+  margin: 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.results-list dt {
+  color: var(--muted);
+}
+.results-list dd {
+  margin: 0;
+}
+
+/* Phones: the keys sit above the dashboard instead of beside the hearts. */
+@media (max-width: 640px) {
+  #hud-keys {
+    top: auto;
+    right: auto;
+    left: var(--edge);
+    bottom: 132px;
+    font-size: 12px;
+  }
+  #hud-wind {
+    bottom: 132px;
+  }
+  /* The dashboard fills the bottom edge, so the viewer link moves to the free top-right. */
+  #hud-watch {
+    top: var(--edge);
+    bottom: auto;
+  }
+  .heart svg {
+    width: 20px;
+    height: 18px;
+  }
+}
+/* Small screens: the keys start folded; the Keys button opens them. */
+@media (max-width: 640px) {
+  #hud-keys-toggle {
+    display: block;
+  }
+  #hud-keys[data-collapsed='true'] {
+    display: none;
+  }
+  #hud-keys {
+    bottom: 166px;
+  }
+  #title .wordmark {
+    font-size: 36px;
+  }
+}
+/* Reduced motion (SPEC §11.4): no animations or transitions anywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  #hud-air.low #hud-air-fill {
+    animation: none;
+  }
+}

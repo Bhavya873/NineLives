@@ -4,13 +4,13 @@
 // never darkens the view. The maths is pure so tests run without a browser.
 
 /** The scale's top, in g; the needle pins here. */
-export const G_METER_MAX_G = 8;
+const G_METER_MAX_G = 8;
 /** From this g the readout is amber; it matches the reward's soft limit (3 g). */
-export const G_METER_WARN_G = 3;
+const G_METER_WARN_G = 3;
 /** From this g the readout is red. */
-export const G_METER_HIGH_G = 6;
+const G_METER_HIGH_G = 6;
 
-export type GLevel = 'calm' | 'warn' | 'high';
+type GLevel = 'calm' | 'warn' | 'high';
 
 /** Needle position, 0 (0 g) to 1 (full scale). Bad numbers read as 0. */
 export function gNeedleFraction(g: number): number {

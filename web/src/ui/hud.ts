@@ -1,7 +1,8 @@
-// The on-screen display's text (SPEC §11.5): the status line, a short alert and the speed. The air gauge, nozzle map and toasts have their own files.
-// It reads plain numbers and writes text; it never touches physics.
+// The HUD's text (SPEC §11.5): the status line, a short alert and the speed. The air gauge,
+// nozzle map and toasts have their own files. It reads plain numbers and writes text;
+// it never touches physics.
 
-import { requireElement, setText } from '../dom.ts';
+import { requireElement, setText } from '../shared/dom.ts';
 import { isFast } from './approach-hud.ts';
 import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
@@ -70,7 +71,7 @@ export interface HudValues {
 }
 
 /** The HUD's elements, looked up once at start-up. */
-export interface Hud {
+interface Hud {
   /** The speed number (its "km/h" unit is fixed in the page). */
   speed: HTMLElement;
   status: HTMLElement;
@@ -99,13 +100,13 @@ export function updateHud(hud: Hud, values: HudValues): void {
 
 /** The status line: the mode and the course section. The thrusters always fly
  * themselves, so the controller is not shown. */
-export function statusText(values: HudValues): string {
+function statusText(values: HudValues): string {
   const mode = MODE_TEXT[values.mode] ?? '';
   return [mode, courseText(values)].filter(Boolean).join(', ');
 }
 
 /** A short note while something is unavailable: respawning, or why Hop won't fire. */
-export function alertText(values: HudValues): string {
+function alertText(values: HudValues): string {
   if (values.crashed) {
     return 'Respawning…';
   }
@@ -116,7 +117,7 @@ export function alertText(values: HudValues): string {
 }
 
 /** The course section (SPEC §11.5), e.g. "Checkpoint 2/6"; empty on flat ground. */
-export function courseText(values: HudValues): string {
+function courseText(values: HudValues): string {
   if (values.finished) {
     return 'Finished';
   }

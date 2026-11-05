@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { URLSearchParams } from 'node:url';
 
-import { createGPeakTracker, formatG, updateGPeak } from '../src/hud/g-meter.ts';
+import { createGPeakTracker, formatG, updateGPeak } from '../src/ui/g-meter.ts';
 import {
   createRunStats,
   recordRunEvents,
@@ -12,10 +12,10 @@ import {
   resultsRows,
   stuntBreakdown,
   stuntTotal,
-} from '../src/hud/run-stats.ts';
-import { stuntReadyNames, stuntReadyText } from '../src/hud/stunt-ready.ts';
-import { titleWanted } from '../src/hud/title.ts';
-import { stuntReadyMaskFromSim } from '../src/stunt-adapter.ts';
+} from '../src/ui/run-stats.ts';
+import { stuntReadyText } from '../src/ui/stunt-ready.ts';
+import { titleWanted } from '../src/ui/title.ts';
+import { stuntReadyMaskFromSim } from '../src/wasm-bridge/stunt-adapter.ts';
 
 const FLOATS = 5;
 function event(kind, ...rest) {
@@ -113,7 +113,6 @@ test('the stunt-ready hint lists the keys a mask allows', () => {
   assert.equal(stuntReadyText(0), '');
   assert.equal(stuntReadyText(0b1111), 'Stunt ready: Q E Z B');
   assert.equal(stuntReadyText(0b0100), 'Stunt ready: Z');
-  assert.deepEqual(stuntReadyNames(0b1001), ['Barrel roll left', 'Back flip']);
 });
 
 test('an older wasm without stunt_ready_mask reads as nothing ready', () => {

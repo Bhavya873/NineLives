@@ -3,12 +3,12 @@
 // vector (the way the air moves, in m/s, +Y up; the sim's `HudField.WindXMS/WindZMS`)
 // and the camera's yaw. With no wind the readout stays hidden.
 
-import { setText } from '../dom.ts';
+import { setText } from '../shared/dom.ts';
 
 /** Below this speed (m/s) the wind counts as off and the readout hides. */
-export const WIND_OFF_BELOW_M_S = 0.5;
+const WIND_OFF_BELOW_M_S = 0.5;
 /** From this speed (m/s) up the wind is a storm rather than a breeze. */
-export const STORM_FROM_M_S = 12;
+const STORM_FROM_M_S = 12;
 
 /**
  * The camera's yaw in radians from the direction it looks along (any length, world

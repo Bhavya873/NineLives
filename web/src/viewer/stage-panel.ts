@@ -67,7 +67,7 @@ export interface StagePanel {
 }
 
 /** What a panel needs to start. */
-export interface StagePanelConfig {
+interface StagePanelConfig {
   arena: ArenaKind;
   layer: number;
   policies: string[];
@@ -308,7 +308,7 @@ function addRunningCars(
 }
 
 /** How many of `outcomes` equal `outcome`. */
-export function count(outcomes: Uint8Array, outcome: CrowdOutcome): number {
+function count(outcomes: Uint8Array, outcome: CrowdOutcome): number {
   let total = 0;
   for (const value of outcomes) {
     if (value === outcome) {

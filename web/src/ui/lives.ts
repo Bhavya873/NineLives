@@ -1,7 +1,7 @@
 // The nine lives: a row of pixel hearts, one emptied per crash, and the black game-over
 // screen once all nine are gone. It reads the sim's crash count; it never touches physics.
 
-import { focusDialog, setText } from '../dom.ts';
+import { focusDialog, setText } from '../shared/dom.ts';
 import { formatTime, type HudValues } from './hud.ts';
 
 /** Lives per run: the game's name. */
@@ -28,7 +28,7 @@ const HEART_PIXELS = [
 const PIXEL_CLASS: Record<string, string> = { o: 'o', f: 'f', h: 'h' };
 
 /** The hearts, the game-over screen and where this run's counts started. */
-export interface Lives {
+interface Lives {
   hearts: HTMLElement[];
   gameOver: HTMLElement;
   summary: HTMLElement;
@@ -69,7 +69,7 @@ export function createLives(row: HTMLElement, gameOver: HTMLElement, summary: HT
 }
 
 /** Lives left in this run, from the sim's crash count. */
-export function livesLeft(lives: Lives, values: HudValues): number {
+function livesLeft(lives: Lives, values: HudValues): number {
   return Math.max(0, LIVES - (values.crashes - lives.crashesAtStart));
 }
 
@@ -104,7 +104,7 @@ export function restartLives(lives: Lives, values: HudValues): void {
 }
 
 /** This run's saves and time, for the game-over screen. */
-export function runSummary(lives: Lives, values: HudValues): string {
+function runSummary(lives: Lives, values: HudValues): string {
   const saves = values.saves - lives.savesAtStart;
   const time = formatTime(values.timeS - lives.timeAtStartS);
   const savesText = saves === 1 ? '1 save' : `${saves} saves`;

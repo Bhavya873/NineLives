@@ -11,8 +11,8 @@ import {
   approachHintText,
   tooSlowWarning,
   updateTooSlow,
-} from '../src/hud/approach-hud.ts';
-import { formatG, gLevel, gNeedleFraction } from '../src/hud/g-meter.ts';
+} from '../src/ui/approach-hud.ts';
+import { formatG, gLevel, gNeedleFraction } from '../src/ui/g-meter.ts';
 import {
   G_RECORD_KEY,
   createGRecord,
@@ -20,7 +20,7 @@ import {
   recordLandings,
   recordLine,
   recordPeak,
-} from '../src/hud/g-record.ts';
+} from '../src/ui/g-record.ts';
 import { burstCount, emitBurst, newSparkField, stepSparks } from '../src/render/sparks.ts';
 
 function memoryStorage(initial = {}) {

@@ -16,7 +16,7 @@ const GRAVITY_M_S2 = 9.81;
 /** Scrape normal speed at which the burst is full size. */
 const FULL_BURST_NORMAL_M_S = 4;
 
-export interface SparkField {
+interface SparkField {
   /** x, y, z per spark. */
   position: Float32Array;
   velocity: Float32Array;

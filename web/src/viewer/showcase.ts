@@ -41,13 +41,8 @@ export function arenaTab(kind: ArenaKind): StageTab {
   }
 }
 
-/** The tab named by `text`, if any. */
-export function tabFromText(text: string | null): StageTab | null {
-  return STAGE_TABS.find((tab) => tab === text) ?? null;
-}
-
 /** How one block of drops went, as flown by the best and the first checkpoint. */
-export interface BlockResult {
+interface BlockResult {
   firstSeed: number;
   size: number;
   bestLanded: number;
@@ -79,7 +74,7 @@ function isBetter(block: BlockResult, chosen: BlockResult): boolean {
 }
 
 /** One committed showcase entry. */
-export interface ShowcaseEntry {
+interface ShowcaseEntry {
   first_seed: number;
   size: number;
   best_landed: number;

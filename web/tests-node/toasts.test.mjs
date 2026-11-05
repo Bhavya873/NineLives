@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createToasts, showNoAirIfNew, showToast, toastForEvents } from '../src/hud/toasts.ts';
+import { createToasts, showNoAirIfNew, showToast, toastForEvents } from '../src/ui/toasts.ts';
 import { CrashCode, EventKind } from './load-wasm.mjs';
 
 /** The sim's flipped mark (150°), in radians. */

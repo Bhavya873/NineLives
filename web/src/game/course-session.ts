@@ -2,10 +2,10 @@
 // the run itself; this only swaps meshes to match it.
 import type { Group, Mesh, Scene } from 'three';
 
-import { swapCourseView } from './render/course-view.ts';
+import { swapCourseView } from '../render/course-view.ts';
 
 /** The drawn course. */
-export interface CourseSession {
+interface CourseSession {
   scene: Scene;
   /** The arena's endless floor, hidden while a course (with its own floor) is up. */
   ground: Mesh;

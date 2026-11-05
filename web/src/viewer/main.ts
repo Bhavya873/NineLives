@@ -6,13 +6,13 @@
 // renderer and one scene, with every stage drawn into its own rectangle of the canvas, and one
 // pool of instanced meshes per stage. The stage tabs, the number keys, a click on a panel's
 // title or `?arena=…` focus one panel; Esc or the All tab tiles them again.
-import { requireElement, setText } from '../dom.ts';
+import { requireElement, setText } from '../shared/dom.ts';
 import {
   createPerfOverlay,
   recordFrame,
   recordTick,
   togglePerfOverlay,
-} from '../hud/perf-overlay.ts';
+} from '../ui/perf-overlay.ts';
 import { createArena, setArenaPixelRatio } from '../render/scene.ts';
 import { newQuality, recordQualityFrame } from './adaptive-quality.ts';
 import {

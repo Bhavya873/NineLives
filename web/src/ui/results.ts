@@ -1,5 +1,5 @@
-// The results screen: a definition list of a run's numbers (hud/run-stats.ts), shown in
-// the game-over screen and, with T, as an overlay in the middle of a run.
+// The results screen: a definition list of a run's numbers (run-stats.ts), shown in
+// the game-over screen and, with Tab, as an overlay in the middle of a run.
 
 /** Fills `list` with one label and one value per row. */
 export function renderResults(list: HTMLElement, rows: Array<[string, string]>): void {

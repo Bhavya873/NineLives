@@ -12,7 +12,7 @@ import {
   Vector3,
 } from 'three';
 
-import type { NozzlePlace } from '../nozzle-layout.ts';
+import type { NozzlePlace } from '../wasm-bridge/nozzle-layout.ts';
 import { SIDE_PORT_RADIUS_M, buildNozzlePort, portPositionM, portSurface } from './nozzle-ports.ts';
 
 /** Flame length at full throttle. */
@@ -27,7 +27,7 @@ const FLAME_MAX_OPACITY = 0.85;
 const FLAME_COLOUR = 0xd6ecff;
 
 /** One nozzle's flame. */
-export type Flame = Mesh<ConeGeometry, MeshBasicMaterial>;
+type Flame = Mesh<ConeGeometry, MeshBasicMaterial>;
 
 /** The way three.js cones point before they are turned toward the exhaust. */
 const CONE_AXIS = new Vector3(0, 1, 0);

@@ -2,7 +2,7 @@
 // which way its gas leaves, in the car's body frame (+X forward, +Y up, +Z right).
 // The flames and the HUD's nozzle map both draw from this one reader.
 
-/** Numbers per nozzle in the layout; main.ts checks it against the wasm build. */
+/** Numbers per nozzle in the layout; layout-check.ts checks it against the wasm build. */
 export const FLOATS_PER_NOZZLE = 6;
 
 /** One nozzle's place on the car, in nozzle order. */
