@@ -1,0 +1,106 @@
+/* Racing paper: the colours, fonts and the ticket tile shared by the game and the viewer pages. */
+
+/* Barlow and Barlow Condensed, latin subset, SIL Open Font License (see src/fonts/OFL.txt). */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/barlow-condensed-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/barlow-condensed-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/barlow-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/barlow-latin-600-normal.woff2') format('woff2');
+}
+
+:root {
+  /* paper and ink; text on cream is ink (about 14:1) or one of the dark accents below */
+  --cream: #f1ead8;
+  --cream-deep: #e2d8bc;
+  --ink: #1b1a17;
+  --ink-soft: #55503f; /* 6.7:1 on cream, for small labels */
+  /* accents: all three reach 4.5:1 as text on cream */
+  --orange: #b8400a;
+  --teal: #0b6762;
+  --red: #b3261e;
+  /* the same hues, light enough to read on the dark scene or on ink */
+  --orange-lit: #ff8a4c;
+  --teal-lit: #5fd6cc;
+  --red-lit: #ff6b5f;
+  --font-text: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  --tile-border: 2px;
+  --tile-notch: 14px;
+  --edge: 16px;
+}
+
+/* The ticket: flat cream, 2px ink border, square corners, top-right corner folded. */
+.tile {
+  position: relative;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border: var(--tile-border) solid var(--ink);
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-variant-numeric: tabular-nums;
+  /* cuts the corner away; ::after draws the fold and the diagonal edge */
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--tile-notch)) 0,
+    100% var(--tile-notch),
+    100% 100%,
+    0 100%
+  );
+}
+.tile::after {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--tile-border));
+  right: calc(-1 * var(--tile-border));
+  width: var(--tile-notch);
+  height: var(--tile-notch);
+  background: linear-gradient(
+    to bottom left,
+    transparent 0 46%,
+    var(--ink) 46% 58%,
+    var(--cream-deep) 58% 100%
+  );
+  pointer-events: none;
+}
+/* Big numbers and titles. */
+.tile-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+/* A small caps label above or beside a value. */
+.tile-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+/* The solid accent: ink text on a rally-orange ticket. */
+.tile-accent {
+  background: var(--orange-lit);
+}
+.tile-danger {
+  color: var(--red);
+}

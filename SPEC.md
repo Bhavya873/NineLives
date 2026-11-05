@@ -33,7 +33,7 @@ On 2026-10-15 Tesla revealed a Roadster with a SpaceX-developed package of 10 co
 1. A deterministic 3D physics sim of a car with 10 thrusters and an air tank, written once in Rust and used for both training and the browser game.
 2. A classical baseline controller (PD attitude control + thruster allocation).
 3. An RL policy (PPO) trained in that sim that auto-fires the thrusters to recover from launches, flips and knocks, then lands on all four wheels.
-4. A browser game: drive a 3D obstacle course, toggle the controller between Off / PD / AI, switch Realistic / Arcade modes, see every nozzle fire.
+4. A browser game: drive a 3D obstacle course, toggle the controller between Off / PD / AI, switch Limited air / Unlimited air modes (the `realistic` / `arcade` presets), see every nozzle fire.
 5. A reproducible evaluation that compares Off vs PD vs AI on fixed seeds, with charts for the README.
 6. A documented reward-hacking experiment ("the hover hack") and its fix.
 
@@ -130,7 +130,7 @@ ninelives/
 ├── web/
 │   ├── package.json, vite.config.ts, tsconfig.json
 │   ├── index.html
-│   └── src/ (main.ts, render/, hud/, input/, ghost/, wasm/)
+│   └── src/ (main.ts, render/, hud/, input/, wasm/)
 ├── configs/
 │   ├── vehicle.toml           # chassis, wheels, nozzles, tank
 │   ├── modes.toml             # realistic, arcade
@@ -556,32 +556,32 @@ class Game {
   build_hash(): string;
 }
 ```
-`InputFrame`: throttle (i8), steer (i8), bit flags (hop, boost, chaos, reset, manual nozzle bits). It is identical to what the ghost recorder stores.
+`InputFrame`: throttle (i8), steer (i8), bit flags (hop, boost, chaos, reset, manual nozzle bits).
 
 ### 11.2 Main loop
 - `requestAnimationFrame` with a fixed-step accumulator: `tick()` at 120 Hz, at most 8 ticks per frame (drop time beyond that). The renderer interpolates between the last two poses.
 - The policy runs inside wasm (no JS inference).
 
 ### 11.3 Controls
+Shown in the key card (top-right, folds with its Keys button; folded at first on phones).
+
 | Key | Action |
 |---|---|
-| W / ↑ | throttle |
-| S / ↓ | brake / reverse |
+| W S / ↑ ↓ | throttle, brake / reverse |
 | A D / ← → | steer |
 | Space | Hop |
 | Shift | Boost |
-| R | reset to the last checkpoint (the `reset` bit in the InputFrame) |
-| C | Chaos (random knock) |
-| X | Drop test: throw the car into a random Stage A start (§9.6), to watch the controller save it |
-| M | toggle Realistic / Arcade |
-| V | cycle wind: Off → Breeze → Storm (`?wind=breeze` or `?wind=storm` picks the starting level) |
-| T | cycle controller: Off → PD → AI (AI once its policy has loaded). The game starts with PD. Manual is not in the cycle; it stays reachable for debugging only through `set_controller("manual")` |
 | Q / E | request a barrel roll left / right (11.8) |
 | Z / B | request a front flip / back flip (11.8) |
-| G | toggle ghost |
-| Tab | results so far (pauses like Esc; Esc or Tab closes) |
+| X | Drop test: throw the car into a random Stage A start (§9.6), to watch the controller save it |
+| R | respawn at the last checkpoint (the `reset` bit in the InputFrame) |
+| M | toggle Limited air / Unlimited air (`realistic` / `arcade`) |
+| V | cycle wind: Off → Breeze → Storm (`?wind=breeze` or `?wind=storm` picks the starting level) |
+| Esc | pause |
+| F3 | frame-rate overlay |
 | 1–0 | fire nozzles 0–9 (only when the controller is Manual, set through the API) |
-| Esc | pause / menu |
+
+The game flies PD alone (`?controller=hybrid` loads the policy and flies PD + AI); there is no key to change the controller.
 
 ### 11.4 Visuals
 - Low-poly generic sports car (no brand shapes) in a **lab arena**: a blue-grey checkered floor that fades into a dark sky dome (its horizon is the fog colour, so there is no edge), neutral light, soft shadows from one directional light, and plain-coloured, flat-shaded course pieces (ramps, blocks), like a physics simulator's test arena.
@@ -590,20 +590,18 @@ class Game {
 - Respect `prefers-reduced-motion`: no camera shake, fewer particles.
 
 ### 11.5 HUD
-- **Top-left:** mode, controller, course section.
-- **Bottom-left:** speed, and the air gauge (∞ in Arcade) with a red flash below 15%.
-- **Bottom-right:** an attitude ball (roll/pitch), spin rate, and a top-down **nozzle map** of the car with 10 dots glowing by throttle.
-- **Top-right:** saves, crashes, time, Hop cooldown.
-- **Under the stats:** a wind arrow (relative to the camera) with Off / Breeze / Storm and the speed, hidden with no wind; streaks in the air show the wind too.
-- **G-meter:** a gauge with the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the headline peak of the stunt window (the smoothed peak capped by the raw `HudField.PeakGLoad`, which shows in the tooltip); amber from 3 g, red from 6 g, and the view is never darkened. The best peak is kept in `localStorage` (`ninelives.g.v1`), with per-stunt bests for the session shown after a landing. Approach HUD: speed turns amber above 200 km/h, a too-slow warning follows `TooSlowFallback`, Scrapes throw sparks, and an "AI outside envelope" badge shows while `PolicyOutOfEnvelope` is 1.
-- **Centre toasts:** "SAVE" (with air used), "CRASH" (with cause), "NO AIR".
+Racing paper look: every readout is a flat cream ticket with a 2 px ink border, square corners and one folded corner (`web/src/ui/theme.css`; Barlow and Barlow Condensed, self-hosted). No blur, glow or translucency. Four zones:
+- **Top-left:** the nine hearts.
+- **Top-right:** the key card (11.3, folds) and the "Watch AI training" link.
+- **Bottom-left:** the gauge card: the air mode ("Limited air" or "Unlimited air", with the course section, e.g. "Checkpoint 2/6"), speed in km/h (orange above 200 km/h) and the air bar (∞ with unlimited air, red and flashing below 15%).
+- **Bottom-centre, only while it matters:** the stunt-ready hint (while airborne and a stunt would be taken), the g-meter (while airborne or above 1.6 g, held 2.5 s) and the top-down nozzle map (while a nozzle fires, held 1.5 s). Bottom-right: the wind arrow with Off / Breeze / Storm, hidden with no wind.
+- **G-meter:** the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the headline peak of the stunt window (the smoothed peak capped by the raw `HudField.PeakGLoad`, which shows in the tooltip); amber from 3 g, red from 6 g. The best peak is kept in `localStorage` (`ninelives.g.v1`), with per-stunt bests for the session shown after a landing.
+- **Messages (centre-low), one stack of tickets:** toasts ("Saved with 14.3 kg of air", "Flip saved ...", "Crashed: ...", "Out of air", stunt landings such as "Back flip! max 3.8 g"; crashes and no air in red), the approach hint ("need N km/h") and the too-slow warning, the Hop note, the new-record line, and an "AI outside envelope" badge while `PolicyOutOfEnvelope` is 1. Scrapes throw sparks.
 
 ### 11.6 Screens and features
 - **Title screen:** Play, "How it works", and a link to the training viewer. The game's clock waits behind it; `?play` skips it. (Mode and controller pickers are not built: M toggles the mode, the game flies PD.)
-- **Results screen** (Tab in a run, and on the game-over screen): saves, air used, peak g (with the contact spike), stunts landed by kind, time and the best spike ever. The Gauntlet is not part of the game (DECISIONS 2026-11-03).
-- **Ghost (as built):** record the chassis pose at 10 Hz of run time (rounded to 1 mm, at most 300 s) and replay it as a translucent car body in the next run. The best run (most saves, then longest) is stored in `localStorage` (`ninelives.ghost.v1:<course>`, one per course; drop tests are not recorded; every read and write in try/catch; an unknown shape is dropped) at game over and on page hide. G shows or hides it. A pose replay needs no second `Game`, no seed and no build-hash check: it draws where the car was, it does not re-simulate.
-- **Results tab:** shows the committed SVG charts from `results/`.
-- **Training viewer** (`viewer.html`): watch a crowd of 64 translucent cars fly the same 64 episodes (eval seeds 0–63) with checkpoint 1, 2, 3… of the newest exported run, auto-advancing, with each checkpoint's landed, crashed and still-flying counts (landed: the episode succeeded, or on a drop ran out of time after a save without crashing, so a policy that still blows air while parked shows its landings). One wasm `Crowd` per checkpoint flies every car as a full `Episode`, and **every car is flown by the Hybrid** (`build_controller("hybrid", …)`, the hand-over tilt from `controllers.toml`) with the checkpoint as its AI, as the game and the eval run it: PD flies until the car tips past the hand-over, so the viewer shows what the policy adds to PD. `ninelives.export --viewer` writes the checkpoint files plus `checkpoints/index.json`. `Crowd.for_stage(policy, mode, stage, first_seed, count)` covers five stages: `A` (Stage A drops in the flat arena, M6), `arena` (Stage A drops in the **obstacle arena**, M7, `courses/arena.json`), `D` (the driver bot on the generated course of `first_seed`), `F` (the bot rolling onto the flip plate of a generated straight) and `gauntlet` (the Stage D bot on `courses/gauntlet.json`; the viewer does not show it). In D and F the cars of a crowd share the course of the first seed, so the viewer draws one course (`episode::course_for_stage(variation, scenarios, stage, seed)` returns the course a stage runs on, or none on flat ground); their seeds vary the driver's speed. The viewer shows every stage at once (see *All stages at once* below) and `?arena=flat|side|obstacles|driving|flight` focuses one; `Crowd.on_course(policy, mode, first_seed, count, course_json)` drops Stage A cars onto any course. `Crowd.course_shapes()` hands the viewer the shapes, drawn by the game's course renderer with the endless floor hidden; on the courses the camera follows the cars. The obstacle arena's pieces sit within about 40 m of the centre (ramp feet 6 m out, walls 31.5 m), inside the area where Stage A drops first touch ground (90% within 15 m, farthest 31 m of 256 seeds), so drops meet them. Cars share the one arena, so they are drawn at their true positions, not on the grid. The viewer landing rates under the current physics are recorded in `results/baseline_2026-10/viewer_landing_rates.json` (`cargo run --release -p nl-wasm --example viewer_rates`). The game links to it from a "Watch AI training" button in the bottom-right corner (top-right on phones) and from the pause menu; the viewer's "Back to the game" link returns.
+- **Pause** (Esc): a ticket with the way to the training viewer. **Game over** (all nine hearts lost): a plain page with the number of saves and a Restart button; no stats list. The Gauntlet is not part of the game (DECISIONS 2026-11-03). The results screen and the ghost run were removed (DECISIONS 2026-11-05).
+- **Training viewer** (`viewer.html`): watch a crowd of 64 translucent cars fly the same 64 episodes (eval seeds 0–63) with checkpoint 1, 2, 3… of the newest exported run, auto-advancing, with each checkpoint's landed, crashed and still-flying counts (landed: the episode succeeded, or on a drop ran out of time after a save without crashing, so a policy that still blows air while parked shows its landings). One wasm `Crowd` per checkpoint flies every car as a full `Episode`, and **every car is flown by the Hybrid** (`build_controller("hybrid", …)`, the hand-over tilt from `controllers.toml`) with the checkpoint as its AI, as the game and the eval run it: PD flies until the car tips past the hand-over, so the viewer shows what the policy adds to PD. `ninelives.export --viewer` writes the checkpoint files plus `checkpoints/index.json`. `Crowd.for_stage(policy, mode, stage, first_seed, count)` covers five stages: `A` (Stage A drops in the flat arena, M6), `arena` (Stage A drops in the **obstacle arena**, M7, `courses/arena.json`), `D` (the driver bot on the generated course of `first_seed`), `F` (the bot rolling onto the flip plate of a generated straight) and `gauntlet` (the Stage D bot on `courses/gauntlet.json`; the viewer does not show it). In D and F the cars of a crowd share the course of the first seed, so the viewer draws one course (`episode::course_for_stage(variation, scenarios, stage, seed)` returns the course a stage runs on, or none on flat ground); their seeds vary the driver's speed. The viewer shows every stage at once (see *All stages at once* below) and `?arena=flat|side|obstacles|driving|flight` focuses one; `Crowd.on_course(policy, mode, first_seed, count, course_json)` drops Stage A cars onto any course. `Crowd.course_shapes()` hands the viewer the shapes, drawn by the game's course renderer with the endless floor hidden; on the courses the camera follows the cars. The obstacle arena's pieces sit within about 40 m of the centre (ramp feet 6 m out, walls 31.5 m), inside the area where Stage A drops first touch ground (90% within 15 m, farthest 31 m of 256 seeds), so drops meet them. Cars share the one arena, so they are drawn at their true positions, not on the grid. The viewer landing rates under the current physics are recorded in `results/baseline_2026-10/viewer_landing_rates.json` (`cargo run --release -p nl-wasm --example viewer_rates`). The game links to it from a "Watch AI training" ticket in the top-right corner and from the pause menu; the viewer's "Back to the game" link returns.
 
 - **Training viewer additions (G5):** a chart of `web/public/checkpoints/<run>/curve.json`, titled exactly **"Checkpoint evaluation under current physics"**: the 8 committed checkpoints flown under the Hybrid in the current physics (`python -m ninelives.export --viewer-curve`, 200 episodes per stage, Realistic, seeds from 0), with the physics, controller-config, git and per-checkpoint policy hashes in the file. It is not a historical training curve. A to F stage tabs choose the stage the chart shows; a leader camera (key L, a button or `?camera=leader`) follows the furthest-along car on the course arenas (D, F); and committed showcase seeds (`showcase.json`, chosen by `web/scripts/choose-showcase-seeds.mjs`) give each tab with a shared-seed crowd (A, D, F) a reproducible drop. Stages B, C and E have no crowd binding, so those tabs show the curve only. If the checkpoints change, re-run the export and the chooser.
 
@@ -701,7 +699,7 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 - [x] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
-- [x] Ghost, title screen, results tab, reduced motion, the performance overlay, static deploy (Docker build not verified end to end, see README "Not verified").
+- [x] Title screen, reduced motion, the performance overlay, static deploy (Docker build not verified end to end, see README "Not verified").
 - [x] The hover-hack experiment (9.11): both runs, numbers and a height chart (`results/hover_hack.json`, `docs/images/hover-hack.svg`). Frame traces instead of video clips; see docs/EXPERIMENTS.md.
 - [x] README: pitch, screenshots (no GIF), how it works, results charts, the hover hack, limits, how to run, credits and sources.
 
@@ -730,7 +728,7 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 ## 15. Future ideas (not v1)
 - AI autopilot that also drives.
 - Pressure-dependent thrust and a heat model.
-- Downloadable ghost runs and a shared leaderboard.
+- A shared leaderboard.
 - Comparing RL with model-predictive control.
 
 ## 16. References

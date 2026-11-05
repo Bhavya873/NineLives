@@ -23,9 +23,7 @@ cd web && npm install && npm run wasm && npm run dev    # http://localhost:5173
 | Q / E | barrel roll left / right (the planner only agrees if the car can also land) |
 | Z / B | front / back flip |
 | X | drop test: throw the car into a random Stage A start and watch it save |
-| G | show or hide the ghost of your best run |
-| Tab | results so far (pauses like Esc) |
-| M, V | Realistic / Arcade air, wind level |
+| M, V | Limited air / Unlimited air, wind level |
 | R, Esc, F3 | respawn, pause, frame-rate overlay |
 
 **Watch AI training** (the link in the corner, or `viewer.html`) replays eight checkpoints of the policy at once: a crowd of cars per checkpoint, dropped from the same starts, so you can see the same drop go from a crash to a clean landing as training goes on.
@@ -154,5 +152,6 @@ npx playwright install chromium && npm run test:e2e
 ## Credits and sources
 
 - Inspired by the thruster-assisted Roadster demo of 2026-10-15: [TechCrunch](https://techcrunch.com/2026/10/15/tesla-reveals-spacex-powered-roadster-that-flies-and-falls-with-style/), [Glitchwire](https://glitchwire.com/news/the-tesla-roadster-hovered-flipped-and-landed-the-air-tank-weighed-260-kilos/). No affiliation; no logos or names from either company.
+- Fonts: [Barlow and Barlow Condensed](https://github.com/jpt/barlow) (SIL Open Font License 1.1, latin subset, self-hosted in `web/src/fonts/` with the licence text).
 - Built with [rapier](https://rapier.rs/) (physics), [three.js](https://threejs.org/) (graphics), [Stable-Baselines3](https://stable-baselines3.readthedocs.io/) PPO, [PyO3](https://pyo3.rs/) / maturin and wasm-bindgen.
 - Specification, plan, decisions and every training run: [SPEC.md](SPEC.md), [docs/BUILD-PLAN.md](docs/BUILD-PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md), [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), [docs/TECHNICAL.md](docs/TECHNICAL.md), [docs/TRAINING.md](docs/TRAINING.md). Index of all docs: [docs/README.md](docs/README.md); index of result files: [results/README.md](results/README.md).
