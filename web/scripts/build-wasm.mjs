@@ -7,7 +7,7 @@
 // Needs `wasm-bindgen` on the PATH, at the same version as the wasm-bindgen
 // crate in Cargo.lock (install with `cargo install wasm-bindgen-cli --version <x>`).
 import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const isRelease = process.argv.includes('--release');
@@ -28,7 +28,9 @@ run(
   repoDir,
 );
 
-const wasmFile = join(repoDir, 'target', 'wasm32-unknown-unknown', profileDir, 'nl_wasm.wasm');
+// CARGO_TARGET_DIR moves cargo's output; follow it (relative paths are from the repo).
+const targetDir = resolve(repoDir, process.env.CARGO_TARGET_DIR ?? 'target');
+const wasmFile = join(targetDir, 'wasm32-unknown-unknown', profileDir, 'nl_wasm.wasm');
 run('wasm-bindgen', [wasmFile, '--target', 'web', '--out-dir', outDir], repoDir);
 
 if (isRelease) {

@@ -23,6 +23,10 @@ const CAR_REACH_M: f32 = 3.5;
 /// Every piece stays this far inside the bounds, so free driving rarely meets the edge.
 const MIN_EDGE_MARGIN_M: f32 = 300.0;
 
+/// Solid pieces keep at least this much clear floor between them, in m (a car row may sit
+/// just past a ramp lip, so it is small).
+const MIN_PIECE_GAP_M: f32 = 5.0;
+
 fn playground() -> CourseSpec {
     CourseSpec::from_json_str(PLAYGROUND_JSON).unwrap()
 }
@@ -95,7 +99,7 @@ fn the_playground_has_every_zone_but_no_lines_or_gaps() {
         count(Surface::Ramp) >= 15 + 4 * 2,
         "ramps, kickers, wall ramps and halfpipe walls"
     );
-    assert!(count(Surface::Obstacle) >= 20, "car rows, bumps and walls");
+    assert!(count(Surface::Obstacle) >= 30, "car rows, bumps and walls");
     assert!(count(Surface::LandingPad) >= 5);
     assert!(count(Surface::KickPlate) >= 4);
     let corkscrews = spec.pieces.iter();
@@ -139,6 +143,54 @@ fn every_piece_sits_well_inside_the_bounds() {
                     shape.piece
                 );
             }
+        }
+    }
+}
+
+/// Horizontal box (min x, min z, max x, max z) around every solid shape of each piece.
+fn piece_footprints() -> Vec<(usize, [f32; 4])> {
+    let mut boxes: Vec<(usize, [f32; 4])> = Vec::new();
+    for shape in obstacles() {
+        let Some(piece) = shape.piece else { continue };
+        let mut footprint = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+        for corner in world_corners(&shape) {
+            footprint[0] = footprint[0].min(corner.x);
+            footprint[1] = footprint[1].min(corner.z);
+            footprint[2] = footprint[2].max(corner.x);
+            footprint[3] = footprint[3].max(corner.z);
+        }
+        match boxes.iter_mut().find(|(index, _)| *index == piece) {
+            Some((_, merged)) => {
+                merged[0] = merged[0].min(footprint[0]);
+                merged[1] = merged[1].min(footprint[1]);
+                merged[2] = merged[2].max(footprint[2]);
+                merged[3] = merged[3].max(footprint[3]);
+            }
+            None => boxes.push((piece, footprint)),
+        }
+    }
+    boxes
+}
+
+#[test]
+fn the_playground_is_spread_out_so_no_two_pieces_touch() {
+    let spec = playground();
+    let footprints = piece_footprints();
+    let is_car_row = |index: usize| matches!(spec.pieces[index], PieceSpec::CarRow { .. });
+
+    for (i, (first, a)) in footprints.iter().enumerate() {
+        for (second, b) in &footprints[i + 1..] {
+            // The car park is a block of rows on purpose; everything else keeps clear.
+            if is_car_row(*first) && is_car_row(*second) {
+                continue;
+            }
+            let gap_x = (a[0] - b[2]).max(b[0] - a[2]);
+            let gap_z = (a[1] - b[3]).max(b[1] - a[3]);
+            assert!(
+                gap_x.max(gap_z) >= MIN_PIECE_GAP_M,
+                "pieces {first} and {second} are {:.1} m apart",
+                gap_x.max(gap_z)
+            );
         }
     }
 }

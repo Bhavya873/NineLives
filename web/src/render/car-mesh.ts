@@ -28,8 +28,8 @@ import {
   warpToBodyShape,
 } from './car-shape.ts';
 
-const WHEEL_RADIUS_M = 0.34;
-const WHEEL_WIDTH_M = 0.26;
+export const WHEEL_RADIUS_M = 0.34;
+export const WHEEL_WIDTH_M = 0.26;
 /** The glass cabin is narrower than the body, like a real car's. */
 const CABIN_WIDTH_M = 1.34;
 const CABIN_BEVEL_M = 0.09;
@@ -84,10 +84,15 @@ const trimGeometry = mergeParts([
 ]);
 const headlightGeometry = mergeParts(headlights());
 const taillightGeometry = mergeParts(taillights());
-const tyreGeometry = new CylinderGeometry(WHEEL_RADIUS_M, WHEEL_RADIUS_M, WHEEL_WIDTH_M, 14);
+export const tyreGeometry = new CylinderGeometry(WHEEL_RADIUS_M, WHEEL_RADIUS_M, WHEEL_WIDTH_M, 14);
 /** Rim radius: the tyre's sidewall shows as a dark band around it. */
 const RIM_RADIUS_M = 0.23;
-const rimGeometry = new CylinderGeometry(RIM_RADIUS_M, RIM_RADIUS_M, WHEEL_WIDTH_M + 0.01, 14);
+export const rimGeometry = new CylinderGeometry(
+  RIM_RADIUS_M,
+  RIM_RADIUS_M,
+  WHEEL_WIDTH_M + 0.01,
+  14,
+);
 /** Five spokes across the rim's outer faces, so a turning wheel shows its spin. */
 const spokeGeometry = mergeOrThrow(
   [0, 1, 2, 3, 4].map((index) => {
