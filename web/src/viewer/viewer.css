@@ -1,23 +1,35 @@
-/* styles of the training viewer page (viewer.html) */
+/* Styles of the training viewer page (viewer.html): Racing paper tickets over the dark scene.
+   Tokens and the .tile ticket come from src/ui/theme.css (linked first by viewer.html). A tile is clipped to its notched
+   shape, so focus rings and inset marks stay inside it. */
+
 html,
 body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  /* the scene's clear colour (main.ts) */
   background: #16202b;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-text);
 }
 #viewer {
   position: fixed;
   inset: 0;
 }
-.panel {
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: rgba(12, 18, 26, 0.75);
-  color: #e8eef5;
-  font-size: 14px;
+/* display rules below would otherwise beat the hidden attribute */
+[hidden] {
+  display: none !important;
 }
+button.tile {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: -5px;
+}
+
 /* The titles of the stage panels, laid over the canvas by the page. */
 #viewer-panels {
   position: fixed;
@@ -27,19 +39,28 @@ body {
 .panel-title {
   position: absolute;
   pointer-events: auto;
-  padding: 4px 10px;
-  border: 1px solid #3a4a5c;
-  font: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 20px 5px 10px;
   font-size: 13px;
-  cursor: pointer;
-  font-variant-numeric: tabular-nums;
-  text-align: left;
-  white-space: pre-line;
-  line-height: 1.3;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 .panel-title:hover {
-  background: rgba(30, 44, 60, 0.9);
+  background: var(--cream-deep);
 }
+.panel-heading {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.panel-detail {
+  color: var(--ink-soft);
+}
+
 /* The column on the right: status, tabs, camera, curve, board, help. */
 #viewer-side {
   position: fixed;
@@ -48,82 +69,205 @@ body {
   bottom: 0;
   width: 336px;
   box-sizing: border-box;
-  padding: 16px 16px 16px 0;
+  padding: var(--edge) var(--edge) var(--edge) 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow-y: auto;
   pointer-events: none;
 }
 #viewer-side > * {
   pointer-events: auto;
+  flex: none;
 }
-#viewer-board {
-  border-spacing: 6px 3px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+
+/* The headline ticket. */
+#viewer-status {
+  margin: 0;
+  padding: 8px 22px 8px 12px;
+  font-size: 19px;
+  line-height: 1.15;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* Tabs: a strip of numbered stubs, torn along a dashed edge. The digit is the key. */
+#stage-tabs {
+  display: flex;
+  padding: 0;
+}
+#stage-tabs button {
+  position: relative;
+  flex: 1;
+  min-height: 44px;
+  padding: 14px 0 2px;
+  border: 0;
+  border-left: 2px dashed var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  cursor: pointer;
+}
+#stage-tabs button:first-child {
+  border-left: 0;
+}
+#stage-tabs button[data-key]::before {
+  content: attr(data-key);
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+#stage-tabs button:hover {
+  background: var(--cream-deep);
+}
+#stage-tabs button[aria-pressed='true'] {
+  background: var(--orange-lit);
+}
+#stage-tabs button[aria-pressed='true']::before {
+  color: var(--ink);
+}
+
+#camera-toggle {
+  padding: 8px 22px 8px 12px;
+  font-size: 16px;
+}
+#camera-toggle:hover {
+  background: var(--cream-deep);
+}
+
+#curve-title {
+  margin: 0 0 4px;
   font-size: 12px;
 }
+#curve-chart svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+#curve-chart p {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+/* The chart's marks: ink on cream, teal for the line, orange for the best checkpoint. */
+.chart-grid {
+  stroke: var(--ink-soft);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.chart-text {
+  fill: var(--ink-soft);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.chart-line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 2.5;
+}
+.chart-dot {
+  fill: var(--cream);
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+.chart-best {
+  fill: var(--orange);
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+/* The checkpoint board: a ruled table with condensed numerals. */
+#viewer-board {
+  border-collapse: separate;
+  border-spacing: 0;
+  padding: 6px 12px 8px;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+}
 #viewer-board th {
-  color: #a9b6c4;
-  font-weight: 500;
+  padding: 2px 4px 3px;
+  border-bottom: 2px solid var(--ink);
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   text-align: left;
+}
+#viewer-board td {
+  padding: 2px 4px;
+  border-bottom: 1px dotted var(--ink-soft);
+}
+#viewer-board tr:last-child td {
+  border-bottom: 0;
 }
 #viewer-board td:nth-child(n + 2),
 #viewer-board th:nth-child(n + 2) {
   text-align: right;
 }
+
 #viewer-help {
-  color: #a9b6c4;
+  color: var(--ink-soft);
   font-size: 13px;
+  line-height: 1.35;
 }
-#stage-tabs {
-  display: flex;
-  gap: 4px;
+#viewer-help p {
+  margin: 0 0 6px;
 }
-#stage-tabs button,
-#camera-toggle {
-  border: 1px solid #3a4a5c;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-#stage-tabs button[aria-pressed='true'] {
-  background: #9fd1ff;
-  color: #0c121a;
-}
-#curve-title {
-  margin: 0 0 4px;
-  font-size: 13px;
+#viewer-help a {
+  color: var(--teal);
   font-weight: 600;
 }
-#curve-chart p {
-  margin: 4px 0 0;
-  color: #a9b6c4;
-  font-size: 12px;
-}
+
+/* F3: the frame rate and the workers' stepping cost, in the same ticket. */
 #hud-perf,
 #hud-perf-steps {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 13px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
 }
 #hud-perf {
   top: 8px;
 }
 #hud-perf-steps {
-  top: 44px;
+  top: 46px;
 }
+
 @media (max-width: 899px) {
   #viewer-side {
     width: 280px;
   }
-}
-a {
-  color: #9fd1ff;
+  #viewer-status {
+    font-size: 16px;
+  }
+  #hud-perf,
+  #hud-perf-steps {
+    font-size: 13px;
+  }
+  #viewer-board {
+    padding: 6px 6px 8px;
+    font-size: 12.5px;
+  }
+  #viewer-board th {
+    padding: 2px 2px 3px;
+    font-size: 9.5px;
+    letter-spacing: 0;
+  }
+  #viewer-board td {
+    padding: 2px;
+  }
 }
 /* Reduced motion (SPEC §11.4): no animations or transitions. */
 @media (prefers-reduced-motion: reduce) {

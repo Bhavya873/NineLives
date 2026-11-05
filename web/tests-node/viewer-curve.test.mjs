@@ -64,7 +64,7 @@ test('curveSvg draws one dot per checkpoint', () => {
   const svg = curveSvg(curve, 'F');
   assert.equal(svg.match(/<circle/g)?.length, 8);
   assert.ok(svg.includes('<polyline'));
-  assert.ok(svg.includes('#ffd166'), 'the best point is ringed');
+  assert.equal(svg.match(/class="chart-best"/g)?.length, 1, 'one best point is marked');
 });
 
 test('the leader is the furthest running car, then landed, then crashed', () => {
