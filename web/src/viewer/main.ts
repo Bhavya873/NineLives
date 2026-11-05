@@ -114,15 +114,19 @@ async function start(): Promise<void> {
   const labelsLayer = requireElement('viewer-panels');
   const panelLabels = new Map<ArenaKind, PanelLabel>();
   const cameraButton = requireElement('camera-toggle');
+  // A stage runs only while it can be seen: it is in the focus and the tab is showing.
+  const applyRunning = () => {
+    for (const panel of panels) {
+      const shown = state.focus === null || state.focus === panel.arena;
+      setStageRunning(panel, shown && !document.hidden);
+    }
+  };
   const setFocus = (next: ArenaKind | null) => {
     state.focus = next;
     if (next !== null) {
       state.tab = arenaTab(next);
     }
-    for (const panel of panels) {
-      // A stage nobody can see does not need to run.
-      setStageRunning(panel, next === null || next === panel.arena);
-    }
+    applyRunning();
     window.history.replaceState(
       null,
       '',
@@ -181,6 +185,15 @@ async function start(): Promise<void> {
   // On a slow GPU the resolution steps down by itself (adaptive-quality.ts).
   const quality = newQuality(arena.renderer.getPixelRatio());
   let lastFrameStartMs = performance.now();
+  // A hidden tab stops the workers (no stepping, no snapshots); showing it again starts the
+  // frame timing over so the pause is not counted as a slow frame.
+  document.addEventListener('visibilitychange', () => {
+    applyRunning();
+    if (!document.hidden) {
+      lastFrameStartMs = performance.now();
+    }
+  });
+
   let mainMsTotal = 0;
   let mainFrames = 0;
 
@@ -228,6 +241,7 @@ async function start(): Promise<void> {
           crashed: stageTotals(panel).crashed,
           shapeCount: panel.shapeCount,
           running: panel.running,
+          stepping: panel.stepping,
           stepMs: panel.stepMs,
           visible: state.focus === null || state.focus === panel.arena,
         })),
@@ -455,10 +469,13 @@ function updateBoard(board: Board, panels: StagePanel[]): void {
 function statusText(state: ViewerState): string {
   const checkpoints = `${state.run.checkpoints.length} checkpoints at once`;
   const where = state.focus === null ? 'all stages' : arenaLabel(state.focus).toLowerCase();
-  const failed = state.panels.filter((panel) => panel.error !== null);
+  const reasons = new Set(
+    state.panels.flatMap((panel) => (panel.error === null ? [] : [panel.error])),
+  );
+  const failedCount = state.panels.filter((panel) => panel.error !== null).length;
   const problem =
-    failed.length > 0
-      ? ` (stage ${failed.map((panel) => `${panel.arena}: ${panel.error}`).join('; ')} failed)`
+    reasons.size > 0
+      ? ` — ${failedCount === state.panels.length ? 'all stages' : `${failedCount} stage(s)`} failed: ${[...reasons].join('; ')}`
       : '';
   return `Run ${state.run.run_id}: ${checkpoints}, ${CARS_PER_CHECKPOINT} drops each, ${state.panels.length} stages, showing ${where}${problem}`;
 }
