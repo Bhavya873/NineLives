@@ -24,9 +24,10 @@ runs/
 .idea/
 .vscode/
 
-# Local agent worktrees and the graphify map (rebuilt with `graphify update .`)
-.claude/worktrees/
+# Local agent tooling: Claude Code state, the graphify map and its ignore file
+.claude/
 graphify-out/
+.graphifyignore
 
 # Stray per-agent Playwright configs (the real one is web/playwright.config.ts)
 web/playwright.*.config.ts

@@ -1,114 +1,55 @@
 # Nine Lives
 
-A browser driving game where an AI fires a car's 10 cold-gas thrusters automatically, so the car always lands on its wheels. One Rust physics sim (Rapier) is used for both RL training (Python, PPO) and the game (wasm + three.js).
-
-**Read `SPEC.md` before starting any work.** It is the source of truth for what to build. This file is how to work.
-
-## How to work through the project
-- Build the milestones in `SPEC.md` §13 in order (M0 → M8). Do not start a milestone until the previous one meets every acceptance criterion.
-- At the start of a session, find the current milestone: check `docs/DECISIONS.md`, `docs/EXPERIMENTS.md` and the milestone checkboxes.
-- Tick a checkbox in `SPEC.md` §13 only when its tests pass in CI or locally.
-- Before a large change, write a short plan. After it, run the full checks (below).
-- `docs/PLAN.md` holds the agreed build plan, review gates and training approach. Stop for the owner's review after M4 and after M7.
-- If the spec is wrong or unclear, pick the simplest option that fits the spec's intent, implement it, update `SPEC.md`, and add one line to `docs/DECISIONS.md` (date, decision, reason). Ask the owner only when a choice is hard to reverse.
-
-## Finding your way: the graphify map
-- `graphify-out/graph.json` is a map of the code (files, symbols, calls, imports), built locally by graphify from the tree-sitter AST, with no LLM. Query it before grepping:
-  - `graphify explain "<symbol>"` lists a node's connections. Use `path::symbol` when a name is ambiguous, e.g. `crates/nl-sim/src/episode.rs::Episode`.
-  - `graphify query "<question>"` returns the relevant subgraph.
-  - `graphify path "A" "B"` shows how two things connect.
-- Rebuild after code changes with `graphify update .` (a few seconds, no API cost). `graphify-out/` is gitignored, and `.graphifyignore` keeps out agent worktrees and generated data.
-- The CLI lives at `~/.local/share/graphify-venv/bin/graphify` (installed with `pip install graphifyy` in that venv).
-
-## Defining a task: grill me
-- Before starting a milestone PR or any change with open design choices, use the `grill-me` skill (mattpocock/skills) to settle the task with the owner, one question at a time. Then write the agreed plan down (PR description or `docs/PLAN.md`) before coding.
+A browser driving game. An AI fires the car's 10 cold-gas thrusters so it lands on its wheels. One Rust physics sim (Rapier) is used for both training (Python, PPO) and the game (wasm + three.js). `SPEC.md` is the source of truth for what to build; `docs/README.md` is the index of everything else. The Gauntlet course is retired and kept for history only.
 
 ## Golden rules
-1. **Physics lives only in `crates/nl-sim`.** Thruster forces, the air tank, events, observations and rewards are never re-implemented in Python or TypeScript. Python and the browser call into Rust.
-2. **Determinism.** Rapier runs with `enhanced-determinism`. Use only seeded `ChaCha8Rng`; no system time, `thread_rng` or `HashMap` iteration in sim logic. The golden-trace test must pass on native and wasm.
-3. **Conventions** (SPEC §4): SI units; world +Y up; car body frame +X forward, +Y up, +Z right; `dt = 1/120`, control at 60 Hz; nozzle order `L_FL L_FR L_RL L_RR S_FL S_RL S_FR S_RR B_L B_R`; wheel order `FL FR RL RR`.
-4. **Observation layout** is defined once in Rust (`ObsSpec`, 43 values in v2). Any change bumps the schema hash. Python, the exporter and the browser all check the hash.
-5. **Sign tests first.** When adding or changing a force, torque or frame transform, write the unit test that pins its sign before the code.
-6. **Configs, not constants.** Tunable numbers go in `configs/*.toml` (vehicle, modes, reward, scenarios). Code holds no magic numbers that the spec marks *(start)*.
-7. **No branding.** Never use Tesla or SpaceX names, logos or car shapes in code, assets or UI. Use "inspired by" wording in docs only.
-8. **Never commit** training checkpoints (`runs/`), large binaries or secrets to `main` or a feature branch. `models/policy.json` and `results/*.json|csv|svg` are committed. Training runs locally, so checkpoints stay in `runs/` on the training machine (ADR-003); the only committed checkpoints are the ≤ 8 viewer exports under `web/public/checkpoints/` (SPEC §9.12).
+1. Physics lives only in `crates/nl-sim`. Thruster forces, the air tank, events, obs and reward are never re-implemented in Python or TypeScript; they call into Rust.
+2. Deterministic: Rapier with `enhanced-determinism`, seeded `ChaCha8Rng` only, no system time, `thread_rng` or `HashMap` iteration in sim logic. The golden trace (`crates/nl-sim/tests/golden/flat_drive.json`, hash `72959553d1b9e680`) must pass on native and wasm, and must not change unless you add a row to `docs/DECISIONS.md` saying why.
+3. Conventions (SPEC section 4): SI units, world +Y up, body frame +X forward / +Y up / +Z right, `dt = 1/120`, control at 60 Hz.
+4. The observation layout is defined once in Rust (`ObsSpec`, 43 values in v2). Any change bumps the schema hash; Python, the exporter and the browser all check it.
+5. Sign tests first: when adding or changing a force, torque or frame transform, write the test that pins its sign before the code.
+6. Configs, not constants: tunable numbers live in `configs/*.toml`, not in code.
+7. No branding: never use Tesla or SpaceX names, logos or shapes.
+8. Never commit `runs/` checkpoints, large binaries or secrets.
+
+Also: every number in docs or README comes from a file in `results/` (see `results/README.md`); never invent measurements. If the spec is wrong or unclear, pick the simplest option, update `SPEC.md`, and add one row to `docs/DECISIONS.md`. Log every training run in `docs/EXPERIMENTS.md`.
 
 ## Layout
-- `crates/nl-sim` holds the world, vehicle, thrusters, tank, modes, courses, events, obs, reward, scenarios and driver bot.
-- `crates/nl-control` holds the Controller trait, Off, Manual, Pd and thruster allocation.
-- `crates/nl-policy` loads the policy JSON and runs the MLP forward pass.
-- `crates/nl-py` is the PyO3 module `ninelives_sim` (BatchedSim).
-- `crates/nl-wasm` is the wasm-bindgen `Game` API.
-- `python/ninelives` holds the Gymnasium/SB3 env, train, eval, export and charts.
-- `web/` is the Vite + TypeScript + three.js game.
-- `configs/` holds the TOML configs and `configs/train/*.yaml` PPO settings.
-- `courses/` holds the course JSON.
-- `docs/` holds DECISIONS.md and EXPERIMENTS.md.
-
-## Git and pull requests
-- One short-lived branch per small feature, named `claude/<feature>`, off `main`. One PR per branch into `main`; aim for < 400 changed lines excluding lockfiles.
-- Commits are authored as `Bhavya Modi <51858604+Bhavya873@users.noreply.github.com>` and end with the `Co-Authored-By: Claude` trailer. The owner reviews and merges every PR.
-- Before opening a PR: run `/simplify`, then `/code-review`, then `/security-review` if the change parses external input, then the full checks below.
-- A PR description says what and why, how to test it, which SPEC section it covers, and includes a screenshot or GIF for anything visual.
+- `crates/nl-sim` sim core, `nl-control` controllers (Off, Manual, PD, Hybrid), `nl-policy` MLP runner, `nl-py` PyO3 batched sim, `nl-wasm` browser API.
+- `python/ninelives` env, train, eval, export, charts. `web/` the Vite + three.js game.
+- `configs/` TOML settings and `configs/train/` PPO yaml. `courses/` course JSON. `models/policy.json` the shipped policy. `results/` eval outputs. `docs/` notes, contracts and decisions.
+- `deploy/` and `Dockerfile` build the static site (nginx); `railway.json` points Railway at it.
 
 ## Commands
-(Create these in M0; keep this list accurate as scripts change.)
 ```bash
 # Rust
 cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo run -p nl-sim --example drive
-cargo run --release -p nl-sim --example drive_feel   # 0-100, top speed, braking, full-lock turns
-cargo run --release -p nl-control --example eval -- --controller pd --stage A --mode realistic --episodes 1000 --seed 0
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 
-# Python (venv with Python 3.11 or 3.12)
+# Python (venv, Python 3.11 or 3.12)
 pip install -e python[dev]
 maturin develop --release -m crates/nl-py/Cargo.toml
 ruff check python && pytest python/tests
-python -m ninelives.train --config configs/train/base.yaml --run-id <name>
-python -m ninelives.eval --controller ai --stage A --mode realistic --episodes 1000 --seed 0
-python -m ninelives.compare --candidate hybrid   # paired vs PD on the same seeds, M7 bar verdict
-python -m ninelives.export --run runs/<name> --out models/policy.json
-python -m ninelives.charts
 
-# Web
-cd web && npm install
-npm run wasm        # builds crates/nl-wasm into web/src/wasm (release: + wasm-opt)
-npm run test:wasm   # Node tests: wasm golden trace + Game API
-node scripts/measure-tick.mjs   # after npm run wasm:release: ms per tick
-npm run dev         # local game
-npm run lint && npm run build
-npx playwright test
+# Web (Node 22)
+cd web && npm ci
+npm run wasm && npm run test:wasm && npm run lint && npm run build
+npm run test:e2e
 ```
 
-## Checks before calling anything done
-- `cargo fmt`, `clippy -D warnings` and `cargo test` are clean.
-- If Python was touched: `ruff` and `pytest` pass, including the export parity test.
-- If web or wasm was touched: `npm run lint`, `npm run build`, the wasm golden-trace test and Playwright pass.
-- Any training run is logged in `docs/EXPERIMENTS.md`: date, config, seed, steps, wall time, results, notes.
-- For RL changes, watch a clip or the browser replay, not just the score. Reward hacking shows up in behaviour first.
+## Before calling anything done
+- fmt, clippy and tests are clean; ruff and pytest pass if Python changed; lint, wasm tests, build and e2e pass if web or wasm changed.
+- For RL changes, watch a replay, not just the score. Reward hacking shows up in behavior first.
 
 ## Style
-- **Rust:** stable toolchain, `rustfmt` defaults, no `unwrap()` in library code outside tests (use `Result` with `thiserror`), `f32` in sim code.
-- **Python:** type hints, `ruff`, small modules, no physics code.
-- **TypeScript:** strict mode, ESLint + Prettier, no framework, rendering separated from input and HUD.
-- Keep functions small and named for what they do.
-
-### Readability: write it like a careful junior developer
-Readable beats clever, everywhere. A new teammate should follow any file without help.
-- **Names say what and in what unit:** `speed_m_s`, `air_left_kg`, `tilt_rad`. One-letter names only for loop indices or maths copied from a SPEC formula.
-- **Small pieces:** a function does one thing and fits on a screen (about 40 lines). A file covers one concept (`tank.rs`, `valve_lag.rs`).
-- **Plain constructs:** structs, enums, `for` loops and `match`. No home-made macros, no generic or trait-object gymnastics, no iterator chains longer than about three steps, no lifetimes beyond the obvious. Traits only where SPEC asks for one (`Controller`).
-- **Comments:** every public item has a `///` (or docstring/JSDoc) comment saying what it is and its units. Inline comments explain **why**. A formula cites its SPEC section, e.g. `// SPEC §7.5: mass flow = force / exhaust speed`.
-- **Module header:** every file starts with 2–4 lines saying what it does and how it fits in.
-- **Errors** tell a person what to fix: "course.json: piece 4 'ramp' is missing 'length'".
-- **Tests read like examples:** `firing_front_left_lift_raises_left_front_corner`, arranged as arrange / act / assert.
-- **Python:** functions over classes unless a class is needed (Gymnasium/SB3 interfaces). **TypeScript:** plain functions and modules; three.js setup kept apart from game logic.
+- Plain, readable code: descriptive names with units (`speed_m_s`), small functions, short lowercase comments that say why, a header on each file saying what it does.
+- Rust: no `unwrap()` in library code. Python: type hints, ruff, no physics. TypeScript: strict, no framework.
+- One branch per change, named `claude/<name>`, one PR into `main`. The owner reviews and merges.
 
 ## Gotchas
-- Rapier's vehicle and query APIs change between releases. Read the docs for the pinned version (`DynamicRayCastVehicleController::update_vehicle` takes the query pipeline).
-- Raycast wheel rays point "down" in the body frame, so on an inverted car they point up. Count wheel contact only when the car is upright enough (SPEC §7.3).
-- SB3 expects actions in [−1, 1]; the sim maps them to throttles in [0, 1].
-- Export VecNormalize statistics with the policy, or the browser policy will act on unnormalized inputs.
+- Rapier's vehicle and query APIs change between releases; read the docs for the pinned version.
+- Wheel rays point "down" in the body frame, so on an inverted car they point up. Count wheel contact only when the car is upright enough (SPEC 7.3).
+- SB3 actions are in [-1, 1]; the sim maps them to throttles in [0, 1].
+- Export VecNormalize statistics with the policy, or the browser acts on unnormalized inputs.
 - Wrap all `localStorage` access in try/catch.

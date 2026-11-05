@@ -1,5 +1,7 @@
 # Plan v3: g-meter, planned stunts, roadster drive with obstacles that never crash, better training viewer
 
+> Historical. This plan is finished; its contracts now live in `docs/contracts/`. The Gauntlet it mentions is retired.
+
 > Approved by the owner on 2026-10-27 and committed in the contracts PR (Gate 0). The contracts in §1 are split out, one file each, under `docs/contracts/`.
 > v3 folds in the owner's review: an exact survival contract, approach kept apart from outcome, conservative stunt authorization, crash-rule safeguards, AI-envelope handling, stronger tests, and one dependency graph with gates.
 
@@ -19,7 +21,7 @@ The owner played the latest demo (origin/main + R4/obs v2/half loop/viewer butto
 - Survival rule: **never crash, may not complete** (§1).
 
 **Explore findings behind each change:**
-- **G-load:** computed in `crates/nl-sim/src/g_load.rs`. The blackout is web-only (`web/src/hud/g-blackout.ts`). Nothing records a peak.
+- **G-load:** computed in `crates/nl-sim/src/g_load.rs`. The blackout was web-only (`web/src/hud/g-blackout.ts`, since removed). Nothing records a peak.
 - **Stunts:**
   - PD only aims upright (`crates/nl-control/src/pd.rs:139`). There is no planner and no landing forecast.
   - A Realistic flip is about 1.4 s and about 55 kg of air.

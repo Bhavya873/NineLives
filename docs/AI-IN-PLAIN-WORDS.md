@@ -1,6 +1,6 @@
-# M5 in plain words
+# How the AI learns, in plain words
 
-What we built in milestone 5, and how the pieces fit. Short version first, details after.
+What we built for training (milestone 5), and how the pieces fit. Short version first, details after.
 
 ## The one-line version
 
@@ -15,7 +15,7 @@ We taught a small neural network to fire the car's 10 thrusters so a falling, tu
  ┌──────────────────────────── Rust ────────────────────────────┐
  │  nl-sim: the physics world. Drops the car, steps time,       │
  │          decides "landed / crashed / out of time",           │
- │          builds what the AI sees (41 numbers),               │
+ │          builds what the AI sees (43 numbers),               │
  │          scores each moment (the reward).                    │
  │  nl-py:  lets Python drive 64 of these worlds at once.       │
  └──────────────────────────────────────────────────────────────┘
@@ -40,7 +40,7 @@ We taught a small neural network to fire the car's 10 thrusters so a falling, tu
 |---|---|
 | **Episode** | One drop: the car starts in the air, and it ends when it lands, crashes or runs out of time (8 s). |
 | **Stage A** | The drop test: random height (1.5–8 m), random tilt (up to upside down) and random spin. |
-| **Observation** | The 41 numbers the AI sees each step: which way is down, how fast it spins, its height, which wheels touch, what it fired last… |
+| **Observation** | The 43 numbers the AI sees each step: which way is down, how fast it spins, its height, which wheels touch, what it fired last… |
 | **Action** | The AI's answer each step: 10 throttles, one per thruster. |
 | **Reward** | A score per step that says "good" or "bad". Landing still pays; crashing, wasting air, spinning and staying in the air cost. Simply staying alive never pays (otherwise it learns to hover). |
 | **PD** | The hand-written controller from M4 (classic control maths). It is the bar the AI has to beat. |
@@ -51,7 +51,7 @@ We taught a small neural network to fire the car's 10 thrusters so a falling, tu
 ## How one training step works
 
 1. Rust steps 64 worlds forward by 1/60 s, using the AI's throttles.
-2. Each world reports its 41 numbers, the reward, and whether its drop ended.
+2. Each world reports its 43 numbers, the reward, and whether its drop ended.
 3. A world whose drop ended starts a new random drop straight away.
 4. Every 512 steps PPO looks at what happened and nudges the network towards the actions that scored well.
 5. Every 1 million steps we save a checkpoint and test it on 200 fixed drops, keeping the best.

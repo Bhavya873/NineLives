@@ -453,11 +453,11 @@ so a result can be matched to the settings it ran on; `--out <dir>` picks the fo
 16 button bits). On control steps it runs the controller, OR-ing together the buttons pressed
 since the last one so a quick tap is not lost. The page reads poses, nozzle throttles, HUD values
 and drained events as flat `Float32Array`s, whose layouts are checked at start-up
-(`checkWasmLayout` in `web/src/main.ts`).
+(`checkWasmLayout` in `web/src/game/main.ts`).
 
-The loop (`web/src/game-loop.ts`) collects real time and spends it in fixed 1/120 s ticks, at most
+The loop (`web/src/game/game-loop.ts`) collects real time and spends it in fixed 1/120 s ticks, at most
 8 per frame. The renderer blends the last two physics poses, so motion is smooth at any frame
-rate. Rendering (`web/src/render`), input (`web/src/input`) and the HUD (`web/src/hud`) are
+rate. Rendering (`web/src/render`), input (`web/src/ui/keyboard.ts`) and the HUD (`web/src/ui`) are
 separate modules. The look is a physics simulator's: a checkered floor, a gradient sky and fog.
 The game flies PD alone (`?controller=hybrid` loads the policy and flies the Hybrid), shows the keys at all times,
 pauses on Esc, and gives the player nine lives, one lost per crash.
