@@ -256,7 +256,7 @@ body {
   white-space: nowrap;
 }
 #hud-perf {
-  /* F3 (src/hud/perf-overlay.ts): fps and ms per tick and per frame. */
+  /* F3 (src/ui/perf-overlay.ts): fps and ms per tick and per frame. */
   right: var(--edge);
   top: 200px;
   font-size: 13px;
