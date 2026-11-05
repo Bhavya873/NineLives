@@ -391,6 +391,9 @@ pub struct StuntPlanner {
     settled_at_s: f32,
     /// Integrated rotation about the stunt axis, in the direction of the stunt, rad.
     rotation_rad: f32,
+    /// Latched once the counted rotation first reaches a full turn (minus the slack), so
+    /// PD's catch turning the car back towards level cannot un-complete the stunt.
+    rotation_done: bool,
     coast_rate_rad_s: f32,
 }
 
@@ -403,6 +406,7 @@ impl StuntPlanner {
             requested_at_s: 0.0,
             settled_at_s: 0.0,
             rotation_rad: 0.0,
+            rotation_done: false,
             coast_rate_rad_s: 0.0,
         }
     }
@@ -424,10 +428,12 @@ impl StuntPlanner {
         self.rotation_rad
     }
 
-    /// True once the integrated rotation reached 2π minus the slack. Being upright is not
+    /// True once the integrated rotation has reached 2π minus the slack, and stays true
+    /// for the rest of the stunt: a ramp launch leaves the car nose up, and PD's catch
+    /// turning it back to level must not undo a turn already made. Being upright is not
     /// enough.
     pub fn rotation_complete(&self) -> bool {
-        self.rotation_rad >= TAU - self.config.complete_rotation_slack_rad
+        self.rotation_done
     }
 
     /// True while the Hybrid gate must stay on PD: from Authorized until
@@ -451,6 +457,7 @@ impl StuntPlanner {
     pub fn reset(&mut self) {
         self.phase = StuntPhase::Idle;
         self.rotation_rad = 0.0;
+        self.rotation_done = false;
     }
 
     /// `tick` for a world: builds the inputs, with `dt_s` the time the tick covers.
@@ -479,6 +486,7 @@ impl StuntPlanner {
                 if inputs.time_s - self.settled_at_s >= self.config.hybrid_hold_after_settled_s {
                     self.phase = StuntPhase::Idle;
                     self.rotation_rad = 0.0;
+                    self.rotation_done = false;
                 }
             }
         }
@@ -496,17 +504,19 @@ impl StuntPlanner {
             Ok(plan) => {
                 self.coast_rate_rad_s = plan.coast_rate_rad_s;
                 self.rotation_rad = 0.0;
+                self.rotation_done = false;
                 // Authorized lasts this one tick, then SpinUp: the nozzles are fired from
                 // the next tick on, so report SpinUp now.
                 self.phase = StuntPhase::SpinUp;
                 events.push(StuntEvent::Started { kind });
             }
-            // Not in the air yet: keep the request queued until it expires.
+            // Not in the air yet, or a ramp launch still has the car nose up: keep the
+            // request queued (PD is levelling it) until it expires.
             Err(StuntRefusal {
-                reason: StuntReason::NotAirborne,
+                reason: StuntReason::NotAirborne | StuntReason::TiltedTooFar,
             }) if inputs.time_s - self.requested_at_s < self.config.request_timeout_s => {}
             Err(StuntRefusal {
-                reason: StuntReason::NotAirborne,
+                reason: StuntReason::NotAirborne | StuntReason::TiltedTooFar,
             }) => {
                 self.phase = StuntPhase::Idle;
                 events.push(StuntEvent::Refused {
@@ -525,6 +535,9 @@ impl StuntPlanner {
     fn track_rotation(&mut self, inputs: &PlannerInputs) {
         let rate = self.kind.sign() * inputs.state.angular_velocity_body_rad_s[self.kind.axis()];
         self.rotation_rad += rate * inputs.dt_s;
+        if self.rotation_rad >= TAU - self.config.complete_rotation_slack_rad {
+            self.rotation_done = true;
+        }
     }
 
     /// Spin rate in the stunt's direction, rad/s.
