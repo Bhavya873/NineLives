@@ -7,6 +7,8 @@ import { collectConsoleErrors } from './console-errors.ts';
 
 /** Generous limit for slow CI machines with software graphics. */
 const SLOW_MACHINE_TIMEOUT_MS = 90_000;
+/** Every stage worker has built its crowds and posted a round, on a slow shared runner. */
+const CROWD_BUILD_TIMEOUT_MS = 180_000;
 
 /** One stage as the viewer's test hook reports it. */
 interface StageReading {
