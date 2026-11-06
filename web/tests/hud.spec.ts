@@ -120,3 +120,54 @@ test('the HUD warns before a piece that needs more speed, and the warning clears
   await expect(page.locator('#hud-too-slow')).toBeHidden({ timeout: 15_000 });
   expect(consoleErrors).toEqual([]);
 });
+
+test('flying out of bounds respawns for free with a back in bounds toast', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/?play=1');
+  await waitForGame(page);
+  // a small world: the edge is 40 m ahead of the start
+  const course = JSON.stringify({
+    version: 1,
+    name: 'Edge',
+    start: { pos: [0, 0.7, 0], yaw: 0 },
+    bounds: { min: [-50, -20, -50], max: [40, 60, 50] },
+    pieces: [{ type: 'landing_pad', pos: [-10, 0, 0] }],
+  });
+  await loadCourse(page, course);
+  // collect every toast text: one lasts only a second
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { toastsSeen: string[] }).toastsSeen = seen;
+    const toast = document.getElementById('hud-toast');
+    new MutationObserver(() => {
+      if (toast?.textContent) {
+        seen.push(toast.textContent);
+      }
+    }).observe(toast as Node, { childList: true, characterData: true, subtree: true });
+  });
+  await page.keyboard.down('ArrowUp');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => (window as unknown as { toastsSeen: string[] }).toastsSeen.join('|')),
+      { timeout: 90_000 },
+    )
+    .toContain('back in bounds');
+  await page.keyboard.up('ArrowUp');
+
+  await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(0);
+  await expect(page.locator('#game-over')).toBeHidden();
+  // respawned at the start, not out past the edge
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as { ninelivesDebug: { chassisPose: () => number[] } }
+            ).ninelivesDebug.chassisPose()[0] ?? 99,
+        ),
+      { timeout: SLOW_MACHINE_TIMEOUT_MS },
+    )
+    .toBeLessThan(20);
+});

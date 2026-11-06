@@ -1,5 +1,5 @@
 // The approach HUD: an amber speed readout above 200 km/h, a "too slow" warning when
-// the sim raises TooSlowFallback (event 16), and an "AI outside envelope" badge when
+// the sim raises TooSlowFallback (event 16), and an "AI unsure" badge when
 // HudField PolicyOutOfEnvelope is 1. Before a piece, HudField 26 (ApproachHint) holds the
 // entry speed the piece ahead needs while the car is too slow for it, and the HUD names
 // it; after the entry, TooSlowFallback keeps the warning up for a few seconds. Pure logic.

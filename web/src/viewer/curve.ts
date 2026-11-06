@@ -105,7 +105,7 @@ export function curveSvg(curve: CurveFile, stage: string): string {
       );
     })
     .join('');
-  const axis = `<text x="${WIDTH / 2}" y="${HEIGHT - 4}" text-anchor="middle" class="chart-text">training steps (max ${(maxSteps / 1e6).toFixed(0)}M)</text>`;
+  const axis = `<text x="${WIDTH / 2}" y="${HEIGHT - 4}" text-anchor="middle" class="chart-text">steps (max ${(maxSteps / 1e6).toFixed(0)}M)</text>`;
   return (
     `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" width="${WIDTH}" height="${HEIGHT}" role="img" aria-label="Stage ${stage} success rate per checkpoint">` +
     `${grid}<polyline class="chart-line" points="${line.join(' ')}"/>${dots}${axis}</svg>`

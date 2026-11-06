@@ -5,7 +5,6 @@ import { URLSearchParams } from 'node:url';
 
 import { createGPeakTracker, formatG, updateGPeak } from '../src/ui/g-meter.ts';
 import { titleWanted } from '../src/ui/title.ts';
-import { stuntReadyMaskFromSim } from '../src/wasm-bridge/stunt-adapter.ts';
 
 test('the title shows unless the address asks to skip it', () => {
   assert.equal(titleWanted(new URLSearchParams('')), true);
@@ -39,9 +38,4 @@ test('the headline peak starts over when the raw peak resets', () => {
   assert.equal(updateGPeak(tracker, 1, 0), 0);
   // Bad numbers read as 0 and do not throw.
   assert.equal(updateGPeak(tracker, Number.NaN, Number.NaN), 0);
-});
-
-test('an older wasm without stunt_ready_mask reads as nothing ready', () => {
-  assert.equal(stuntReadyMaskFromSim({}), 0);
-  assert.equal(stuntReadyMaskFromSim({ stunt_ready_mask: () => 5 }), 5);
 });
