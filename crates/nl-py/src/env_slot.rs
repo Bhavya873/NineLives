@@ -167,8 +167,8 @@ pub(crate) fn controller_ctx(env: &TrainingEnv) -> ControlCtx {
         // As eval's `ControlCtx::for_episode`, so a base PD plans with the same
         // allocation the game and eval use.
         actuators: env.actuator_state(),
-        // Training stays on the old PD (no look-ahead) until the policy is retrained.
-        landing: None,
+        // The same landing summary eval gives PD, so a zero residual flies exactly as PD does.
+        landing: env.landing_view(),
     }
 }
 
