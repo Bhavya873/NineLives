@@ -1,6 +1,6 @@
-// Unit tests for the parked-vehicle models (SPEC §11.4): each sedan, SUV and box truck fits
+// Unit tests for the parked-vehicle models (SPEC §11.4): each hatchback, pickup, SUV and box truck fits
 // inside its 4.5 x 1.9 m collider box, its flat roof spans the box top so a landing never
-// looks like floating, only car_row pieces become vehicles, and a car park costs three
+// looks like floating, only car_row pieces become vehicles, and a car park costs four
 // meshes however many cars it has. Needs `npm run wasm` first. Plain Node.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,6 +13,8 @@ import {
   VEHICLE_LENGTH_M,
   VEHICLE_WIDTH_M,
   buildVehicleGeometry,
+  PALETTE,
+  VEHICLE_COLOURS,
   paintFor,
   vehicleTypeFor,
 } from '../src/render/vehicle-model.ts';
@@ -22,7 +24,7 @@ const playgroundJson = readFileSync(
   new URL('../../courses/playground.json', import.meta.url),
   'utf8',
 );
-const HEIGHTS_M = [1.0, 1.2, 1.5, 1.6, 1.8, 1.9, 2.0, 2.2];
+const HEIGHTS_M = [1.0, 1.2, 1.4, 1.6, 1.7, 1.8, 2.0, 2.2];
 const EPSILON_M = 1e-4;
 
 /** The playground's shapes without the floor (its checker texture needs a browser canvas). */
@@ -31,13 +33,39 @@ function playgroundShapes() {
   return JSON.parse(game.load_course(playgroundJson)).filter((shape) => shape.surface !== 'floor');
 }
 
-test('heights pick the vehicle: sedan to 1.5 m, truck from 1.9 m, SUV between', () => {
-  assert.equal(vehicleTypeFor(1.0), 'sedan');
-  assert.equal(vehicleTypeFor(1.5), 'sedan');
-  assert.equal(vehicleTypeFor(1.6), 'suv');
+test('heights pick the vehicle: hatchback, pickup, SUV, then box truck from 1.95 m', () => {
+  assert.equal(vehicleTypeFor(1.0), 'hatchback');
+  assert.equal(vehicleTypeFor(1.2), 'hatchback');
+  assert.equal(vehicleTypeFor(1.4), 'pickup');
+  assert.equal(vehicleTypeFor(1.6), 'pickup');
+  assert.equal(vehicleTypeFor(1.7), 'suv');
   assert.equal(vehicleTypeFor(1.8), 'suv');
-  assert.equal(vehicleTypeFor(1.9), 'truck');
+  assert.equal(vehicleTypeFor(2.0), 'truck');
   assert.equal(vehicleTypeFor(2.2), 'truck');
+});
+
+test('the palette is five muted colours and every vertex colour comes from the vehicle colours', () => {
+  assert.equal(PALETTE.length, 5);
+  const seen = new Set();
+  for (let index = 0; index < 10; index += 1) {
+    seen.add(paintFor(index));
+  }
+  assert.deepEqual([...seen].sort(), [...PALETTE].sort());
+
+  const allowed = new Set(
+    VEHICLE_COLOURS.map((hex) =>
+      [1, 3, 5].map((at) => Math.round((parseInt(hex.slice(at, at + 2), 16) / 255) * 255)).join(),
+    ),
+  );
+  for (const heightM of HEIGHTS_M) {
+    for (let index = 0; index < 5; index += 1) {
+      const colours = buildVehicleGeometry(heightM, index).getAttribute('color');
+      for (let vertex = 0; vertex < colours.count; vertex += 1) {
+        const rgb = [0, 1, 2].map((c) => Math.round(colours.array[vertex * 3 + c] * 255));
+        assert.ok(allowed.has(rgb.join()), `${heightM} m #${index}: colour ${rgb} is off palette`);
+      }
+    }
+  }
 });
 
 test('every vehicle fits inside its collider and its roof spans the whole box top', () => {
@@ -78,10 +106,10 @@ test('vehicles are the same every time they are built', () => {
 
   assert.deepEqual(first.getAttribute('position').array, second.getAttribute('position').array);
   assert.deepEqual(first.getAttribute('color').array, second.getAttribute('color').array);
-  assert.equal(paintFor('sedan', 2), paintFor('sedan', 2));
+  assert.equal(paintFor(2), paintFor(2));
 });
 
-test('the playground draws its car rows as vehicles in three meshes, walls and bumps as boxes', () => {
+test('the playground draws its car rows as vehicles in at most four meshes, walls and bumps as boxes', () => {
   const shapes = playgroundShapes();
   const pieceTypes = JSON.parse(playgroundJson).pieces.map((piece) => piece.type);
   const carShapes = shapes.filter((shape) => pieceTypes[shape.piece] === 'car_row');
@@ -89,7 +117,7 @@ test('the playground draws its car rows as vehicles in three meshes, walls and b
 
   const group = buildCourseView(JSON.stringify(shapes), playgroundJson);
   const vehicleMeshes = group.children.filter((child) => child.name.startsWith('vehicles-'));
-  assert.ok(vehicleMeshes.length >= 2 && vehicleMeshes.length <= 3);
+  assert.ok(vehicleMeshes.length >= 2 && vehicleMeshes.length <= 4);
 
   // Every shape but the cars still has its own mesh (gates add a few more).
   const others = shapes.length - carShapes.length;

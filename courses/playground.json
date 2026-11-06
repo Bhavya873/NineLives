@@ -2,7 +2,7 @@
   "version": 1,
   "name": "Playground",
   "start": { "pos": [0, 0.7, 0], "yaw": 0 },
-  "bounds": { "min": [-800, -20, -800], "max": [800, 60, 800] },
+  "bounds": { "min": [-1500, -20, -1500], "max": [1500, 300, 1500] },
   "pieces": [
     { "type": "landing_pad", "pos": [-10, 0, 0] },
 

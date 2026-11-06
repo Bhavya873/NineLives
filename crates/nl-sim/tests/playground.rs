@@ -208,3 +208,13 @@ fn drops_on_the_playground_end_without_errors() {
         assert!(episode.result().duration_s > 0.0);
     }
 }
+
+#[test]
+fn the_playground_ceiling_is_at_least_250_m() {
+    let spec = playground();
+    assert!(
+        spec.bounds.max[1] >= 250.0,
+        "ceiling is only {} m",
+        spec.bounds.max[1]
+    );
+}

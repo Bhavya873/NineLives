@@ -33,7 +33,7 @@ test('free driving opens in the playground, and ?world=flat in the empty arena',
   await expect
     .poll(() => readCourse(page, 'meshes'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(80);
-  // The playground's 50 parked cars merge into three vehicle meshes, not 50 boxes.
+  // The playground's 50 parked cars merge into at most four vehicle meshes (one per type), not 50 boxes.
   expect(await readCourse(page, 'meshes')).toBeLessThan(100);
   expect(await readCourse(page, 'checkpoints')).toBe(0);
 
