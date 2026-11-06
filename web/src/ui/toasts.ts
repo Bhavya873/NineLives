@@ -1,19 +1,23 @@
-// Toasts in the centre-low message stack (SPEC §11.5): "Saved" (or "Flip saved" after the car went past
-// upside down) with the air used, "Crashed" with the cause, and "Out of air". It turns
-// drained sim events into short messages; it never touches physics.
+// Toasts in the centre-low message stack (SPEC §11.5): "landed" after a jump, "crashed: <cause>",
+// "no air" and "back in bounds". It turns drained sim events into short messages (a word or
+// three, no numbers); it never touches physics.
 import { FLOATS_PER_EVENT } from '../wasm-bridge/sim-events.ts';
 import { CrashCode, EventKind } from '../wasm/nl_wasm.js';
 
 /** How long a toast stays on screen. */
-const TOAST_SHOW_MS = 1800;
+const TOAST_SHOW_MS = 1000;
 
 /** What a CRASH toast says about the cause, by wasm `CrashCode` value. */
 const CRASH_CAUSE_TEXT: Record<number, string> = {
-  [CrashCode.HardImpact]: 'hit too hard',
-  [CrashCode.UpsideDown]: 'landed on the roof',
-  [CrashCode.Stuck]: 'stuck on its side',
-  [CrashCode.OutOfBounds]: 'out of bounds',
+  [CrashCode.HardImpact]: 'too hard',
+  [CrashCode.UpsideDown]: 'roof',
+  [CrashCode.Stuck]: 'on its side',
 };
+
+/** Said when the car flew out of the world: a free respawn, no life lost (game/main.ts). */
+export const BACK_IN_BOUNDS_TEXT = 'back in bounds';
+/** Said when the tank runs dry. */
+export const NO_AIR_TEXT = 'no air';
 
 /** The toast element and when it should disappear. */
 interface Toasts {
@@ -22,7 +26,7 @@ interface Toasts {
   /** When to hide it, in `performance.now()` milliseconds. */
   hideAtMs: number;
   /**
-   * Whether "Out of air" may show again. It re-arms only once the tank is full, so air
+   * Whether "no air" may show again. It re-arms only once the tank is full, so air
    * hovering around the empty mark does not flash the toast over and over.
    */
   noAirArmed: boolean;
@@ -36,37 +40,37 @@ export function createToasts(element: HTMLElement): Toasts {
 
 /**
  * The toast for a batch of drained events, or null if none deserves one. When several
- * do, the last one wins (a crash after a save is the news). A save whose peak tilt
- * reached `invertedTiltRad` (the sim's flipped mark, `Game.inverted_tilt_deg()`) is a
- * flip save.
+ * do, the last one wins (a crash after a save is the news).
  */
-export function toastForEvents(events: Float32Array, invertedTiltRad: number): string | null {
+export function toastForEvents(events: Float32Array): string | null {
   let text: string | null = null;
   for (let start = 0; start < events.length; start += FLOATS_PER_EVENT) {
     const kind = events[start];
     if (kind === EventKind.Save) {
-      const airUsedKg = events[start + 2] ?? 0;
-      const peakTiltRad = events[start + 3] ?? 0;
-      const label = peakTiltRad >= invertedTiltRad ? 'Flip saved' : 'Saved';
-      text = `${label} with ${airUsedKg.toFixed(1)} kg of air`;
+      text = 'landed';
     } else if (kind === EventKind.Crash) {
-      const cause = CRASH_CAUSE_TEXT[events[start + 1] ?? 0] ?? '';
-      text = cause ? `Crashed: ${cause}` : 'Crashed';
+      const code = events[start + 1] ?? 0;
+      const cause = CRASH_CAUSE_TEXT[code] ?? '';
+      if (code === CrashCode.OutOfBounds) {
+        text = BACK_IN_BOUNDS_TEXT;
+      } else {
+        text = cause ? `crashed: ${cause}` : 'crashed';
+      }
     } else if (kind === EventKind.CheckpointReached) {
-      text = 'Checkpoint';
+      text = 'checkpoint';
     } else if (kind === EventKind.Finished) {
-      text = 'Finished';
+      text = 'finished';
     }
   }
   return text;
 }
 
-/** The ticket's colour: crashes and running out of air read as danger. */
+/** The ticket's colour: crashes and running out of air read as danger (the words say it too). */
 export function toastTone(text: string): string {
-  return text.startsWith('Crashed') || text === 'Out of air' ? 'danger' : 'plain';
+  return text.startsWith('crashed') || text === NO_AIR_TEXT ? 'danger' : 'plain';
 }
 
-/** Shows `text` from `nowMs` for a couple of seconds, replacing any toast showing. */
+/** Shows `text` from `nowMs` for about a second, replacing any toast showing. */
 export function showToast(toasts: Toasts, text: string, nowMs: number): void {
   toasts.element.textContent = text;
   toasts.element.dataset['tone'] = toastTone(text);
@@ -75,7 +79,7 @@ export function showToast(toasts: Toasts, text: string, nowMs: number): void {
 }
 
 /**
- * Shows "Out of air" when the sim says the tank has run out, unless another toast is
+ * Shows "no air" when the sim says the tank has run out, unless another toast is
  * showing (a save or crash is bigger news). `airFraction` re-arms it once the tank is full.
  */
 export function showNoAirIfNew(
@@ -88,7 +92,7 @@ export function showNoAirIfNew(
     toasts.noAirArmed = true;
   }
   if (outOfAir && toasts.noAirArmed && toasts.element.hidden) {
-    showToast(toasts, 'Out of air', nowMs);
+    showToast(toasts, NO_AIR_TEXT, nowMs);
     toasts.noAirArmed = false;
   }
 }

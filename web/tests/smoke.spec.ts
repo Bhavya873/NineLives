@@ -55,11 +55,11 @@ test('holding W drives the car forward without console errors', async ({ page })
   const startX = await readDebug(page, 'x');
   const startTimeS = await readDebug(page, 'time');
 
-  await page.keyboard.down('KeyW');
+  await page.keyboard.down('ArrowUp');
   await expect
     .poll(() => readDebug(page, 'time'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .toBeGreaterThan(startTimeS + THROTTLE_SIM_S);
-  await page.keyboard.up('KeyW');
+  await page.keyboard.up('ArrowUp');
 
   expect(await readDebug(page, 'x')).toBeGreaterThan(startX + 5);
   await expect(page.locator('#hud-speed-value')).not.toHaveText('0');

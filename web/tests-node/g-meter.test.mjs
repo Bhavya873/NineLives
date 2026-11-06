@@ -1,4 +1,4 @@
-// Unit tests for the g-meter, the g record and the approach HUD logic. Plain Node.
+// Unit tests for the g-meter and the approach HUD logic. Plain Node.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -13,24 +13,7 @@ import {
   updateTooSlow,
 } from '../src/ui/approach-hud.ts';
 import { formatG, gLevel, gNeedleFraction } from '../src/ui/g-meter.ts';
-import {
-  G_RECORD_KEY,
-  createGRecord,
-  loadBestPeakG,
-  recordLandings,
-  recordLine,
-  recordPeak,
-} from '../src/ui/g-record.ts';
 import { burstCount, emitBurst, newSparkField, stepSparks } from '../src/render/sparks.ts';
-
-function memoryStorage(initial = {}) {
-  const data = new Map(Object.entries(initial));
-  return {
-    getItem: (key) => data.get(key) ?? null,
-    setItem: (key, value) => data.set(key, value),
-    data,
-  };
-}
 
 test('the needle is clamped and levels follow 3 g and 6 g', () => {
   assert.equal(gNeedleFraction(-1), 0);
@@ -42,56 +25,7 @@ test('the needle is clamped and levels follow 3 g and 6 g', () => {
   assert.equal(formatG(Number.NaN), '0.0 g');
 });
 
-test('the best peak is stored on a new best only', () => {
-  const storage = memoryStorage();
-  const record = createGRecord(storage);
-  recordPeak(record, 2.5);
-  recordPeak(record, 1.0);
-
-  assert.equal(record.bestPeakG, 2.5);
-  assert.equal(loadBestPeakG(storage), 2.5);
-});
-
-test('an old, unknown or broken stored shape is dropped', () => {
-  for (const raw of [
-    '{"bestPeakG":4}',
-    '{"bestPeakG":4,"version":0}',
-    '{"bestPeakG":"x","version":1}',
-    'nope',
-    '[]',
-    'null',
-  ]) {
-    assert.equal(loadBestPeakG(memoryStorage({ [G_RECORD_KEY]: raw })), 0, raw);
-  }
-  assert.equal(loadBestPeakG(null), 0);
-  const throwing = {
-    getItem: () => {
-      throw new Error('blocked');
-    },
-    setItem: () => {
-      throw new Error('blocked');
-    },
-  };
-  const record = createGRecord(throwing);
-  recordPeak(record, 3);
-  assert.equal(record.bestPeakG, 3);
-});
-
-test('a stunt landing records per-stunt best and shows the line for a while', () => {
-  const record = createGRecord(null);
-  // [StuntLanded, code 3 (front flip), peak g, rotation, 0]
-  const landed = new Float32Array([12, 3, 4.2, 6.28, 0]);
-
-  assert.equal(recordLandings(record, landed, 10), true);
-  assert.match(recordLine(record, 11), /Front flip best 4\.2 g \(new\)/);
-  assert.equal(recordLine(record, 20), '');
-  recordLandings(record, new Float32Array([12, 3, 3.0, 6.28, 0]), 30);
-  assert.ok(Math.abs(record.perStunt.get(3) - 4.2) < 1e-5);
-  assert.ok(Math.abs(record.bestPeakG - 4.2) < 1e-5);
-  assert.equal(recordLandings(record, new Float32Array([1, 0, 0, 0, 0]), 31), false);
-});
-
-test('speed is amber above 200 km/h, either direction', () => {
+test('speed reads as fast above 200 km/h, either direction', () => {
   assert.ok(Math.abs(FAST_SPEED_M_S - 55.56) < 0.01);
   assert.equal(isFast(55.5), false);
   assert.equal(isFast(56), true);
@@ -106,17 +40,17 @@ test('the AI badge shows only for flag 1', () => {
 test('too-slow warning comes from event 16 and times out', () => {
   assert.equal(tooSlowWarning(new Float32Array([15, 2, 0, 0, 0])), null);
   const events = new Float32Array([16, 3, 10, 0, 0]);
-  assert.equal(tooSlowWarning(events), 'Too slow to clear this piece (36 km/h)');
+  assert.equal(tooSlowWarning(events), 'too slow');
   const state = newTooSlowState();
-  assert.match(updateTooSlow(state, events, 5), /Too slow/);
-  assert.match(updateTooSlow(state, new Float32Array(0), 7), /Too slow/);
+  assert.match(updateTooSlow(state, events, 5), /too slow/);
+  assert.match(updateTooSlow(state, new Float32Array(0), 7), /too slow/);
   assert.equal(updateTooSlow(state, new Float32Array(0), 9), '');
 });
 
 test('the approach hint names the needed speed before the piece and is empty at 0', () => {
   assert.equal(approachHintText(0), '');
   assert.equal(approachHintText(Number.NaN), '');
-  assert.equal(approachHintText(14), 'Too slow to clear this piece: need 51 km/h');
+  assert.equal(approachHintText(14), 'need 51 km/h');
 });
 
 test('scrape events give their normal speeds; sparks burst, fall and die', () => {

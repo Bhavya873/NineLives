@@ -43,25 +43,25 @@ const paint = new MeshStandardMaterial({
   roughness: 0.4,
   metalness: 0.15,
 });
-/** Tinted glass; light enough that the cabin still reads when the car is upside down. */
+/** Tinted glass; light enough that the cabin still reads when the car is upside down, but not glossy. */
 const glass = new MeshStandardMaterial({
   color: 0x3d5a72,
   flatShading: true,
-  roughness: 0.12,
-  metalness: 0.4,
+  roughness: 0.55,
+  metalness: 0.2,
 });
 /** Diffuser, skirts, intake and wheel wells. */
 const trim = new MeshStandardMaterial({ color: 0x23262b, flatShading: true, roughness: 0.75 });
 const headlight = new MeshStandardMaterial({
   color: 0xffffff,
   emissive: 0xfff2d0,
-  emissiveIntensity: 1.6,
+  emissiveIntensity: 0.5,
   flatShading: true,
 });
 const taillight = new MeshStandardMaterial({
   color: 0xff3020,
   emissive: 0xff1a10,
-  emissiveIntensity: 1.4,
+  emissiveIntensity: 0.4,
   flatShading: true,
 });
 const tyre = new MeshStandardMaterial({ color: 0x1b1b1b, flatShading: true, roughness: 0.9 });

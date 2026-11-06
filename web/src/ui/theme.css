@@ -1,4 +1,4 @@
-/* Racing paper: the colours, fonts and the ticket tile shared by the game and the viewer pages. */
+/* Scene theme: the colours, fonts and the ticket tile shared by the game and the viewer pages. */
 
 /* Barlow and Barlow Condensed, latin subset, SIL Open Font License (see src/fonts/OFL.txt). */
 @font-face {
@@ -27,35 +27,37 @@
 }
 
 :root {
-  /* paper and ink; text on cream is ink (about 14:1) or one of the dark accents below */
-  --cream: #f1ead8;
-  --cream-deep: #e2d8bc;
-  --ink: #1b1a17;
-  --ink-soft: #55503f; /* 6.7:1 on cream, for small labels */
-  /* accents: all three reach 4.5:1 as text on cream */
-  --orange: #b8400a;
-  --teal: #0b6762;
-  --red: #b3261e;
-  /* the same hues, light enough to read on the dark scene or on ink */
-  --orange-lit: #ff8a4c;
-  --teal-lit: #5fd6cc;
-  --red-lit: #ff6b5f;
+  /* slate tiles, sand text and border, one rust accent (the car's colour in the scene) */
+  --slate: #1f2b38;
+  --slate-deep: #141c25;
+  --slate-line: #66788a; /* quiet marks on slate: lost hearts, grid lines */
+  --sand: #e9dcc0; /* 10.8:1 on slate */
+  --sand-soft: #b9ad92; /* 6.5:1 on slate, for small labels */
+  --rust: #e0542f; /* fills, and text from 18 px bold up (3.5:1 on slate) */
+  --red: #ff5b5b; /* danger only; 4.9:1 on slate */
   --font-text: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  /* the five font sizes */
+  --text-xs: 12px;
+  --text-s: 14px;
+  --text-m: 18px;
+  --text-l: 30px;
+  --text-xl: 48px;
   --tile-border: 2px;
   --tile-notch: 14px;
   --edge: 16px;
 }
 
-/* The ticket: flat cream, 2px ink border, square corners, top-right corner folded. */
+/* The ticket: flat slate, 2px sand border, square corners, top-right corner folded. */
 .tile {
   position: relative;
   box-sizing: border-box;
   padding: 6px 12px;
-  border: var(--tile-border) solid var(--ink);
-  background: var(--cream);
-  color: var(--ink);
+  border: var(--tile-border) solid var(--sand);
+  background: var(--slate);
+  color: var(--sand);
   font-family: var(--font-text);
+  font-size: var(--text-s);
   font-variant-numeric: tabular-nums;
   /* cuts the corner away; ::after draws the fold and the diagonal edge */
   clip-path: polygon(
@@ -76,8 +78,8 @@
   background: linear-gradient(
     to bottom left,
     transparent 0 46%,
-    var(--ink) 46% 58%,
-    var(--cream-deep) 58% 100%
+    var(--sand) 46% 58%,
+    var(--slate-deep) 58% 100%
   );
   pointer-events: none;
 }
@@ -92,15 +94,12 @@
 .tile-label {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--sand-soft);
 }
-/* The solid accent: ink text on a rally-orange ticket. */
-.tile-accent {
-  background: var(--orange-lit);
-}
+/* Danger: red text, always with words beside it. */
 .tile-danger {
   color: var(--red);
 }

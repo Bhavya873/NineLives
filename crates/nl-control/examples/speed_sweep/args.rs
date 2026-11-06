@@ -4,8 +4,8 @@ use std::error::Error;
 
 use super::Floor;
 
-/// The playground's floor (`courses/playground.json` bounds were ±800 m and are now ±1500 m;
-/// the sweep keeps 800), so the sweep sees the same contact behaviour as free driving.
+/// A flat floor 800 m each way (the playground's size before it grew to ±1500 m), kept so
+/// sweep results stay comparable; contact behaviour matches free driving.
 const DEFAULT_FLOOR: Floor = Floor {
     behind_m: 800.0,
     ahead_m: 800.0,

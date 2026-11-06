@@ -5,13 +5,17 @@
 /** Full scale of the throttle and steer bytes. */
 const FULL_SCALE = 127;
 
-const THROTTLE_KEYS = ['KeyW', 'ArrowUp'];
-const BRAKE_KEYS = ['KeyS', 'ArrowDown'];
-const STEER_LEFT_KEYS = ['KeyA', 'ArrowLeft'];
-const STEER_RIGHT_KEYS = ['KeyD', 'ArrowRight'];
+// Arrows only: A S D F are the stunt keys (game/stunt-requests.ts).
+const THROTTLE_KEYS = ['ArrowUp'];
+const BRAKE_KEYS = ['ArrowDown'];
+const STEER_LEFT_KEYS = ['ArrowLeft'];
+const STEER_RIGHT_KEYS = ['ArrowRight'];
 const HOP_KEYS = ['Space'];
 const BOOST_KEYS = ['ShiftLeft', 'ShiftRight'];
+// R respawns; the key card does not list it.
 const RESET_KEYS = ['KeyR'];
+/** The stunt keys, listed here so the page does not act on them (find-in-page, scrolling). */
+const STUNT_KEY_CODES = ['KeyA', 'KeyS', 'KeyD', 'KeyF'];
 
 /**
  * Button bits, matching the BUTTON_* constants in crates/nl-sim/src/input.rs.
@@ -48,6 +52,7 @@ const HANDLED_KEYS = [
   ...HOP_KEYS,
   ...BOOST_KEYS,
   ...RESET_KEYS,
+  ...STUNT_KEY_CODES,
   // The performance overlay, not the browser's find-in-page.
   'F3',
 ];
@@ -104,6 +109,16 @@ export function startKeyboard(target: Window): void {
 const frame = new Uint8Array(4);
 /** The same bytes seen as signed numbers, for throttle and steer. */
 const frameSigned = new Int8Array(frame.buffer);
+
+/** True while any manual nozzle key (1 to 0) is held. */
+export function isNozzleKeyHeld(): boolean {
+  for (let nozzle = 0; nozzle < MANUAL_NOZZLE_COUNT; nozzle += 1) {
+    if (heldKeys.has(`Digit${(nozzle + 1) % 10}`)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Builds the input frame for the next tick from the keys held right now. */
 export function readInputFrame(): Uint8Array {

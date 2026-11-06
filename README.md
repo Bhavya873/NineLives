@@ -18,13 +18,13 @@ cd web && npm install && npm run wasm && npm run dev    # http://localhost:5173
 
 | Key | Action |
 |---|---|
-| W S / ↑ ↓, A D / ← → | drive, brake, steer |
+| ↑ ↓, ← → | drive, brake, steer (arrows only) |
 | Space, Shift | Hop, Boost |
-| Q / E | barrel roll left / right (the planner only agrees if the car can also land) |
-| Z / B | front / back flip |
+| A / S | barrel roll left / right (the planner only agrees if the car can also land) |
+| D / F | front / back flip |
 | X | drop test: throw the car into a random Stage A start and watch it save |
 | M, V | Limited air / Unlimited air, wind level |
-| R, Esc, F3 | respawn, pause, frame-rate overlay |
+| Esc, F3 | pause, frame-rate overlay (R also respawns, unlisted) |
 
 **Watch AI training** (the link in the corner, or `viewer.html`) replays eight checkpoints of the policy at once: a crowd of cars per checkpoint, dropped from the same starts, so you can see the same drop go from a crash to a clean landing as training goes on. All five stages run at once; click a title, a tab or press 1-5 to focus one, Esc to see all, L for the leader camera.
 

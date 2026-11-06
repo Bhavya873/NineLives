@@ -9,15 +9,15 @@ import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 const KM_PER_H_PER_M_PER_S = 3.6;
 
 /** What the alert says when a Hop is unavailable, by wasm `HopBlocked` value. */
-const HOP_BLOCKED_TEXT: Record<number, string> = {
+export const HOP_BLOCKED_TEXT: Record<number, string> = {
   [HopBlocked.No]: '',
-  [HopBlocked.NotOnGround]: 'Hop needs the wheels down',
-  [HopBlocked.Cooldown]: 'Hop recharging',
-  [HopBlocked.NoAir]: 'Hop needs air',
+  [HopBlocked.NotOnGround]: 'wheels down first',
+  [HopBlocked.Cooldown]: 'hop ready soon',
+  [HopBlocked.NoAir]: 'no air to hop',
 };
 
 /** Mode names, by wasm `ModeCode` value. */
-const MODE_TEXT: Record<number, string> = {
+export const MODE_TEXT: Record<number, string> = {
   [ModeCode.Realistic]: 'Limited air',
   [ModeCode.Arcade]: 'Unlimited air',
   [ModeCode.Custom]: 'Custom',
@@ -108,10 +108,10 @@ function statusText(values: HudValues): string {
 /** A short note while something is unavailable: respawning, or why Hop won't fire. */
 function alertText(values: HudValues): string {
   if (values.crashed) {
-    return 'Respawning…';
+    return 'respawning';
   }
   if (values.hopBlocked === HopBlocked.Cooldown && values.hopCooldownS > 0) {
-    return `Hop in ${values.hopCooldownS.toFixed(1)} s`;
+    return `hop ready in ${Math.ceil(values.hopCooldownS)} s`;
   }
   return HOP_BLOCKED_TEXT[values.hopBlocked] ?? '';
 }

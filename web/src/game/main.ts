@@ -7,15 +7,24 @@ import vehicleToml from '../../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { prefersReducedMotion, requireElement, setText } from '../shared/dom.ts';
+import { prefersReducedMotion, requireElement } from '../shared/dom.ts';
 import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
+import { saveRun, sessionStore, takeSavedRun } from './run-storage.ts';
+import { countOutOfBoundsCrashes, hasRealCrash } from './out-of-bounds.ts';
 import { createAirGauge, updateAirGauge } from '../ui/air-gauge.ts';
 import { findHud, updateHud } from '../ui/hud.ts';
 import { newZoneHolds, updateZones } from '../ui/hud-zones.ts';
-import { createLives, restartLives, updateLives } from '../ui/lives.ts';
+import {
+  createLives,
+  grantFreeRespawns,
+  LIVES,
+  livesLeft,
+  restartLives,
+  restoreLives,
+  updateLives,
+} from '../ui/lives.ts';
 import { createNozzleMap, updateNozzleMap } from '../ui/nozzle-map.ts';
-import { stuntReadyText } from '../ui/stunt-ready.ts';
 import { createTitle, titleWanted } from '../ui/title.ts';
 import {
   createPerfOverlay,
@@ -30,7 +39,7 @@ import {
   toastForEvents,
   updateToasts,
 } from '../ui/toasts.ts';
-import { onKeyPress, readInputFrame, startKeyboard } from '../ui/keyboard.ts';
+import { isNozzleKeyHeld, onKeyPress, readInputFrame, startKeyboard } from '../ui/keyboard.ts';
 import { followCar, snapCamera, widenWithSpeed } from '../render/chase-camera.ts';
 import {
   cameraShake,
@@ -58,7 +67,7 @@ import {
   type WindLevel,
 } from '../render/screen-effects.ts';
 import { containsEvent } from '../wasm-bridge/sim-events.ts';
-import { requestStuntInSim, stuntReadyMaskFromSim } from '../wasm-bridge/stunt-adapter.ts';
+import { requestStuntInSim } from '../wasm-bridge/stunt-adapter.ts';
 import {
   STUNT_KEYS,
   applyStuntEvents,
@@ -170,7 +179,17 @@ async function start(): Promise<void> {
   );
   let lastRenderMs = performance.now();
   fillHudValues(game.hud(), hudValues);
-  const stuntReady = requireElement('hud-stunt-ready');
+  // Back from the viewer (?play=1&resume=1): the lives lost before leaving stay lost.
+  if (params.has('play') && params.has('resume')) {
+    restoreLives(lives, hudValues, takeSavedRun(sessionStore()));
+  }
+  // Before a watch link leaves the page, remember the lives lost so far.
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('a[href$="viewer.html"]')) {
+    link.addEventListener('click', () => {
+      const left = livesLeft(lives, hudValues);
+      saveRun(sessionStore(), LIVES - left, lives.over ? 0 : left);
+    });
+  }
   const zoneTiles = {
     gTile: requireElement('hud-g-tile'),
     nozzleTile: requireElement('hud-nozzle-tile'),
@@ -206,17 +225,10 @@ async function start(): Promise<void> {
     keysPanel.dataset['collapsed'] = String(!collapsed);
     keysToggle.setAttribute('aria-expanded', String(collapsed));
   });
-  createTitle(
-    requireElement('title'),
-    requireElement('title-help'),
-    requireElement('title-play'),
-    requireElement('title-how'),
-    titleWanted(params),
-    () => {
-      started = true;
-      lastRenderMs = performance.now();
-    },
-  );
+  createTitle(requireElement('title'), requireElement('title-play'), titleWanted(params), () => {
+    started = true;
+    lastRenderMs = performance.now();
+  });
   // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
   onKeyPress('KeyX', () => {
     game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
@@ -225,15 +237,15 @@ async function start(): Promise<void> {
     snapViewToGame(game, frames, view, carPose);
     resetScreenEffects(effects);
   });
-  const invertedTiltRad = (Game.inverted_tilt_deg() * Math.PI) / 180;
 
   /**
    * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
    * frozen (SPEC §7.9), a respawn ends it and snaps the view to the checkpoint, and
    * saves and crashes get a toast. The sim decides all of it; the view only follows.
+   * Flying out of bounds is no wreck: no explosion, and the life is given back above.
    */
   const reactToEvents = (events: Float32Array, nowMs: number) => {
-    if (containsEvent(events, EventKind.Crash)) {
+    if (hasRealCrash(events)) {
       startExplosion(explosion, crashPosition);
     }
     if (containsEvent(events, EventKind.Respawn)) {
@@ -248,7 +260,7 @@ async function start(): Promise<void> {
       stuntQueue,
       (code) => !paused && !lives.over && requestStuntInSim(game, code),
     );
-    const toast = stuntToastForEvents(events) ?? toastForEvents(events, invertedTiltRad);
+    const toast = stuntToastForEvents(events) ?? toastForEvents(events);
     // Nothing covers the game-over screen.
     if (toast && !lives.over) {
       showToast(toasts, toast, nowMs);
@@ -281,6 +293,8 @@ async function start(): Promise<void> {
       // The HUD's save and crash counts update as events drain, so drain first.
       const events = game.drain_events();
       fillHudValues(game.hud(), hudValues);
+      // An out-of-bounds crash is a free respawn: give the life back before the hearts draw.
+      grantFreeRespawns(lives, countOutOfBoundsCrashes(events));
       updateLives(lives, hudValues, nowMs);
       reactToEvents(events, nowMs);
 
@@ -312,21 +326,12 @@ async function start(): Promise<void> {
         nowS: nowMs / 1000,
       });
 
-      // The stunt-ready hint costs a forecast, so it is asked only while airborne.
-      const readyText =
-        started && !paused && !hudValues.crashed && hudValues.wheelsTouching === 0
-          ? stuntReadyText(stuntReadyMaskFromSim(game))
-          : '';
-      setText(stuntReady, readyText);
-      stuntReady.hidden = readyText === '';
-
       updateHud(hud, hudValues);
       updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
       updateNozzleMap(nozzleDots, throttles);
       updateZones(zoneTiles, zoneHolds, {
-        airborne: hudValues.wheelsTouching === 0 && !hudValues.crashed,
-        gLoad: hudValues.gLoad,
-        throttles,
+        thrusterKeyHeld: isNozzleKeyHeld(),
+        gLoad: hudValues.crashed ? 1 : hudValues.gLoad,
         nowMs,
       });
       updateToasts(toasts, nowMs);
@@ -350,6 +355,9 @@ async function start(): Promise<void> {
         startCourse(game.load_course(courseJson), courseJson);
       },
       started: () => started,
+      heartsLeft: () => livesLeft(lives, hudValues),
+      // tests only: takes a life as a crash would
+      loseLife: () => grantFreeRespawns(lives, -1),
     },
   });
 }

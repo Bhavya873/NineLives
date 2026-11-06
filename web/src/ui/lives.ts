@@ -1,5 +1,6 @@
-// The nine lives: a row of pixel hearts, one emptied per crash, and the black game-over
+// The nine lives: a row of pixel hearts, one emptied per crash, and the game-over
 // screen once all nine are gone. It reads the sim's crash count; it never touches physics.
+// A crash from flying out of bounds is a free respawn: `grantFreeRespawns` gives that life back.
 
 import { focusDialog, setText } from '../shared/dom.ts';
 import type { HudValues } from './hud.ts';
@@ -35,6 +36,8 @@ interface Lives {
   /** The sim's crash and save counts when this run began (they never reset). */
   crashesAtStart: number;
   savesAtStart: number;
+  /** Crashes this run that cost nothing (out of bounds). */
+  freeRespawns: number;
   /** When to show the game-over screen, once the last life is gone; null before. */
   gameOverAtMs: number | null;
   /** True while the game-over screen is up. */
@@ -60,15 +63,25 @@ export function createLives(row: HTMLElement, gameOver: HTMLElement, summary: HT
     summary,
     crashesAtStart: 0,
     savesAtStart: 0,
+    freeRespawns: 0,
     gameOverAtMs: null,
     over: false,
     restoreFocus: null,
   };
 }
 
-/** Lives left in this run, from the sim's crash count. */
-function livesLeft(lives: Lives, values: HudValues): number {
-  return Math.max(0, LIVES - (values.crashes - lives.crashesAtStart));
+/** Lives left in this run, from the sim's crash count less the free respawns. */
+export function livesLeft(
+  lives: Pick<Lives, 'crashesAtStart' | 'freeRespawns'>,
+  values: Pick<HudValues, 'crashes'>,
+): number {
+  const costly = values.crashes - lives.crashesAtStart - lives.freeRespawns;
+  return Math.max(0, LIVES - costly);
+}
+
+/** Gives back `count` lives for crashes that should not cost one. Call before `updateLives`. */
+export function grantFreeRespawns(lives: Pick<Lives, 'freeRespawns'>, count: number): void {
+  lives.freeRespawns += count;
 }
 
 /** Empties a heart per crash, and puts up the game-over screen after the last one. */
@@ -89,10 +102,22 @@ export function updateLives(lives: Lives, values: HudValues, nowMs: number): voi
   }
 }
 
+/** Carries a run over a page change: `lost` lives are already gone. Call once at start-up. */
+export function restoreLives(
+  lives: Pick<Lives, 'crashesAtStart' | 'freeRespawns'>,
+  values: Pick<HudValues, 'crashes'>,
+  lost: number,
+): void {
+  const clamped = Number.isFinite(lost) ? Math.min(LIVES - 1, Math.max(0, Math.floor(lost))) : 0;
+  lives.crashesAtStart = values.crashes - clamped;
+  lives.freeRespawns = 0;
+}
+
 /** Starts a new run with nine lives from the sim's current counts. */
 export function restartLives(lives: Lives, values: HudValues): void {
   lives.crashesAtStart = values.crashes;
   lives.savesAtStart = values.saves;
+  lives.freeRespawns = 0;
   lives.gameOverAtMs = null;
   lives.over = false;
   lives.gameOver.hidden = true;
@@ -103,7 +128,7 @@ export function restartLives(lives: Lives, values: HudValues): void {
 /** This run's saves, for the game-over screen. */
 function runSummary(lives: Lives, values: HudValues): string {
   const saves = values.saves - lives.savesAtStart;
-  return saves === 1 ? '1 save' : `${saves} saves`;
+  return `Out of lives - ${saves === 1 ? '1 save' : `${saves} saves`}`;
 }
 
 /** One heart as an SVG of square pixels. */

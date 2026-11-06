@@ -36,7 +36,7 @@ test('the keys panel and nine full hearts show from the start', async ({ page })
   await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(0);
   await expect(page.locator('#game-over')).toBeHidden();
 
-  await page.keyboard.press('KeyW');
+  await page.keyboard.press('ArrowUp');
   await expect(page.locator('#hud-keys')).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

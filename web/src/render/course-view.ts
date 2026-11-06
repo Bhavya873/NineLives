@@ -46,11 +46,11 @@ interface CourseShape {
 
 /** Plain colours by surface (SPEC §11.4); markings are see-through. */
 const SURFACE_LOOK: Record<Exclude<Surface, 'floor'>, { color: string; opacity: number }> = {
-  ramp: { color: '#e8a33d', opacity: 1 },
-  obstacle: { color: '#c9d3de', opacity: 1 },
-  landing_pad: { color: '#4fbf7a', opacity: 0.6 },
-  kick_plate: { color: '#d46ad8', opacity: 0.75 },
-  checkpoint: { color: '#5ad1e8', opacity: 0.8 },
+  ramp: { color: '#c8b88e', opacity: 1 },
+  obstacle: { color: '#b4bcc6', opacity: 1 },
+  landing_pad: { color: '#7f8f4a', opacity: 0.85 },
+  kick_plate: { color: '#e0542f', opacity: 0.8 },
+  checkpoint: { color: '#ece3cd', opacity: 0.8 },
   finish: { color: '#ffffff', opacity: 0.9 },
 };
 

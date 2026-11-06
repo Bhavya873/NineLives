@@ -1,4 +1,4 @@
-// Stunt keys: the request queue and the toast mapping (plan G4, docs/contracts/stunt-states.md).
+// Stunt keys (A S barrel roll, D F flip): the request queue and the toast mapping (plan G4, docs/contracts/stunt-states.md).
 // A key press is only a REQUEST. The Rust planner decides (authorizes or refuses) and tells
 // us through events; this module never starts a stunt itself. No wasm import on purpose, so
 // it runs in plain Node and builds before the planner lands. Event kinds are the numbers
@@ -40,17 +40,18 @@ export const RefusedReason = {
 
 /** Keys that request a stunt, by `KeyboardEvent.code`. */
 export const STUNT_KEYS: Record<string, StuntCodeValue> = {
-  KeyQ: StuntCode.BarrelLeft,
-  KeyE: StuntCode.BarrelRight,
-  KeyZ: StuntCode.FrontFlip,
-  KeyB: StuntCode.BackFlip,
+  KeyA: StuntCode.BarrelLeft,
+  KeyS: StuntCode.BarrelRight,
+  KeyD: StuntCode.FrontFlip,
+  KeyF: StuntCode.BackFlip,
 };
 
+/** What the toast calls each stunt (left and right roll read the same). */
 export const STUNT_NAME: Record<number, string> = {
-  [StuntCode.BarrelLeft]: 'Barrel roll left',
-  [StuntCode.BarrelRight]: 'Barrel roll right',
-  [StuntCode.FrontFlip]: 'Front flip',
-  [StuntCode.BackFlip]: 'Back flip',
+  [StuntCode.BarrelLeft]: 'barrel roll',
+  [StuntCode.BarrelRight]: 'barrel roll',
+  [StuntCode.FrontFlip]: 'front flip',
+  [StuntCode.BackFlip]: 'back flip',
 };
 
 /** One waiting request. */
@@ -107,21 +108,20 @@ export function stuntToastForEvents(events: Float32Array): string | null {
     const kind = events[start];
     const code = events[start + 1] ?? -1;
     if (kind === StuntEvent.Landed) {
-      // [Landed, stunt_code, peak_g, rotation_rad]
-      const name = STUNT_NAME[code] ?? 'Stunt';
-      text = `${name}! max ${(events[start + 2] ?? 0).toFixed(1)} g`;
+      // [Landed, stunt_code, peak_g, rotation_rad]; the g number stays out of the toast
+      text = STUNT_NAME[code] ?? 'landed';
     } else if (kind === StuntEvent.Refused) {
       // [Refused, stunt_code, reason]
       const reason = events[start + 2];
       if (reason === RefusedReason.LandingBlocked) {
-        text = 'Landing blocked';
+        text = 'landing blocked';
       } else if (reason !== RefusedReason.Expired) {
-        text = 'Not enough air time';
+        text = 'not enough air';
       }
     } else if (kind === StuntEvent.Aborted) {
       // [Aborted, stunt_code, reason, rotation_rad]
       text =
-        events[start + 2] === RefusedReason.LandingBlocked ? 'Landing blocked' : 'Stunt aborted';
+        events[start + 2] === RefusedReason.LandingBlocked ? 'landing blocked' : 'stunt aborted';
     }
   }
   return text;

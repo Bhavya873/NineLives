@@ -9,22 +9,20 @@ import {
   showToast,
   toastForEvents,
   toastTone,
+  updateToasts,
 } from '../src/ui/toasts.ts';
 import { CrashCode, EventKind } from './load-wasm.mjs';
 
-/** The sim's flipped mark (150°), in radians. */
-const INVERTED_TILT_RAD = (150 * Math.PI) / 180;
-
-test('a save toast shows the air used', () => {
+test('a save toast says landed, with no numbers', () => {
   const events = new Float32Array([EventKind.Save, 1.2, 14.25, 2.0, 3.5]);
 
-  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'Saved with 14.3 kg of air');
+  assert.equal(toastForEvents(events), 'landed');
 });
 
-test('a save past upside down is a flip save', () => {
+test('a flip save reads the same: the stunt toast names the flip', () => {
   const events = new Float32Array([EventKind.Save, 1.8, 9.0, 3.0, 3.5]);
 
-  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'Flip saved with 9.0 kg of air');
+  assert.equal(toastForEvents(events), 'landed');
 });
 
 test('a crash after a save in the same frame wins, with its cause', () => {
@@ -41,7 +39,15 @@ test('a crash after a save in the same frame wins, with its cause', () => {
     0,
   ]);
 
-  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), 'Crashed: landed on the roof');
+  assert.equal(toastForEvents(events), 'crashed: roof');
+});
+
+test('each crash cause has its short words', () => {
+  const say = (code) => toastForEvents(new Float32Array([EventKind.Crash, code, 0, 0, 0]));
+
+  assert.equal(say(CrashCode.HardImpact), 'crashed: too hard');
+  assert.equal(say(CrashCode.Stuck), 'crashed: on its side');
+  assert.equal(say(CrashCode.OutOfBounds), 'back in bounds');
 });
 
 test('airborne and respawn events get no toast', () => {
@@ -58,7 +64,7 @@ test('airborne and respawn events get no toast', () => {
     0,
   ]);
 
-  assert.equal(toastForEvents(events, INVERTED_TILT_RAD), null);
+  assert.equal(toastForEvents(events), null);
 });
 
 /** A stand-in for the toast's page element: only the fields the module uses. */
@@ -66,11 +72,11 @@ function fakeElement() {
   return { hidden: true, textContent: '', dataset: {} };
 }
 
-test('Out of air shows once, and again only after the tank was full', () => {
+test('no air shows once, and again only after the tank was full', () => {
   const toasts = createToasts(fakeElement());
 
   showNoAirIfNew(toasts, true, 0.01, 0);
-  assert.equal(toasts.element.textContent, 'Out of air');
+  assert.equal(toasts.element.textContent, 'no air');
   toasts.element.hidden = true;
   showNoAirIfNew(toasts, false, 0.3, 100);
   showNoAirIfNew(toasts, true, 0.01, 200);
@@ -81,18 +87,27 @@ test('Out of air shows once, and again only after the tank was full', () => {
   assert.equal(toasts.element.hidden, false);
 });
 
-test('Out of air never covers a toast that is already showing', () => {
+test('no air never covers a toast that is already showing', () => {
   const toasts = createToasts(fakeElement());
-  showToast(toasts, 'Saved with 3.0 kg of air', 0);
+  showToast(toasts, 'landed', 0);
 
   showNoAirIfNew(toasts, true, 0.01, 10);
 
-  assert.equal(toasts.element.textContent, 'Saved with 3.0 kg of air');
+  assert.equal(toasts.element.textContent, 'landed');
+});
+
+test('a toast stays up about a second', () => {
+  const toasts = createToasts(fakeElement());
+  showToast(toasts, 'landed', 0);
+  updateToasts(toasts, 900);
+  assert.equal(toasts.element.hidden, false);
+  updateToasts(toasts, 1100);
+  assert.equal(toasts.element.hidden, true);
 });
 
 test('crashes and running out of air read as danger, everything else as plain', () => {
-  assert.equal(toastTone('Crashed: hit too hard'), 'danger');
-  assert.equal(toastTone('Out of air'), 'danger');
-  assert.equal(toastTone('Saved with 2.0 kg of air'), 'plain');
-  assert.equal(toastTone('Back flip! max 3.8 g'), 'plain');
+  assert.equal(toastTone('crashed: too hard'), 'danger');
+  assert.equal(toastTone('no air'), 'danger');
+  assert.equal(toastTone('landed'), 'plain');
+  assert.equal(toastTone('back flip'), 'plain');
 });

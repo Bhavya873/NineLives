@@ -158,7 +158,8 @@ fn rule_3_refuses_when_the_tank_cannot_pay_for_the_stunt_and_the_landing() {
     assert!(authorize(&config(), StuntKind::FrontFlip, &input).is_ok());
     // A harder landing (more fall speed at touchdown) needs more air for the same stunt.
     let mut hard = input;
-    hard.state.linear_velocity_body_m_s[1] = 30.0;
+    // Body up is +y, so a fall at 30 m/s is -30; +30 would be a car still rising.
+    hard.state.linear_velocity_body_m_s[1] = -30.0;
     assert_eq!(
         refusal(StuntKind::FrontFlip, &hard),
         StuntReason::NotEnoughAir
