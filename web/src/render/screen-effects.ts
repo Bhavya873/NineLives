@@ -1,5 +1,5 @@
 // Draws the screen effects of the game and updates their HUD parts, once per frame:
-// the g-meter and g record (ui/g-meter.ts, ui/g-record.ts), the approach HUD (ui/approach-hud.ts,
+// the g-meter (ui/g-meter.ts), the approach HUD (ui/approach-hud.ts,
 // sparks.ts), the wind readout and streaks (ui/wind-indicator.ts, wind-streaks.ts) and the wind level.
 // game/main.ts calls it with values from `Game.hud()`. Rendering and HUD only.
 import { type PerspectiveCamera, type Scene, Vector3 } from 'three';
@@ -22,14 +22,6 @@ import {
   updateGPeak,
 } from '../ui/g-meter.ts';
 import {
-  type GRecord,
-  browserStorage,
-  createGRecord,
-  recordLandings,
-  recordLine,
-  recordPeak,
-} from '../ui/g-record.ts';
-import {
   cameraYawRad,
   createWindIndicator,
   updateWindIndicator,
@@ -49,8 +41,6 @@ interface ScreenEffects {
   gMeter: GMeter;
   /** The headline peak the meter shows (raw peak stays in the sim). */
   gPeak: GPeakTracker;
-  gRecord: GRecord;
-  gRecordElement: HTMLElement;
   sparks: Sparks;
   tooSlow: TooSlowState;
   tooSlowElement: HTMLElement;
@@ -71,8 +61,6 @@ export function createScreenEffects(scene: Scene): ScreenEffects {
       requireElement('hud-g-peak'),
     ),
     gPeak: createGPeakTracker(),
-    gRecord: createGRecord(browserStorage()),
-    gRecordElement: requireElement('hud-g-record'),
     sparks: createSparks(scene),
     tooSlow: newTooSlowState(),
     tooSlowElement: requireElement('hud-too-slow'),
@@ -119,11 +107,6 @@ interface EffectsFrame {
 export function renderScreenEffects(effects: ScreenEffects, frame: EffectsFrame): void {
   const liveG = frame.crashed ? 1 : frame.gLoad;
   updateGMeter(effects.gMeter, liveG, updateGPeak(effects.gPeak, liveG, frame.peakG), frame.peakG);
-  recordPeak(effects.gRecord, frame.peakG);
-  recordLandings(effects.gRecord, frame.events, frame.nowS);
-  const line = recordLine(effects.gRecord, frame.nowS);
-  effects.gRecordElement.textContent = line;
-  effects.gRecordElement.hidden = line === '';
 
   // The warning after a too-slow entry wins; before the piece the live hint shows.
   const tooSlow =

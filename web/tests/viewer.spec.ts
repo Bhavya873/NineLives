@@ -57,10 +57,10 @@ test('the training viewer flies every stage at once and cars land', async ({ pag
 
   await page.goto('/viewer.html');
 
-  await expect(page.locator('#viewer-status')).toContainText('checkpoints at once', {
+  await expect(page.locator('#viewer-status')).toContainText('8 checkpoints', {
     timeout: SLOW_MACHINE_TIMEOUT_MS,
   });
-  await expect(page.locator('#viewer-status')).toContainText('all stages');
+  await expect(page.locator('#viewer-status')).toContainText('5 stages');
   await expect(page.locator('#viewer-board')).toContainText('Checkpoint');
   // Five stage panels, one title each.
   await expect(page.locator('.panel-title')).toHaveCount(5);

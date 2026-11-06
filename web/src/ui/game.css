@@ -1,10 +1,8 @@
 /* Styles of the game page (index.html): the four HUD zones, messages, title, pause and
-   game-over, all drawn as Racing paper tickets (theme.css has the tokens and the tile). */
+   game-over, all drawn as slate tickets (theme.css has the tokens and the tile). */
 
 :root {
-  --heart: #c8302a;
-  --heart-light: #ff9a8f;
-  --heart-lost: #cfc3a1;
+  --heart-lost: #34424f;
   /* Edge of the scene seen through a gap; matches BACKDROP_HORIZON in src/render/backdrop.ts. */
   --scene: #2a3d52;
 }
@@ -14,7 +12,7 @@ body {
   height: 100%;
   overflow: hidden;
   background: var(--scene);
-  color: var(--ink);
+  color: var(--sand);
   font-family: var(--font-text);
 }
 #game {
@@ -32,9 +30,9 @@ button,
 a {
   font-family: inherit;
 }
-/* One focus ring everywhere: ink on cream. */
+/* One focus ring everywhere: sand on slate. */
 :focus-visible {
-  outline: 3px solid var(--ink);
+  outline: 3px solid var(--sand);
   outline-offset: 2px;
 }
 
@@ -55,20 +53,20 @@ a {
   height: 21px;
 }
 .heart .o {
-  fill: var(--ink);
+  fill: var(--sand);
 }
 .heart .f {
-  fill: var(--heart);
+  fill: var(--rust);
 }
 .heart .h {
-  fill: var(--heart-light);
+  fill: var(--sand);
 }
 .heart.lost .f,
 .heart.lost .h {
   fill: var(--heart-lost);
 }
 .heart.lost .o {
-  fill: var(--ink-soft);
+  fill: var(--slate-line);
 }
 
 /* Zone 2, top-right: the key card and the viewer link. */
@@ -91,9 +89,9 @@ a {
   padding: 2px 0;
   border: 0;
   background: none;
-  color: var(--ink);
+  color: var(--sand);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--text-m);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-align: left;
@@ -111,7 +109,7 @@ a {
   display: grid;
   grid-template-columns: auto auto;
   gap: 3px 12px;
-  font-size: 14px;
+  font-size: var(--text-s);
 }
 #hud-keys[data-collapsed='true'] {
   display: none;
@@ -127,7 +125,7 @@ a {
 #hud-watch {
   pointer-events: auto;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--text-m);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-decoration: none;
@@ -135,8 +133,8 @@ a {
 }
 #hud-watch:hover,
 #hud-watch:focus-visible {
-  background: var(--ink);
-  color: var(--cream);
+  background: var(--sand);
+  color: var(--slate);
 }
 
 /* Zone 3, bottom-left: the gauge card, speed and air. */
@@ -149,19 +147,19 @@ a {
 }
 #hud-speed {
   font-family: var(--font-display);
-  font-size: 48px;
+  font-size: var(--text-xl);
   font-weight: 700;
   line-height: 1;
 }
 #hud-speed small {
   margin-left: 6px;
-  font-size: 16px;
+  font-size: var(--text-m);
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--ink-soft);
+  color: var(--sand-soft);
 }
 #hud-speed.fast {
-  color: var(--orange);
+  color: var(--rust);
 }
 #hud-air {
   display: flex;
@@ -180,8 +178,8 @@ a {
   flex: 1;
   min-width: 90px;
   height: 12px;
-  border: 2px solid var(--ink);
-  background: var(--cream-deep);
+  border: 2px solid var(--sand);
+  background: var(--slate-deep);
 }
 #hud-air-fill,
 #hud-g-fill {
@@ -189,10 +187,10 @@ a {
   height: 100%;
 }
 #hud-air-fill {
-  background: var(--teal);
+  background: var(--sand);
 }
 #hud-air.low #hud-air-fill {
-  background: var(--red);
+  background: var(--rust);
   animation: low-air-flash 0.6s steps(2, jump-none) infinite;
 }
 @keyframes low-air-flash {
@@ -201,7 +199,7 @@ a {
   }
 }
 
-/* Zone 4, bottom-centre: stunt-ready, the g-meter and the nozzle map, only when they matter. */
+/* Zone 4, bottom-centre: the g-meter and the nozzle map, only on a thruster key or a hard landing. */
 #hud-center {
   position: fixed;
   left: 50%;
@@ -215,38 +213,29 @@ a {
   width: 340px;
   pointer-events: none;
 }
-#hud-stunt-ready {
-  flex-basis: auto;
-  background: var(--orange-lit);
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
 #hud-g-tile {
   min-width: 150px;
 }
 #hud-g {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--text-s);
   font-weight: 600;
-  color: var(--ink-soft);
+  color: var(--sand-soft);
 }
 #hud-g-live {
-  font-size: 22px;
+  font-size: var(--text-m);
   font-weight: 700;
-  color: var(--ink);
+  color: var(--sand);
 }
 #hud-g-track {
   margin: 3px 0 2px;
   width: auto;
 }
 #hud-g-fill {
-  background: var(--ink);
+  background: var(--sand);
 }
 #hud-g[data-level='warn'] #hud-g-fill {
-  background: var(--orange);
+  background: var(--rust);
 }
 #hud-g[data-level='high'] #hud-g-fill {
   background: var(--red);
@@ -261,14 +250,14 @@ a {
 #hud-nozzles .car-outline {
   /* nozzle-map.ts sets the inset so the outline matches the nozzle dots. */
   position: absolute;
-  border: 2px solid var(--ink-soft);
+  border: 2px solid var(--sand-soft);
 }
 .nozzle-dot {
   position: absolute;
   width: 8px;
   height: 8px;
   margin: -4px 0 0 -4px;
-  background: var(--orange);
+  background: var(--rust);
 }
 
 /* Bottom-right: the wind, only while there is any. */
@@ -280,9 +269,9 @@ a {
   align-items: center;
   gap: 8px;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: var(--text-m);
   font-weight: 700;
-  color: var(--teal);
+  color: var(--sand);
 }
 #hud-wind-arrow,
 #hud-wind-arrow svg {
@@ -305,14 +294,14 @@ a {
 }
 #hud-messages > .tile {
   padding: 5px 16px;
-  font-size: 16px;
+  font-size: var(--text-m);
   font-weight: 600;
   white-space: nowrap;
 }
 #hud-messages > #hud-toast {
   padding: 8px 22px;
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: var(--text-l);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -320,13 +309,10 @@ a {
   color: var(--red);
   box-shadow: inset 8px 0 0 var(--red);
 }
+/* Rust beside the text, not in it: small rust text on slate misses 4.5:1. */
 #hud-too-slow,
 #hud-envelope {
-  color: var(--orange);
-}
-#hud-g-record,
-#hud-alert {
-  color: var(--ink);
+  box-shadow: inset 6px 0 0 var(--rust);
 }
 
 #hud-perf {
@@ -334,7 +320,7 @@ a {
   position: fixed;
   left: var(--edge);
   top: 64px;
-  font-size: 13px;
+  font-size: var(--text-s);
 }
 
 /* Esc: the game stops until Esc again. */
@@ -348,16 +334,12 @@ a {
 }
 #paused h2 {
   margin: 0;
-  font-size: 36px;
-}
-#paused p {
-  margin: 4px 0 0;
-  color: var(--ink-soft);
+  font-size: var(--text-l);
 }
 #paused a {
   display: inline-block;
   margin-top: 12px;
-  color: var(--teal);
+  color: var(--sand);
   font-weight: 600;
   pointer-events: auto;
 }
@@ -372,7 +354,7 @@ a {
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  background: var(--ink);
+  background: var(--slate-deep);
   overflow-y: auto;
 }
 #title {
@@ -405,7 +387,7 @@ a {
   position: absolute;
   inset: 0 0 auto 0;
   height: 10px;
-  background: repeating-linear-gradient(90deg, var(--ink) 0 14px, var(--cream) 14px 28px);
+  background: repeating-linear-gradient(90deg, var(--slate) 0 14px, var(--sand) 14px 28px);
 }
 .card p,
 .card h1,
@@ -414,21 +396,21 @@ a {
 }
 .wordmark {
   font-family: var(--font-display);
-  font-size: 56px;
+  font-size: var(--text-xl);
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--orange);
+  color: var(--rust);
 }
 #game-over .wordmark {
-  font-size: 18px;
+  font-size: var(--text-m);
   letter-spacing: 0.4em;
 }
 #game-over h2 {
-  font-size: 48px;
+  font-size: var(--text-xl);
 }
 .tagline {
-  font-size: 18px;
+  font-size: var(--text-m);
   line-height: 1.35;
 }
 #title-buttons {
@@ -441,42 +423,30 @@ a {
 .card button,
 .card a.button {
   padding: 8px 26px;
-  border: var(--tile-border) solid var(--ink);
-  background: var(--cream);
-  color: var(--ink);
+  border: var(--tile-border) solid var(--sand);
+  background: var(--slate);
+  color: var(--sand);
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: var(--text-m);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-decoration: none;
   text-transform: uppercase;
   cursor: pointer;
 }
+/* slate-deep on rust is 4.1:1, and the label is 18 px bold */
 .card button.primary {
-  background: var(--orange-lit);
+  background: var(--rust);
+  color: var(--slate-deep);
 }
 .card button:hover,
 .card a.button:hover {
-  background: var(--ink);
-  color: var(--cream);
+  background: var(--sand);
+  color: var(--slate);
 }
 .card > a {
-  color: var(--teal);
+  color: var(--sand);
   font-weight: 600;
-}
-#title-help {
-  max-width: 34em;
-  padding: 10px 14px;
-  border: var(--tile-border) solid var(--ink);
-  background: var(--cream-deep);
-  text-align: left;
-  font-size: 15px;
-}
-#title-help p {
-  margin: 0 0 8px;
-}
-#title-help p:last-child {
-  margin-bottom: 0;
 }
 
 /* Phones: smaller hearts and gauge, the key card starts folded and the centre tiles lift. */
@@ -490,7 +460,7 @@ a {
     padding: 4px 10px 8px;
   }
   #hud-speed {
-    font-size: 38px;
+    font-size: var(--text-l);
   }
   #hud-center {
     bottom: 112px;
@@ -500,10 +470,10 @@ a {
     bottom: 230px;
   }
   #hud-messages > #hud-toast {
-    font-size: 24px;
+    font-size: var(--text-m);
   }
   .wordmark {
-    font-size: 36px;
+    font-size: var(--text-l);
   }
   .card {
     padding: 26px 20px 20px;

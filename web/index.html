@@ -22,24 +22,22 @@
           Keys
         </button>
         <dl id="hud-keys">
-          <dt>W S / ↑ ↓</dt>
-          <dd>drive, brake</dd>
-          <dt>A D / ← →</dt>
+          <dt>Up / Down</dt>
+          <dd>drive</dd>
+          <dt>Left / Right</dt>
           <dd>steer</dd>
           <dt>Space</dt>
           <dd>hop</dd>
           <dt>Shift</dt>
           <dd>boost</dd>
-          <dt>Q / E</dt>
+          <dt>A S</dt>
           <dd>barrel roll</dd>
-          <dt>Z / B</dt>
-          <dd>front / back flip</dd>
+          <dt>D F</dt>
+          <dd>flip</dd>
           <dt>X</dt>
           <dd>drop test</dd>
-          <dt>R</dt>
-          <dd>respawn</dd>
           <dt>M</dt>
-          <dd>limited / unlimited air</dd>
+          <dd>air mode</dd>
           <dt>V</dt>
           <dd>wind</dd>
           <dt>Esc</dt>
@@ -59,9 +57,8 @@
         <span id="hud-air-label">100%</span>
       </div>
     </div>
-    <!-- Bottom-centre: shown only while they matter (see ui/hud-zones.ts). -->
+    <!-- Bottom-centre: shown on a thruster key or a hard landing (see ui/hud-zones.ts). -->
     <div id="hud-center">
-      <div id="hud-stunt-ready" class="tile" hidden></div>
       <div id="hud-g-tile" class="tile" hidden>
         <div id="hud-g">
           <span id="hud-g-live">1.0 g</span> <span id="hud-g-peak">peak 0.0 g</span>
@@ -82,17 +79,15 @@
       <span id="hud-wind-label">Off</span>
     </div>
     <!-- Centre-low: toasts and hints, one stack of tickets. -->
-    <div id="hud-messages">
+    <div id="hud-messages" role="status">
       <div id="hud-toast" class="tile" hidden></div>
       <div id="hud-too-slow" class="tile" hidden></div>
       <div id="hud-alert" class="tile" hidden></div>
-      <div id="hud-g-record" class="tile" hidden></div>
       <div id="hud-envelope" class="tile" hidden>AI outside envelope</div>
     </div>
     <div id="hud-perf" class="tile" hidden></div>
     <section id="paused" class="tile" hidden>
-      <h2 class="tile-display">Paused</h2>
-      <p>Press Esc to resume</p>
+      <h2 class="tile-display">Paused - Esc to resume</h2>
       <a href="./viewer.html">Watch AI training</a>
     </section>
     <section
@@ -104,8 +99,9 @@
     >
       <div class="card tile">
         <p class="wordmark">Nine Lives</p>
-        <h2 id="game-over-title" class="tile-display">Out of lives</h2>
-        <p id="game-over-summary"></p>
+        <h2 id="game-over-title" class="tile-display">
+          <span id="game-over-summary">Out of lives</span>
+        </h2>
         <button type="button" id="restart" class="primary">Restart</button>
         <a href="https://github.com/Bhavya873/NineLives" target="_blank" rel="noopener"
           >Source and write-up on GitHub</a
@@ -115,27 +111,10 @@
     <section id="title" role="dialog" aria-modal="true" aria-labelledby="title-name">
       <div class="card tile">
         <h1 id="title-name" class="wordmark">Nine Lives</h1>
-        <p class="tagline">
-          An AI fires a car's 10 cold-gas thrusters so it always lands on its wheels. Drive, jump,
-          flip, and watch it save you nine times.
-        </p>
+        <p class="tagline">Jump, flip, land on your wheels. Nine tries.</p>
         <div id="title-buttons">
           <button type="button" id="title-play" class="primary">Play</button>
-          <button type="button" id="title-how" aria-expanded="false" aria-controls="title-help">
-            How it works
-          </button>
-          <a class="button" id="title-watch" href="./viewer.html">Watch AI training</a>
-        </div>
-        <div id="title-help" hidden>
-          <p>
-            The car carries ten air nozzles and a tank. In limited air the tank runs down; in
-            unlimited air it never does (M switches). The AI fires the nozzles in the air to turn
-            the car so the wheels touch first. Each crash costs a life; you have nine.
-          </p>
-          <p>
-            W S drive and brake, A D steer, Space hops, Shift boosts. Q / E barrel-roll and Z / B
-            flip when the planner says a stunt is ready. Esc pauses.
-          </p>
+          <a class="button" id="title-watch" href="./viewer.html">Watch the AI train</a>
         </div>
       </div>
     </section>
