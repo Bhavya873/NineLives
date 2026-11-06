@@ -16,6 +16,7 @@ use nl_sim::conventions::{NOZZLE_COUNT, WHEEL_COUNT};
 use nl_sim::course::{ARENA_JSON, CourseSpec, GAUNTLET_JSON};
 use nl_sim::course_build::build_course_shapes;
 use nl_sim::episode::{Episode, EpisodeStatus, course_for_stage};
+use nl_sim::flight_stage::preset_label;
 use nl_sim::modes::{DEFAULT_MODES_TOML, ModesConfig};
 use nl_sim::randomization::EpisodeVariation;
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage};
@@ -52,7 +53,8 @@ pub enum CrowdStage {
     Arena,
     /// Stage D: the driver bot takes a generated course, all cars the same one.
     Driving,
-    /// Stage F: the bot rolls onto a flip plate, all cars on the same generated straight.
+    /// Stage F: the bot rolls onto a flip plate. Every car has its own plate (preset and
+    /// strength) on its own copy of the straight; the plates look alike, so one is drawn.
     Flight,
     /// Stage D on the Gauntlet (`courses/gauntlet.json`). Historical: the viewer does not show it.
     Gauntlet,
@@ -97,6 +99,8 @@ pub struct Crowd {
     throttles: Vec<[f32; NOZZLE_COUNT]>,
     /// The course's shapes as JSON for the renderer; None on flat ground.
     course_shapes_json: Option<String>,
+    /// Each car's short label for what kicks it ("barrel L"); empty where there is none.
+    labels: Vec<String>,
 }
 
 #[wasm_bindgen]
@@ -117,9 +121,10 @@ impl Crowd {
     /// `count` cars of the stage called `stage` (see `CrowdStage::NAMES`: "A" flat
     /// drops, "arena" drops into the obstacle arena, "D" and "F" on the generated course
     /// of seed `first_seed`, "gauntlet"), car `i` from seed `first_seed + i`, all flown by
-    /// the Hybrid with the policy in `policy_json`. Cars of D and F share the course of
-    /// the first seed (so the viewer can draw it once); their seeds vary the driver's
-    /// speed and the start. Throws for an unknown stage or mode.
+    /// the Hybrid with the policy in `policy_json`. Cars of D share the course of the
+    /// first seed (so the viewer can draw it once); their seeds vary the driver's speed
+    /// and the start. Cars of F each have their own plate from their own seed. Throws
+    /// for an unknown stage or mode.
     pub fn for_stage(
         policy_json: &str,
         mode: &str,
@@ -168,6 +173,12 @@ impl Crowd {
     /// How many cars there are.
     pub fn count(&self) -> usize {
         self.episodes.len()
+    }
+
+    /// Each car's short label for the flip plate that kicks it ("back flip", "barrel L",
+    /// "roll + flip"), `count` strings; empty strings on the stages without plates.
+    pub fn car_labels(&self) -> Vec<String> {
+        self.labels.clone()
     }
 
     /// One physics step (1/120 s) for every car still running, the policy acting at
@@ -276,16 +287,23 @@ impl Crowd {
         let course = course.or(owned_course.as_ref());
         let mut episodes = Vec::new();
         let mut pilots = Vec::new();
+        let mut labels = Vec::new();
         for offset in 0..u64::from(count) {
             let seed = first_seed
                 .checked_add(offset)
                 .ok_or_else(|| JsError::new("Crowd: first_seed is too large"))?;
-            let episode = match course {
+            // Stage F cars each fly their own plate, so each builds its own course.
+            let shared = course.filter(|_| stage != CrowdStage::Flight);
+            let episode = match shared {
                 Some(course) => {
                     Episode::start_on_course(&plain, &scenarios, stage.stage(), course, seed)?
                 }
                 None => Episode::start(&plain, &scenarios, stage.stage(), seed)?,
             };
+            labels.push(match (stage, episode.result().preset) {
+                (CrowdStage::Flight, Some(name)) => preset_label(&name),
+                _ => String::new(),
+            });
             episodes.push(episode);
             let mut pilot = hybrid.clone();
             pilot.reset(seed);
@@ -302,6 +320,7 @@ impl Crowd {
             pilots,
             throttles,
             course_shapes_json,
+            labels,
         })
     }
 }
@@ -464,6 +483,38 @@ mod tests {
                 "{name}"
             );
         }
+    }
+
+    #[test]
+    fn stage_f_cars_each_fly_their_own_plate_as_the_hybrid_eval_does() {
+        let (plain, scenarios) = setup();
+        let mut crowd = crowd("F", 0, 8);
+
+        run_to_end(&mut crowd);
+
+        let mut expected = Vec::new();
+        for seed in 0..8 {
+            let mut hybrid = eval_hybrid();
+            expected.push(run_episode(&plain, &scenarios, Stage::F, &mut hybrid, seed).unwrap());
+        }
+        assert_eq!(
+            crowd.results_json().ok().unwrap(),
+            serde_json::to_string(&expected).unwrap()
+        );
+        let labels = crowd.car_labels();
+        assert_eq!(labels.len(), 8);
+        assert!(labels.iter().all(|label| !label.is_empty()));
+        let mut distinct = labels.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert!(distinct.len() >= 3, "one round shows {distinct:?}");
+        assert!(labels.iter().all(|label| label.split(' ').count() <= 3));
+        // The other stages have no plates and so no labels.
+        assert!(crowd_labels_empty("A") && crowd_labels_empty("D"));
+    }
+
+    fn crowd_labels_empty(name: &str) -> bool {
+        crowd(name, 0, 2).car_labels().iter().all(String::is_empty)
     }
 
     #[test]

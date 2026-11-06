@@ -11,7 +11,7 @@
       "first_seed": 0,
       "size": 8,
       "best_landed": 8,
-      "first_landed": 5
+      "first_landed": 6
     },
     "driving": {
       "first_seed": 0,
@@ -20,10 +20,10 @@
       "first_landed": 8
     },
     "flight": {
-      "first_seed": 8,
+      "first_seed": 16,
       "size": 8,
-      "best_landed": 8,
-      "first_landed": 0
+      "best_landed": 7,
+      "first_landed": 3
     }
   }
 }

@@ -116,6 +116,7 @@ function startRound(current: Stage, round: number): void {
     round,
     shapes: first?.course_shapes() ?? null,
     wheelsPerCar: wheelPoses / (init.carsPerCheckpoint * FLOATS_PER_POSE),
+    carTags: crowds.map((crowd) => crowd.car_labels()),
   });
   postSnapshot(current, performance.now());
 }

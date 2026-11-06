@@ -23,6 +23,7 @@ def load_sim_config(
     randomize_mode: bool = True,
     controller: str | None = None,
     randomize_share: float = 1.0,
+    widened: bool = True,
 ) -> str:
     """The sim config JSON for `mode` ("realistic" or "arcade") and `stage`; `randomize`
     turns on SPEC §9.8 domain randomization for BatchedSim episodes (training only);
@@ -32,7 +33,9 @@ def load_sim_config(
     throttles (`ResidualSettings.as_sim_json`); `randomize_mode=False` keeps `mode`'s
     preset under randomization, for a policy trained for one mode; `controller="hybrid"`
     trains under the game's Hybrid gate (PD flies until the gate hands over);
-    `randomize_share` randomizes only that share of episodes (the rest run plain)."""
+    `randomize_share` randomizes only that share of episodes (the rest run plain);
+    `widened=False` turns scenarios.toml's `[widening]` off: the Stage A and F draws every
+    result before the widening was made with."""
     if not CONFIGS_DIR.is_dir():
         raise FileNotFoundError(
             f"configs folder not found at {CONFIGS_DIR}: install ninelives from the repo "
@@ -41,7 +44,7 @@ def load_sim_config(
     config = {
         "vehicle_toml": (CONFIGS_DIR / "vehicle.toml").read_text(),
         "modes_toml": (CONFIGS_DIR / "modes.toml").read_text(),
-        "scenarios_toml": (CONFIGS_DIR / "scenarios.toml").read_text(),
+        "scenarios_toml": scenarios_text(widened),
         "reward_toml": override_reward_weights(
             (CONFIGS_DIR / "reward.toml").read_text(), reward_overrides or {}
         ),
@@ -58,6 +61,18 @@ def load_sim_config(
     if controller is not None:
         config["controller"] = controller
     return json.dumps(config)
+
+
+def scenarios_text(widened: bool) -> str:
+    """scenarios.toml's text, with `[widening]` switched off unless `widened`."""
+    text = (CONFIGS_DIR / "scenarios.toml").read_text()
+    if widened:
+        return text
+    head, separator, rest = text.partition("[widening]")
+    rest, count = re.subn(r"^enabled\s*=\s*true", "enabled = false", rest, count=1, flags=re.M)
+    if not separator or count != 1:
+        raise ValueError("scenarios.toml has no [widening] enabled = true to switch off")
+    return head + separator + rest
 
 
 def override_reward_weights(reward_toml: str, overrides: dict[str, float]) -> str:
