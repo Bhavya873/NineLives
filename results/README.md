@@ -8,7 +8,7 @@ Name pattern: `eval_<controller>_<stage>_<mode>.json` (+ `.csv` from the Python 
 
 - `eval_off_*`: no controller (Stages A and B). Cited by README and docs/EXPERIMENTS.md.
 - `eval_pd_*`: the PD controller, Stages A to E, both modes (`_dr` for Stage A realistic). Cited by README, docs/EXPERIMENTS.md.
-- `eval_hybrid_*`: PD plus the trained AI, Stages A to E, both modes. Cited by README, docs/EXPERIMENTS.md. `eval_hybrid_A_realistic.json` is also read by `web/tests-node/crowd.test.mjs`.
+- `eval_hybrid_*`: PD plus the trained AI, Stages A to E, both modes. Cited by README, docs/EXPERIMENTS.md. 
 - `eval_ai_*`: the AI alone on Stage A (arcade, realistic, realistic `_dr`). `eval_ai_A_realistic.json` is read by `web/tests-node/policy.test.mjs` (wasm must match native).
 - `hover_hack.json`: the hover-hack experiment (SPEC 9.11, docs/TRAINING.md, README chart `docs/images/hover-hack.svg`).
 - `stunt_budget.json`: air budget per stunt (docs/research/stunt-planning.md, docs/EXPERIMENTS.md).
@@ -26,6 +26,8 @@ Name pattern: `eval_<controller>_<stage>_<mode>.json` (+ `.csv` from the Python 
   - `2026-10-27-gate-tilt/`, `2026-10-27-r3/`, `2026-10-27-r4/`: manifest and validation summary for the hand-over tilt test and training rounds R3 and R4.
 
 ## Removed in the repo cleanup
+
+`widening_2026-11/before/` and `widening_2026-11/widened/`: PD and Hybrid (the policy of `models/policy.json`), Stages A and F, both modes, 1000 episodes, seed 0, made with the old draws (`--legacy`) and with scenarios.toml `[widening]`. Rows carry `preset`, `strength` and `spin_axis`; each file has `by_preset` and `by_axis` tables. Tables are in docs/EXPERIMENTS.md. `widened/eval_hybrid_A_realistic.json` is read by `web/tests-node/crowd.test.mjs`.
 
 Raw per-candidate eval files under `control_upgrade/*/candidates/` and `control_upgrade/2026-10-26-pd-model-fix/hybrid_r2_latest/` (their numbers stay in the manifests), and the superseded speed sweeps `speed_sweep_after_drive`, `speed_sweep_after_merge` and `speed_sweep_drive_candidate` (their numbers stay in docs/EXPERIMENTS.md and docs/research/speed-survival.md). 66 files, about 12 MB.
 
