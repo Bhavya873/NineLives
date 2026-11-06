@@ -7,7 +7,7 @@ import vehicleToml from '../../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { prefersReducedMotion, requireElement } from '../shared/dom.ts';
+import { focusDialog, prefersReducedMotion, requireElement } from '../shared/dom.ts';
 import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import { saveRun, sessionStore, takeSavedRun } from './run-storage.ts';
@@ -22,6 +22,7 @@ import {
   livesLeft,
   restartLives,
   restoreLives,
+  savesThisRun,
   updateLives,
 } from '../ui/lives.ts';
 import { createNozzleMap, updateNozzleMap } from '../ui/nozzle-map.ts';
@@ -181,13 +182,15 @@ async function start(): Promise<void> {
   fillHudValues(game.hud(), hudValues);
   // Back from the viewer (?play=1&resume=1): the lives lost before leaving stay lost.
   if (params.has('play') && params.has('resume')) {
-    restoreLives(lives, hudValues, takeSavedRun(sessionStore()));
+    const saved = takeSavedRun(sessionStore());
+    restoreLives(lives, hudValues, saved.lostLives, saved.saves);
   }
   // Before a watch link leaves the page, remember the lives lost so far.
   for (const link of document.querySelectorAll<HTMLAnchorElement>('a[href$="viewer.html"]')) {
     link.addEventListener('click', () => {
       const left = livesLeft(lives, hudValues);
-      saveRun(sessionStore(), LIVES - left, lives.over ? 0 : left);
+      const run = { lostLives: LIVES - left, saves: savesThisRun(lives, hudValues) };
+      saveRun(sessionStore(), run, lives.over ? 0 : left);
     });
   }
   const zoneTiles = {
@@ -207,12 +210,20 @@ async function start(): Promise<void> {
   // Esc pauses and resumes; nothing moves while paused or after the last life.
   const pausedPanel = requireElement('paused');
   let paused = false;
+  let restorePauseFocus: (() => void) | null = null;
   onKeyPress('Escape', () => {
     if (!started || lives.over) {
       return;
     }
     paused = !paused;
     pausedPanel.hidden = !paused;
+    // The pause card is a dialog: the page behind it is inert, and Esc gives focus back.
+    if (paused) {
+      restorePauseFocus = focusDialog(pausedPanel, pausedPanel.querySelector('a') ?? pausedPanel);
+    } else {
+      restorePauseFocus?.();
+      restorePauseFocus = null;
+    }
   });
   // The key card folds with its Keys button; it starts folded on small screens.
   const keysPanel = requireElement('hud-keys');
@@ -356,8 +367,8 @@ async function start(): Promise<void> {
       },
       started: () => started,
       heartsLeft: () => livesLeft(lives, hudValues),
-      // tests only: takes a life as a crash would
-      loseLife: () => grantFreeRespawns(lives, -1),
+      // tests only (?testhooks): takes a life as a crash would
+      ...(params.has('testhooks') ? { loseLife: () => grantFreeRespawns(lives, -1) } : {}),
     },
   });
 }

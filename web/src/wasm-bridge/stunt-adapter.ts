@@ -13,9 +13,3 @@ export function requestStuntInSim(game: object, code: StuntCodeValue): boolean {
   const capable = game as Partial<StuntCapableGame>;
   return typeof capable.request_stunt === 'function' ? capable.request_stunt(code) : false;
 }
-
-/** Which stunts the planner would take now (bit `code - 1`), or 0 if the build lacks it. */
-export function stuntReadyMaskFromSim(game: object): number {
-  const capable = game as { stunt_ready_mask?: () => number };
-  return typeof capable.stunt_ready_mask === 'function' ? capable.stunt_ready_mask() : 0;
-}

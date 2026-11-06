@@ -192,3 +192,32 @@ test('the Barlow fonts load and the tiles are flat slate', async ({ page }) => {
   expect(dash.filter).toBe('none');
   expect(dash.shadow).toBe('none');
 });
+
+test('Tab never lands behind the title or the pause card', async ({ page }) => {
+  await page.goto('/');
+  await waitForHook(page);
+  const behind = async () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      const dialog = document.querySelector('#title:not([hidden]), #paused:not([hidden])');
+      return !!active && active !== document.body && !!dialog && !dialog.contains(active);
+    });
+  for (let press = 0; press < 6; press += 1) {
+    await page.keyboard.press('Tab');
+    expect(await behind()).toBe(false);
+  }
+  // the page behind is inert while the title is up, and live again after Play
+  await expect(page.locator('#hud-top-right')).toHaveJSProperty('inert', true);
+  await page.locator('#title-play').click();
+  await expect(page.locator('#hud-top-right')).toHaveJSProperty('inert', false);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#paused')).toBeVisible();
+  await expect(page.locator('#hud-top-right')).toHaveJSProperty('inert', true);
+  for (let press = 0; press < 4; press += 1) {
+    await page.keyboard.press('Tab');
+    expect(await behind()).toBe(false);
+  }
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#hud-top-right')).toHaveJSProperty('inert', false);
+});
