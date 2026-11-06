@@ -98,6 +98,9 @@ fn the_summary_counts_rates_and_air_per_save() {
         speed_kept: None,
         settle_time_s: success.then_some(0.8),
         air_left_kg: Some(200.0),
+        preset: None,
+        strength: None,
+        spin_axis: None,
     };
 
     let summary = summarise(&[episode(true, 1, 30.0), episode(false, 0, 10.0)]);

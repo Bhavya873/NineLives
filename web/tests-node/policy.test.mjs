@@ -82,6 +82,15 @@ test('a drop test throws the car into the air', () => {
   assert.ok(heightM > 1.0, `car centre at ${heightM} m`);
 });
 
+/** `row` as the rows were before the preset, strength and spin axis fields. */
+function withoutNewFields(row) {
+  const old = { ...row };
+  for (const key of ['preset', 'strength', 'spin_axis']) {
+    delete old[key];
+  }
+  return old;
+}
+
 test('wasm runs the same AI episodes as the native eval, bit for bit', () => {
   const committed = JSON.parse(
     readFileSync(new URL('../../results/eval_ai_A_realistic.json', import.meta.url), 'utf8'),
@@ -89,5 +98,14 @@ test('wasm runs the same AI episodes as the native eval, bit for bit', () => {
 
   const rows = JSON.parse(evalEpisodes('ai', 'realistic', 0n, 30, policyJson));
 
-  assert.deepEqual(rows.map(asFloat32), committed.episodes.slice(0, 30).map(asFloat32));
+  // The committed rows are the drops before the widening and have no preset fields; the
+  // widened default scripts some drops, so compare the plain ones (the rest are new).
+  const plain = rows.flatMap((row, index) => (row.preset === null ? [index] : []));
+  assert.ok(plain.length >= 15, `${plain.length} plain drops of 30`);
+  for (const index of plain) {
+    assert.deepEqual(
+      asFloat32(withoutNewFields(rows[index])),
+      asFloat32(committed.episodes[index]),
+    );
+  }
 });

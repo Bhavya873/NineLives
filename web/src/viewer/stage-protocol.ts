@@ -42,6 +42,9 @@ export interface StageRound {
   /** The course's shapes as JSON, or null on the flat arenas. */
   shapes: string | null;
   wheelsPerCar: number;
+  /** Each checkpoint row's car tags in car order ("barrel L"); empty strings where a car has
+   * none (only Stage F cars have a flip plate). */
+  carTags: string[][];
 }
 
 /** Worker to page: the poses after `simTimeS` seconds of this round. A row that has not
