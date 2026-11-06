@@ -22,6 +22,13 @@ fn start(seed: u64) -> Episode {
     Episode::start(&variation, &scenarios(), Stage::F, seed).unwrap()
 }
 
+/// The old plate draws (widening off), which the 100%-upside-down measurement below was
+/// made on. The widened draws include milder plates the thrusters can nearly catch.
+fn start_legacy(seed: u64) -> Episode {
+    let variation = EpisodeVariation::none(&vehicle(), realistic());
+    Episode::start(&variation, &scenarios().legacy(), Stage::F, seed).unwrap()
+}
+
 fn run_to_end(episode: &mut Episode) -> EpisodeStatus {
     let mut status = EpisodeStatus::Running;
     while status == EpisodeStatus::Running {
@@ -35,7 +42,7 @@ fn with_the_thrusters_off_stage_f_turns_the_car_upside_down() {
     let mut inverted = 0;
     let mut crashed = 0;
     for seed in 0..20 {
-        let mut episode = start(seed);
+        let mut episode = start_legacy(seed);
 
         let status = run_to_end(&mut episode);
 
