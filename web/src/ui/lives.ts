@@ -102,15 +102,25 @@ export function updateLives(lives: Lives, values: HudValues, nowMs: number): voi
   }
 }
 
-/** Carries a run over a page change: `lost` lives are already gone. Call once at start-up. */
+/** Carries a run over a page change: `lost` lives are already gone and `saves` already made. Call once at start-up. */
 export function restoreLives(
-  lives: Pick<Lives, 'crashesAtStart' | 'freeRespawns'>,
-  values: Pick<HudValues, 'crashes'>,
+  lives: Pick<Lives, 'crashesAtStart' | 'freeRespawns' | 'savesAtStart'>,
+  values: Pick<HudValues, 'crashes' | 'saves'>,
   lost: number,
+  saves = 0,
 ): void {
   const clamped = Number.isFinite(lost) ? Math.min(LIVES - 1, Math.max(0, Math.floor(lost))) : 0;
   lives.crashesAtStart = values.crashes - clamped;
   lives.freeRespawns = 0;
+  lives.savesAtStart = values.saves - (Number.isFinite(saves) ? Math.max(0, Math.floor(saves)) : 0);
+}
+
+/** Saves made in this run so far, for the page change. */
+export function savesThisRun(
+  lives: Pick<Lives, 'savesAtStart'>,
+  values: Pick<HudValues, 'saves'>,
+): number {
+  return values.saves - lives.savesAtStart;
 }
 
 /** Starts a new run with nine lives from the sim's current counts. */
@@ -127,7 +137,7 @@ export function restartLives(lives: Lives, values: HudValues): void {
 
 /** This run's saves, for the game-over screen. */
 function runSummary(lives: Lives, values: HudValues): string {
-  const saves = values.saves - lives.savesAtStart;
+  const saves = savesThisRun(lives, values);
   return `Out of lives - ${saves === 1 ? '1 save' : `${saves} saves`}`;
 }
 

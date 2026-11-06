@@ -45,7 +45,7 @@
         </dl>
       </section>
       <!-- Out of the Tab order: a focused link would leave the game when Enter is pressed. -->
-      <a id="hud-watch" class="tile" href="./viewer.html" tabindex="-1">Watch AI training</a>
+      <a id="hud-watch" class="tile" href="./viewer.html" tabindex="-1">Watch the AI train</a>
     </div>
     <!-- Bottom-left: the gauge card, speed and air. -->
     <div id="hud-dash" class="tile">
@@ -83,12 +83,19 @@
       <div id="hud-toast" class="tile" hidden></div>
       <div id="hud-too-slow" class="tile" hidden></div>
       <div id="hud-alert" class="tile" hidden></div>
-      <div id="hud-envelope" class="tile" hidden>AI outside envelope</div>
+      <div id="hud-envelope" class="tile" hidden>AI unsure</div>
     </div>
     <div id="hud-perf" class="tile" hidden></div>
-    <section id="paused" class="tile" hidden>
-      <h2 class="tile-display">Paused - Esc to resume</h2>
-      <a href="./viewer.html">Watch AI training</a>
+    <section
+      id="paused"
+      class="tile"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="paused-title"
+      hidden
+    >
+      <h2 id="paused-title" class="tile-display">Paused - Esc to resume</h2>
+      <a href="./viewer.html">Watch the AI train</a>
     </section>
     <section
       id="game-over"

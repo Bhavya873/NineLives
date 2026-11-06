@@ -25,7 +25,7 @@ test('the pause menu offers the training viewer', async ({ page }) => {
   });
 
   await page.keyboard.press('Escape');
-  const pauseLink = page.locator('#paused').getByRole('link', { name: 'Watch AI training' });
+  const pauseLink = page.locator('#paused').getByRole('link', { name: 'Watch the AI train' });
   await expect(pauseLink).toBeVisible();
 
   await pauseLink.click();
@@ -42,13 +42,16 @@ async function hook(page: import('@playwright/test').Page, name: string): Promis
 }
 
 test('the back button returns to the game with the same lives and no title', async ({ page }) => {
-  await page.goto('/?play=1');
+  await page.goto('/?play=1&testhooks=1');
   await expect.poll(() => hook(page, 'heartsLeft'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(9);
   await hook(page, 'loseLife');
   await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(1);
 
   await page.locator('#hud-watch').click();
   await expect(page).toHaveURL(/viewer\.html$/);
+  // the run is kept for the trip back, saves included
+  const kept = await page.evaluate(() => sessionStorage.getItem('ninelives.run'));
+  expect(JSON.parse(kept ?? '{}')).toEqual({ lostLives: 1, saves: 0 });
   await page.locator('#viewer-back').click();
 
   await expect(page).toHaveURL(/play=1/);
@@ -60,7 +63,7 @@ test('the back button returns to the game with the same lives and no title', asy
 
 test('a fresh tab or a plain ?play=1 starts with nine lives', async ({ page, context }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
-  await page.goto('/?play=1');
+  await page.goto('/?play=1&testhooks=1');
   await expect.poll(() => hook(page, 'heartsLeft'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(9);
   await hook(page, 'loseLife');
   await page.locator('#hud-watch').click();
