@@ -4,12 +4,16 @@
 //! cargo run --release -p nl-control --example eval -- \
 //!     --controller pd --stage A --mode realistic --episodes 1000 --seed 0
 //! (`--controller ai` or `hybrid` reads `--policy`, default models/policy.json; `--dr` turns on
-//! domain randomization, SPEC §9.8, and adds `_dr` to the file name; `--course <json>`
+//! domain randomization, SPEC §9.8, and adds `_dr` to the file name; `--legacy` turns the
+//! scenarios.toml `[widening]` off (the Stage A and F draws every earlier result was made
+//! with; the file name gets no suffix, so pair it with `--out`); `--course <json>`
 //! runs the episodes on that course, e.g. courses/playground.json, and adds its file
 //! stem, e.g. `_playground`; `--controllers <toml>` reads the controller settings from that
 //! file instead of configs/controllers.toml, e.g. to try `[allocation] model`; `--out <dir>`
 //! writes there instead of `results`)
 //!
+//! Every file also has `by_preset` and `by_axis` tables (episodes, landing and crash rate per
+//! flip-plate preset and per dominant spin axis), printed as markdown after the summary.
 //! Every file also records `physics_hash`, `controller_config_hash`, `policy_hash` (null
 //! without a policy) and `git_sha`, so a result can be matched to the settings it ran on.
 
@@ -37,6 +41,8 @@ struct Args {
     seed: u64,
     policy: String,
     randomize: bool,
+    /// Run the Stage A and F draws as they were before `[widening]`.
+    legacy: bool,
     /// A course JSON file to run the episodes on; None: flat ground.
     course: Option<String>,
     /// A controllers.toml to use instead of the repo's; None: the repo's.
@@ -58,7 +64,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args()?;
     let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML)?;
     let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)?;
-    let scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?;
+    let mut scenarios = ScenariosConfig::from_toml_str(DEFAULT_SCENARIOS_TOML)?;
+    if args.legacy {
+        scenarios = scenarios.legacy();
+    }
     let stage = Stage::from_name(&args.stage).ok_or("--stage must be A, B, C, D, E or F")?;
     let mode = modes
         .by_name(&args.mode)
@@ -85,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         };
         results.push(result);
     }
-    write_report(&args, &results, &provenance)
+    write_report(&args, &results, &provenance, scenarios.widened().is_some())
 }
 
 /// Prints the summary and writes it, with every episode, to the results file.
@@ -93,8 +102,13 @@ fn write_report(
     args: &Args,
     results: &[EpisodeResult],
     provenance: &Provenance,
+    widened: bool,
 ) -> Result<(), Box<dyn Error>> {
     let summary = summarise(results);
+    let by_preset = group_rows(results, |row| row.preset.clone());
+    let by_axis = group_rows(results, |row| {
+        row.spin_axis.map(|axis| axis.name().to_string())
+    });
     let stage_name = args.stage.to_uppercase();
     let report = serde_json::json!({
         "controller": args.controller,
@@ -102,12 +116,15 @@ fn write_report(
         "mode": args.mode,
         "first_seed": args.seed,
         "randomized": args.randomize,
+        "widened": widened,
         "course": args.course,
         "physics_hash": provenance.physics_hash,
         "controller_config_hash": provenance.controller_config_hash,
         "policy_hash": provenance.policy_hash,
         "git_sha": provenance.git_sha,
         "summary": summary,
+        "by_preset": by_preset,
+        "by_axis": by_axis,
         "episodes": results,
     });
     std::fs::create_dir_all(&args.out)?;
@@ -128,8 +145,73 @@ fn write_report(
     // Compact: 1000 per-episode rows pretty-printed are several hundred KB per file.
     std::fs::write(&path, serde_json::to_string(&report)?)?;
     println!("{}", serde_json::to_string_pretty(&summary)?);
+    println!("{}", markdown_table("preset", &by_preset));
+    println!("{}", markdown_table("spin axis", &by_axis));
     println!("wrote {path}");
     Ok(())
+}
+
+/// One line of the per-preset or per-axis table.
+#[derive(Debug, serde::Serialize)]
+struct GroupRow {
+    /// The preset or axis name ("none" for episodes without one).
+    name: String,
+    episodes: usize,
+    /// Fraction that succeeded (landed on the wheels and held), 0..1.
+    landing_rate: f32,
+    /// Fraction that ended in a crash, 0..1.
+    crash_rate: f32,
+    /// Mean strength of the group's episodes, if they have one.
+    mean_strength: Option<f32>,
+}
+
+/// The episodes grouped by `key` (sorted by name), with their landing and crash rates.
+fn group_rows(
+    results: &[EpisodeResult],
+    key: impl Fn(&EpisodeResult) -> Option<String>,
+) -> Vec<GroupRow> {
+    let mut groups: std::collections::BTreeMap<String, Vec<&EpisodeResult>> =
+        std::collections::BTreeMap::new();
+    for row in results {
+        groups
+            .entry(key(row).unwrap_or_else(|| "none".to_string()))
+            .or_default()
+            .push(row);
+    }
+    let rate = |rows: &[&EpisodeResult], test: fn(&EpisodeResult) -> bool| {
+        rows.iter().filter(|row| test(row)).count() as f32 / rows.len() as f32
+    };
+    groups
+        .into_iter()
+        .map(|(name, rows)| {
+            let strengths: Vec<f32> = rows.iter().filter_map(|row| row.strength).collect();
+            let mean_strength = (!strengths.is_empty())
+                .then(|| strengths.iter().sum::<f32>() / strengths.len() as f32);
+            GroupRow {
+                name,
+                episodes: rows.len(),
+                landing_rate: rate(&rows, |row| row.success),
+                crash_rate: rate(&rows, |row| row.crash_cause.is_some()),
+                mean_strength,
+            }
+        })
+        .collect()
+}
+
+/// `rows` as a markdown table headed `heading`.
+fn markdown_table(heading: &str, rows: &[GroupRow]) -> String {
+    let mut text =
+        format!("| {heading} | episodes | landing % | crash % |\n|---|---:|---:|---:|\n");
+    for row in rows {
+        text.push_str(&format!(
+            "| {} | {} | {:.1} | {:.1} |\n",
+            row.name,
+            row.episodes,
+            row.landing_rate * 100.0,
+            row.crash_rate * 100.0
+        ));
+    }
+    text
 }
 
 /// The controller named by `--controller`: Off, PD built for this car, or the AI or
@@ -201,6 +283,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
         seed: 0,
         policy: "models/policy.json".to_string(),
         randomize: false,
+        legacy: false,
         course: None,
         controllers: None,
         out: "results".to_string(),
@@ -209,6 +292,10 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
     while let Some(name) = words.next() {
         if name == "--dr" {
             args.randomize = true;
+            continue;
+        }
+        if name == "--legacy" {
+            args.legacy = true;
             continue;
         }
         let value = words.next().ok_or(format!("{name} needs a value"))?;

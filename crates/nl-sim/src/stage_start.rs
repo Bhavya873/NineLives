@@ -10,10 +10,11 @@ use crate::driver_bot::{Centerline, DriverBot, HopTrigger, has_hop_rows, row_hop
 use crate::driving_stages::{
     HopSetup, draw_chaos_plan, draw_hop_setup, draw_target_speed, hop_course,
 };
-use crate::flight_stage::{FlightSetup, draw_flight_setup, flight_course};
+use crate::flight_stage::{FlightSetup, StartAttitude, draw_flight_setup, flight_course};
 use crate::hop_profile::HopProfile;
 use crate::randomization::EpisodeVariation;
-use crate::scenarios::{ScenariosConfig, Stage, start_episode};
+use crate::scenarios::{ScenariosConfig, Stage, start_episode_tagged};
+use crate::spin_axis::ScenarioTag;
 use crate::vehicle_config::VehicleConfig;
 use crate::world::{PlaceCarError, World};
 
@@ -70,6 +71,8 @@ pub(crate) struct StageStart {
     pub(crate) knock_steps: Vec<u64>,
     /// Car rows the car must not touch (Stage C).
     pub(crate) obstacles: Vec<ObstacleZone>,
+    /// What the start was made of (the eval's per-preset tables).
+    pub(crate) tag: ScenarioTag,
 }
 
 /// One episode's draws, made once per reset and shared by everything that sets it up.
@@ -117,7 +120,13 @@ impl StagePlan {
             let plates = scenarios.piece_catalog()?.flip_plates().ok_or_else(|| {
                 PlaceCarError::BadCourse("pieces.json: Stage F needs a flip_plate".to_string())
             })?;
-            flight = Some(draw_flight_setup(&scenarios.stage_f, &plates, seed));
+            let widening = scenarios.widened().map(|widening| &widening.stage_f);
+            flight = Some(draw_flight_setup(
+                &scenarios.stage_f,
+                widening,
+                &plates,
+                seed,
+            ));
         }
         Ok(StagePlan {
             stage,
@@ -171,8 +180,13 @@ pub(crate) fn begin_stage(
     let mut start = match (plan.base, &plan.hop, &plan.flight) {
         (_, _, Some(flight)) => begin_flight(world, variation, scenarios, flight, course, seed)?,
         (Stage::A | Stage::B, _, _) => {
-            start_episode(world, plan.base, scenarios, seed)?;
-            no_driver(Goal::HoldOnWheels)
+            // Stage E on a drop keeps the plain drops: the widening is for A itself.
+            let widened = plan.stage == Stage::A;
+            let tag = start_episode_tagged(world, plan.base, scenarios, widened, seed)?;
+            StageStart {
+                tag,
+                ..no_driver(Goal::HoldOnWheels)
+            }
         }
         (_, Some((setup, profile)), _) => {
             begin_hop(world, variation, scenarios, setup, profile, course, seed)?
@@ -265,7 +279,15 @@ fn begin_flight(
     seed: u64,
 ) -> Result<StageStart, PlaceCarError> {
     let centerline = course.map_or(Centerline::along_x(), Centerline::of_course);
-    roll_forward(world, setup.speed_m_s)?;
+    match &setup.start {
+        Some(start) => roll_forward_off_level(
+            world,
+            setup.speed_m_s,
+            start,
+            scenarios.episode.spawn_clearance_m,
+        )?,
+        None => roll_forward(world, setup.speed_m_s)?,
+    }
     let bot = DriverBot::new(
         scenarios.driver_bot,
         &variation.vehicle,
@@ -274,7 +296,44 @@ fn begin_flight(
         &[],
         seed,
     );
-    Ok(with_driver(Goal::LandAndHold, bot))
+    Ok(StageStart {
+        tag: setup.tag(),
+        ..with_driver(Goal::LandAndHold, bot)
+    })
+}
+
+/// Like `roll_forward`, but the car starts tilted and turned off its heading by `start`
+/// and spinning slowly. It rolls along its own heading and is lifted clear of the ground.
+fn roll_forward_off_level(
+    world: &mut World,
+    speed_m_s: f32,
+    start: &StartAttitude,
+    clearance_m: f32,
+) -> Result<(), PlaceCarError> {
+    use rapier3d::prelude::{Rotation, Vector};
+    let pose = world.chassis_pose();
+    let heading = pose.to_rapier().rotation * Rotation::from_rotation_y(start.yaw_rad);
+    let axis = Vector::new(
+        libm::cosf(start.tilt_axis_rad),
+        0.0,
+        libm::sinf(start.tilt_axis_rad),
+    );
+    let rotation = Rotation::from_axis_angle(axis, start.tilt_rad) * heading;
+    let velocity = heading * Vector::X * speed_m_s;
+    let place = |world: &mut World, lift_m: f32| {
+        let [x, y, z] = pose.position_m;
+        world.place_car(
+            [x, y + lift_m, z],
+            rotation.to_array(),
+            velocity.to_array(),
+            start.spin_rad_s,
+        )
+    };
+    place(world, 0.0)?;
+    let lift_m = (clearance_m - world.lowest_chassis_point_m()).max(0.0);
+    place(world, lift_m)?;
+    world.refill_tank();
+    Ok(())
 }
 
 /// Keeps the car where the world put it (the course start), level and facing the
@@ -337,6 +396,7 @@ fn no_driver(goal: Goal) -> StageStart {
         driver: None,
         knock_steps: Vec::new(),
         obstacles: Vec::new(),
+        tag: ScenarioTag::default(),
     }
 }
 
