@@ -7,6 +7,10 @@
 //! any nozzle itself: each tick it returns a [`StuntCommand`] (spin about an axis, or
 //! nothing) and who owns the nozzles; the executor turns the command into throttles.
 //!
+//! A jump may hold up to [`MAX_STUNTS`] stunts: the same stunt repeated is one long coast
+//! (a double flip is one spin-up, two turns, one brake), a different stunt next brakes to a
+//! stop and spins up again. Every added stunt re-runs the rules with the extra time and air.
+//!
 //! Phases: `Idle → Requested → Authorized → SpinUp → Coast → Brake → Catch → Settled`,
 //! with `Aborted` reachable from SpinUp, Coast and Brake. `Authorized` lasts a single
 //! tick, so `tick` reports the phase after it, `SpinUp`.
@@ -29,6 +33,13 @@ const TANK_FULL_GATE: f32 = 0.999;
 const MIN_ALPHA_RAD_S2: f32 = 0.5;
 /// Settled needs the car this close to upright, in degrees, and this slow.
 const SETTLED_MAX_TILT_DEG: f32 = 15.0;
+
+/// Most stunts in one jump (rotations counted one each).
+pub const MAX_STUNTS: usize = 3;
+/// A multi-turn coast may go this much faster than the fastest configured single-turn rate.
+const MULTI_TURN_RATE_SCALE: f32 = 1.4;
+/// A brake between two spins in one jump ends at this rate, rad/s (not the PD hand-over).
+const STOP_RATE_RAD_S: f32 = 0.3;
 
 /// Body axis indices into `CarState::angular_velocity_body_rad_s`.
 const ROLL_AXIS: usize = 0;
@@ -275,16 +286,162 @@ fn alpha_for(config: &StuntConfig, kind: StuntKind, state: &CarState) -> f32 {
     base * state.mode_thrust_scale * state.tank_gate
 }
 
-fn coast_rate_for(config: &StuntConfig, kind: StuntKind, mode: StuntMode, alpha: f32) -> f32 {
+/// The spin the car coasts at. One turn uses the configured rate; several turns may go as
+/// fast as the fastest configured rate, which shortens a long coast, as long as spin-up and
+/// brake still fit in the turns (w² <= turns·2·pi·alpha + end²/2).
+fn coast_rate_for(
+    config: &StuntConfig,
+    kind: StuntKind,
+    mode: StuntMode,
+    alpha: f32,
+    turns: u8,
+    end_rate: f32,
+) -> f32 {
     let configured = match (kind.is_flip(), mode) {
         (true, StuntMode::Realistic) => config.flip_coast_rate_realistic_rad_s,
         (false, StuntMode::Realistic) => config.barrel_coast_rate_realistic_rad_s,
         (true, StuntMode::Arcade) => config.flip_coast_rate_arcade_rad_s,
         (false, StuntMode::Arcade) => config.barrel_coast_rate_arcade_rad_s,
     };
-    // Spin-up and brake together must fit in one turn: w² <= 2·pi·alpha + wh²/2.
-    let fits = (TAU * alpha + 0.5 * config.handover_rate_rad_s.powi(2)).sqrt();
+    let fits = (f32::from(turns.max(1)) * TAU * alpha + 0.5 * end_rate.powi(2)).sqrt();
+    if turns > 1 {
+        let fastest = config
+            .flip_coast_rate_realistic_rad_s
+            .max(config.barrel_coast_rate_realistic_rad_s)
+            .max(config.flip_coast_rate_arcade_rad_s)
+            .max(config.barrel_coast_rate_arcade_rad_s);
+        return configured.max(fastest * MULTI_TURN_RATE_SCALE).min(fits);
+    }
     configured.min(fits)
+}
+
+/// A run of one stunt kind flown as a single spin of `turns` full rotations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Segment {
+    kind: StuntKind,
+    turns: u8,
+}
+
+/// Merges neighbours of the same kind: a double flip is one segment of two turns.
+fn segments_of(kinds: &[StuntKind]) -> Vec<Segment> {
+    let mut segments: Vec<Segment> = Vec::new();
+    for &kind in kinds {
+        match segments.last_mut() {
+            Some(last) if last.kind == kind => last.turns += 1,
+            _ => segments.push(Segment { kind, turns: 1 }),
+        }
+    }
+    segments
+}
+
+/// The rate a segment's brake ends at: the PD hand-over for the last one, a stop otherwise.
+fn end_rate_for(config: &StuntConfig, last: bool) -> f32 {
+    if last {
+        config.handover_rate_rad_s
+    } else {
+        STOP_RATE_RAD_S
+    }
+}
+
+fn air_rate_for(config: &StuntConfig, kind: StuntKind) -> f32 {
+    if kind.is_flip() {
+        config.pitch_air_kg_s
+    } else {
+        config.roll_air_kg_s
+    }
+}
+
+/// Time (s) and firing time (s) of a segment's remaining spin-up, coast and brake.
+struct SegmentTimes {
+    up_s: f32,
+    coast_s: f32,
+    brake_s: f32,
+}
+
+/// The remaining times of a segment that is at `rate` with `rotation` turned so far,
+/// before it has started braking (spin-up and coast), aiming for `omega`.
+fn times_to_go(
+    segment: Segment,
+    omega: f32,
+    alpha: f32,
+    end_rate: f32,
+    rate: f32,
+    rotation: f32,
+) -> SegmentTimes {
+    let target = f32::from(segment.turns) * TAU;
+    let up_s = (omega - rate).max(0.0) / alpha;
+    let turned = ramp_angle(rate, omega, alpha) + ramp_angle(end_rate, omega, alpha);
+    let coast_s = (target - rotation - turned).max(0.0) / omega;
+    SegmentTimes {
+        up_s,
+        coast_s,
+        brake_s: (omega - end_rate).max(0.0) / alpha,
+    }
+}
+
+/// What the rest of a jump's stunts still need: time and the air burnt firing.
+struct Cost {
+    time_s: f32,
+    air_kg: f32,
+}
+
+/// Cost of `segments` from segment `index`, which is in `phase` at `rate` with `rotation`
+/// turned and coasting at `omega`; the later segments start from rest. Excludes the catch,
+/// the margin and the landing reserve.
+#[allow(clippy::too_many_arguments)]
+fn remaining_cost(
+    config: &StuntConfig,
+    inputs: &PlannerInputs,
+    segments: &[Segment],
+    index: usize,
+    phase: StuntPhase,
+    rate: f32,
+    rotation: f32,
+    omega: f32,
+) -> Cost {
+    let mut cost = Cost {
+        time_s: 0.0,
+        air_kg: 0.0,
+    };
+    for (i, &segment) in segments.iter().enumerate().skip(index) {
+        let last = i + 1 == segments.len();
+        let end_rate = end_rate_for(config, last);
+        let alpha = alpha_for(config, segment.kind, &inputs.state);
+        let air_rate = air_rate_for(config, segment.kind);
+        if i == index {
+            let target = f32::from(segment.turns) * TAU;
+            let brake_s = (rate.max(end_rate) - end_rate) / alpha;
+            let (time_s, firing_s) = match phase {
+                // Past the point of braking the rotation is what it is.
+                StuntPhase::Brake => (brake_s, brake_s),
+                StuntPhase::Coast => {
+                    let to_turn = (target - rotation - ramp_angle(end_rate, rate, alpha)).max(0.0);
+                    let firing_s =
+                        (omega - rate).max(0.0) / alpha + (omega - end_rate).max(0.0) / alpha;
+                    (to_turn / rate.max(0.1) + brake_s, firing_s)
+                }
+                _ => {
+                    let t = times_to_go(segment, omega, alpha, end_rate, rate, rotation);
+                    (t.up_s + t.coast_s + t.brake_s, t.up_s + t.brake_s)
+                }
+            };
+            cost.time_s += time_s;
+            cost.air_kg += air_rate * firing_s;
+        } else {
+            let omega = coast_rate_for(
+                config,
+                segment.kind,
+                inputs.mode,
+                alpha,
+                segment.turns,
+                end_rate,
+            );
+            let t = times_to_go(segment, omega, alpha, end_rate, 0.0, 0.0);
+            cost.time_s += t.up_s + t.coast_s + t.brake_s;
+            cost.air_kg += air_rate * (t.up_s + t.brake_s);
+        }
+    }
+    cost
 }
 
 /// Angle of spin-up from rest (or from `from` rad/s) to `to` rad/s at `alpha`.
@@ -324,12 +481,21 @@ fn check_start(config: &StuntConfig, inputs: &PlannerInputs) -> Result<(), Stunt
     Ok(())
 }
 
-/// The planner's four authorization rules (research §2.3, plan G4). `Ok` carries the plan,
-/// `Err` the first rule that failed, in the order: start envelope (4), landing surface (1),
-/// time (2), air (3).
+/// The planner's four authorization rules (research §2.3, plan G4) for one stunt.
 pub fn authorize(
     config: &StuntConfig,
     kind: StuntKind,
+    inputs: &PlannerInputs,
+) -> Result<StuntPlan, StuntRefusal> {
+    authorize_chain(config, &[kind], inputs)
+}
+
+/// The same rules for up to [`MAX_STUNTS`] stunts flown back to back in one jump: the time
+/// and air of every one of them must fit. `Ok` carries the plan, `Err` the first rule that
+/// failed, in the order: start envelope (4), landing surface (1), time (2), air (3).
+pub fn authorize_chain(
+    config: &StuntConfig,
+    kinds: &[StuntKind],
     inputs: &PlannerInputs,
 ) -> Result<StuntPlan, StuntRefusal> {
     let refuse = |reason| Err(StuntRefusal { reason });
@@ -342,28 +508,41 @@ pub fn authorize(
     if let Err(reason) = check_landing(config, &landing) {
         return refuse(reason);
     }
-    let alpha = alpha_for(config, kind, &inputs.state);
-    let omega = coast_rate_for(config, kind, inputs.mode, alpha);
-    let handover = config.handover_rate_rad_s;
-    let spin_up_s = omega / alpha;
-    let brake_s = (omega - handover).max(0.0) / alpha;
-    let turned = ramp_angle(0.0, omega, alpha) + ramp_angle(handover, omega, alpha);
-    let coast_s = (TAU - turned).max(0.0) / omega;
-    let required_s = spin_up_s + coast_s + brake_s + config.catch_time_s + config.settle_margin_s;
+    let segments = segments_of(kinds);
+    let Some(&first) = segments.first() else {
+        return refuse(StuntReason::NoLanding);
+    };
+    let end_rate = end_rate_for(config, segments.len() == 1);
+    let alpha = alpha_for(config, first.kind, &inputs.state);
+    let omega = coast_rate_for(
+        config,
+        first.kind,
+        inputs.mode,
+        alpha,
+        first.turns,
+        end_rate,
+    );
+    let first_times = times_to_go(first, omega, alpha, end_rate, 0.0, 0.0);
+    let cost = remaining_cost(
+        config,
+        inputs,
+        &segments,
+        0,
+        StuntPhase::SpinUp,
+        0.0,
+        0.0,
+        omega,
+    );
+    let required_s = cost.time_s + config.catch_time_s + config.settle_margin_s;
     // Rule 2.
     if landing.time_s - landing.time_uncertainty_s < required_s {
         return refuse(StuntReason::NotEnoughTime);
     }
     // Rule 3.
-    let air_rate = if kind.is_flip() {
-        config.pitch_air_kg_s
-    } else {
-        config.roll_air_kg_s
-    };
     let air_needed_kg = if inputs.unlimited_air {
         0.0
     } else {
-        config.air_margin * (air_rate * (spin_up_s + brake_s) + config.catch_air_kg)
+        config.air_margin * (cost.air_kg + config.catch_air_kg)
             + landing_reserve_kg(config, &inputs.state, &landing)
     };
     if !inputs.unlimited_air && inputs.air_kg < air_needed_kg {
@@ -372,9 +551,9 @@ pub fn authorize(
     Ok(StuntPlan {
         coast_rate_rad_s: omega,
         alpha_rad_s2: alpha,
-        spin_up_s,
-        coast_s,
-        brake_s,
+        spin_up_s: first_times.up_s,
+        coast_s: first_times.coast_s,
+        brake_s: first_times.brake_s,
         required_s,
         air_needed_kg,
     })
@@ -392,20 +571,32 @@ pub fn landing_reserve_kg(
     config.landing_air_kg_per_m_s * fall_m_s
 }
 
-/// One stunt's state machine. Make one per car, call `request` when the player presses a
-/// stunt key and `tick` every control tick.
+/// The stunt machine for one jump. Make one per car, call `request` when the player presses
+/// a stunt key (up to [`MAX_STUNTS`] times in a jump) and `tick` every control tick.
 #[derive(Debug, Clone)]
 pub struct StuntPlanner {
     config: StuntConfig,
     phase: StuntPhase,
+    /// The stunt flying now (the kind of the current segment).
     kind: StuntKind,
     requested_at_s: f32,
     settled_at_s: f32,
-    /// Integrated rotation about the stunt axis, in the direction of the stunt, rad.
+    /// Stunts asked for and not yet judged, in press order.
+    pending: Vec<StuntKind>,
+    /// The authorized stunts as spins: neighbours of one kind are one segment.
+    segments: Vec<Segment>,
+    /// The segment being flown.
+    segment_index: usize,
+    /// Rotation about the stunt axis in this segment, in the stunt's direction, rad.
     rotation_rad: f32,
-    /// Latched once the counted rotation first reaches a full turn (minus the slack), so
-    /// PD's catch turning the car back towards level cannot un-complete the stunt.
-    rotation_done: bool,
+    /// Rotation of the segments already flown, rad.
+    rotation_before_rad: f32,
+    /// Full turns of this segment latched so far: each counts once the integrated rotation
+    /// first reaches a full turn (minus the slack), so PD's catch turning the car back
+    /// towards level cannot un-complete a turn already made.
+    turns_done: u8,
+    /// Turns (stunts) of the earlier segments, all complete.
+    turns_before: u8,
     coast_rate_rad_s: f32,
 }
 
@@ -417,8 +608,13 @@ impl StuntPlanner {
             kind: StuntKind::FrontFlip,
             requested_at_s: 0.0,
             settled_at_s: 0.0,
+            pending: Vec::new(),
+            segments: Vec::new(),
+            segment_index: 0,
             rotation_rad: 0.0,
-            rotation_done: false,
+            rotation_before_rad: 0.0,
+            turns_done: 0,
+            turns_before: 0,
             coast_rate_rad_s: 0.0,
         }
     }
@@ -431,21 +627,57 @@ impl StuntPlanner {
         self.phase
     }
 
+    /// The stunt flying or waiting now.
     pub fn kind(&self) -> StuntKind {
         self.kind
     }
 
-    /// Rotation about the stunt axis so far, in the stunt's direction, rad.
+    /// Rotation about the stunt axis so far in the current spin, in the stunt's direction, rad.
     pub fn rotation_rad(&self) -> f32 {
         self.rotation_rad
     }
 
-    /// True once the integrated rotation has reached 2π minus the slack, and stays true
-    /// for the rest of the stunt: a ramp launch leaves the car nose up, and PD's catch
-    /// turning it back to level must not undo a turn already made. Being upright is not
-    /// enough.
+    /// Rotation of the whole jump's stunts so far, rad.
+    pub fn total_rotation_rad(&self) -> f32 {
+        self.rotation_before_rad + self.rotation_rad
+    }
+
+    /// The authorized stunts of this jump, in order (empty until one is authorized).
+    pub fn chain(&self) -> Vec<StuntKind> {
+        self.segments
+            .iter()
+            .flat_map(|s| std::iter::repeat_n(s.kind, usize::from(s.turns)))
+            .collect()
+    }
+
+    /// The chain as one number for the event stream: the stunt codes, the first in the
+    /// ones digit (a double back flip is 44, a back flip then a barrel roll right is 24).
+    pub fn chain_code(&self) -> f32 {
+        let mut value = 0u32;
+        let mut scale = 1u32;
+        for kind in self.chain() {
+            value += u32::from(kind.code()) * scale;
+            scale *= 10;
+        }
+        value as f32
+    }
+
+    /// Stunts authorized (each turn is one), plus those still waiting.
+    fn stunts_held(&self) -> usize {
+        self.segments
+            .iter()
+            .map(|s| usize::from(s.turns))
+            .sum::<usize>()
+            + self.pending.len()
+    }
+
+    /// True once every authorized stunt has its full turn latched (2π minus the slack), and
+    /// stays true for the rest of the jump's stunts: a ramp launch leaves the car nose up,
+    /// and PD's catch turning it back to level must not undo a turn already made. Being
+    /// upright is not enough, and a chain is complete only when every stunt in it is.
     pub fn rotation_complete(&self) -> bool {
-        self.rotation_done
+        !self.segments.is_empty()
+            && usize::from(self.turns_before + self.turns_done) >= self.chain().len()
     }
 
     /// True while the Hybrid gate must stay on PD: from Authorized until
@@ -454,22 +686,43 @@ impl StuntPlanner {
         !matches!(self.phase, StuntPhase::Idle | StuntPhase::Requested)
     }
 
-    /// Queues a stunt. Ignored (returns false) while another stunt is queued or flying.
+    /// Queues a stunt. While Idle it starts a request; while a request waits or a stunt is
+    /// spinning up, coasting or braking it adds one more, up to [`MAX_STUNTS`] in all (the
+    /// planner judges it at the next tick). False when full or the stunt is past braking.
     pub fn request(&mut self, kind: StuntKind, now_s: f32) -> bool {
-        if self.phase != StuntPhase::Idle {
-            return false;
+        match self.phase {
+            StuntPhase::Idle => {
+                self.pending.clear();
+                self.pending.push(kind);
+                self.phase = StuntPhase::Requested;
+                self.kind = kind;
+                self.requested_at_s = now_s;
+                true
+            }
+            StuntPhase::Requested | StuntPhase::SpinUp | StuntPhase::Coast | StuntPhase::Brake
+                if self.stunts_held() < MAX_STUNTS =>
+            {
+                self.pending.push(kind);
+                true
+            }
+            _ => false,
         }
-        self.phase = StuntPhase::Requested;
-        self.kind = kind;
-        self.requested_at_s = now_s;
-        true
+    }
+
+    fn clear_run(&mut self) {
+        self.pending.clear();
+        self.segments.clear();
+        self.segment_index = 0;
+        self.rotation_rad = 0.0;
+        self.rotation_before_rad = 0.0;
+        self.turns_done = 0;
+        self.turns_before = 0;
     }
 
     /// Drops any stunt (respawn or reset).
     pub fn reset(&mut self) {
         self.phase = StuntPhase::Idle;
-        self.rotation_rad = 0.0;
-        self.rotation_done = false;
+        self.clear_run();
     }
 
     /// `tick` for a world: builds the inputs, with `dt_s` the time the tick covers.
@@ -488,17 +741,18 @@ impl StuntPlanner {
             StuntPhase::Authorized => self.phase = StuntPhase::SpinUp,
             StuntPhase::SpinUp | StuntPhase::Coast | StuntPhase::Brake => {
                 self.track_rotation(inputs);
+                self.take_added(inputs, &mut events);
                 self.tick_flying(inputs, &mut events);
             }
             StuntPhase::Catch | StuntPhase::Aborted => {
                 self.track_rotation(inputs);
+                self.pending.clear();
                 self.tick_recovery(inputs, &mut events);
             }
             StuntPhase::Settled => {
                 if inputs.time_s - self.settled_at_s >= self.config.hybrid_hold_after_settled_s {
                     self.phase = StuntPhase::Idle;
-                    self.rotation_rad = 0.0;
-                    self.rotation_done = false;
+                    self.clear_run();
                 }
             }
         }
@@ -511,34 +765,112 @@ impl StuntPlanner {
     }
 
     fn tick_requested(&mut self, inputs: &PlannerInputs, events: &mut Vec<StuntEvent>) {
-        let kind = self.kind;
-        match authorize(&self.config, kind, inputs) {
-            Ok(plan) => {
-                self.coast_rate_rad_s = plan.coast_rate_rad_s;
-                self.rotation_rad = 0.0;
-                self.rotation_done = false;
-                // Authorized lasts this one tick, then SpinUp: the nozzles are fired from
-                // the next tick on, so report SpinUp now.
-                self.phase = StuntPhase::SpinUp;
-                events.push(StuntEvent::Started { kind });
+        // Try all the waiting stunts, then fewer: the ones that do not fit are refused.
+        let mut keep = self.pending.len();
+        let mut last_error = None;
+        while keep > 0 {
+            match authorize_chain(&self.config, &self.pending[..keep], inputs) {
+                Ok(plan) => {
+                    let kept: Vec<StuntKind> = self.pending[..keep].to_vec();
+                    let dropped: Vec<StuntKind> = self.pending[keep..].to_vec();
+                    self.begin(&kept, plan.coast_rate_rad_s);
+                    for &kind in &kept {
+                        events.push(StuntEvent::Started { kind });
+                    }
+                    if let Some(reason) = last_error {
+                        for kind in dropped {
+                            events.push(StuntEvent::Refused { kind, reason });
+                        }
+                    }
+                    return;
+                }
+                Err(StuntRefusal { reason }) => {
+                    let waiting =
+                        matches!(reason, StuntReason::NotAirborne | StuntReason::TiltedTooFar);
+                    if waiting {
+                        // Not in the air yet, or a ramp launch still has the car nose up:
+                        // keep the request queued (PD is levelling it) until it expires.
+                        if inputs.time_s - self.requested_at_s >= self.config.request_timeout_s {
+                            self.expire(events);
+                        }
+                        return;
+                    }
+                    last_error = Some(reason);
+                    keep -= 1;
+                }
             }
-            // Not in the air yet, or a ramp launch still has the car nose up: keep the
-            // request queued (PD is levelling it) until it expires.
-            Err(StuntRefusal {
-                reason: StuntReason::NotAirborne | StuntReason::TiltedTooFar,
-            }) if inputs.time_s - self.requested_at_s < self.config.request_timeout_s => {}
-            Err(StuntRefusal {
-                reason: StuntReason::NotAirborne | StuntReason::TiltedTooFar,
-            }) => {
-                self.phase = StuntPhase::Idle;
-                events.push(StuntEvent::Refused {
-                    kind,
-                    reason: StuntReason::RequestExpired,
-                });
+        }
+        let reason = last_error.unwrap_or(StuntReason::NoLanding);
+        for kind in std::mem::take(&mut self.pending) {
+            events.push(StuntEvent::Refused { kind, reason });
+        }
+        self.phase = StuntPhase::Idle;
+    }
+
+    fn expire(&mut self, events: &mut Vec<StuntEvent>) {
+        for kind in std::mem::take(&mut self.pending) {
+            events.push(StuntEvent::Refused {
+                kind,
+                reason: StuntReason::RequestExpired,
+            });
+        }
+        self.phase = StuntPhase::Idle;
+    }
+
+    /// Starts the first spin of `kinds`.
+    fn begin(&mut self, kinds: &[StuntKind], coast_rate_rad_s: f32) {
+        self.pending.clear();
+        self.segments = segments_of(kinds);
+        self.segment_index = 0;
+        self.kind = self.segments[0].kind;
+        self.coast_rate_rad_s = coast_rate_rad_s;
+        self.rotation_rad = 0.0;
+        self.rotation_before_rad = 0.0;
+        self.turns_done = 0;
+        self.turns_before = 0;
+        // Authorized lasts this one tick, then SpinUp: the nozzles are fired from
+        // the next tick on, so report SpinUp now.
+        self.phase = StuntPhase::SpinUp;
+    }
+
+    /// Judges the stunts added in the air, one by one: each needs the time and air of the
+    /// whole chain with it. Accepted ones join the chain (`Started`), the rest are refused.
+    fn take_added(&mut self, inputs: &PlannerInputs, events: &mut Vec<StuntEvent>) {
+        let added = std::mem::take(&mut self.pending);
+        for kind in added {
+            let mut segments = self.segments.clone();
+            let last_index = segments.len() - 1;
+            // The same stunt again joins the spin if that spin has not started braking.
+            let joins = last_index > self.segment_index
+                || matches!(self.phase, StuntPhase::SpinUp | StuntPhase::Coast);
+            match segments.last_mut() {
+                Some(last) if last.kind == kind && joins => last.turns += 1,
+                _ => segments.push(Segment { kind, turns: 1 }),
             }
-            Err(StuntRefusal { reason }) => {
-                self.phase = StuntPhase::Idle;
-                events.push(StuntEvent::Refused { kind, reason });
+            let alpha = alpha_for(&self.config, self.kind, &inputs.state);
+            let rate = self.progress_rate(inputs);
+            // Spinning up, a longer coast may go faster; once coasting the rate is set.
+            let omega = if self.phase == StuntPhase::SpinUp {
+                let current = segments[self.segment_index];
+                let end_rate = end_rate_for(&self.config, self.segment_index + 1 == segments.len());
+                coast_rate_for(
+                    &self.config,
+                    current.kind,
+                    inputs.mode,
+                    alpha,
+                    current.turns,
+                    end_rate,
+                )
+            } else {
+                self.coast_rate_rad_s
+            };
+            match self.problem_for(&segments, inputs, alpha, rate, omega) {
+                None => {
+                    self.segments = segments;
+                    self.coast_rate_rad_s = omega;
+                    events.push(StuntEvent::Started { kind });
+                }
+                Some(reason) => events.push(StuntEvent::Refused { kind, reason }),
             }
         }
     }
@@ -547,9 +879,11 @@ impl StuntPlanner {
     fn track_rotation(&mut self, inputs: &PlannerInputs) {
         let rate = self.kind.sign() * inputs.state.angular_velocity_body_rad_s[self.kind.axis()];
         self.rotation_rad += rate * inputs.dt_s;
-        if self.rotation_rad >= TAU - self.config.complete_rotation_slack_rad {
-            self.rotation_done = true;
-        }
+        let turns = ((self.rotation_rad + self.config.complete_rotation_slack_rad) / TAU)
+            .floor()
+            .max(0.0);
+        let cap = self.segments.get(self.segment_index).map_or(1, |s| s.turns);
+        self.turns_done = self.turns_done.max((turns as u8).min(cap));
     }
 
     /// Spin rate in the stunt's direction, rad/s.
@@ -563,15 +897,19 @@ impl StuntPlanner {
         let alpha = alpha_for(&cfg, self.kind, &inputs.state);
 
         // Replan against the fresh forecast; abort to Catch if the window shrank.
-        if let Some(reason) = self.window_problem(inputs, alpha, rate) {
+        if let Some(reason) =
+            self.problem_for(&self.segments, inputs, alpha, rate, self.coast_rate_rad_s)
+        {
             self.abort(reason, events);
             return;
         }
 
         // Phase changes. Brake as soon as the remaining angle reaches the switching curve.
-        let handover = cfg.handover_rate_rad_s;
-        let remaining = TAU - self.rotation_rad;
-        let curve = ramp_angle(handover, rate.max(handover), alpha) + rate.max(0.0) * VALVE_LAG_S;
+        let segment = self.segments[self.segment_index];
+        let last = self.segment_index + 1 == self.segments.len();
+        let end_rate = end_rate_for(&cfg, last);
+        let remaining = f32::from(segment.turns) * TAU - self.rotation_rad;
+        let curve = ramp_angle(end_rate, rate.max(end_rate), alpha) + rate.max(0.0) * VALVE_LAG_S;
         match self.phase {
             StuntPhase::SpinUp | StuntPhase::Coast if remaining <= curve => {
                 self.phase = StuntPhase::Brake;
@@ -579,13 +917,50 @@ impl StuntPlanner {
             StuntPhase::SpinUp if rate >= self.coast_rate_rad_s => self.phase = StuntPhase::Coast,
             _ => {}
         }
-        if self.phase == StuntPhase::Brake && rate <= handover {
-            self.phase = StuntPhase::Catch;
+        if self.phase == StuntPhase::Brake && rate <= end_rate {
+            if last {
+                self.phase = StuntPhase::Catch;
+            } else if self.turns_done < segment.turns {
+                // Stopped short of the turn: the rest of the chain cannot be flown.
+                self.abort(StuntReason::NotEnoughTime, events);
+            } else {
+                self.next_segment(inputs);
+            }
         }
     }
 
-    /// Why the stunt can no longer be completed, if it cannot (replanned every tick).
-    fn window_problem(&self, inputs: &PlannerInputs, alpha: f32, rate: f32) -> Option<StuntReason> {
+    /// Hands the nozzles to the next spin of the chain, the car at rest about the old axis.
+    fn next_segment(&mut self, inputs: &PlannerInputs) {
+        self.turns_before += self.segments[self.segment_index].turns;
+        self.rotation_before_rad += self.rotation_rad;
+        self.rotation_rad = 0.0;
+        self.turns_done = 0;
+        self.segment_index += 1;
+        let segment = self.segments[self.segment_index];
+        self.kind = segment.kind;
+        let alpha = alpha_for(&self.config, segment.kind, &inputs.state);
+        let last = self.segment_index + 1 == self.segments.len();
+        self.coast_rate_rad_s = coast_rate_for(
+            &self.config,
+            segment.kind,
+            inputs.mode,
+            alpha,
+            segment.turns,
+            end_rate_for(&self.config, last),
+        );
+        self.phase = StuntPhase::SpinUp;
+    }
+
+    /// Why `segments` can no longer be completed from here, if they cannot (replanned every
+    /// tick, and run for each stunt added).
+    fn problem_for(
+        &self,
+        segments: &[Segment],
+        inputs: &PlannerInputs,
+        alpha: f32,
+        rate: f32,
+        omega: f32,
+    ) -> Option<StuntReason> {
         let cfg = &self.config;
         if inputs.state.wheels_down() > 0 || alpha < MIN_ALPHA_RAD_S2 {
             return Some(StuntReason::ControlLost);
@@ -596,36 +971,24 @@ impl StuntPlanner {
         if let Err(reason) = check_landing(cfg, &landing) {
             return Some(reason);
         }
-        let handover = cfg.handover_rate_rad_s;
-        let omega = self.coast_rate_rad_s;
-        let brake_s = (rate.max(handover) - handover) / alpha;
-        let remaining_s = match self.phase {
-            // Past the point of braking the rotation is what it is: only the recovery must fit.
-            StuntPhase::Brake => brake_s,
-            StuntPhase::Coast => {
-                let to_turn =
-                    (TAU - self.rotation_rad - ramp_angle(handover, rate, alpha)).max(0.0);
-                to_turn / rate.max(0.1) + brake_s
-            }
-            _ => {
-                let up_s = (omega - rate).max(0.0) / alpha;
-                let turned = ramp_angle(rate, omega, alpha) + ramp_angle(handover, omega, alpha);
-                let coast_s = (TAU - self.rotation_rad - turned).max(0.0) / omega;
-                up_s + coast_s + (omega - handover).max(0.0) / alpha
-            }
-        };
+        let cost = remaining_cost(
+            cfg,
+            inputs,
+            segments,
+            self.segment_index,
+            self.phase,
+            rate,
+            self.rotation_rad,
+            omega,
+        );
         let window_s = landing.time_s - landing.time_uncertainty_s;
-        if window_s < remaining_s + cfg.catch_time_s + cfg.settle_margin_s {
+        if window_s < cost.time_s + cfg.catch_time_s + cfg.settle_margin_s {
             return Some(StuntReason::NotEnoughTime);
         }
-        if !inputs.unlimited_air && self.phase != StuntPhase::Brake {
-            let air_rate = if self.kind.is_flip() {
-                cfg.pitch_air_kg_s
-            } else {
-                cfg.roll_air_kg_s
-            };
-            let firing_s = (omega - rate).max(0.0) / alpha + (omega - handover).max(0.0) / alpha;
-            let needed = cfg.air_margin * (air_rate * firing_s + cfg.catch_air_kg)
+        let braking_last =
+            self.phase == StuntPhase::Brake && self.segment_index + 1 == segments.len();
+        if !inputs.unlimited_air && !braking_last {
+            let needed = cfg.air_margin * (cost.air_kg + cfg.catch_air_kg)
                 + landing_reserve_kg(cfg, &inputs.state, &landing);
             if inputs.air_kg < needed {
                 return Some(StuntReason::NotEnoughAir);
@@ -636,10 +999,11 @@ impl StuntPlanner {
 
     fn abort(&mut self, reason: StuntReason, events: &mut Vec<StuntEvent>) {
         self.phase = StuntPhase::Aborted;
+        self.pending.clear();
         events.push(StuntEvent::Aborted {
             kind: self.kind,
             reason,
-            rotation_rad: self.rotation_rad,
+            rotation_rad: self.total_rotation_rad(),
         });
     }
 
@@ -656,17 +1020,18 @@ impl StuntPlanner {
         let aborted = self.phase == StuntPhase::Aborted;
         self.phase = StuntPhase::Settled;
         self.settled_at_s = inputs.time_s;
+        let first = self.chain().first().copied().unwrap_or(self.kind);
         if !aborted && self.rotation_complete() {
             events.push(StuntEvent::Landed {
-                kind: self.kind,
-                rotation_rad: self.rotation_rad,
+                kind: first,
+                rotation_rad: self.total_rotation_rad(),
             });
         } else if !aborted {
-            // Upright, but the rotation was never finished: that is not a stunt.
+            // Upright, but a rotation was never finished: that is not a stunt.
             events.push(StuntEvent::Aborted {
                 kind: self.kind,
                 reason: StuntReason::NotEnoughTime,
-                rotation_rad: self.rotation_rad,
+                rotation_rad: self.total_rotation_rad(),
             });
         }
     }

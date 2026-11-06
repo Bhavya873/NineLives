@@ -230,7 +230,8 @@ pub enum EventKind {
     /// An authorized stunt began its spin. Followed by: the `StuntCode`.
     StuntStart = 11,
     /// A stunt finished with the full rotation. Followed by: the `StuntCode`, the peak g of
-    /// the landing, the rotation in rad.
+    /// the landing, the total rotation in rad, the chain (the stunt codes of the jump, the
+    /// first in the ones digit: 44 is a double back flip).
     StuntLanded = 12,
     /// The planner said no. Followed by: the `StuntCode`, a `StuntReasonCode`.
     StuntRefused = 13,
@@ -258,6 +259,9 @@ pub enum StuntReasonCode {
     RequestExpired = 2,
     /// Aborted in the air: thrust ran out or a wheel touched early.
     ControlLost = 3,
+    /// Too little air time for the spin, brake and catch ("not enough time"); 0 is the
+    /// air tank and the start state.
+    NotEnoughTime = 4,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -427,7 +431,11 @@ impl Game {
     /// (the `StuntCode` values). The planner decides, at the next control step in the air,
     /// whether to start it (`StuntStart`) or refuse (`StuntRefused`), and a request still
     /// waiting after `[stunt] request_timeout_s` is refused. Returns false, queueing
-    /// nothing, for an unknown code, a crashed car or a stunt already queued or flying.
+    /// nothing, for an unknown code, a crashed car, a full jump (3 stunts) or a stunt that
+    /// is past braking. A stunt asked for while one is queued or spinning up, coasting or
+    /// braking is added to the jump (a second press of the same key is one more rotation;
+    /// another key flies after it): the planner judges each at the next control step and
+    /// answers with `StuntStart` (taken) or `StuntRefused` for it.
     pub fn request_stunt(&mut self, code: u8) -> bool {
         let Some(kind) = StuntKind::from_code(code) else {
             return false;
@@ -656,7 +664,7 @@ impl Game {
                     kind.code() as f32,
                     self.world.peak_g_load(),
                     rotation_rad,
-                    0.0,
+                    self.stunt.planner().chain_code(),
                 ],
                 StuntEvent::Refused { kind, reason } => [
                     kind_code(EventKind::StuntRefused),
@@ -674,7 +682,7 @@ impl Game {
                     kind.code() as f32,
                     stunt_reason_code(reason),
                     rotation_rad,
-                    0.0,
+                    self.stunt.planner().chain_code(),
                 ],
             };
             self.stunt_events.push(floats);
@@ -765,8 +773,8 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
 /// The reason number a `StuntRefused` or `StuntAborted` event carries.
 fn stunt_reason_code(reason: StuntReason) -> f32 {
     let code = match reason {
-        StuntReason::NotEnoughTime
-        | StuntReason::NotEnoughAir
+        StuntReason::NotEnoughTime => StuntReasonCode::NotEnoughTime,
+        StuntReason::NotEnoughAir
         | StuntReason::NotAirborne
         | StuntReason::TiltedTooFar
         | StuntReason::SpinningTooFast
