@@ -82,7 +82,7 @@ test('a short drop refuses the flip for lack of air time and leaves PD flying', 
   assert.deepEqual(seen[0].slice(0, 3), [
     EventKind.StuntRefused,
     FRONT_FLIP,
-    StuntReasonCode.NotEnoughTime,
+    StuntReasonCode.NotEnoughAirTime,
   ]);
   tickMany(game, IDLE, 360);
   assert.equal(game.hud()[HudField.WheelsTouching], 4);

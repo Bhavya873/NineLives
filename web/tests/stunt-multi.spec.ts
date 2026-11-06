@@ -39,11 +39,26 @@ test('tapping the flip key twice flies a double back flip and says so', async ({
     hook.loadCourse(json);
   }, HIGH_START_COURSE);
 
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { toastLog: string[] }).toastLog = seen;
+    new MutationObserver(() => {
+      const text = document.querySelector('#hud-toast')?.textContent ?? '';
+      if (text && seen[seen.length - 1] !== text) seen.push(text);
+    }).observe(document.querySelector('#hud-toast') as Node, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+  });
   await page.keyboard.press('KeyF');
   await page.keyboard.press('KeyF');
 
   // The toast shows for about a second: poll for the name as the landing happens.
-  const toast = page.locator('#hud-toast');
-  await expect(toast).toHaveText('double back flip', { timeout: 2 * SLOW_MACHINE_TIMEOUT_MS });
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { toastLog: string[] }).toastLog), {
+      timeout: 2 * SLOW_MACHINE_TIMEOUT_MS,
+    })
+    .toContain('double back flip');
   expect(consoleErrors).toEqual([]);
 });
