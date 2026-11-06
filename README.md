@@ -24,23 +24,25 @@ Open the live demo: TODO (the owner adds the link once the game is hosted).
 | V | change the wind |
 | Esc | pause |
 
-R puts the car back on the road. A stunt key is a request, not a command: the car only starts the move if it can still finish it and land.
+R puts the car back on the road. A stunt key is a request: the car only starts the move if it can still finish it and land. You can press stunt keys again during a jump to add moves, up to 3 per jump (a double back flip, a triple barrel roll, a flip then a roll). The toast names the move. If the air or time runs short, the toast says "not enough air" or "not enough time".
+
+You have nine lives. The "watch the AI train" link opens the training viewer, and its "back to game" button returns you to the game with the lives you had lost kept as they were. A new tab starts with nine.
 
 ## Limited air and Unlimited air
 
-The car carries an air tank of 260 kg (the `air_left_kg` field in `results/eval_off_A_realistic.json`). Every nozzle burst uses some of it.
+The car carries an air tank of 260 kg (`air_left_kg` in `results/eval_off_A_realistic.json`). Every nozzle burst uses some of it.
 
-- **Limited air:** the tank drains while you fire. It refills slowly once the wheels are down and the nozzles are quiet. If it runs dry, the car cannot right itself. This is the default.
-- **Unlimited air:** the tank never empties and the nozzles push twice as hard. Use it to play with the controls and stunts without watching the gauge. Air use is still counted.
+- **Limited air:** the tank drains while you fire and refills slowly once the wheels are down and the nozzles are quiet. If it runs dry, the car cannot right itself. This is the default.
+- **Unlimited air:** the tank never empties and the nozzles push twice as hard. Air use is still counted.
 
-In code, result files and settings, Limited air is called `realistic` and Unlimited air is called `arcade`. Those names stay in filenames such as `results/eval_pd_A_realistic.json`.
+In code, result files and settings, Limited air is `realistic` and Unlimited air is `arcade`, as in `results/eval_pd_A_realistic.json`.
 
 ## How it works
 
-- **The car.** A simulated car with four wheels and 10 air nozzles. The physics is written in Rust and runs in your browser as WebAssembly. It runs at a fixed 120 steps per second, so the same inputs always give the same result.
-- **The safety net.** A plain controller (PD, which means it steers the car back toward upright in proportion to how far off it is and how fast it is turning) decides which nozzles to fire. It is the default flyer in the game.
-- **The trained AI.** A small neural network trained in simulation with reinforcement learning (it tries drops, gets a reward for clean landings and learns from that). When the car tips more than 120 degrees from upright, the AI takes over from PD. The game only uses it if you open the page with `?controller=hybrid`. The AI is only trusted up to 55 m/s; above that PD flies.
-- **Training stages.** Stage A is a drop from a random bad start. Stages B to E add ramps, walls, gaps and obstacle courses. Stage F mixes everything.
+- **The car.** A simulated car with four wheels and 10 air nozzles. The physics is Rust, compiled to WebAssembly so it runs in your browser, at a fixed 120 steps per second. The same inputs always give the same result.
+- **The safety net.** A plain controller called PD steers the car back toward upright in proportion to how far off it is and how fast it is turning. It is the default flyer.
+- **The trained AI.** A small neural network trained in simulation by trial and reward. When the car tips more than 120 degrees from upright, it takes over from PD. The game uses it only with `?controller=hybrid`, and only up to 55 m/s.
+- **Training stages.** Stage A is a drop from a random bad start. B to E add ramps, walls, gaps and obstacles. F mixes everything.
 
 ## What we found
 
@@ -48,31 +50,26 @@ All numbers are success rates over 1000 fixed episodes per cell (four wheels dow
 
 - With no controller, 20.6% of Stage A drops end on four wheels (`eval_off_A_realistic.json`). PD raises that to 82.1% in Limited air (`eval_pd_A_realistic.json`) and 87.6% in Unlimited air (`eval_pd_A_arcade.json`).
 - The trained AI does not beat PD everywhere. On Stage A with Limited air, PD plus the AI gets 80.8% against PD's 82.1% (`eval_hybrid_A_realistic.json`). It uses less air per save though: 43 kg against 49 kg (`summary.air_per_save_kg` in the same two files).
-- Stages B, C and D are level between the two: 99.6%, 100.0% and 99.8% (`eval_pd_B_realistic.json`, `eval_pd_C_realistic.json`, `eval_pd_D_realistic.json`, and the matching `eval_hybrid_*` files).
-- Stage E, the hardest course, is 91.0% for PD and 91.3% for PD plus the AI in Limited air (`eval_pd_E_realistic.json`, `eval_hybrid_E_realistic.json`).
-- **The hover hack.** We trained the same car twice for about 12 million steps on Stage A in Unlimited air. One reward paid +0.1 for every step spent upright. The other paid only for landing and charged for air. With the first reward, 37.0% of drops were still in the air when the 8 second clock ran out. With the second, none were. Mean air used was 135 kg against 35 kg (`results/hover_hack.json`, `broken` and `fixed`). This is one seed and measures time-outs and airtime, not the car's attitude, so read it as a demonstration, not a benchmark.
+- Stages B, C and D are level between the two: 99.6%, 100.0% and 99.8%. Stage E is 91.0% for PD and 91.3% with the AI (matching `eval_pd_*` and `eval_hybrid_*` files, Limited air).
+- **The hover hack.** We trained the same car twice for about 12 million steps on Stage A in Unlimited air. One reward paid +0.1 for every step spent upright. The other paid only for landing and charged for air. With the first reward, 37.0% of drops were still in the air when the 8 second clock ran out. With the second, none were. Mean air used was 135 kg against 35 kg (`results/hover_hack.json`, `broken` and `fixed`). One seed; it measures time-outs and airtime, not the car's attitude.
 - TODO: the retrain (round r5) results are not in `results/` yet. Add the new per-preset landing table and the Stage A to F numbers from the r5 evaluation here, and refresh the numbers above if the eval files change.
 
-The full tables and every run are in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md). The file index is [results/README.md](results/README.md).
+Full tables and runs: [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md). File index: [results/README.md](results/README.md).
 
 ![Success rate by stage and mode: Off, PD, Hybrid](docs/images/results-by-stage.svg)
 
 ## How it was built
 
-The work followed a milestone plan ([docs/BUILD-PLAN.md](docs/BUILD-PLAN.md)). Each experiment and what it taught us is in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), and each design choice with its reason is in [docs/DECISIONS.md](docs/DECISIONS.md). The AI is explained without jargon in [docs/AI-IN-PLAIN-WORDS.md](docs/AI-IN-PLAIN-WORDS.md).
+The work followed a milestone plan ([docs/BUILD-PLAN.md](docs/BUILD-PLAN.md)). Experiments are in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), design choices with reasons in [docs/DECISIONS.md](docs/DECISIONS.md), and the AI in plain words in [docs/AI-IN-PLAIN-WORDS.md](docs/AI-IN-PLAIN-WORDS.md).
 
-- **Same physics everywhere.** One Rust crate holds the physics, and both training and the browser use it. A frozen test run (the golden trace) must give the same result on native and WebAssembly builds, and each physics setup has its own hash.
-- **Checks on every change.** Continuous integration runs the Rust, Python and browser tests.
-- **Numbers have a source.** Every number in this README comes from a file under `results/`, and the files are only overwritten by a rerun.
+- **Same physics everywhere.** Training and the browser use one Rust crate. A frozen test run (the golden trace) must match on native and WebAssembly builds.
 
-## Honest limits
+## Limits
 
-- PD alone is already strong, and the trained AI is not better on every stage.
 - Frame rate on a real GPU has not been measured. The 60 fps figures come from software rendering in headless Chromium.
 - The training viewer cannot show Stages C and E, because each seed builds its own course.
-- Stage A is the hard one: in Limited air, 17.9% of drops still crash with PD (`crash_rate` in `results/eval_pd_A_realistic.json`).
-- The hover-hack runs are small: 12 million steps, one seed each, 200 drops.
-- The AI is trusted only up to 55 m/s.
+- Stage A is the hard one: with PD in Limited air, 17.9% of drops still crash (`crash_rate` in `results/eval_pd_A_realistic.json`).
+- The hover-hack runs are small: one seed each, 200 drops.
 
 ## Credits
 
