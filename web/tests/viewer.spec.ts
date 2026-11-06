@@ -7,6 +7,8 @@ import { collectConsoleErrors } from './console-errors.ts';
 
 /** Generous limit for slow CI machines with software graphics. */
 const SLOW_MACHINE_TIMEOUT_MS = 90_000;
+/** Every stage worker has built its crowds and posted a round, on a slow shared runner. */
+const CROWD_BUILD_TIMEOUT_MS = 180_000;
 
 /** One stage as the viewer's test hook reports it. */
 interface StageReading {
@@ -83,26 +85,30 @@ test('the training viewer flies every stage at once and cars land', async ({ pag
 });
 
 test('every course stage draws its shapes and the drop stages draw none', async ({ page }) => {
-  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  // Each stage's worker builds all its crowds before it posts its first round, and CI runs the
+  // debug wasm with five workers on a couple of cores: that takes about a minute, and all the
+  // stages arrive together. So one shared deadline covers every stage, not one wait per stage.
+  test.setTimeout(CROWD_BUILD_TIMEOUT_MS + SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/viewer.html');
 
   await expect
-    .poll(async () => (await readStage(page, 'obstacles'))?.shapeCount ?? 0, {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    // The arena's parked cars merge into a few vehicle meshes, so it has fewer children than shapes.
-    .toBeGreaterThan(10);
-  await expect
-    .poll(async () => (await readStage(page, 'driving'))?.shapeCount ?? 0, {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    .toBeGreaterThan(1);
-  await expect
-    .poll(async () => (await readStage(page, 'flight'))?.shapeCount ?? 0, {
-      timeout: SLOW_MACHINE_TIMEOUT_MS,
-    })
-    .toBeGreaterThan(1);
+    .poll(
+      async () => {
+        const counts = new Map<string, number>();
+        for (const stage of await readStages(page)) {
+          counts.set(stage.arena, stage.shapeCount);
+        }
+        // The arena's parked cars merge into a few vehicle meshes, so it has fewer children than shapes.
+        return (
+          (counts.get('obstacles') ?? 0) > 10 &&
+          (counts.get('driving') ?? 0) > 1 &&
+          (counts.get('flight') ?? 0) > 1
+        );
+      },
+      { timeout: CROWD_BUILD_TIMEOUT_MS },
+    )
+    .toBe(true);
   expect((await readStage(page, 'flat'))?.shapeCount).toBe(0);
   expect((await readStage(page, 'side'))?.shapeCount).toBe(0);
   expect(consoleErrors).toEqual([]);

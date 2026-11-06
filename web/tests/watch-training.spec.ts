@@ -59,19 +59,24 @@ test('the back button returns to the game with the same lives and no title', asy
 });
 
 test('a fresh tab or a plain ?play=1 starts with nine lives', async ({ page, context }) => {
-  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
-  await page.goto('/?play=1');
+  test.setTimeout(3 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/?play=1&testhooks=1');
   await expect.poll(() => hook(page, 'heartsLeft'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(9);
   await hook(page, 'loseLife');
+  await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(1);
   await page.locator('#hud-watch').click();
   await expect(page).toHaveURL(/viewer\.html$/);
+  // close the viewer tab: five stage workers would slow the new tab's boot
+  await page.close();
 
   const fresh = await context.newPage();
   await fresh.goto('/?play=1&resume=1');
-  await expect(fresh.locator('#hud-hearts .heart')).toHaveCount(9, {
-    timeout: SLOW_MACHINE_TIMEOUT_MS,
-  });
+  // wait for a booted game, not just for hearts: the debug wasm can take a while to load
+  await expect.poll(() => hook(fresh, 'started'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(true);
+  await expect.poll(() => hook(fresh, 'heartsLeft')).toBe(9);
+  await expect(fresh.locator('#hud-hearts .heart')).toHaveCount(9);
   await expect(fresh.locator('#hud-hearts .heart.lost')).toHaveCount(0);
+  // a new navigation starts only once the game is up, so the first one is not aborted
   await fresh.goto('/');
   await expect(fresh.locator('#title')).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
 });
