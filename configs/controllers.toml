@@ -53,6 +53,30 @@ air_wish_min_height_m = 3.0
 # a bump is not a save.
 quiet_max_tilt_deg = 15.0
 quiet_max_spin_rad_s = 1.5
+# Looking ahead (PD reads the landing summary, nl_sim::forecast::LandingView). Landing on
+# an obstacle top, braking starts obstacle_margin_m higher: the nose can overhang the edge.
+# PD wants the car settled and braking catch_window_s before touchdown.
+obstacle_margin_m = 0.7
+catch_window_s = 0.8
+# Limited air only (Arcade is unchanged): while touchdown is farther than the braking time
+# plus catch_window_s, a tilt below hold_deadband_deg and a spin below hold_max_spin_rad_s
+# are left alone and sideways sliding is not damped, so a long fall keeps its air. The
+# landing air reserve is reserve_safety × the air the final braking needs + the catch air;
+# below low_air_floor_kg the attitude gains slide down to low_air_gain_share, not a cliff.
+hold_deadband_deg = 12.0
+hold_max_spin_rad_s = 0.8
+reserve_safety = 1.3
+reserve_catch_air_kg = 11.0
+low_air_floor_kg = 40.0
+low_air_gain_share = 0.5
+# Close to an edge (the landing surface ends within 6 m), sideways damping is stronger by
+# up to 1 + edge_damping_boost, and the nose tips by edge_pitch_rad_per_m_s per m/s of
+# forward speed (at most edge_pitch_max_rad) to slow the slide. The catch aims the up axis
+# at the surface normal when the surface is tilted at most normal_aim_max_deg.
+edge_damping_boost = 2.0
+edge_pitch_rad_per_m_s = 0.3
+edge_pitch_max_rad = 0.2
+normal_aim_max_deg = 35.0
 
 [allocation]
 # Solve min |W(B·u − w)|² + λ|u|² with 0 ≤ u ≤ 1 by projected gradient (SPEC §8).
@@ -100,7 +124,9 @@ forecast_speed_spread = 0.02
 forecast_pitch_spread_deg = 1.0
 # Air (rule 3) and start envelope (rule 4).
 air_margin = 1.25
-landing_reserve_kg = 60.0
+# Air kept for the landing: this per m/s of fall speed at touchdown (forecast time and fall
+# speed), not a flat number. PD's own estimate is m(1 + g/a)/exhaust speed = 5.5.
+landing_air_kg_per_m_s = 6.0
 start_max_tilt_deg = 25.0
 start_max_spin_rad_s = 1.5
 # Request handling.

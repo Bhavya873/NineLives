@@ -8,7 +8,7 @@ use std::f32::consts::TAU;
 use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML, StuntConfig};
 use nl_control::stunt::{
     NozzleOwner, PlannerInputs, StuntEvent, StuntKind, StuntMode, StuntPhase, StuntPlanner,
-    StuntReason, authorize,
+    StuntReason, authorize, landing_reserve_kg,
 };
 use nl_sim::car_state::CarState;
 use nl_sim::forecast::LandingForecast;
@@ -45,11 +45,19 @@ fn airborne_state() -> CarState {
     }
 }
 
+/// The car on a ballistic arc that comes down `air_time_s` from now: it still rises at
+/// half of g times that, so it lands at the same speed (the reserve counts the fall speed).
+fn airborne_state_for(air_time_s: f32) -> CarState {
+    let mut state = airborne_state();
+    state.linear_velocity_body_m_s[1] = 0.5 * 9.80665 * air_time_s;
+    state
+}
+
 fn inputs(time_s: f32, air_time_s: f32) -> PlannerInputs {
     PlannerInputs {
         time_s,
         dt_s: DT,
-        state: airborne_state(),
+        state: airborne_state_for(air_time_s),
         air_kg: 260.0,
         mode: StuntMode::Realistic,
         unlimited_air: false,
@@ -69,8 +77,13 @@ fn a_good_flip_is_authorized_with_the_research_budget() {
     assert_eq!(plan.coast_rate_rad_s, 5.0);
     // research §3: spin-up 0.38 + coast 0.9 + brake 0.27 + catch 0.8 + margin 0.3.
     assert!((plan.required_s - 2.64).abs() < 0.05, "{}", plan.required_s);
+    // The stunt's own air (about 46 kg) plus the landing reserve from the forecast: the
+    // fall speed at touchdown (about 19.6 m/s here) times `landing_air_kg_per_m_s`.
+    let input = inputs(0.0, 4.0);
+    let reserve = landing_reserve_kg(&config(), &input.state, &input.forecast.unwrap());
+    assert!((reserve - 6.0 * 19.6).abs() < 1.0, "{reserve}");
     assert!(
-        (plan.air_needed_kg - 106.0).abs() < 3.0,
+        (plan.air_needed_kg - (46.0 + reserve)).abs() < 3.0,
         "{}",
         plan.air_needed_kg
     );
@@ -136,13 +149,21 @@ fn rule_2_counts_the_uncertainty_against_the_air_time() {
 #[test]
 fn rule_3_refuses_when_the_tank_cannot_pay_for_the_stunt_and_the_landing() {
     let mut input = inputs(0.0, 4.0);
-    input.air_kg = 100.0; // flip needs about 106 kg
+    input.air_kg = 150.0; // flip needs about 164 kg: 46 for the stunt, 118 for the landing
     assert_eq!(
         refusal(StuntKind::FrontFlip, &input),
         StuntReason::NotEnoughAir
     );
-    input.air_kg = 120.0;
+    input.air_kg = 180.0;
     assert!(authorize(&config(), StuntKind::FrontFlip, &input).is_ok());
+    // A harder landing (more fall speed at touchdown) needs more air for the same stunt.
+    let mut hard = input;
+    // Body up is +y, so a fall at 30 m/s is -30; +30 would be a car still rising.
+    hard.state.linear_velocity_body_m_s[1] = -30.0;
+    assert_eq!(
+        refusal(StuntKind::FrontFlip, &hard),
+        StuntReason::NotEnoughAir
+    );
     // Arcade air never runs out: only the time rules apply.
     input.air_kg = 1.0;
     input.unlimited_air = true;

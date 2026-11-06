@@ -237,7 +237,7 @@ min_usable_landing_m = 8.4                # two car lengths
 forecast_speed_spread = 0.02
 forecast_pitch_spread_deg = 1.0
 air_margin = 1.25
-landing_reserve_kg = 60.0                 # max PD landing air measured: 57 kg (#24, 30 m/s)
+landing_air_kg_per_m_s = 6.0              # replaced the flat 60 kg reserve (2026-11-05)
 start_max_tilt_deg = 25.0
 start_max_spin_rad_s = 1.5
 # Player request handling.

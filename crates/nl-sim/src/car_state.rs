@@ -121,6 +121,8 @@ pub struct CarModel {
     /// Each nozzle's push at full throttle in Realistic mode: the columns of the
     /// SPEC's 6×10 matrix `B`.
     pub nozzle_wrenches: [Wrench; NOZZLE_COUNT],
+    /// How fast the air leaves a nozzle, in m/s: air used per second = push / this.
+    pub exhaust_speed_m_s: f32,
 }
 
 /// SPEC §9.2: a world-down ray from the centre of mass, ignoring the car itself.
@@ -198,5 +200,6 @@ pub(crate) fn read_car_model(physics: &PhysicsWorld, car: &Car) -> CarModel {
         mass_kg: body.mass(),
         principal_inertia_kg_m2: inertia_body_kg_m2,
         nozzle_wrenches,
+        exhaust_speed_m_s: car.exhaust_speed_m_s(),
     }
 }

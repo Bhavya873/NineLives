@@ -12,6 +12,7 @@ use crate::car_state::{CarState, Touchdown};
 use crate::conventions::{NOZZLE_COUNT, PHYSICS_DT_S};
 use crate::driving_stages::{pick_weighted, stream_rng};
 use crate::episode::{Episode, EpisodeResult, EpisodeStatus};
+use crate::forecast::LandingView;
 use crate::modes::ModeParams;
 use crate::obs::{OBS_DIM, Observation};
 use crate::randomization::EpisodeVariation;
@@ -206,6 +207,12 @@ impl TrainingEnv {
     /// (`Episode::actuator_state`): None with no running episode or under latency.
     pub fn actuator_state(&self) -> Option<ActuatorState> {
         self.episode.as_ref().and_then(Episode::actuator_state)
+    }
+
+    /// The landing summary eval's controllers see (`Episode::landing_view`): None with no
+    /// running episode or on the ground.
+    pub fn landing_view(&self) -> Option<LandingView> {
+        self.episode.as_ref().and_then(Episode::landing_view)
     }
 
     /// One control step with `throttles` (each in 0..1) given directly, e.g. PD's

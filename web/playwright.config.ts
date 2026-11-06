@@ -9,6 +9,9 @@ const PREVIEW_PORT = Number(process.env.PLAYWRIGHT_PREVIEW_PORT ?? 4173);
 
 export default defineConfig({
   testDir: 'tests',
+  // CI runs the debug wasm on a small runner, where one page boot can take longer than the
+  // 30 s default; the slow viewer specs set their own, longer timeouts.
+  timeout: process.env.CI ? 90_000 : 30_000,
   use: {
     baseURL: `http://localhost:${PREVIEW_PORT}`,
     launchOptions: {

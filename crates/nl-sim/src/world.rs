@@ -36,7 +36,7 @@ use crate::diagnostics::{
 };
 use crate::events::{EventInputs, EventTracker, SimEvent};
 use crate::floor_hook::FloorNormalHook;
-use crate::forecast::{ForecastSettings, LandingForecast, forecast};
+use crate::forecast::{ForecastSettings, LandingForecast, LandingView, forecast, landing_view};
 use crate::g_load::GLoad;
 use crate::hop_boost::{HopBlockedReason, HopBoost, boost_speed_share, combine_throttles};
 use crate::input::{BUTTON_BOOST, BUTTON_CHAOS, BUTTON_HOP, BUTTON_RESET, InputFrame};
@@ -1028,6 +1028,28 @@ impl World {
             body.linvel(),
             settings,
         )
+    }
+
+    /// The cheap landing summary for controllers: None on the ground or crashed, else the
+    /// nominal touchdown, its surface and the edges around it (`crate::forecast::LandingView`).
+    /// Read-only: it never changes the world.
+    pub fn landing_view(&self) -> Option<LandingView> {
+        if self.is_crashed() || self.wheels_touching_count() > 0 {
+            return None;
+        }
+        let body = &self.physics.bodies[self.car.chassis];
+        let view = landing_view(
+            &self.physics,
+            &self.car,
+            body.translation(),
+            body.linvel(),
+            |world_vector| self.in_body_frame(world_vector),
+        );
+        Some(LandingView {
+            limited_air: !self.mode.unlimited_air,
+            air_kg: self.tank.air_kg(),
+            ..view
+        })
     }
 
     /// The car's velocity in world coordinates.

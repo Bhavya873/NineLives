@@ -56,18 +56,18 @@ Success rate on fixed seeds, 1000 episodes per bar: four wheels down, quiet thro
 
 | Stage | Mode | Off | PD | Hybrid | PD air per save | Hybrid air per save |
 |---|---|---|---|---|---|---|
-| A | realistic | 20.6% | 82.2% | 81.0% | 49 kg | 43 kg |
-| A | arcade | 20.6% | 87.1% | 85.4% | 58 kg | 51 kg |
-| B | realistic | 16.6% | 99.4% | 99.4% | 27 kg | 27 kg |
-| B | arcade | 16.6% | 99.8% | 99.8% | 34 kg | 34 kg |
+| A | realistic | 20.6% | 82.1% | 80.8% | 49 kg | 43 kg |
+| A | arcade | 20.6% | 87.6% | 85.6% | 58 kg | 51 kg |
+| B | realistic | 16.6% | 99.6% | 99.6% | 27 kg | 27 kg |
+| B | arcade | 16.6% | 99.6% | 99.6% | 34 kg | 34 kg |
 | C | realistic | - | 100.0% | 100.0% | 10 kg | 10 kg |
-| C | arcade | - | 100.0% | 100.0% | 35 kg | 35 kg |
-| D | realistic | - | 99.7% | 99.7% | 9 kg | 9 kg |
+| C | arcade | - | 100.0% | 100.0% | 37 kg | 37 kg |
+| D | realistic | - | 99.8% | 99.8% | 9 kg | 9 kg |
 | D | arcade | - | 99.8% | 99.8% | 9 kg | 9 kg |
-| E | realistic | - | 90.7% | 90.8% | 16 kg | 15 kg |
-| E | arcade | - | 92.1% | 91.5% | 23 kg | 22 kg |
+| E | realistic | - | 91.0% | 91.3% | 16 kg | 15 kg |
+| E | arcade | - | 92.2% | 91.6% | 24 kg | 23 kg |
 
-**What the numbers say, plainly:** PD alone is already strong, and the trained policy does **not** beat it everywhere. The Hybrid is level with PD on Stages B to D and a little behind on Stage A (81.0% against 82.2% in Realistic) and on the Arcade cells of A and E; it uses less air per save on Stage A (43 kg against 49 kg). With domain randomization (a harder, noisier start) the Hybrid was ahead of PD in the October validation run: 92.1% against 88.7% over the 12 cells (before the last physics fix; docs/EXPERIMENTS.md), which is where the policy earns its place. The full story and every run are in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+**What the numbers say, plainly:** PD alone is already strong, and the trained policy does **not** beat it everywhere. The Hybrid is level with PD on Stages B to D and a little behind on Stage A (80.8% against 82.1% in Realistic) and on the Arcade cells of A and E; it uses less air per save on Stage A (43 kg against 49 kg). With domain randomization (a harder, noisier start) the Hybrid was ahead of PD in the October validation run: 92.1% against 88.7% over the 12 cells (before the last physics fix; docs/EXPERIMENTS.md), which is where the policy earns its place. The full story and every run are in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
 
 The viewer's curve shows how the shipped policy's checkpoints fly today:
 
