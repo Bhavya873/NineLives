@@ -19,11 +19,11 @@ Today the last kind is 10 `HardLanding`.
 | Number | Name | Meaning |
 |---|---|---|
 | 11 | `StuntStart` | An authorized stunt began SpinUp: `[11, code, 0, 0, 0]` |
-| 12 | `StuntLanded` | The stunt reached Settled with full rotation: `[12, code, peak_g, rotation_rad, 0]` |
+| 12 | `StuntLanded` | The stunt reached Settled with full rotation: `[12, code, peak_g, rotation_rad, chain]` (`code` is the first stunt of the jump, `chain` packs every stunt code with the first in the ones digit: 44 is a double back flip, 24 a back flip then a barrel roll right; 0 from an older build means the single stunt `code`) |
 | 13 | `StuntRefused` | The planner said no to a request: `[13, code, reason, 0, 0]` |
-| 14 | `StuntAborted` | The planner stopped a stunt mid-air and handed over to PD: `[14, code, reason, rotation_rad, 0]` |
+| 14 | `StuntAborted` | The planner stopped a stunt mid-air and handed over to PD: `[14, code, reason, rotation_rad, chain]` |
 
-Stunt reasons (float 2 of 13 and 14): 0 not enough air time, 1 landing blocked, 2 request expired, 3 control lost.
+Stunt reasons (float 2 of 13 and 14): 0 not enough air (tank or start state), 1 landing blocked, 2 request expired, 3 control lost, 4 not enough time. `StuntStart` is sent once for every stunt taken into the jump, `StuntRefused` once for every one turned down, so each key press gets exactly one answer.
 | 15 | `Scrape` | An underbody touch classed as a Scrape, not a crash (see `crash-scrape.md`) |
 | 16 | `TooSlowFallback` | The car entered a piece below `v_complete_min_m_s` and takes the fallback (see `survival.md`) |
 

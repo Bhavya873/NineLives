@@ -39,12 +39,15 @@ test('an unknown stunt code is not queued', () => {
   assert.equal(game.hud()[HudField.StuntPhase], 0);
 });
 
-test('a request shows on the HUD, and a second one waits for the first', () => {
+test('a request shows on the HUD, and a second one joins it up to three', () => {
   const game = new Game(vehicleToml, modesToml, controllersToml, 0n);
   assert.equal(game.request_stunt(BACK_FLIP), true);
   assert.equal(game.hud()[HudField.StuntPhase], 1, 'Requested');
   assert.equal(game.hud()[HudField.StuntCode], BACK_FLIP);
-  assert.equal(game.request_stunt(FRONT_FLIP), false);
+  assert.equal(game.request_stunt(FRONT_FLIP), true, 'a second stunt joins the jump');
+  assert.equal(game.request_stunt(BACK_FLIP), true);
+  assert.equal(game.request_stunt(BACK_FLIP), false, 'a fourth is turned away');
+  assert.equal(game.hud()[HudField.StuntCode], BACK_FLIP);
 });
 
 test('a request on the ground lapses after 3 s with the expired reason', () => {
@@ -79,7 +82,7 @@ test('a short drop refuses the flip for lack of air time and leaves PD flying', 
   assert.deepEqual(seen[0].slice(0, 3), [
     EventKind.StuntRefused,
     FRONT_FLIP,
-    StuntReasonCode.NotEnoughAirTime,
+    StuntReasonCode.NotEnoughTime,
   ]);
   tickMany(game, IDLE, 360);
   assert.equal(game.hud()[HudField.WheelsTouching], 4);
