@@ -1,6 +1,7 @@
 // Keeps the lives lost across a trip to the training viewer and back (sessionStorage, so a
 // new tab starts fresh). The game saves before a watch link leaves; `?play=1&resume=1`
-// reads it once. A run that is over, or no saved run, means nine fresh lives.
+// reads it once. A run that is over, or no saved run, means nine fresh lives. It keeps the
+// lives lost and the saves made, so the game-over count carries on.
 
 /** The sessionStorage key. */
 export const RUN_KEY = 'ninelives.run';
@@ -13,30 +14,37 @@ interface RunStorage {
 }
 
 /** Saves the lives lost so far; a finished run (no lives left) saves nothing. */
-export function saveRun(storage: RunStorage | null, lostLives: number, livesLeft: number): void {
+export function saveRun(
+  storage: RunStorage | null,
+  run: { lostLives: number; saves: number },
+  livesLeft: number,
+): void {
   try {
     if (livesLeft <= 0) {
       storage?.removeItem(RUN_KEY);
     } else {
-      storage?.setItem(RUN_KEY, JSON.stringify({ lostLives }));
+      storage?.setItem(RUN_KEY, JSON.stringify(run));
     }
   } catch {
     // storage may be blocked; the next visit then starts fresh
   }
 }
 
-/** The lives lost in the saved run, taken out of storage (0 when none or unreadable). */
-export function takeSavedRun(storage: RunStorage | null): number {
+/** The lives lost and saves made in the saved run, taken out of storage (zeros when none). */
+export function takeSavedRun(storage: RunStorage | null): { lostLives: number; saves: number } {
+  const none = { lostLives: 0, saves: 0 };
   try {
     const raw = storage?.getItem(RUN_KEY);
     storage?.removeItem(RUN_KEY);
     if (!raw) {
-      return 0;
+      return none;
     }
-    const lost = (JSON.parse(raw) as { lostLives?: unknown }).lostLives;
-    return typeof lost === 'number' && Number.isFinite(lost) && lost > 0 ? lost : 0;
+    const saved = JSON.parse(raw) as { lostLives?: unknown; saves?: unknown };
+    const count = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+    return { lostLives: count(saved.lostLives), saves: count(saved.saves) };
   } catch {
-    return 0;
+    return none;
   }
 }
 

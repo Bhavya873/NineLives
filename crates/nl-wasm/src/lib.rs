@@ -8,9 +8,7 @@
 //! the Off, PD, AI and (debug-only) Manual controllers, and courses (`course.rs`, M7).
 
 use nl_control::config::ControllersConfig;
-use nl_control::stunt::{
-    PlannerInputs, StuntDirector, StuntEvent, StuntKind, StuntPhase, StuntReason, authorize,
-};
+use nl_control::stunt::{StuntDirector, StuntEvent, StuntKind, StuntReason};
 use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind};
 use std::sync::Arc;
 
@@ -27,7 +25,7 @@ use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::wind::WindLevel;
-use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
+use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, World};
 use wasm_bindgen::prelude::*;
 
 mod course;
@@ -448,23 +446,6 @@ impl Game {
         self.stunt.request(kind, self.world.time_s() as f32)
     }
 
-    /// Which stunts the planner would authorize right now, as a bit mask: bit 0 BarrelLeft,
-    /// bit 1 BarrelRight, bit 2 FrontFlip, bit 3 BackFlip (stunt code minus one). Read-only:
-    /// it runs the planner's four rules on a fresh forecast and starts nothing, so the
-    /// web can show a "stunt ready" hint. 0 on the ground, while crashed or while a stunt
-    /// is queued or flying. Costs one landing forecast, so ask only while airborne.
-    pub fn stunt_ready_mask(&self) -> u8 {
-        if self.world.is_crashed() || self.stunt.planner().phase() != StuntPhase::Idle {
-            return 0;
-        }
-        let config = self.stunt.planner().config();
-        let inputs = PlannerInputs::from_world(&self.world, config, 0.0);
-        (1..=4u8)
-            .filter_map(StuntKind::from_code)
-            .filter(|kind| authorize(config, *kind, &inputs).is_ok())
-            .fold(0u8, |mask, kind| mask | 1 << (kind.code() - 1))
-    }
-
     /// The car body's pose: [x, y, z, qx, qy, qz, qw].
     pub fn chassis_pose(&self) -> Vec<f32> {
         flatten_poses(&[self.world.chassis_pose()])
@@ -584,16 +565,6 @@ impl Game {
             values.extend_from_slice(&event);
         }
         values
-    }
-
-    /// Identifies this build, so saved ghosts from an incompatible build are ignored.
-    /// It is the crate version and the snapshot format.
-    pub fn build_hash() -> String {
-        format!(
-            "nl-wasm-{}-snapshot-v{}",
-            env!("CARGO_PKG_VERSION"),
-            SNAPSHOT_FORMAT_VERSION
-        )
     }
 
     /// Runs the 2000-step golden trace and returns its hash, so a test can check
