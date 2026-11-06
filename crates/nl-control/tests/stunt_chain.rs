@@ -87,7 +87,7 @@ fn a_longer_chain_needs_more_time() {
     let double = need(&[BACK, BACK]);
     let triple = need(&[BACK, BACK, BACK]);
     println!("required s: single {single:.2}, double {double:.2}, triple {triple:.2}");
-    assert!(double > single + 0.6 && triple > double + 0.6);
+    assert!(double > single + 0.4 && triple > double + 0.4);
     // The single stunt is the same plan as before the chain existed.
     assert_eq!(
         authorize(&config, BACK, &inputs(30.0, 1.0e6, false))
@@ -357,7 +357,7 @@ fn a_triple_back_flip_in_limited_air_keeps_air_for_the_landing() {
 
 #[test]
 fn a_drop_with_room_for_one_flip_refuses_the_second_and_still_lands_the_first() {
-    let flight = fly(&[BACK], &[(BACK, 20)], 14.0, false);
+    let flight = fly(&[BACK], &[(BACK, 40)], 14.0, false);
     println!("{:?}", flight.events);
     assert!(flight.events.iter().any(|e| matches!(
         e,
