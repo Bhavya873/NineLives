@@ -36,6 +36,8 @@ const SETTLED_MAX_TILT_DEG: f32 = 15.0;
 
 /// Most stunts in one jump (rotations counted one each).
 pub const MAX_STUNTS: usize = 3;
+/// A multi-turn coast may go this much faster than the fastest configured single-turn rate.
+const MULTI_TURN_RATE_SCALE: f32 = 1.4;
 /// A brake between two spins in one jump ends at this rate, rad/s (not the PD hand-over).
 const STOP_RATE_RAD_S: f32 = 0.3;
 
@@ -308,7 +310,7 @@ fn coast_rate_for(
             .max(config.barrel_coast_rate_realistic_rad_s)
             .max(config.flip_coast_rate_arcade_rad_s)
             .max(config.barrel_coast_rate_arcade_rad_s);
-        return configured.max(fastest).min(fits);
+        return configured.max(fastest * MULTI_TURN_RATE_SCALE).min(fits);
     }
     configured.min(fits)
 }
