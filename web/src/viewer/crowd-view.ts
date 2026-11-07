@@ -290,8 +290,8 @@ function setDrawOrder(wheels: Slot[], body: Slot[]): void {
 }
 
 /** The tag colours: theme.css's --slate and --sand (a canvas cannot read CSS variables cheaply). */
-const LABEL_SLATE = '#1f2b38';
-const LABEL_SAND = '#e9dcc0';
+const LABEL_SLATE = '#15191f';
+const LABEL_SAND = '#f1ede2';
 const LABEL_FONT_PX = 40;
 const LABEL_TAG_FONT_PX = 34;
 const LABEL_SMALL_FONT_PX = 22;

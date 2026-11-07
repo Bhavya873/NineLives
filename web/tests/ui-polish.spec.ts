@@ -188,7 +188,7 @@ test('the Barlow fonts load and the tiles are flat slate', async ({ page }) => {
       shadow: style.boxShadow,
     };
   });
-  expect(dash.background).toBe('rgb(31, 43, 56)');
+  expect(dash.background).toBe('rgb(21, 25, 31)');
   expect(dash.filter).toBe('none');
   expect(dash.shadow).toBe('none');
 });

@@ -2,7 +2,7 @@
    game-over, all drawn as slate tickets (theme.css has the tokens and the tile). */
 
 :root {
-  --heart-lost: #34424f;
+  --heart-lost: #2c3138;
   /* Edge of the scene seen through a gap; matches BACKDROP_HORIZON in src/render/backdrop.ts. */
   --scene: #2a3d52;
 }

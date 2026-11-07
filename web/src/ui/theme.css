@@ -27,14 +27,15 @@
 }
 
 :root {
-  /* slate tiles, sand text and border, one rust accent (the car's colour in the scene) */
-  --slate: #1f2b38;
-  --slate-deep: #141c25;
-  --slate-line: #66788a; /* quiet marks on slate: lost hearts, grid lines */
-  --sand: #e9dcc0; /* 10.8:1 on slate */
-  --sand-soft: #b9ad92; /* 6.5:1 on slate, for small labels */
-  /* Rust is 3.75:1 on slate: fine for fills and large text (the wordmark, the speed), never for
-     body text. Small text stays sand. */
+  /* ink panels, bone text, one rust accent (the car's colour in the scene). The token names
+     keep their old slate and sand names so the rest of the CSS did not have to change. */
+  --slate: #15191f;
+  --slate-deep: #0d1014;
+  --slate-line: #4a525c; /* thin panel edges and quiet marks: lost hearts, bar tracks */
+  --sand: #f1ede2; /* 15.1:1 on slate */
+  --sand-soft: #aeb0b3; /* 8.1:1 on slate, for small labels */
+  /* Rust is 4.6:1 on slate: fine for fills and large text (the wordmark, the speed), and just
+     enough for small text, but small text stays bone. */
   --rust: #e0542f;
   --red: #ff5b5b; /* danger only; 4.9:1 on slate */
   --font-text: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
