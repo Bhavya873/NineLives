@@ -45,45 +45,21 @@
   --text-m: 18px;
   --text-l: 30px;
   --text-xl: 48px;
-  --tile-border: 2px;
-  --tile-notch: 14px;
+  --tile-border: 1px;
   --edge: 16px;
 }
 
-/* The ticket: flat slate, 2px sand border, square corners, top-right corner folded. */
+/* The panel: flat slate, a thin slate-line edge, square corners. No fold, no clipped corner. */
 .tile {
   position: relative;
   box-sizing: border-box;
   padding: 6px 12px;
-  border: var(--tile-border) solid var(--sand);
+  border: var(--tile-border) solid var(--slate-line);
   background: var(--slate);
   color: var(--sand);
   font-family: var(--font-text);
   font-size: var(--text-s);
   font-variant-numeric: tabular-nums;
-  /* cuts the corner away; ::after draws the fold and the diagonal edge */
-  clip-path: polygon(
-    0 0,
-    calc(100% - var(--tile-notch)) 0,
-    100% var(--tile-notch),
-    100% 100%,
-    0 100%
-  );
-}
-.tile::after {
-  content: '';
-  position: absolute;
-  top: calc(-1 * var(--tile-border));
-  right: calc(-1 * var(--tile-border));
-  width: var(--tile-notch);
-  height: var(--tile-notch);
-  background: linear-gradient(
-    to bottom left,
-    transparent 0 46%,
-    var(--sand) 46% 58%,
-    var(--slate-deep) 58% 100%
-  );
-  pointer-events: none;
 }
 /* Big numbers and titles. */
 .tile-display {

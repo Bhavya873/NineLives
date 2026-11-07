@@ -89,13 +89,12 @@ a {
   padding: 2px 0;
   border: 0;
   background: none;
-  color: var(--sand);
+  color: var(--sand-soft);
   font-family: var(--font-display);
-  font-size: var(--text-m);
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-size: var(--text-s);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-align: left;
-  text-transform: uppercase;
   cursor: pointer;
 }
 #hud-keys-toggle::after {
@@ -177,8 +176,9 @@ a {
   box-sizing: border-box;
   flex: 1;
   min-width: 90px;
-  height: 12px;
-  border: 2px solid var(--sand);
+  height: 6px;
+  border: 0;
+  background-color: var(--slate-line);
   background: var(--slate-deep);
 }
 #hud-air-fill,
@@ -380,14 +380,6 @@ a {
   max-width: 38rem;
   padding: 30px 36px 26px;
   text-align: center;
-}
-/* A racing stripe along the top edge of the ticket. */
-.card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 10px;
-  background: repeating-linear-gradient(90deg, var(--slate) 0 14px, var(--sand) 14px 28px);
 }
 .card p,
 .card h1,
