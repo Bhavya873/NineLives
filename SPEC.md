@@ -691,7 +691,7 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [x] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
-- [x] The policy is trained and re-exported: `models/policy.json` is flight-r4, trained on Stages A, D, E and F (docs/EXPERIMENTS.md).
+- [x] The policy is trained and re-exported: `models/policy.json` is flight-r5 (the flight-r4 policy retrained on the widened draws), trained on Stages A, D, E and F (docs/EXPERIMENTS.md, DECISIONS 2026-11-09).
 - [ ] Stages B and C are not trained, on purpose: B almost never upsets the car and C is a hop, so PD flies them (the Hybrid hands over only past 120° of tilt, DECISIONS 2026-10-27).
 - [x] Eval on all stages and both modes: Stages A–E, Off / PD / Hybrid, Realistic and Arcade, 1000 episodes each (`results/eval_*`). The AI policy does not beat PD in every cell (Stage A: Hybrid 81.0% against PD 82.2% in Realistic), see the README.
 - [x] The Gauntlet was playable start to finish with checkpoints (historical: cut from the game on 2026-11-03, DECISIONS; course and sim code stay).
