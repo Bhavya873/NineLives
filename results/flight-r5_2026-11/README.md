@@ -38,4 +38,4 @@ The full per-episode eval files (about 11 MB per cell set) are not committed, as
 | 4,000,000+ | 90.54 to 91.28 | -0.4 (F Unlimited) | 58.1 to 66.0 | pass |
 | 4,000,000+, r6 | 90.54 to 91.29 | -3.9 (F Unlimited) | 58.1 to 68.3 | fail (condition 3) |
 
-Known weak case: the mixed `roll_flip` plate. Landing rate on Stage F, r5, by block: 34.4, 32.7 and 29.5 percent in Limited air and 32.6, 37.3 and 38.6 percent in Unlimited air (old policy on the same blocks: 30.8, 24.9, 22.4 and 34.4, 38.7, 39.0). It did not get good with r5 or r6.
+Known weak case: the mixed `roll_flip` plate. Landing rate on Stage F, r5, by block: 34.4, 32.7 and 29.5 percent in Limited air and 32.6, 37.3 and 38.6 percent in Unlimited air (old policy on the same blocks: 30.8, 24.9, 22.4 and 34.4, 38.7, 39.0). The Limited air gain on seeds 4,000,000+ is about 1.8 standard errors (241 episodes), and r5 is slightly worse than the old policy in Unlimited air on every block. It did not get good with r5 or r6.

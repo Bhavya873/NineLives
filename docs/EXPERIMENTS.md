@@ -568,8 +568,8 @@ Results: `results/flight-r5_2026-11/` (compact per-cell files, `check_gate.py`, 
 | roll_flip | 22.4 | 39.0 | 29.5 | 38.6 | 30.7 | 36.1 |
 | roof_toss | 82.6 | 96.6 | 89.3 | 95.3 | 93.3 | 91.9 |
 
-- **Original gate:** failed on seeds 1,500,000+ (widened Stage F Unlimited air 77.8 to 76.5; mixed `roll_flip` not better in both modes). The rule was then **revised after seeing that result** (DECISIONS 2026-11-09) and r5 was checked against it on two fresh blocks, passing all four conditions on both.
+- **Original gate:** every stage within 1 point of the old policy, and mixed episodes better. It failed on seeds 1,500,000+ (widened Stage F Unlimited air 77.8 to 76.5; mixed `roll_flip` not better in both modes). The rule was then **revised after seeing that result** (DECISIONS 2026-11-09) and r5 was checked against it on two fresh blocks, passing all four conditions on both.
 - **R6** reaches the mean and Stage F Limited air gains, but loses 3.9 points on Stage F Unlimited air on seeds 4,000,000+ (condition 3: 77.3 to 73.4), so it is not shipped.
-- **Mixed `roll_flip` stays weak for every policy:** about 30% landed in Limited air and 36 to 39% in Unlimited air on seeds 4,000,000+ (R5 29.5 / 38.6, R6 30.7 / 36.1, old 22.4 / 39.0). Shipped as a known weak case.
+- **Mixed `roll_flip` is not fixed, and r5 is not a clear win there:** on seeds 4,000,000+ (241 episodes) Limited air lands 22.4% (old), 29.5% (r5) and 30.7% (r6); the r5 gain is about 1.8 standard errors. Unlimited air on seeds 4,000,000+: 39.0 (old), 38.6 (r5), 36.1 (r6). r5 is slightly worse than the old policy in Unlimited air on every block (1,500,000+ 34.4 to 32.6, 3,000,000+ 38.7 to 37.3, 4,000,000+ 39.0 to 38.6). Shipped as a known weak case.
 - **Viewer:** the eight `flight-r5` checkpoints (steps 2M to 60M) replace `flight-r4`; `curve.json`, `showcase.json` and `results/flight-r5_2026-11/viewer_landing_rates.json` are regenerated.
 - **Reproducibility:** the Stage F Limited air cell of seeds 4,000,000+ for r5, rerun on the promotion branch, matches the earlier run episode for episode (policy hash 5c325d425e7b3f90).
