@@ -1,0 +1,29 @@
+{
+  "run_id": "flight-r5",
+  "physics_hash": "5cf7862fd0ccf2b2",
+  "policy_hashes": {
+    "first": "8c2168d70f6b78fe",
+    "best": "0682162da9f82e74"
+  },
+  "blocks_tried": 16,
+  "seeds": {
+    "flat": {
+      "first_seed": 80,
+      "size": 8,
+      "best_landed": 8,
+      "first_landed": 7
+    },
+    "driving": {
+      "first_seed": 0,
+      "size": 8,
+      "best_landed": 8,
+      "first_landed": 8
+    },
+    "flight": {
+      "first_seed": 0,
+      "size": 8,
+      "best_landed": 7,
+      "first_landed": 5
+    }
+  }
+}

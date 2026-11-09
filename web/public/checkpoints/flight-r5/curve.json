@@ -1,0 +1,318 @@
+{
+  "title": "Checkpoint evaluation under current physics",
+  "what": "The committed checkpoints re-evaluated by the Hybrid in the current physics. Not the training history: each point is how that old policy flies today.",
+  "run_id": "flight-r5",
+  "controller": "hybrid",
+  "mode": "realistic",
+  "episodes": 200,
+  "first_seed": 0,
+  "stages": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F"
+  ],
+  "physics_hash": "5cf7862fd0ccf2b2",
+  "controller_config_hash": "727118f1fa27ec3d",
+  "git_sha": "d3683fbc278763ee05f8f03cba956fe3aec9226c-dirty",
+  "checkpoints": [
+    {
+      "file": "1.json",
+      "steps": 2000000,
+      "policy_hash": "8c2168d70f6b78fe",
+      "stages": {
+        "A": {
+          "success_rate": 0.7850000262260437,
+          "save_rate": 0.7699999809265137,
+          "crash_rate": 0.2150000035762787
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
+        },
+        "F": {
+          "success_rate": 0.5899999737739563,
+          "save_rate": 0.7950000166893005,
+          "crash_rate": 0.1550000011920929
+        }
+      }
+    },
+    {
+      "file": "2.json",
+      "steps": 12000000,
+      "policy_hash": "ed2dd4ade9465575",
+      "stages": {
+        "A": {
+          "success_rate": 0.8149999976158142,
+          "save_rate": 0.800000011920929,
+          "crash_rate": 0.1850000023841858
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8999999761581421,
+          "save_rate": 0.8999999761581421,
+          "crash_rate": 0.0949999988079071
+        },
+        "F": {
+          "success_rate": 0.6100000143051147,
+          "save_rate": 0.8050000071525574,
+          "crash_rate": 0.14499999582767487
+        }
+      }
+    },
+    {
+      "file": "3.json",
+      "steps": 20000000,
+      "policy_hash": "0e17e3f0aa15087e",
+      "stages": {
+        "A": {
+          "success_rate": 0.8199999928474426,
+          "save_rate": 0.8050000071525574,
+          "crash_rate": 0.18000000715255737
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8999999761581421,
+          "save_rate": 0.8999999761581421,
+          "crash_rate": 0.0949999988079071
+        },
+        "F": {
+          "success_rate": 0.6200000047683716,
+          "save_rate": 0.8199999928474426,
+          "crash_rate": 0.12999999523162842
+        }
+      }
+    },
+    {
+      "file": "4.json",
+      "steps": 30000000,
+      "policy_hash": "95a56a491a3b681e",
+      "stages": {
+        "A": {
+          "success_rate": 0.8050000071525574,
+          "save_rate": 0.7900000214576721,
+          "crash_rate": 0.19499999284744263
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
+        },
+        "F": {
+          "success_rate": 0.625,
+          "save_rate": 0.8199999928474426,
+          "crash_rate": 0.12999999523162842
+        }
+      }
+    },
+    {
+      "file": "5.json",
+      "steps": 40000000,
+      "policy_hash": "0ab5746a0886ea62",
+      "stages": {
+        "A": {
+          "success_rate": 0.8050000071525574,
+          "save_rate": 0.7900000214576721,
+          "crash_rate": 0.19499999284744263
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
+        },
+        "F": {
+          "success_rate": 0.6399999856948853,
+          "save_rate": 0.8299999833106995,
+          "crash_rate": 0.11999999731779099
+        }
+      }
+    },
+    {
+      "file": "6.json",
+      "steps": 48000000,
+      "policy_hash": "8be92ba20eac7f4f",
+      "stages": {
+        "A": {
+          "success_rate": 0.8199999928474426,
+          "save_rate": 0.8050000071525574,
+          "crash_rate": 0.18000000715255737
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.9100000262260437,
+          "save_rate": 0.9100000262260437,
+          "crash_rate": 0.08500000089406967
+        },
+        "F": {
+          "success_rate": 0.6449999809265137,
+          "save_rate": 0.8399999737739563,
+          "crash_rate": 0.10999999940395355
+        }
+      }
+    },
+    {
+      "file": "7.json",
+      "steps": 58000000,
+      "policy_hash": "8757abb58a25ec66",
+      "stages": {
+        "A": {
+          "success_rate": 0.8199999928474426,
+          "save_rate": 0.8050000071525574,
+          "crash_rate": 0.18000000715255737
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.9049999713897705,
+          "save_rate": 0.9049999713897705,
+          "crash_rate": 0.09000000357627869
+        },
+        "F": {
+          "success_rate": 0.6349999904632568,
+          "save_rate": 0.8500000238418579,
+          "crash_rate": 0.10000000149011612
+        }
+      }
+    },
+    {
+      "file": "8.json",
+      "steps": 60000000,
+      "policy_hash": "0682162da9f82e74",
+      "stages": {
+        "A": {
+          "success_rate": 0.8149999976158142,
+          "save_rate": 0.800000011920929,
+          "crash_rate": 0.1850000023841858
+        },
+        "B": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "C": {
+          "success_rate": 1.0,
+          "save_rate": 1.0,
+          "crash_rate": 0.0
+        },
+        "D": {
+          "success_rate": 0.9950000047683716,
+          "save_rate": 0.9950000047683716,
+          "crash_rate": 0.004999999888241291
+        },
+        "E": {
+          "success_rate": 0.8949999809265137,
+          "save_rate": 0.8949999809265137,
+          "crash_rate": 0.10000000149011612
+        },
+        "F": {
+          "success_rate": 0.6399999856948853,
+          "save_rate": 0.8700000047683716,
+          "crash_rate": 0.07999999821186066
+        }
+      }
+    }
+  ]
+}
