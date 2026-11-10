@@ -28,6 +28,13 @@ R puts the car back on the road. A stunt key is a request: the car only starts t
 
 You have nine lives. The "watch the AI train" link opens the training viewer, and its "back to game" button returns you to the game with the lives you had lost kept as they were. A new tab starts with nine.
 
+## Deploy
+
+Railway builds the root `Dockerfile` from this repo (`railway.json`): a Rust and Node stage builds the wasm and `web/dist`, and nginx serves it. The health check path is `/healthz`. nginx listens on the `PORT` variable, which Railway sets (the image defaults to 8080). There is no server or database.
+
+CI builds the same image and smoke-tests it. To check a running deploy yourself:
+`deploy/smoke.sh https://<your-app>.up.railway.app`
+
 ## Limited air and Unlimited air
 
 The car carries an air tank of 260 kg (`air_left_kg` in `results/eval_off_A_realistic.json`). Every nozzle burst uses some of it.
@@ -40,8 +47,8 @@ In code, result files and settings, Limited air is `realistic` and Unlimited air
 ## How it works
 
 - **The car.** A simulated car with four wheels and 10 air nozzles. The physics is Rust, compiled to WebAssembly so it runs in your browser, at a fixed 120 steps per second. The same inputs always give the same result.
-- **The safety net.** A plain controller called PD steers the car back toward upright in proportion to how far off it is and how fast it is turning. It is the default flyer.
-- **The trained AI.** A small neural network trained in simulation by trial and reward. When the car tips more than 120 degrees from upright, it takes over from PD. The game uses it only with `?controller=hybrid`, and only up to 55 m/s.
+- **The safety net.** A plain controller called PD steers the car back toward upright in proportion to how far off it is and how fast it is turning. It flies alone below 120 degrees of tilt and above 55 m/s.
+- **The trained AI.** A small neural network trained in simulation by trial and reward. When the car tips more than 120 degrees from upright, it takes over from PD. The game flies PD plus the AI by default, with the AI active up to 55 m/s; `?controller=pd` gives PD alone.
 - **Training stages.** Stage A is a drop from a random bad start. B to E add ramps, walls, gaps and obstacles. F mixes everything.
 
 ## What we found

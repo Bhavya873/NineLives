@@ -102,9 +102,12 @@ async function start(): Promise<void> {
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   });
   const params = new URLSearchParams(window.location.search);
-  // The game flies PD alone, its best controller on every stage (DECISIONS 2026-10-27).
-  // ?controller=hybrid loads the policy and flies PD + AI once it has loaded.
-  if (params.get('controller') === 'hybrid') {
+  // The game flies the Hybrid (PD + the shipped r5 policy) by default: with the 120 degree
+  // hand-over it gains 17 to 20 points on Stage F flip plates and is within about 1.5 points of
+  // PD elsewhere (DECISIONS 2026-11-10). PD still flies below 120 degrees of tilt and above the
+  // 55 m/s envelope. ?controller=pd keeps PD alone and skips loading the policy. If the policy
+  // fails to load, the game stays on PD.
+  if (params.get('controller') !== 'pd') {
     void loadPolicy(game).then((loaded) => {
       if (loaded) {
         game.set_controller('hybrid');
