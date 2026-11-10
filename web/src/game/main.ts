@@ -7,14 +7,15 @@ import vehicleToml from '../../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { focusDialog, prefersReducedMotion, requireElement } from '../shared/dom.ts';
+import { focusDialog, prefersReducedMotion, requireElement, setText } from '../shared/dom.ts';
 import { createCourseSession, showCourse } from './course-session.ts';
 import { startGameLoop } from './game-loop.ts';
 import { saveRun, sessionStore, takeSavedRun } from './run-storage.ts';
 import { countOutOfBoundsCrashes, hasRealCrash } from './out-of-bounds.ts';
 import { createAirGauge, updateAirGauge } from '../ui/air-gauge.ts';
-import { findHud, updateHud } from '../ui/hud.ts';
-import { newZoneHolds, updateZones } from '../ui/hud-zones.ts';
+import { findHud, nozzleWhoText, updateHud } from '../ui/hud.ts';
+import { isAnyNozzleFiring, newZoneHolds, updateZones } from '../ui/hud-zones.ts';
+import { enableRefractionIfSupported } from '../ui/refraction.ts';
 import {
   createLives,
   grantFreeRespawns,
@@ -24,6 +25,7 @@ import {
   restoreLives,
   savesThisRun,
   updateLives,
+  updateSavesCounter,
 } from '../ui/lives.ts';
 import { createNozzleMap, updateNozzleMap } from '../ui/nozzle-map.ts';
 import { createTitle, titleWanted } from '../ui/title.ts';
@@ -141,6 +143,7 @@ async function start(): Promise<void> {
   );
   // keyboard and the first picture
   startKeyboard(window);
+  enableRefractionIfSupported();
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
@@ -198,6 +201,11 @@ async function start(): Promise<void> {
     nozzleTile: requireElement('hud-nozzle-tile'),
   };
   const zoneHolds = newZoneHolds();
+  const nozzleWho = requireElement('hud-nozzle-who');
+  const savesCounter = {
+    count: requireElement('hud-saves-count'),
+    label: requireElement('hud-saves-label'),
+  };
   // The title keeps the game's clock still until the player starts (?play skips it).
   let started = false;
   // Restart: a fresh playground run, which also sets the sim's counts back to zero.
@@ -225,16 +233,19 @@ async function start(): Promise<void> {
       restorePauseFocus = null;
     }
   });
-  // The key card folds with its Keys button; it starts folded on small screens.
+  // The key card starts folded to a chip; the chip and the H key unfold and fold it.
   const keysPanel = requireElement('hud-keys');
   const keysToggle = requireElement('hud-keys-toggle');
-  const smallScreen = window.matchMedia('(max-width: 640px)');
-  keysPanel.dataset['collapsed'] = String(smallScreen.matches);
-  keysToggle.setAttribute('aria-expanded', String(!smallScreen.matches));
-  keysToggle.addEventListener('click', () => {
-    const collapsed = keysPanel.dataset['collapsed'] === 'true';
-    keysPanel.dataset['collapsed'] = String(!collapsed);
-    keysToggle.setAttribute('aria-expanded', String(collapsed));
+  const toggleKeyCard = () => {
+    const wasFolded = keysPanel.dataset['collapsed'] === 'true';
+    keysPanel.dataset['collapsed'] = String(!wasFolded);
+    keysToggle.setAttribute('aria-expanded', String(wasFolded));
+  };
+  keysToggle.addEventListener('click', toggleKeyCard);
+  onKeyPress('KeyH', () => {
+    if (started && !paused) {
+      toggleKeyCard();
+    }
   });
   createTitle(requireElement('title'), requireElement('title-play'), titleWanted(params), () => {
     started = true;
@@ -340,8 +351,11 @@ async function start(): Promise<void> {
       updateHud(hud, hudValues);
       updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
       updateNozzleMap(nozzleDots, throttles);
+      setText(nozzleWho, nozzleWhoText(hudValues.controller));
+      updateSavesCounter(savesCounter, savesThisRun(lives, hudValues));
       updateZones(zoneTiles, zoneHolds, {
         thrusterKeyHeld: isNozzleKeyHeld(),
+        anyNozzleFiring: isAnyNozzleFiring(throttles),
         gLoad: hudValues.crashed ? 1 : hudValues.gLoad,
         nowMs,
       });

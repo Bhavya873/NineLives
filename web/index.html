@@ -10,18 +10,56 @@
     <link rel="stylesheet" href="/src/ui/game.css" />
   </head>
   <body>
+    <!-- Chromium bends the scene behind each glass panel with this filter (ui/refraction.ts). -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <filter
+        id="glass-refract"
+        x="0%"
+        y="0%"
+        width="100%"
+        height="100%"
+        color-interpolation-filters="sRGB"
+      >
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.006 0.010"
+          numOctaves="2"
+          seed="7"
+          result="noise"
+        />
+        <feGaussianBlur in="noise" stdDeviation="3" result="soft" />
+        <feDisplacementMap
+          in="SourceGraphic"
+          in2="soft"
+          scale="46"
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </svg>
     <div id="game"></div>
-    <!-- Top-left: the nine hearts. -->
-    <div id="hud-top-left" class="tile">
+    <!-- Top-left: the nine hearts and the saves so far. -->
+    <div id="hud-top-left" class="glass">
       <div id="hud-hearts" aria-label="Lives"></div>
+      <div id="hud-saves">
+        <span id="hud-saves-count" class="num">0</span>
+        <span id="hud-saves-label" class="tile-label">saves</span>
+      </div>
     </div>
-    <!-- Top-right: the key card, which folds, and the way to the training viewer. -->
+    <!-- Top-centre: toasts and hints, one stack, off the road. -->
+    <div id="hud-messages" role="status">
+      <div id="hud-toast" class="glass" hidden></div>
+      <div id="hud-too-slow" class="glass" hidden></div>
+      <div id="hud-alert" class="glass" hidden></div>
+      <div id="hud-envelope" class="glass" hidden>AI unsure</div>
+    </div>
+    <!-- Top-right: the key card. It starts folded to a chip; H or a click unfolds it. -->
     <div id="hud-top-right">
-      <section id="hud-keycard" class="tile" aria-label="Keys">
-        <button type="button" id="hud-keys-toggle" aria-controls="hud-keys" aria-expanded="true">
-          Keys
+      <section id="hud-keycard" class="glass" aria-label="Keys">
+        <button type="button" id="hud-keys-toggle" aria-controls="hud-keys" aria-expanded="false">
+          <span class="num">H</span> <span class="tile-label">keys</span>
         </button>
-        <dl id="hud-keys">
+        <dl id="hud-keys" data-collapsed="true">
           <dt>Up / Down</dt>
           <dd>drive</dd>
           <dt>Left / Right</dt>
@@ -44,51 +82,47 @@
           <dd>pause</dd>
         </dl>
       </section>
-      <!-- Out of the Tab order: a focused link would leave the game when Enter is pressed. -->
-      <a id="hud-watch" class="tile" href="./viewer.html" tabindex="-1">Watch the AI train</a>
     </div>
-    <!-- Bottom-left: the gauge card, speed and air. -->
-    <div id="hud-dash" class="tile">
-      <div id="hud-status" class="tile-label">Limited air</div>
-      <div id="hud-speed"><span id="hud-speed-value">0</span><small>km/h</small></div>
+    <!-- Bottom-centre: the instruments. The nozzle map and g-meter have fixed places beside the
+         dash, so the dash never moves when they fade in (see ui/hud-zones.ts). -->
+    <div id="hud-dash" class="glass">
+      <div id="hud-speed">
+        <span id="hud-speed-value" class="num">0</span><small class="tile-label">km/h</small>
+      </div>
       <div id="hud-air">
         <span class="tile-label">Air</span>
         <div id="hud-air-track"><div id="hud-air-fill"></div></div>
-        <span id="hud-air-label">100%</span>
+        <span id="hud-air-label" class="num">100%</span>
       </div>
     </div>
-    <!-- Bottom-centre: shown on a thruster key or a hard landing (see ui/hud-zones.ts). -->
-    <div id="hud-center">
-      <div id="hud-g-tile" class="tile" hidden>
-        <div id="hud-g">
-          <span id="hud-g-live">1.0 g</span> <span id="hud-g-peak">peak 0.0 g</span>
-          <div id="hud-g-track"><div id="hud-g-fill"></div></div>
-        </div>
-      </div>
-      <div id="hud-nozzle-tile" class="tile" hidden>
-        <div id="hud-nozzles"></div>
+    <div id="hud-nozzle-tile" class="glass" hidden>
+      <div id="hud-nozzles"></div>
+      <span id="hud-nozzle-who" class="tile-label">Thrusters</span>
+    </div>
+    <div id="hud-g-tile" class="glass" hidden>
+      <div id="hud-g">
+        <span class="tile-label">G-force</span>
+        <div><span id="hud-g-live" class="num">1.0 g</span></div>
+        <span id="hud-g-peak">peak 0.0 g</span>
+        <div id="hud-g-track"><div id="hud-g-fill"></div></div>
       </div>
     </div>
-    <!-- Bottom-right: the wind, only while there is any. -->
-    <div id="hud-wind" class="tile" hidden>
+    <!-- Bottom-left: the air mode. Bottom-right: the wind, only while there is any. -->
+    <div id="hud-mode" class="glass">
+      <span id="hud-status" class="tile-label">Limited air</span>
+    </div>
+    <div id="hud-wind" class="glass" hidden>
       <span id="hud-wind-arrow">
         <svg viewBox="-12 -12 24 24" aria-hidden="true">
           <path d="M0 -10 L7 2 L2 1 L2 10 L-2 10 L-2 1 L-7 2 Z" fill="currentColor" />
         </svg>
       </span>
-      <span id="hud-wind-label">Off</span>
+      <span id="hud-wind-label" class="num">Off</span>
     </div>
-    <!-- Centre-low: toasts and hints, one stack of tickets. -->
-    <div id="hud-messages" role="status">
-      <div id="hud-toast" class="tile" hidden></div>
-      <div id="hud-too-slow" class="tile" hidden></div>
-      <div id="hud-alert" class="tile" hidden></div>
-      <div id="hud-envelope" class="tile" hidden>AI unsure</div>
-    </div>
-    <div id="hud-perf" class="tile" hidden></div>
+    <div id="hud-perf" class="glass" hidden></div>
     <section
       id="paused"
-      class="tile"
+      class="glass"
       role="dialog"
       aria-modal="true"
       aria-labelledby="paused-title"
@@ -104,7 +138,7 @@
       aria-labelledby="game-over-title"
       hidden
     >
-      <div class="card tile">
+      <div class="card glass">
         <p class="wordmark">Nine Lives</p>
         <h2 id="game-over-title" class="tile-display">
           <span id="game-over-summary">Out of lives</span>
@@ -116,7 +150,7 @@
       </div>
     </section>
     <section id="title" role="dialog" aria-modal="true" aria-labelledby="title-name">
-      <div class="card tile">
+      <div class="card glass">
         <h1 id="title-name" class="wordmark">Nine Lives</h1>
         <p class="tagline">Jump, flip, land on your wheels. Nine tries.</p>
         <div id="title-buttons">
