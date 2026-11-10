@@ -379,4 +379,15 @@ test.describe('on a desktop', () => {
     // a click leaves no focus behind, so Space (hop) cannot press the button again
     await expect(page.locator('#hud-mode')).not.toBeFocused();
   });
+
+  test('the key card lists the gamepad buttons once a gamepad connects', async ({ page }) => {
+    await page.goto('/?play=1');
+    await waitForGame(page);
+    await page.keyboard.press('KeyH');
+    await expect(page.locator('#hud-keys')).toBeVisible();
+    await expect(page.locator('#hud-pad-keys')).toBeHidden();
+    await page.evaluate(() => window.dispatchEvent(new Event('gamepadconnected')));
+    await expect(page.locator('#hud-pad-keys')).toBeVisible();
+    await expect(page.locator('#hud-pad-keys')).toContainText('Start');
+  });
 });
