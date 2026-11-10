@@ -18,7 +18,8 @@ COPY configs configs
 COPY courses courses
 COPY models models
 # wasm-bindgen-cli must match the wasm-bindgen crate in Cargo.lock.
-RUN rustup show \
+# Rustup 1.28+ no longer installs toolchains on demand, so add the wasm target explicitly.
+RUN rustup target add wasm32-unknown-unknown \
     && version="$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')" \
     && cargo install wasm-bindgen-cli --version "$version" --locked
 COPY web web
