@@ -40,8 +40,8 @@ In code, result files and settings, Limited air is `realistic` and Unlimited air
 ## How it works
 
 - **The car.** A simulated car with four wheels and 10 air nozzles. The physics is Rust, compiled to WebAssembly so it runs in your browser, at a fixed 120 steps per second. The same inputs always give the same result.
-- **The safety net.** A plain controller called PD steers the car back toward upright in proportion to how far off it is and how fast it is turning. It is the default flyer.
-- **The trained AI.** A small neural network trained in simulation by trial and reward. When the car tips more than 120 degrees from upright, it takes over from PD. The game uses it only with `?controller=hybrid`, and only up to 55 m/s.
+- **The safety net.** A plain controller called PD steers the car back toward upright in proportion to how far off it is and how fast it is turning. It flies alone below 120 degrees of tilt and above 55 m/s.
+- **The trained AI.** A small neural network trained in simulation by trial and reward. When the car tips more than 120 degrees from upright, it takes over from PD. The game flies PD plus the AI by default, with the AI active up to 55 m/s; `?controller=pd` gives PD alone.
 - **Training stages.** Stage A is a drop from a random bad start. B to E add ramps, walls, gaps and obstacles. F mixes everything.
 
 ## What we found
