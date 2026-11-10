@@ -573,3 +573,24 @@ Results: `results/flight-r5_2026-11/` (compact per-cell files, `check_gate.py`, 
 - **Mixed `roll_flip` is not fixed, and r5 is not a clear win there:** on seeds 4,000,000+ (241 episodes) Limited air lands 22.4% (old), 29.5% (r5) and 30.7% (r6); the r5 gain is about 1.8 standard errors. Unlimited air on seeds 4,000,000+: 39.0 (old), 38.6 (r5), 36.1 (r6). r5 is slightly worse than the old policy in Unlimited air on every block (1,500,000+ 34.4 to 32.6, 3,000,000+ 38.7 to 37.3, 4,000,000+ 39.0 to 38.6). Shipped as a known weak case.
 - **Viewer:** the eight `flight-r5` checkpoints (steps 2M to 60M) replace `flight-r4`; `curve.json`, `showcase.json` and `results/flight-r5_2026-11/viewer_landing_rates.json` are regenerated.
 - **Reproducibility:** the Stage F Limited air cell of seeds 4,000,000+ for r5, rerun on the promotion branch, matches the earlier run episode for episode (policy hash 5c325d425e7b3f90).
+
+## 2026-11-10 Top-level Hybrid evals regenerated with r5
+No training. `results/eval_hybrid_{A..E}_{realistic,arcade}.{json,csv}` still held the R4 policy (`policy_hash` 40d054618d409972) after the r5 promotion; they now hold r5 (`policy_hash` 5c325d425e7b3f90). The PD files were not touched: their `physics_hash` (5cf7862fd0ccf2b2) and `controller_config_hash` (727118f1fa27ec3d) equal what the current code writes, so the pairs are comparable.
+- **Command, per cell:** `eval --controller hybrid --stage <A..E> --mode <realistic|arcade> --episodes 1000 --seed 0 --policy models/policy.json --out results` (the release `nl-control` eval example, as for the PD files). No domain randomization. The CSVs are the same episode rows written with the Python eval's CSV layout (the Rust eval writes only JSON).
+- **Wall time:** 78 s for the ten cells on this machine. Seeds 0 to 999, 1000 episodes per cell.
+- **Success rate, percent:**
+
+| Stage | Mode | PD | Hybrid (r5) | Difference |
+|---|---|---:|---:|---:|
+| A | Limited air | 82.1 | 83.0 | +0.9 |
+| A | Unlimited air | 87.6 | 88.0 | +0.4 |
+| B | Limited air | 99.6 | 99.6 | 0.0 |
+| B | Unlimited air | 99.6 | 99.6 | 0.0 |
+| C | Limited air | 100.0 | 100.0 | 0.0 |
+| C | Unlimited air | 100.0 | 100.0 | 0.0 |
+| D | Limited air | 99.8 | 99.8 | 0.0 |
+| D | Unlimited air | 99.8 | 99.8 | 0.0 |
+| E | Limited air | 91.0 | 91.2 | +0.2 |
+| E | Unlimited air | 92.2 | 92.2 | 0.0 |
+
+- **Notes:** on seeds 0 to 999 the Hybrid is level with or slightly ahead of PD in every cell; seeds 0 to 999 were used during development, so the fresh blocks in `results/flight-r5_2026-11/` remain the fair comparison (there PD is about one point ahead on Stage A and E Unlimited air). Not regenerated: `eval_ai_A_arcade`, `eval_ai_A_realistic_dr` (R4, AI alone). `docs/images/results-by-stage.svg` was redrawn with `PYTHONPATH=python python -m ninelives.charts --repo . --out docs/images`.

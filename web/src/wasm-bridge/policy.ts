@@ -1,5 +1,5 @@
 // Loads the trained AI policy (models/policy.json, SPEC §9.12) into the game, for the
-// ?controller=hybrid page. The file is a separate asset fetched once at start; if it is
+// default Hybrid page (?controller=pd skips it). The file is a separate asset fetched once at start; if it is
 // missing or refused (wrong schema hash), the game runs without the AI.
 import policyUrl from '../../../models/policy.json?url';
 
