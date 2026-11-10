@@ -1,21 +1,25 @@
-// The way from the game to the training viewer (SPEC §11.6): a corner link and a pause-menu
+// The way from the game to the training viewer (SPEC §11.6): a title link and a pause-menu
 // item both open the viewer, and the viewer links back to the game.
 import { expect, test } from '@playwright/test';
 
 /** Generous limit for slow CI machines. */
 const SLOW_MACHINE_TIMEOUT_MS = 60_000;
 
-test('the corner link opens the training viewer and its back link returns', async ({ page }) => {
-  await page.goto('/?play=1');
-  const watch = page.locator('#hud-watch');
+test('the title link opens the training viewer and its back link returns', async ({ page }) => {
+  await page.goto('/');
+  const watch = page.locator('#title-watch');
   await expect(watch).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
+  // the driving HUD has no viewer link of its own any more
+  await expect(page.locator('#hud-watch')).toHaveCount(0);
 
   await watch.click();
   await expect(page).toHaveURL(/viewer\.html$/);
   await expect(page.locator('#viewer-status')).toBeVisible();
 
   await page.getByRole('link', { name: 'back to game' }).click();
-  await expect(page.locator('#hud-watch')).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
+  await expect(page.locator('#hud-hearts .heart').first()).toBeVisible({
+    timeout: SLOW_MACHINE_TIMEOUT_MS,
+  });
 });
 
 test('the pause menu offers the training viewer', async ({ page }) => {
@@ -32,6 +36,12 @@ test('the pause menu offers the training viewer', async ({ page }) => {
   await expect(page).toHaveURL(/viewer\.html$/);
 });
 
+/** Opens the pause card and follows its link to the training viewer. */
+async function goToViewerFromPause(page: import('@playwright/test').Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await page.locator('#paused').getByRole('link', { name: 'Watch the AI train' }).click();
+}
+
 /** Calls a debug hook and returns its value. */
 async function hook(page: import('@playwright/test').Page, name: string): Promise<unknown> {
   return page.evaluate((hookName) => {
@@ -47,7 +57,7 @@ test('the back button returns to the game with the same lives and no title', asy
   await hook(page, 'loseLife');
   await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(1);
 
-  await page.locator('#hud-watch').click();
+  await goToViewerFromPause(page);
   await expect(page).toHaveURL(/viewer\.html$/);
   // the run is kept for the trip back, saves included
   const kept = await page.evaluate(() => sessionStorage.getItem('ninelives.run'));
@@ -67,7 +77,7 @@ test('a fresh tab or a plain ?play=1 starts with nine lives', async ({ page, con
   await expect.poll(() => hook(page, 'heartsLeft'), { timeout: SLOW_MACHINE_TIMEOUT_MS }).toBe(9);
   await hook(page, 'loseLife');
   await expect(page.locator('#hud-hearts .heart.lost')).toHaveCount(1);
-  await page.locator('#hud-watch').click();
+  await goToViewerFromPause(page);
   await expect(page).toHaveURL(/viewer\.html$/);
   // close the viewer tab: five stage workers would slow the new tab's boot
   await page.close();

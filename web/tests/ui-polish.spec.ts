@@ -90,15 +90,19 @@ test('reduced motion turns the title animation off', async ({ page }) => {
   expect(normal).toBeGreaterThan(0.1);
 });
 
-test('the key card starts folded on a small screen and its Keys button opens it', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 500, height: 800 });
-  await page.goto('/?play=1');
-  await waitForHook(page);
+test('the key card starts folded on every screen size and the chip opens it', async ({ page }) => {
+  // two page boots in one test: give a slow machine room
+  test.setTimeout(SLOW_MACHINE_TIMEOUT_MS);
+  for (const width of [500, 1200]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/?play=1');
+    await waitForHook(page);
+    await expect(page.locator('#hud-keys-toggle')).toBeVisible();
+    await expect(page.locator('#hud-keys-toggle')).toContainText('H');
+    await expect(page.locator('#hud-keys-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#hud-keys')).toBeHidden();
+  }
 
-  await expect(page.locator('#hud-keys-toggle')).toBeVisible();
-  await expect(page.locator('#hud-keys')).toBeHidden();
   await page.locator('#hud-keys-toggle').click();
   await expect(page.locator('#hud-keys')).toBeVisible();
   await expect(page.locator('#hud-keys')).toContainText('barrel roll');
@@ -107,11 +111,13 @@ test('the key card starts folded on a small screen and its Keys button opens it'
   await expect(page.locator('#hud-keys')).toBeHidden();
 });
 
-test('the key card starts open on a wide screen and can be folded', async ({ page }) => {
+test('H unfolds and folds the key card, which lists the keys', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto('/?play=1');
   await waitForHook(page);
+  await page.keyboard.press('KeyH');
   await expect(page.locator('#hud-keys')).toBeVisible();
+  await expect(page.locator('#hud-keys')).toContainText('pause');
   await expect(page.locator('#hud-keys')).toContainText('barrel roll');
   // The ghost and the results screen are gone, so their keys are not listed.
   await expect(page.locator('#hud-keys')).not.toContainText(/ghost|results/i);
@@ -119,9 +125,47 @@ test('the key card starts open on a wide screen and can be folded', async ({ pag
   await expect(page.locator('#hud-keys')).toContainText('A S');
   await expect(page.locator('#hud-keys')).toContainText('D F');
   await expect(page.locator('#hud-keys')).not.toContainText(/W S|Q \/ E|respawn/);
-  await page.locator('#hud-keys-toggle').click();
+  await expect(page.locator('#hud-keys-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('KeyH');
   await expect(page.locator('#hud-keys')).toBeHidden();
   await expect(page.locator('#hud-keys-toggle')).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('the driving HUD has no viewer link; the saves counter and message stack have places', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/?play=1');
+  await waitForHook(page);
+  await expect(page.locator('#hud-watch')).toHaveCount(0);
+  await expect(page.locator('#hud-saves')).toHaveText('0 saves');
+
+  // The message stack sits in the top third, off the road. It may be empty, so look at its box.
+  const messages = await page.locator('#hud-messages').evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { top: box.top, innerHeight: window.innerHeight };
+  });
+  expect(messages.top).toBeLessThan(messages.innerHeight / 3);
+
+  const dash = await page.locator('#hud-dash').boundingBox();
+  expect(dash).not.toBeNull();
+  const dashCentre = (dash?.x ?? 0) + (dash?.width ?? 0) / 2;
+  expect(Math.abs(dashCentre - 1280 / 2)).toBeLessThanOrEqual(2);
+});
+
+test('the nozzle map shows when a nozzle fires, and the dash does not move', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/?play=1');
+  await waitForHook(page);
+  await expect(page.locator('#hud-nozzle-tile')).toBeHidden();
+  const before = await page.locator('#hud-dash').boundingBox();
+
+  // X throws the car into a drop; the automatic thrusters fire to save it.
+  await page.keyboard.press('KeyX');
+  await expect(page.locator('#hud-nozzle-tile')).toBeVisible({ timeout: SLOW_MACHINE_TIMEOUT_MS });
+  await expect(page.locator('#hud-nozzle-who')).toHaveText(/Thrusters|AI flying/);
+  const after = await page.locator('#hud-dash').boundingBox();
+  expect(after).toEqual(before);
 });
 
 test('Tab is not swallowed in a run, and there is no results screen or ghost', async ({ page }) => {
@@ -166,7 +210,7 @@ test('Tab moves focus on the title and the dialogs announce themselves', async (
   await expect(page.locator('#title-play')).not.toBeFocused();
 });
 
-test('the Barlow fonts load and the tiles are flat slate', async ({ page }) => {
+test('the Barlow fonts load and the HUD panels are glass', async ({ page }) => {
   await page.goto('/?play=1');
   await waitForHook(page);
   const fonts = await page.evaluate(async () => {
@@ -182,15 +226,28 @@ test('the Barlow fonts load and the tiles are flat slate', async ({ page }) => {
   expect(fonts).toEqual([true, true]);
   const dash = await page.locator('#hud-dash').evaluate((element) => {
     const style = getComputedStyle(element);
-    return {
-      background: style.backgroundColor,
-      filter: style.backdropFilter,
-      shadow: style.boxShadow,
-    };
+    return { background: style.backgroundColor, filter: style.backdropFilter };
+  });
+  // Liquid glass: a blurred, see-through pane (alpha below 1).
+  expect(dash.filter).not.toBe('none');
+  const alpha = Number(/,\s*([\d.]+)\)$/.exec(dash.background)?.[1] ?? '1');
+  expect(alpha).toBeLessThan(1);
+});
+
+test('reduced transparency gives the glass panels an opaque ink look', async ({ page }) => {
+  // Playwright 1.64 has no reducedTransparency option, so ask Chromium directly.
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }],
+  });
+  await page.goto('/?play=1');
+  await waitForHook(page);
+  const dash = await page.locator('#hud-dash').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, filter: style.backdropFilter };
   });
   expect(dash.background).toBe('rgb(21, 25, 31)');
   expect(dash.filter).toBe('none');
-  expect(dash.shadow).toBe('none');
 });
 
 test('Tab never lands behind the title or the pause card', async ({ page }) => {
