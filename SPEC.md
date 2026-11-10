@@ -40,7 +40,7 @@ On 2026-10-15 Tesla revealed a Roadster with a SpaceX-developed package of 10 co
 ### Non-goals (v1)
 - Hardware (no microcontroller, no ESP32).
 - AI that drives the car (steering/throttle stay human or scripted).
-- Photorealistic graphics, multiplayer, mobile touch controls, a backend server.
+- Photorealistic graphics, multiplayer, a backend server. (Phone touch controls and gamepads are in scope since 2026-11-10: §11.9.)
 - Real Roadster specs. Numbers are plausible, not official.
 
 ---
@@ -592,12 +592,12 @@ The game flies the Hybrid (PD + AI) by default and switches to it once the polic
 ### 11.5 HUD
 Liquid-glass look (owner's choice from a mock, DECISIONS 2026-11-10). Every readout on the game page is a see-through glass panel (`.glass` in `web/src/ui/theme.css`): ink at 35% tint (`--glass-tint`) over a faint top highlight, a 1 px light edge, an inner top highlight, a soft shadow, rounded corners (18 px) and `backdrop-filter: blur(8px) saturate(1.6)`. In Chromium an inline SVG displacement filter adds real refraction (`data-refract="on"` on `<html>`, set by `web/src/ui/refraction.ts` after feature detection); other browsers show the blur. Under `prefers-reduced-transparency: reduce` the panels fall back to the opaque ink look (flat slate, thin edge, square corners). The training viewer keeps ink panels (`.tile`). Barlow and Barlow Condensed, self-hosted; one rust accent, the car's colour in the scene; red only for danger.
 - **Type:** five sizes, 13 / 15 / 20 / 32 / 56 px, nothing smaller. Barlow Condensed 700 for numbers only, Barlow Condensed 600 uppercase for labels, Barlow 400 / 600 for sentences. Three letter-spacings only: 0, 0.04em, 0.1em. Every label is at most six words.
-- **Centre instruments** (desktop, keyboard; touch controls and gamepad come later):
+- **Centre instruments** (desktop, keyboard; the phone layout is §11.9):
   - **Top-left:** the nine hearts and the saves counter ("3 saves", this run's saves, live).
   - **Top-centre:** the message stack, off the road.
   - **Top-right:** the key card (11.3), folded to an "H keys" chip on every screen size; a click on the chip or the H key unfolds it. There is no viewer link in the driving HUD (the title and pause screens keep "Watch the AI train").
   - **Bottom-centre:** the dash, about 380 px wide: speed in km/h at 56 px (rust above 200 km/h) and the air bar, 240 px wide (sand; ∞ with unlimited air; rust and flashing below 15%). The nozzle map sits to its left and the g-meter to its right, in fixed places, so the dash never moves when they fade in.
-  - **Bottom-left:** the air mode ("Limited air" or "Unlimited air", with the course section, e.g. "Checkpoint 2/6"). **Bottom-right:** the wind arrow with Off / Breeze / Storm, hidden with no wind.
+  - **Bottom-left:** the air mode ("Limited air" or "Unlimited air", with the course section, e.g. "Checkpoint 2/6"). **Bottom-right:** the wind arrow with Off / Breeze / Storm ("Off" with no wind). Both readouts are buttons: a click or tap does what M and V do.
 - **Nozzle map and g-meter:** shown whenever any nozzle fires (the automatic saves are the point of the game), while a thruster key (1 to 0) is held, or after a hard landing (3 g or more), then fade within about a second. Under the map, "AI flying" while the trained policy is in control (`HudField.Controller` is `Ai` or `HybridAi`), otherwise "Thrusters". There is no stunt-ready tile.
 - **G-meter:** the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the headline peak of the stunt window (the smoothed peak capped by the raw `HudField.PeakGLoad`, which shows in the tooltip); sand, rust from 3 g, red from 6 g. The g numbers stay on the meter; toasts carry none. The old best-g record line is gone.
 - **Messages (top-centre), one stack of glass panels:** one short toast after a jump, about 1 s ("landed", or "back flip", "front flip", "barrel roll"; "crashed: roof", "crashed: too hard", "crashed: on its side" and "no air" in red; "back in bounds"), the approach hint ("need N km/h") and "too slow", the Hop note ("wheels down first", "no air to hop", "hop ready in 1 s"), and an "AI unsure" badge while `PolicyOutOfEnvelope` is 1. Scrapes throw sparks.
@@ -625,6 +625,27 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 - **Executor** (`StuntDirector`): spin and brake commands become throttles through PD's allocation (`Pd::spin_throttles`), and PD flies the catch, so exactly one owner writes the nozzles each tick. The Hybrid gate stays on PD from authorization until 1 s after Settled. With no stunt requested the director does nothing and the active controller flies as before.
 - **Toasts:** "back flip" / "front flip" / "barrel roll" on a landed stunt (no g number; the meter shows g, 7.9), "not enough air", "landing blocked", "stunt aborted" (or "landing blocked" when the landing was the cause). A lapsed request is silent.
 - **Evidence:** `crates/nl-control/tests/stunt_flight.rs` flies all four stunts on a real car from 60 m at 15 m/s: each completes 6.25 to 6.30 rad, lands on four wheels and does not crash.
+### 11.9 Phones and gamepads
+Touch controls show only on touch devices: `(pointer: coarse)` matches, or after the first `touchstart` (`web/src/ui/touch-mode.ts` sets `data-touch="on"` on `<html>`). Mouse and keyboard users never see them. The key chip and key card are hidden on touch. The sim and the wasm API are unchanged: throttle and steer are already signed bytes, so the stick and triggers send analog values; `web/src/ui/input-merge.ts` merges keyboard, touch and gamepad into the one 4-byte InputFrame (each axis takes the source pushing hardest, buttons are OR-ed).
+- **Stick:** one floating joystick. A touch in the left 45% of the screen (below the top row) puts the ring under the finger; the knob follows, clamped to the ring (travel 0.6 of its radius, dead zone 0.12); release eases it home. Up is gas, down is brake or reverse, left and right steer. The game surface has `touch-action: none`.
+- **Buttons:** HOP (about 88 px) and BOOST (about 64 px) bottom-right, at least 56 px each; a pause button top-right. The pause card gains Resume, **Drop test** (the X action, which also resumes) and a **Motion stunts** on/off toggle (remembered in localStorage).
+- **Readouts as buttons (every device):** a tap or click on the wind readout cycles the wind like V (it always shows, "Off" with no wind); a tap on the air-mode label switches mode like M.
+- **Motion stunts:** `devicemotion` `rotationRate` (deg/s), remapped for `screen.orientation.angle`, only while the car is airborne. A twist about the axis out of the screen of at least 220 deg/s rolls in the direction of the twist; a flick of the landscape screen's top edge of at least 260 deg/s is a front flip away from the player and a back flip toward them; the winning axis must be 1.5 times the others; a shake of at least 450 deg/s total with no clear axis is a front flip; 600 ms cooldown after a trigger (`web/src/ui/motion-gesture.ts`). iOS asks for permission when Play is pressed. A hint, "Twist to roll, flick to flip" (or "Swipe to roll or flip" with motion off), shows in the message line on the first jumps, at most 3 times per session.
+- **Swipe fallback:** a swipe of at least 40 CSS px that starts on the right half of the screen, not on a button: left / right barrel roll, up front flip, down back flip. It uses the same request path as A S D F, so the planner still decides. It works whether or not motion is on.
+- **Phone layout (landscape):** the desktop arrangement scaled down. Top row: hearts and saves, one message line (a toast replaces the hint), wind chip, pause. Bottom-centre: a slim speed and air panel (about 220 px wide) with the air-mode label as its top line, the nozzle map and g-meter flanking it. Edge pieces respect `env(safe-area-inset-*)` (`viewport-fit=cover`). Held upright, a full-screen "Rotate your phone" card shows and the game waits. On Play the game asks for full screen and a wake lock, best effort.
+- **Gamepad** (standard mapping, polled once per frame; the key card lists these while one is connected; no vibration):
+
+| Input | Action |
+|---|---|
+| Right / left trigger | gas / brake and reverse |
+| Left stick X (dead zone 0.15) | steer |
+| A (0) / B (1) | hop / boost |
+| LB (4) / RB (5) | barrel roll left / right |
+| Y (3) / X (2) | front flip / back flip |
+| Start (9) | pause |
+
+Buttons are edge-detected: a held button requests once.
+
 
 ---
 
