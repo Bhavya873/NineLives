@@ -698,7 +698,7 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 - [x] An obstacle arena course (ramps and blocks, plain colours) that the training viewer runs.
 
 **M8 — Polish and write-up**
-- [x] Title screen, reduced motion, the performance overlay, static deploy (Docker build not verified end to end, see README "Not verified").
+- [x] Title screen, reduced motion, the performance overlay, static deploy (CI builds the Docker image and smoke-tests it with `deploy/smoke.sh`).
 - [x] The hover-hack experiment (9.11): both runs, numbers and a height chart (`results/hover_hack.json`, `docs/images/hover-hack.svg`). Frame traces instead of video clips; see docs/EXPERIMENTS.md.
 - [x] README: pitch, screenshots (no GIF), how it works, results charts, the hover hack, limits, how to run, credits and sources.
 

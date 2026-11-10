@@ -28,6 +28,13 @@ R puts the car back on the road. A stunt key is a request: the car only starts t
 
 You have nine lives. The "watch the AI train" link opens the training viewer, and its "back to game" button returns you to the game with the lives you had lost kept as they were. A new tab starts with nine.
 
+## Deploy
+
+Railway builds the root `Dockerfile` from this repo (`railway.json`): a Rust and Node stage builds the wasm and `web/dist`, and nginx serves it. The health check path is `/healthz`. nginx listens on the `PORT` variable, which Railway sets (the image defaults to 8080). There is no server or database.
+
+CI builds the same image and smoke-tests it. To check a running deploy yourself:
+`deploy/smoke.sh https://<your-app>.up.railway.app`
+
 ## Limited air and Unlimited air
 
 The car carries an air tank of 260 kg (`air_left_kg` in `results/eval_off_A_realistic.json`). Every nozzle burst uses some of it.
