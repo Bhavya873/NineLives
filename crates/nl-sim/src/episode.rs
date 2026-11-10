@@ -25,6 +25,7 @@ use crate::landing::LandingQuality;
 use crate::obs::{Observation, PREV_ACTION_INDEX, observe};
 use crate::randomization::{EpisodeVariation, ObsNoise, add_state_noise, noise_rng};
 use crate::scenarios::{EpisodeConfig, ScenariosConfig, Stage};
+use crate::spin_axis::SpinAxis;
 use crate::stage_start::{Goal, StagePlan, StageStart, begin_stage};
 use crate::world::{PlaceCarError, World};
 
@@ -87,6 +88,15 @@ pub struct EpisodeResult {
     pub settle_time_s: Option<f32>,
     /// Air left in the tank at the end, in kg; None with unlimited air.
     pub air_left_kg: Option<f32>,
+    /// The flip plate preset (Stage F) or scripted entry (widened Stage A) the episode
+    /// started with, e.g. "barrel_left" or "roll_flip"; None for plain starts.
+    pub preset: Option<String>,
+    /// Stage F: the plate's strength multiplier. Stage A scripted entries: the start spin
+    /// in rad/s. None for plain starts.
+    pub strength: Option<f32>,
+    /// The axis the plate's kick or the start spin is mostly about, in the car's frame;
+    /// None for stages without one.
+    pub spin_axis: Option<SpinAxis>,
 }
 
 /// The numbers an episode gathers while it runs.
@@ -416,6 +426,9 @@ impl Episode {
                 .and_then(|quality| quality.speed_kept),
             settle_time_s: self.settle_time_s(),
             air_left_kg: (!self.world.mode().unlimited_air).then(|| self.world.air_kg()),
+            preset: self.stage.tag.preset.clone(),
+            strength: self.stage.tag.strength,
+            spin_axis: self.stage.tag.spin_axis,
         }
     }
 

@@ -4,7 +4,7 @@
 
 Writes `results-by-stage.svg` (success rate per stage, Off / PD / Hybrid, both modes, from
 `results/eval_*.json`) and `viewer-curve.svg` (the training viewer's checkpoint curve, from
-`web/public/checkpoints/flight-r4/curve.json`).
+`curve.json` of the newest run in `web/public/checkpoints/`).
 """
 
 import argparse
@@ -142,7 +142,9 @@ def main(argv: list[str] | None = None) -> None:
     by_stage_path.write_text(by_stage_svg(args.repo / "results") + "\n")
     log.info(f"wrote {by_stage_path}")
     # chart 2: the viewer's training curve
-    curve = args.repo / "web" / "public" / "checkpoints" / "flight-r4" / "curve.json"
+    checkpoints = args.repo / "web" / "public" / "checkpoints"
+    newest_run = json.loads((checkpoints / "index.json").read_text())["runs"][-1]["run_id"]
+    curve = checkpoints / newest_run / "curve.json"
     curve_path = args.out / "viewer-curve.svg"
     curve_path.write_text(curve_svg(curve) + "\n")
     log.info(f"wrote {curve_path}")

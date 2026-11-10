@@ -1,0 +1,28 @@
+== seeds_1500000: old vs r5
+(1) widened 12-cell mean 91.30 -> 91.68: PASS
+(2) legacy worst cell ('A', 'realistic') -0.4: PASS
+(3) widened worst cell ('F', 'arcade') -1.3: PASS
+(4) Stage F limited air 61.3 -> 67.4 (+6.1, standard error 2.14): PASS
+    all four: PASS
+
+== seeds_3000000: old vs r5
+(1) widened 12-cell mean 90.82 -> 91.44: PASS
+(2) legacy worst cell ('E', 'arcade') -0.3: PASS
+(3) widened worst cell ('F', 'arcade') -0.8: PASS
+(4) Stage F limited air 59.9 -> 67.2 (+7.3, standard error 2.15): PASS
+    all four: PASS
+
+== seeds_4000000: old vs r5
+(1) widened 12-cell mean 90.54 -> 91.28: PASS
+(2) legacy worst cell ('E', 'arcade') -0.2: PASS
+(3) widened worst cell ('F', 'arcade') -0.4: PASS
+(4) Stage F limited air 58.1 -> 66.0 (+7.9, standard error 2.16): PASS
+    all four: PASS
+
+== seeds_4000000: old vs r6
+(1) widened 12-cell mean 90.54 -> 91.29: PASS
+(2) legacy worst cell ('B', 'realistic') -0.0: PASS
+(3) widened worst cell ('F', 'arcade') -3.9: FAIL
+(4) Stage F limited air 58.1 -> 68.3 (+10.2, standard error 2.14): PASS
+    all four: FAIL
+

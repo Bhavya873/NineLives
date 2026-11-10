@@ -82,3 +82,26 @@ fn every_stunt_kind_completes_a_full_rotation_and_lands() {
         assert_eq!(flight.wheels_down_at_end, 4);
     }
 }
+
+/// A fast fall (over 40 m/s) can step from just above the ground to just inside it; the
+/// forecast must still find a level surface and not refuse every stunt as tilted.
+#[test]
+fn a_forecast_from_a_very_high_drop_finds_level_ground() {
+    let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
+    let mode = ModesConfig::from_toml_str(DEFAULT_MODES_TOML)
+        .unwrap()
+        .realistic;
+    for height_m in [100.0_f32, 130.0, 150.0] {
+        let mut world = World::new_on_flat_ground(&vehicle, mode, DEFAULT_GROUND_FRICTION, 1);
+        world
+            .place_car(
+                [0.0, height_m, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+                [5.0, 0.0, 0.0],
+                [0.0; 3],
+            )
+            .unwrap();
+        let forecast = world.forecast_landing().expect("the car lands");
+        assert!(forecast.normal_tilt_deg < 1.0, "{height_m} m: {forecast:?}");
+    }
+}

@@ -553,7 +553,6 @@ class Game {
   is_crashed(): boolean;
   set_checkpoint(): void;                   // the car's pose and motion now become the respawn point
   snapshot(): Uint8Array; restore(s: Uint8Array): void;
-  build_hash(): string;
 }
 ```
 `InputFrame`: throttle (i8), steer (i8), bit flags (hop, boost, chaos, reset, manual nozzle bits).
@@ -592,11 +591,11 @@ The game flies PD alone (`?controller=hybrid` loads the policy and flies PD + AI
 ### 11.5 HUD
 Scene-theme look: every readout is a flat slate ticket (about #1f2b38) with sand text and a 2 px sand border, square corners and one folded corner (`web/src/ui/theme.css`; Barlow and Barlow Condensed, self-hosted). One rust accent, the car's colour in the scene; red only for danger. No blur, glow or translucency. Every label is at most six words. Four zones:
 - **Top-left:** the nine hearts.
-- **Top-right:** the key card (11.3, folds) and the "Watch AI training" link.
+- **Top-right:** the key card (11.3, folds) and the "Watch the AI train" link.
 - **Bottom-left:** the gauge card: the air mode ("Limited air" or "Unlimited air", with the course section, e.g. "Checkpoint 2/6"), speed in km/h (rust above 200 km/h) and the air bar (sand; ∞ with unlimited air; rust and flashing below 15%).
 - **Bottom-centre, only on demand:** the g-meter and the top-down nozzle map show only while a thruster key (1 to 0) is held or after a hard landing (3 g or more), then fade within about a second. There is no stunt-ready tile. Bottom-right: the wind arrow with Off / Breeze / Storm, hidden with no wind.
 - **G-meter:** the live passenger g (`HudField.GLoad`, the 0.1 s smoothed value) and the headline peak of the stunt window (the smoothed peak capped by the raw `HudField.PeakGLoad`, which shows in the tooltip); sand, rust from 3 g, red from 6 g. The g numbers stay on the meter; toasts carry none. The old best-g record line is gone.
-- **Messages (centre-low), one stack of tickets:** one short toast after a jump, about 1 s ("landed", or "back flip", "front flip", "barrel roll"; "crashed: roof", "crashed: too hard", "crashed: on its side" and "no air" in red; "back in bounds"), the approach hint ("need N km/h") and "too slow", the Hop note ("wheels down first", "no air to hop", "hop ready in 1 s"), and an "AI outside envelope" badge while `PolicyOutOfEnvelope` is 1. Scrapes throw sparks.
+- **Messages (centre-low), one stack of tickets:** one short toast after a jump, about 1 s ("landed", or "back flip", "front flip", "barrel roll"; "crashed: roof", "crashed: too hard", "crashed: on its side" and "no air" in red; "back in bounds"), the approach hint ("need N km/h") and "too slow", the Hop note ("wheels down first", "no air to hop", "hop ready in 1 s"), and an "AI unsure" badge while `PolicyOutOfEnvelope` is 1. Scrapes throw sparks.
 
 ### 11.6 Screens and features
 - **Title screen:** one line ("Jump, flip, land on your wheels. Nine tries."), Play, and "Watch the AI train". The game's clock waits behind it; `?play` skips it. (Mode and controller pickers are not built: M toggles the mode, the game flies PD.)
@@ -692,7 +691,7 @@ A stunt is a request, never a trigger: the player asks, the planner decides, and
 
 **M7 — Hop, course, driver bot, full curriculum**
 - [x] Course loader with all piece types and the `gauntlet.json`; the procedural generator; the driver bot.
-- [x] The policy is trained and re-exported: `models/policy.json` is flight-r4, trained on Stages A, D, E and F (docs/EXPERIMENTS.md).
+- [x] The policy is trained and re-exported: `models/policy.json` is flight-r5 (the flight-r4 policy retrained on the widened draws), trained on Stages A, D, E and F (docs/EXPERIMENTS.md, DECISIONS 2026-11-09).
 - [ ] Stages B and C are not trained, on purpose: B almost never upsets the car and C is a hop, so PD flies them (the Hybrid hands over only past 120° of tilt, DECISIONS 2026-10-27).
 - [x] Eval on all stages and both modes: Stages A–E, Off / PD / Hybrid, Realistic and Arcade, 1000 episodes each (`results/eval_*`). The AI policy does not beat PD in every cell (Stage A: Hybrid 81.0% against PD 82.2% in Realistic), see the README.
 - [x] The Gauntlet was playable start to finish with checkpoints (historical: cut from the game on 2026-11-03, DECISIONS; course and sim code stay).

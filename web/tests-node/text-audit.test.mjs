@@ -52,6 +52,10 @@ function moduleStrings() {
     ...Object.values(STUNT_NAME),
     stunt(StuntEvent.Refused, 3, RefusedReason.NotEnoughAir),
     stunt(StuntEvent.Refused, 3, RefusedReason.LandingBlocked),
+    stunt(StuntEvent.Refused, 3, RefusedReason.NotEnoughTime),
+    ...[44, 333, 222, 24, 342].map((chain) =>
+      stuntToastForEvents(new Float32Array([StuntEvent.Landed, 4, 3.8, 6.3, chain])),
+    ),
     stunt(StuntEvent.Aborted, 3, RefusedReason.ControlLost),
     ...Object.values(HOP_BLOCKED_TEXT),
     ...Object.values(MODE_TEXT),

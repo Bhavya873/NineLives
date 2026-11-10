@@ -18,14 +18,18 @@ use crate::checkpoint::Checkpoint;
 use crate::course_gen::{PieceCatalog, PieceCatalogError};
 use crate::driver_bot::DriverBotConfig;
 use crate::driving_stages::{ChaosStageConfig, CourseStageConfig, HopStageConfig};
-use crate::flight_stage::FlightStageConfig;
+use crate::flight_stage::{FlightStageConfig, FlightWidening};
 use crate::obs::MAX_THRUST_SCALE;
 use crate::randomization::RandomizationConfig;
+use crate::spin_axis::{ScenarioTag, SpinAxis};
 use crate::wind::WindConfig;
 use crate::world::{PlaceCarError, Pose, World};
 
 /// The ChaCha8 stream scenario draws use (Chaos uses the default stream 0).
 const SCENARIO_RNG_STREAM: u64 = 1;
+/// The ChaCha8 stream for the widened Stage A draws, apart from the stream above so the
+/// plain drops keep their draws.
+const DROP_WIDENING_RNG_STREAM: u64 = 13;
 
 /// The repo's `configs/scenarios.toml`, built in so tests and the eval runner share it.
 pub const DEFAULT_SCENARIOS_TOML: &str = include_str!("../../../configs/scenarios.toml");
@@ -130,6 +134,38 @@ pub struct CurriculumAConfig {
     pub first_max_spin_rad_s: f32,
 }
 
+/// The widened Stage A draws (`[widening.stage_a]`): some drops are scripted flip or roll
+/// entries, a fast spin about one axis from a height with room to stop it.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DropWidening {
+    /// Chance that a drop is a scripted entry (at the full curriculum level only).
+    pub scripted_probability: f32,
+    /// Scripted entries start at this height of the centre of mass, in m.
+    pub height_m: [f32; 2],
+    /// The spin of a scripted entry, in rad/s.
+    pub spin_rad_s: [f32; 2],
+    /// Largest tilt from upright of a scripted entry, in degrees.
+    pub tilt_deg: f32,
+    /// Scripted entries only happen when `[stage_a]`'s max spin is at least this, so the
+    /// curriculum's easy levels stay easy (the full level is 6).
+    pub from_max_spin_rad_s: f32,
+}
+
+/// `[widening]`: the wider training and eval episodes of Stages A and F. Remove the
+/// section or set `enabled = false` for the distribution before the widening (every
+/// result under results/ before it was made that way).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WideningConfig {
+    /// False keeps the old Stage A and F draws exactly.
+    pub enabled: bool,
+    /// The `[widening.stage_f]` section.
+    pub stage_f: FlightWidening,
+    /// The `[widening.stage_a]` section.
+    pub stage_a: DropWidening,
+}
+
 /// Everything in scenarios.toml, plus the procedural course pieces (pieces.json).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -156,6 +192,9 @@ pub struct ScenariosConfig {
     pub randomization: RandomizationConfig,
     /// The `[wind]` section: the game's wind levels (SPEC §7.2).
     pub wind: WindConfig,
+    /// The `[widening]` section; absent is the same as `enabled = false`.
+    #[serde(default)]
+    pub widening: Option<WideningConfig>,
     /// The Stage D course pieces (pieces.json), set with `with_pieces_json`; None uses
     /// the built-in copy. Not part of scenarios.toml.
     #[serde(skip)]
@@ -220,6 +259,7 @@ impl ScenariosConfig {
         config.check_randomization()?;
         config.check_wind()?;
         config.check_driving_stages()?;
+        config.check_widening()?;
         Ok(config)
     }
 
@@ -228,6 +268,19 @@ impl ScenariosConfig {
     pub fn with_pieces_json(mut self, text: &str) -> Result<ScenariosConfig, PieceCatalogError> {
         self.pieces = Some(Arc::new(PieceCatalog::from_json_str(text)?));
         Ok(self)
+    }
+
+    /// The widening settings if they are switched on.
+    pub fn widened(&self) -> Option<&WideningConfig> {
+        self.widening.as_ref().filter(|widening| widening.enabled)
+    }
+
+    /// These scenarios with the widening switched off: the old Stage A and F draws.
+    pub fn legacy(&self) -> ScenariosConfig {
+        ScenariosConfig {
+            widening: None,
+            ..self.clone()
+        }
     }
 
     /// The course pieces Stage D draws from: the ones set by `with_pieces_json`, or the
@@ -429,6 +482,58 @@ impl ScenariosConfig {
         Ok(())
     }
 
+    /// The widening ranges are in order and its chances are between 0 and 1.
+    fn check_widening(&self) -> Result<(), ScenariosConfigError> {
+        let Some(widening) = &self.widening else {
+            return Ok(());
+        };
+        let (f, a) = (&widening.stage_f, &widening.stage_a);
+        let ranges = [
+            ("widening.stage_f.strength", f.strength),
+            ("widening.stage_f.mixed_roll_share", f.mixed_roll_share),
+            ("widening.stage_f.mixed_pitch_share", f.mixed_pitch_share),
+            ("widening.stage_a.height_m", a.height_m),
+            ("widening.stage_a.spin_rad_s", a.spin_rad_s),
+        ];
+        for (field, range) in ranges {
+            let [low, high] = range;
+            if !(low.is_finite() && high.is_finite() && 0.0 <= low && low <= high) {
+                return Err(ScenariosConfigError::BadRange { field, range });
+            }
+        }
+        let chances = [
+            ("widening.stage_f.mixed_probability", f.mixed_probability),
+            (
+                "widening.stage_a.scripted_probability",
+                a.scripted_probability,
+            ),
+        ];
+        for (field, value) in chances {
+            if !(0.0..=1.0).contains(&value) {
+                return Err(ScenariosConfigError::BadDrivingStage {
+                    field,
+                    rule: "between 0 and 1",
+                });
+            }
+        }
+        let numbers = [
+            ("widening.stage_f.start_tilt_deg", f.start_tilt_deg),
+            ("widening.stage_f.start_yaw_deg", f.start_yaw_deg),
+            ("widening.stage_f.start_spin_rad_s", f.start_spin_rad_s),
+            ("widening.stage_a.tilt_deg", a.tilt_deg),
+            (
+                "widening.stage_a.from_max_spin_rad_s",
+                a.from_max_spin_rad_s,
+            ),
+        ];
+        for (field, value) in numbers {
+            if !(value.is_finite() && value >= 0.0) {
+                return Err(ScenariosConfigError::Negative { field, value });
+            }
+        }
+        Ok(())
+    }
+
     /// Single numbers: none may be negative (a negative maximum would make an empty
     /// draw range), and the time limit must be above zero.
     fn check_numbers(&self) -> Result<(), ScenariosConfigError> {
@@ -577,16 +682,41 @@ pub fn start_episode(
     config: &ScenariosConfig,
     seed: u64,
 ) -> Result<(), PlaceCarError> {
+    start_episode_tagged(world, stage, config, false, seed).map(|_| ())
+}
+
+/// Like `start_episode`, and says what the start was. With `widened` (and the widening
+/// switched on in `config`) a Stage A drop may be a scripted flip or roll entry.
+pub(crate) fn start_episode_tagged(
+    world: &mut World,
+    stage: Stage,
+    config: &ScenariosConfig,
+    widened: bool,
+    seed: u64,
+) -> Result<ScenarioTag, PlaceCarError> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     // The world seeds Chaos from the same seed; a stream of its own keeps the start's
     // draws from repeating Chaos's knocks.
     rng.set_stream(SCENARIO_RNG_STREAM);
+    let mut tag = ScenarioTag::default();
     let start = match stage {
-        Stage::A => sample_drop(&config.stage_a, &mut rng),
+        Stage::A => {
+            let scripted = config
+                .widened()
+                .filter(|_| widened)
+                .and_then(|widening| scripted_drop(config, &widening.stage_a, seed));
+            match scripted {
+                Some((start, scripted_tag)) => {
+                    tag = scripted_tag;
+                    start
+                }
+                None => sample_drop(&config.stage_a, &mut rng),
+            }
+        }
         Stage::B => sample_tip_over(&config.stage_b, &mut rng),
         Stage::C | Stage::D | Stage::E | Stage::F => {
             world.refill_tank();
-            return Ok(());
+            return Ok(tag);
         }
     };
     place(world, &start, 0.0)?;
@@ -600,7 +730,65 @@ pub fn start_episode(
     };
     place(world, &start, lift_m)?;
     world.refill_tank();
-    Ok(())
+    if stage == Stage::A && tag.spin_axis.is_none() {
+        // A plain random drop has no preset, only the axis its start spin is mostly about.
+        tag.spin_axis = SpinAxis::dominant(world.car_state().angular_velocity_body_rad_s);
+    }
+    Ok(tag)
+}
+
+/// A scripted Stage A entry for `seed` (a flip, a roll or a tumble about a random axis),
+/// or None if this drop is a plain one. Drawn from a stream of its own.
+fn scripted_drop(
+    config: &ScenariosConfig,
+    widening: &DropWidening,
+    seed: u64,
+) -> Option<(Checkpoint, ScenarioTag)> {
+    if config.stage_a.max_spin_rad_s < widening.from_max_spin_rad_s {
+        return None;
+    }
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    rng.set_stream(DROP_WIDENING_RNG_STREAM);
+    if rng.random_range(0.0..1.0) >= widening.scripted_probability {
+        return None;
+    }
+    let drop = &config.stage_a;
+    let rate_rad_s = draw(&mut rng, widening.spin_rad_s);
+    let sign = if rng.random_range(0.0..1.0) < 0.5 {
+        1.0
+    } else {
+        -1.0
+    };
+    let (name, body_spin) = match rng.random_range(0..3) {
+        0 => ("scripted_flip", Vector::new(0.0, 0.0, sign * rate_rad_s)),
+        1 => ("scripted_roll", Vector::new(sign * rate_rad_s, 0.0, 0.0)),
+        _ => ("scripted_tumble", random_direction(&mut rng) * rate_rad_s),
+    };
+    let height_m = draw(&mut rng, widening.height_m);
+    let heading = Rotation::from_rotation_y(rng.random_range(0.0..std::f32::consts::TAU));
+    let tilt_axis_rad = rng.random_range(0.0..std::f32::consts::TAU);
+    let tilt_axis = Vector::new(libm::cosf(tilt_axis_rad), 0.0, libm::sinf(tilt_axis_rad));
+    let tilt_rad = rng.random_range(0.0..=widening.tilt_deg.to_radians());
+    let rotation = Rotation::from_axis_angle(tilt_axis, tilt_rad) * heading;
+    let direction_rad = rng.random_range(0.0..std::f32::consts::TAU);
+    let horizontal_m_s = draw(&mut rng, drop.horizontal_speed_m_s);
+    let velocity = Vector::new(
+        horizontal_m_s * libm::cosf(direction_rad),
+        draw(&mut rng, drop.vertical_speed_m_s),
+        horizontal_m_s * libm::sinf(direction_rad),
+    );
+    let start = checkpoint(
+        Vector::new(0.0, height_m, 0.0),
+        rotation,
+        velocity,
+        rotation * body_spin,
+    );
+    let tag = ScenarioTag {
+        preset: Some(name.to_string()),
+        strength: Some(rate_rad_s),
+        spin_axis: SpinAxis::dominant(body_spin.to_array()),
+    };
+    Some((start, tag))
 }
 
 /// Puts the car at `start`, raised by `lift_m`.

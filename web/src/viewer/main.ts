@@ -380,7 +380,7 @@ function createCurvePanel(
       return;
     }
     const note = tabArena(tab) ? '' : '<p>curve only</p>';
-    const facts = `<p>${curve.episodes} episodes per point</p>`;
+    const facts = `<p>${curve.episodes} drops per point</p>`;
     chart.innerHTML = curveSvg(curve, tab) + note + facts;
   };
   const markFocus = (focus: ArenaKind | null) => {

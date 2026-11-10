@@ -80,7 +80,7 @@ def test_the_export_carries_the_schema_hash_and_the_layer_shapes():
 def test_the_python_eval_reproduces_the_rust_eval_runners_rows():
     committed = json.loads((RESULTS_DIR / "eval_pd_A_realistic.json").read_text())
 
-    report = evaluate("pd", "A", "realistic", episodes=20, first_seed=0)
+    report = evaluate("pd", "A", "realistic", episodes=20, first_seed=0, widened=False)
 
     if committed.get("physics_hash") != report.get("physics_hash"):
         # The committed result was recorded under older physics (before the bump stop and
@@ -88,7 +88,28 @@ def test_the_python_eval_reproduces_the_rust_eval_runners_rows():
         # results/eval_* files with hashes; until then rows are only comparable when the
         # physics matches.
         pytest.skip("committed eval_pd_A_realistic.json predates the current physics_hash")
-    assert report["episodes"] == committed["episodes"][:20]
+    # The committed rows predate the preset, strength and spin_axis fields.
+    old_fields = [
+        {key: value for key, value in row.items() if key in committed["episodes"][0]}
+        for row in report["episodes"]
+    ]
+    assert old_fields == committed["episodes"][:20]
+
+
+def test_eval_rows_name_the_plate_and_the_widening_can_be_switched_off():
+    widened = evaluate("pd", "F", "realistic", episodes=12, first_seed=0)
+    legacy = evaluate("pd", "F", "realistic", episodes=12, first_seed=0, widened=False)
+
+    assert widened["widened"] and not legacy["widened"]
+    for report in (widened, legacy):
+        for row in report["episodes"]:
+            assert row["preset"] and row["strength"] > 0
+            assert row["spin_axis"] in ("roll", "pitch", "yaw", "mixed")
+    assert {row["preset"] for row in widened["episodes"]} != {
+        row["preset"] for row in legacy["episodes"]
+    }
+    assert max(row["strength"] for row in legacy["episodes"]) <= 3.0
+    assert max(row["strength"] for row in widened["episodes"]) > 3.0
 
 
 def test_an_exported_policy_runs_as_the_ai_controller(tmp_path):

@@ -248,10 +248,15 @@ fn a_request_waits_for_take_off_and_expires_after_3_s() {
 }
 
 #[test]
-fn a_second_request_is_ignored_while_one_is_active() {
+fn a_second_request_joins_the_first_up_to_three() {
     let mut planner = StuntPlanner::new(config());
     assert!(planner.request(StuntKind::BackFlip, 0.0));
-    assert!(!planner.request(StuntKind::FrontFlip, 0.1));
+    assert!(planner.request(StuntKind::FrontFlip, 0.1));
+    assert!(planner.request(StuntKind::BackFlip, 0.2));
+    assert!(
+        !planner.request(StuntKind::BackFlip, 0.3),
+        "a fourth is refused"
+    );
     assert_eq!(planner.kind(), StuntKind::BackFlip);
 }
 

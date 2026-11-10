@@ -1,4 +1,4 @@
-// Smoke test (SPEC §12): the page loads, holding W drives the car forward, and
+// Smoke test (SPEC §12): the page loads, holding the up arrow drives the car forward, and
 // nothing logs an error.
 //
 // It waits on *simulated* time, not wall-clock time: on a slow machine with software
@@ -46,7 +46,7 @@ async function readDebug(page: Page, what: 'x' | 'time'): Promise<number> {
   }, what);
 }
 
-test('holding W drives the car forward without console errors', async ({ page }) => {
+test('holding the up arrow drives the car forward without console errors', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   const consoleErrors = collectConsoleErrors(page);
 

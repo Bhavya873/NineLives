@@ -82,6 +82,9 @@ export interface CrowdView {
   spreadOnGrid: boolean;
   /** Which labels show: one over every car, one over the first car of each row, or none. */
   labels: LabelMode;
+  /** Each row's checkpoint label, and the looks made for every row-and-tag pair so far. */
+  rowLabels: string[];
+  taggedLooks: Map<string, LabelLooks>;
 }
 
 /** Which labels a crowd shows. A crowd that shares a screen with others shows few, so the
@@ -112,17 +115,8 @@ export function createCrowdView(
   const wheelSlots = slotsOf(buildWheel(), carCount * wheelCount, looks, scene, layer);
   const cars: GhostCar[] = [];
   rowLabels.forEach((text, row) => {
-    const labelTexture = new CanvasTexture(drawLabel(text));
     // One full and one faded material per row, not per car: fewer materials to bind.
-    const labelLooks: LabelLooks = {
-      full: new SpriteMaterial({ map: labelTexture, depthTest: false }),
-      faded: new SpriteMaterial({
-        map: labelTexture,
-        depthTest: false,
-        transparent: true,
-        opacity: CRASHED_LABEL_OPACITY,
-      }),
-    };
+    const labelLooks = labelLooksOf(drawLabel(text));
     for (let column = 0; column < carsPerRow; column += 1) {
       const label = new Sprite(labelLooks.full);
       label.scale.set(LABEL_WIDTH_M, LABEL_TALL_M, 1);
@@ -147,6 +141,50 @@ export function createCrowdView(
     allSlots,
     spreadOnGrid: true,
     labels: 'cars',
+    rowLabels: [...rowLabels],
+    taggedLooks: new Map(),
+  };
+}
+
+/** Adds each car's own short tag ("barrel L") under its row's checkpoint label. `tags` has
+ * one string per car of `row`; an empty string leaves the plain row label. Call again when
+ * the cars change (a new round). */
+export function setCarTags(view: CrowdView, row: number, tags: string[]): void {
+  const rowLabel = view.rowLabels[row];
+  if (rowLabel === undefined) {
+    return;
+  }
+  for (let index = 0; index < view.carsPerRow; index += 1) {
+    const car = view.cars[row * view.carsPerRow + index];
+    if (!car) {
+      return;
+    }
+    const tag = tags[index] ?? '';
+    if (tag === '') {
+      continue;
+    }
+    const key = `${row}|${tag}`;
+    let looks = view.taggedLooks.get(key);
+    if (!looks) {
+      looks = labelLooksOf(drawLabel(rowLabel, tag));
+      view.taggedLooks.set(key, looks);
+    }
+    car.looks = looks;
+    car.label.material = car.crashed ? looks.faded : looks.full;
+  }
+}
+
+/** The full and the faded (crashed car) materials for a label canvas. */
+function labelLooksOf(canvas: HTMLCanvasElement): LabelLooks {
+  const texture = new CanvasTexture(canvas);
+  return {
+    full: new SpriteMaterial({ map: texture, depthTest: false }),
+    faded: new SpriteMaterial({
+      map: texture,
+      depthTest: false,
+      transparent: true,
+      opacity: CRASHED_LABEL_OPACITY,
+    }),
   };
 }
 
@@ -252,12 +290,15 @@ function setDrawOrder(wheels: Slot[], body: Slot[]): void {
 }
 
 /** The tag colours: theme.css's --slate and --sand (a canvas cannot read CSS variables cheaply). */
-const LABEL_SLATE = '#1f2b38';
-const LABEL_SAND = '#e9dcc0';
+const LABEL_SLATE = '#15191f';
+const LABEL_SAND = '#f1ede2';
 const LABEL_FONT_PX = 40;
+const LABEL_TAG_FONT_PX = 34;
+const LABEL_SMALL_FONT_PX = 22;
 
-/** A canvas with `text` on a slate ticket, for a car's label. */
-function drawLabel(text: string): HTMLCanvasElement {
+/** A canvas with `text` on a slate ticket, for a car's label; with a `tag` the text is
+ * smaller on top and the tag under it. */
+function drawLabel(text: string, tag = ''): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   [canvas.width, canvas.height] = LABEL_CANVAS_PX;
   const context = canvas.getContext('2d');
@@ -269,10 +310,18 @@ function drawLabel(text: string): HTMLCanvasElement {
     context.lineWidth = 6;
     context.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
     context.fillStyle = LABEL_SAND;
-    context.font = `700 ${LABEL_FONT_PX}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText(text, canvas.width / 2, canvas.height / 2);
+    const family = '"Barlow Condensed", "Arial Narrow", sans-serif';
+    if (tag === '') {
+      context.font = `700 ${LABEL_FONT_PX}px ${family}`;
+      context.fillText(text, canvas.width / 2, canvas.height / 2);
+    } else {
+      context.font = `700 ${LABEL_SMALL_FONT_PX}px ${family}`;
+      context.fillText(text, canvas.width / 2, canvas.height * 0.29);
+      context.font = `700 ${LABEL_TAG_FONT_PX}px ${family}`;
+      context.fillText(tag, canvas.width / 2, canvas.height * 0.68);
+    }
   }
   return canvas;
 }

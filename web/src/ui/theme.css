@@ -27,13 +27,16 @@
 }
 
 :root {
-  /* slate tiles, sand text and border, one rust accent (the car's colour in the scene) */
-  --slate: #1f2b38;
-  --slate-deep: #141c25;
-  --slate-line: #66788a; /* quiet marks on slate: lost hearts, grid lines */
-  --sand: #e9dcc0; /* 10.8:1 on slate */
-  --sand-soft: #b9ad92; /* 6.5:1 on slate, for small labels */
-  --rust: #e0542f; /* fills, and text from 18 px bold up (3.5:1 on slate) */
+  /* ink panels, bone text, one rust accent (the car's colour in the scene). The token names
+     keep their old slate and sand names so the rest of the CSS did not have to change. */
+  --slate: #15191f;
+  --slate-deep: #0d1014;
+  --slate-line: #4a525c; /* thin panel edges and quiet marks: lost hearts, bar tracks */
+  --sand: #f1ede2; /* 15.1:1 on slate */
+  --sand-soft: #aeb0b3; /* 8.1:1 on slate, for small labels */
+  /* Rust is 4.6:1 on slate: fine for fills and large text (the wordmark, the speed), and just
+     enough for small text, but small text stays bone. */
+  --rust: #e0542f;
   --red: #ff5b5b; /* danger only; 4.9:1 on slate */
   --font-text: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
@@ -43,45 +46,21 @@
   --text-m: 18px;
   --text-l: 30px;
   --text-xl: 48px;
-  --tile-border: 2px;
-  --tile-notch: 14px;
+  --tile-border: 1px;
   --edge: 16px;
 }
 
-/* The ticket: flat slate, 2px sand border, square corners, top-right corner folded. */
+/* The panel: flat slate, a thin slate-line edge, square corners. No fold, no clipped corner. */
 .tile {
   position: relative;
   box-sizing: border-box;
   padding: 6px 12px;
-  border: var(--tile-border) solid var(--sand);
+  border: var(--tile-border) solid var(--slate-line);
   background: var(--slate);
   color: var(--sand);
   font-family: var(--font-text);
   font-size: var(--text-s);
   font-variant-numeric: tabular-nums;
-  /* cuts the corner away; ::after draws the fold and the diagonal edge */
-  clip-path: polygon(
-    0 0,
-    calc(100% - var(--tile-notch)) 0,
-    100% var(--tile-notch),
-    100% 100%,
-    0 100%
-  );
-}
-.tile::after {
-  content: '';
-  position: absolute;
-  top: calc(-1 * var(--tile-border));
-  right: calc(-1 * var(--tile-border));
-  width: var(--tile-notch);
-  height: var(--tile-notch);
-  background: linear-gradient(
-    to bottom left,
-    transparent 0 46%,
-    var(--sand) 46% 58%,
-    var(--slate-deep) 58% 100%
-  );
-  pointer-events: none;
 }
 /* Big numbers and titles. */
 .tile-display {

@@ -16,7 +16,8 @@
 
 use nl_control::config::{ControllersConfig, DEFAULT_CONTROLLERS_TOML};
 use nl_control::stunt::{
-    PlannerInputs, StuntDirector, StuntEvent, StuntKind, StuntPhase, authorize,
+    PlannerInputs, StuntDirector, StuntEvent, StuntKind, StuntPhase, authorize_chain,
+    landing_reserve_kg,
 };
 use nl_control::{ControlCtx, Controller, Pd};
 use nl_sim::conventions::PHYSICS_DT_S;
@@ -72,6 +73,15 @@ struct RunResult {
     wheels_down_at_end: usize,
     /// The planner's own events, for failure messages.
     events: Vec<StuntEvent>,
+    /// The stunts the planner took into the jump.
+    chain_len: usize,
+    /// Air in the tank when the stunt was authorized, the air the plan asked for (spin,
+    /// catch and the landing reserve) and the reserve alone, in kg.
+    air_at_press_kg: f32,
+    air_needed_kg: f32,
+    reserve_kg: f32,
+    /// Air left at touchdown, in kg.
+    air_at_landing_kg: f32,
 }
 
 impl RunResult {
@@ -81,10 +91,13 @@ impl RunResult {
     }
 }
 
-fn mode() -> ModeParams {
-    ModesConfig::from_toml_str(DEFAULT_MODES_TOML)
-        .unwrap()
-        .realistic
+fn mode(unlimited: bool) -> ModeParams {
+    let modes = ModesConfig::from_toml_str(DEFAULT_MODES_TOML).unwrap();
+    if unlimited {
+        modes.arcade
+    } else {
+        modes.realistic
+    }
 }
 
 /// Drives the ramp `piece` of `course` at `speed_m_s`; with a `stunt`, the player presses
@@ -95,9 +108,27 @@ fn run(
     speed_m_s: f32,
     stunt: Option<(StuntKind, f32)>,
 ) -> RunResult {
+    run_chain(
+        course,
+        piece,
+        speed_m_s,
+        stunt.map(|(kind, tilt)| (vec![kind], tilt)),
+        false,
+    )
+}
+
+/// `run` for a whole chain of stunts (the first `authorize_chain` yes starts them all),
+/// in Limited air or `unlimited`.
+fn run_chain(
+    course: &CourseSpec,
+    piece: usize,
+    speed_m_s: f32,
+    stunt: Option<(Vec<StuntKind>, f32)>,
+    unlimited: bool,
+) -> RunResult {
     let vehicle = VehicleConfig::from_toml_str(DEFAULT_VEHICLE_TOML).unwrap();
     let controllers = ControllersConfig::from_toml_str(DEFAULT_CONTROLLERS_TOML).unwrap();
-    let mode = mode();
+    let mode = mode(unlimited);
     let mut world = World::new_on_course(&vehicle, mode, course, DEFAULT_GROUND_FRICTION, 0);
     let (foot, yaw_deg) = match &course.pieces[piece] {
         PieceSpec::Ramp { pos, yaw, .. } => (*pos, *yaw),
@@ -132,20 +163,29 @@ fn run(
             let ctx = ControlCtx::for_world(&world, input);
             let step = director.step(&world, &ctx, 1.0 / 60.0);
             result.events.extend(step.tick.events.iter().copied());
+            result.chain_len = result.chain_len.max(director.planner().chain().len());
             result.rotation_done |= director.planner().rotation_complete()
                 && director.planner().phase() != StuntPhase::Idle;
-            if let (Some((kind, max_tilt_deg)), Some(takeoff), None, None) =
-                (stunt, takeoff_s, landing_s, result.plan)
+            if let (Some((kinds, max_tilt_deg)), Some(takeoff), None, None) =
+                (stunt.as_ref(), takeoff_s, landing_s, result.plan)
             {
                 let config = *director.planner().config();
                 let inputs = PlannerInputs::from_world(&world, &config, 1.0 / 60.0);
                 let tilt_deg = world.tilt_rad().to_degrees();
-                if let (true, Ok(plan)) =
-                    (tilt_deg <= max_tilt_deg, authorize(&config, kind, &inputs))
-                {
+                if let (true, Ok(plan)) = (
+                    tilt_deg <= *max_tilt_deg,
+                    authorize_chain(&config, kinds, &inputs),
+                ) {
                     let forecast_s = inputs.forecast.map_or(0.0, |forecast| forecast.time_s);
                     result.plan = Some((plan.required_s, forecast_s, time_s - takeoff));
-                    director.request(kind, world.time_s() as f32);
+                    result.air_at_press_kg = inputs.air_kg;
+                    result.air_needed_kg = plan.air_needed_kg;
+                    result.reserve_kg = inputs.forecast.map_or(0.0, |forecast| {
+                        landing_reserve_kg(&config, &inputs.state, &forecast)
+                    });
+                    for &kind in kinds {
+                        director.request(kind, world.time_s() as f32);
+                    }
                 }
             }
             let throttles = step.throttles.unwrap_or_else(|| fallback.act(&ctx));
@@ -159,16 +199,19 @@ fn run(
             match event {
                 SimEvent::AirborneStart if along_m > APPROACH_M && takeoff_s.is_none() => {
                     takeoff_s = Some(time_s);
-                    if let Some((kind, tilt)) = stunt.filter(|(_, tilt)| *tilt == RAW_PRESS) {
+                    if let Some((kinds, _)) = stunt.as_ref().filter(|(_, tilt)| *tilt == RAW_PRESS)
+                    {
                         // A raw press: queued at once, the planner waits for the car to level.
-                        let _ = tilt;
-                        director.request(kind, world.time_s() as f32);
+                        for &kind in kinds {
+                            director.request(kind, world.time_s() as f32);
+                        }
                         result.plan = Some((0.0, 0.0, 0.0));
                     }
                 }
                 SimEvent::AirborneEnd if takeoff_s.is_some() && landing_s.is_none() => {
                     landing_s = Some(time_s);
                     result.airtime_s = time_s - takeoff_s.unwrap_or(time_s);
+                    result.air_at_landing_kg = world.air_kg();
                 }
                 SimEvent::Crash { .. } => result.crashed = true,
                 _ => {}
@@ -339,4 +382,138 @@ fn the_steep_ramps_crash_a_clean_approach_no_more_than_the_old_ramps_did() {
     let old_rate = old_crashed as f32 / old_total as f32;
     let new_rate = new_crashed as f32 / new_total as f32;
     assert!(new_rate <= old_rate + 1e-6, "{new_rate} vs old {old_rate}");
+}
+
+/// One cell of the multi-rotation table.
+fn describe_chain(result: &RunResult, wanted: usize) -> String {
+    let Some((required_s, forecast_s, _)) = result.plan else {
+        return format!("{:>5}", "no");
+    };
+    let outcome = if result.crashed {
+        "CRASH"
+    } else if result.stunt_landed() && result.landed_event && result.chain_len == wanted {
+        "clean"
+    } else if result.landed_event {
+        "part"
+    } else {
+        "FAIL"
+    };
+    format!(
+        "{required_s:>4.1}/{forecast_s:>4.1}s {outcome:<5} air {:>3.0}/{:>3.0}/{:>3.0}/{:>3.0}",
+        result.air_at_press_kg, result.air_needed_kg, result.reserve_kg, result.air_at_landing_kg
+    )
+}
+
+#[test]
+#[ignore = "prints the multi-rotation table; slow in debug builds"]
+fn multi_rotation_table_for_every_playground_ramp_angle() {
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
+    println!(
+        "\nangle speed | airtime s | per move: needed/forecast s, outcome, air kg at press/needed/reserve/left at landing"
+    );
+    println!(
+        "(\"no\" = the planner never said yes; clean = every rotation made and landed on four wheels)"
+    );
+    for unlimited in [false, true] {
+        println!(
+            "--- {} ---",
+            if unlimited {
+                "Unlimited air"
+            } else {
+                "Limited air"
+            }
+        );
+        for (piece, angle_deg) in playground_ramps(&course) {
+            for speed_m_s in SPEEDS_M_S {
+                let plain = run(&course, piece, speed_m_s, None);
+                let mut cells = Vec::new();
+                for (label, kinds) in [
+                    ("x1", vec![StuntKind::BackFlip]),
+                    ("x2", vec![StuntKind::BackFlip; 2]),
+                    ("x3", vec![StuntKind::BackFlip; 3]),
+                    (
+                        "flip+roll",
+                        vec![StuntKind::BackFlip, StuntKind::BarrelRight],
+                    ),
+                ] {
+                    let result = run_chain(
+                        &course,
+                        piece,
+                        speed_m_s,
+                        Some((kinds.clone(), ANY_TILT_DEG)),
+                        unlimited,
+                    );
+                    cells.push(format!("{label} {}", describe_chain(&result, kinds.len())));
+                }
+                println!(
+                    "{angle_deg:>4.0} {speed_m_s:>5.0} | {:>5.2}{} | {}",
+                    plain.airtime_s,
+                    if plain.crashed { " CRASH" } else { "" },
+                    cells.join(" | ")
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_double_and_a_triple_back_flip_authorize_and_land_on_the_big_ramps() {
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
+    let ramps = playground_ramps(&course);
+    let piece = |angle: f32| ramps.iter().find(|ramp| ramp.1 == angle).unwrap().0;
+    // (angle, speed, flips, unlimited): doubles on the steep ramps at speed, a triple on
+    // the biggest in Unlimited air.
+    for (angle_deg, speed_m_s, flips, unlimited) in [
+        (28.0, 30.0, 2usize, false),
+        (28.0, 30.0, 2, true),
+        (26.0, 35.0, 2, true),
+        (28.0, 35.0, 3, true),
+    ] {
+        let result = run_chain(
+            &course,
+            piece(angle_deg),
+            speed_m_s,
+            Some((vec![StuntKind::BackFlip; flips], ANY_TILT_DEG)),
+            unlimited,
+        );
+        let label = format!("{flips} flips on {angle_deg} at {speed_m_s}, unlimited {unlimited}");
+        assert!(
+            result.plan.is_some(),
+            "{label}: never authorized {:?}",
+            result.events
+        );
+        assert_eq!(result.chain_len, flips, "{label}: {:?}", result.events);
+        assert!(
+            result.stunt_landed() && result.landed_event,
+            "{label}: {:?}",
+            result.events
+        );
+        if !unlimited {
+            // Limited air always keeps the landing reserve.
+            assert!(result.air_needed_kg >= result.reserve_kg, "{label}");
+            assert!(result.air_at_landing_kg > 0.0, "{label}");
+        }
+    }
+}
+
+#[test]
+fn small_ramps_refuse_a_double_but_take_a_single_flip() {
+    let course = CourseSpec::from_json_str(STEEP_RAMPS_JSON).unwrap();
+    let ramps = playground_ramps(&course);
+    let piece = ramps.iter().find(|ramp| ramp.1 == 14.0).unwrap().0;
+    for unlimited in [false, true] {
+        let double = run_chain(
+            &course,
+            piece,
+            20.0,
+            Some((vec![StuntKind::BackFlip; 2], ANY_TILT_DEG)),
+            unlimited,
+        );
+        assert!(
+            double.plan.is_none(),
+            "unlimited {unlimited}: {:?}",
+            double.events
+        );
+        assert!(!double.landed_event && !double.rotation_done);
+    }
 }

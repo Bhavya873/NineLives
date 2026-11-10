@@ -20,6 +20,8 @@ const GROUND_STEP_M: f32 = 0.5;
 const GROUND_REACH_M: f32 = 12.0;
 /// How far above the touchdown point the ground samples start, in m.
 const GROUND_LIFT_M: f32 = 4.0;
+/// How far a touchdown ray is lifted when its start fell inside the ground, in m.
+const INSIDE_LIFT_M: f32 = 2.0;
 
 /// What the forecast assumes (all but `max_time_s` are `[stunt]` entries in
 /// `configs/controllers.toml`).
@@ -202,7 +204,21 @@ fn touch_down(
         let t = step as f32 * step_s;
         let position = start + velocity * t + gravity * (0.5 * t * t);
         let ray = Ray::new(position, down);
-        if let Some((handle, hit)) = physics.cast_ray_and_get_normal(&ray, reach, true, filter) {
+        let mut cast = physics.cast_ray_and_get_normal(&ray, reach, true, filter);
+        if let Some((_, hit)) = &cast {
+            // A fast fall can step from just above the ground to just inside it, and a ray
+            // that starts inside a solid reports distance 0 and no normal. Cast again from
+            // a little higher, so the touchdown still gets its surface and normal.
+            if hit.time_of_impact <= 0.0 {
+                let lift = INSIDE_LIFT_M;
+                let higher = Ray::new(position + Vector::new(0.0, lift, 0.0), down);
+                cast = physics.cast_ray_and_get_normal(&higher, reach + lift, true, filter);
+                if let Some((_, lifted)) = cast.as_mut() {
+                    lifted.time_of_impact -= lift;
+                }
+            }
+        }
+        if let Some((handle, hit)) = cast {
             let gap = hit.time_of_impact - settings.rest_height_m;
             if gap <= 0.0 {
                 // Interpolate where the gap closed between the last sample and this one.

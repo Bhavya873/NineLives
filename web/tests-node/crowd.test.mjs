@@ -18,8 +18,16 @@ function runToEnd(crowd, limit = 2000) {
 }
 
 test('each car ends exactly as the native Hybrid eval of its seed does', () => {
+  // The widened Stage A draws (scripted flips and rolls) are the default, so the reference is
+  // the widened eval; results/eval_hybrid_A_realistic.json holds the older drops.
   const committed = JSON.parse(
-    readFileSync(new URL('../../results/eval_hybrid_A_realistic.json', import.meta.url), 'utf8'),
+    readFileSync(
+      new URL(
+        '../../results/widening_2026-11/widened/eval_hybrid_A_realistic.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
   ).episodes.slice(0, 8);
   const crowd = new Crowd(policyJson, 'realistic', 0n, 8);
 
@@ -122,5 +130,23 @@ test('an unknown stage is refused with the valid names', () => {
   assert.throws(
     () => Crowd.for_stage(policyJson, 'realistic', 'Z', 0n, 2),
     /stage must be one of A, B, arena, D, F, gauntlet/,
+  );
+});
+
+test('Stage F cars each get their own short plate label, the other stages none', () => {
+  const crowd = Crowd.for_stage(policyJson, 'realistic', 'F', 16n, 8);
+
+  const labels = crowd.car_labels();
+
+  assert.equal(labels.length, 8);
+  assert.ok(new Set(labels).size >= 3, `one round shows ${new Set(labels).size} labels`);
+  for (const label of labels) {
+    assert.match(label, /^[a-z+ ]+( [LR])?$/i);
+    assert.ok(label.split(' ').length <= 3, label);
+  }
+  assert.ok(
+    Crowd.for_stage(policyJson, 'realistic', 'A', 0n, 3)
+      .car_labels()
+      .every((l) => l === ''),
   );
 });

@@ -8,9 +8,7 @@
 //! the Off, PD, AI and (debug-only) Manual controllers, and courses (`course.rs`, M7).
 
 use nl_control::config::ControllersConfig;
-use nl_control::stunt::{
-    PlannerInputs, StuntDirector, StuntEvent, StuntKind, StuntPhase, StuntReason, authorize,
-};
+use nl_control::stunt::{StuntDirector, StuntEvent, StuntKind, StuntReason};
 use nl_control::{ControlCtx, Controller, ControllerChoices, ControllerKind};
 use std::sync::Arc;
 
@@ -27,7 +25,7 @@ use nl_sim::modes::{ModeParams, ModesConfig};
 use nl_sim::scenarios::{DEFAULT_SCENARIOS_TOML, ScenariosConfig, Stage, start_episode};
 use nl_sim::vehicle_config::VehicleConfig;
 use nl_sim::wind::WindLevel;
-use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, SNAPSHOT_FORMAT_VERSION, World};
+use nl_sim::world::{DEFAULT_GROUND_FRICTION, Pose, World};
 use wasm_bindgen::prelude::*;
 
 mod course;
@@ -232,7 +230,8 @@ pub enum EventKind {
     /// An authorized stunt began its spin. Followed by: the `StuntCode`.
     StuntStart = 11,
     /// A stunt finished with the full rotation. Followed by: the `StuntCode`, the peak g of
-    /// the landing, the rotation in rad.
+    /// the landing, the total rotation in rad, the chain (the stunt codes of the jump, the
+    /// first in the ones digit: 44 is a double back flip).
     StuntLanded = 12,
     /// The planner said no. Followed by: the `StuntCode`, a `StuntReasonCode`.
     StuntRefused = 13,
@@ -260,6 +259,9 @@ pub enum StuntReasonCode {
     RequestExpired = 2,
     /// Aborted in the air: thrust ran out or a wheel touched early.
     ControlLost = 3,
+    /// Too little air time for the spin, brake and catch ("not enough time"); 0 is the
+    /// air tank and the start state.
+    NotEnoughTime = 4,
 }
 
 /// Why the car crashed, the second float of a `Crash` event.
@@ -429,7 +431,11 @@ impl Game {
     /// (the `StuntCode` values). The planner decides, at the next control step in the air,
     /// whether to start it (`StuntStart`) or refuse (`StuntRefused`), and a request still
     /// waiting after `[stunt] request_timeout_s` is refused. Returns false, queueing
-    /// nothing, for an unknown code, a crashed car or a stunt already queued or flying.
+    /// nothing, for an unknown code, a crashed car, a full jump (3 stunts) or a stunt that
+    /// is past braking. A stunt asked for while one is queued or spinning up, coasting or
+    /// braking is added to the jump (a second press of the same key is one more rotation;
+    /// another key flies after it): the planner judges each at the next control step and
+    /// answers with `StuntStart` (taken) or `StuntRefused` for it.
     pub fn request_stunt(&mut self, code: u8) -> bool {
         let Some(kind) = StuntKind::from_code(code) else {
             return false;
@@ -438,23 +444,6 @@ impl Game {
             return false;
         }
         self.stunt.request(kind, self.world.time_s() as f32)
-    }
-
-    /// Which stunts the planner would authorize right now, as a bit mask: bit 0 BarrelLeft,
-    /// bit 1 BarrelRight, bit 2 FrontFlip, bit 3 BackFlip (stunt code minus one). Read-only:
-    /// it runs the planner's four rules on a fresh forecast and starts nothing, so the
-    /// web can show a "stunt ready" hint. 0 on the ground, while crashed or while a stunt
-    /// is queued or flying. Costs one landing forecast, so ask only while airborne.
-    pub fn stunt_ready_mask(&self) -> u8 {
-        if self.world.is_crashed() || self.stunt.planner().phase() != StuntPhase::Idle {
-            return 0;
-        }
-        let config = self.stunt.planner().config();
-        let inputs = PlannerInputs::from_world(&self.world, config, 0.0);
-        (1..=4u8)
-            .filter_map(StuntKind::from_code)
-            .filter(|kind| authorize(config, *kind, &inputs).is_ok())
-            .fold(0u8, |mask, kind| mask | 1 << (kind.code() - 1))
     }
 
     /// The car body's pose: [x, y, z, qx, qy, qz, qw].
@@ -578,16 +567,6 @@ impl Game {
         values
     }
 
-    /// Identifies this build, so saved ghosts from an incompatible build are ignored.
-    /// It is the crate version and the snapshot format.
-    pub fn build_hash() -> String {
-        format!(
-            "nl-wasm-{}-snapshot-v{}",
-            env!("CARGO_PKG_VERSION"),
-            SNAPSHOT_FORMAT_VERSION
-        )
-    }
-
     /// Runs the 2000-step golden trace and returns its hash, so a test can check
     /// that wasm gives bit-identical physics to native (SPEC §7.10).
     pub fn golden_trace_hash() -> Result<String, JsError> {
@@ -685,7 +664,7 @@ impl Game {
                     kind.code() as f32,
                     self.world.peak_g_load(),
                     rotation_rad,
-                    0.0,
+                    self.stunt.planner().chain_code(),
                 ],
                 StuntEvent::Refused { kind, reason } => [
                     kind_code(EventKind::StuntRefused),
@@ -703,7 +682,7 @@ impl Game {
                     kind.code() as f32,
                     stunt_reason_code(reason),
                     rotation_rad,
-                    0.0,
+                    self.stunt.planner().chain_code(),
                 ],
             };
             self.stunt_events.push(floats);
@@ -794,8 +773,8 @@ fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
 /// The reason number a `StuntRefused` or `StuntAborted` event carries.
 fn stunt_reason_code(reason: StuntReason) -> f32 {
     let code = match reason {
-        StuntReason::NotEnoughTime
-        | StuntReason::NotEnoughAir
+        StuntReason::NotEnoughTime => StuntReasonCode::NotEnoughTime,
+        StuntReason::NotEnoughAir
         | StuntReason::NotAirborne
         | StuntReason::TiltedTooFar
         | StuntReason::SpinningTooFast

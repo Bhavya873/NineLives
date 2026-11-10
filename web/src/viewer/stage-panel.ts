@@ -14,6 +14,7 @@ import {
   beginCrowdFrame,
   createCrowdView,
   endCrowdFrame,
+  setCarTags,
   updateCrowdRow,
 } from './crowd-view.ts';
 import { pickCrowdLeader } from './leader.ts';
@@ -193,6 +194,12 @@ function onRound(panel: StagePanel, message: StageRound): void {
     panel.course.traverse((object) => object.layers.set(panel.layer));
     panel.scene.add(panel.course);
   }
+  // Each car carries the short name of its own flip plate for this round.
+  message.carTags.forEach((tags, row) => {
+    if (panel.view) {
+      setCarTags(panel.view, row, tags);
+    }
+  });
   panel.shapeCount = panel.course?.children.length ?? 0;
   panel.round = message.round;
   panel.restart = true;

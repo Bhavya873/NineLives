@@ -38,15 +38,19 @@ def evaluate(
     randomize: bool = False,
     randomize_mode: bool = True,
     policy_json: str | None = None,
+    widened: bool = True,
 ) -> dict[str, Any]:
     """The eval report: settings, the SPEC §10 summary and every episode's row.
     `policy` is the exported policy file the AI and Hybrid controllers load; `randomize` gives
     every episode its own randomized car and world (SPEC §9.8); with
     `randomize_mode=False` the mode stays `mode`'s preset (a per-mode policy).
-    `policy_json` (the exported text) replaces the file, e.g. for a checkpoint in training."""
+    `policy_json` (the exported text) replaces the file, e.g. for a checkpoint in training;
+    `widened=False` runs the Stage A and F draws as they were before scenarios.toml's
+    `[widening]`. Every row also has `preset`, `strength` and `spin_axis` (null where a stage
+    has none)."""
     if policy_json is None and controller in ("ai", "hybrid"):
         policy_json = policy.read_text()
-    config = load_sim_config(mode, stage, randomize, randomize_mode=randomize_mode)
+    config = load_sim_config(mode, stage, randomize, randomize_mode=randomize_mode, widened=widened)
     report = json.loads(run_eval(controller, config, episodes, first_seed, policy_json))
     return {
         "controller": controller,
@@ -54,6 +58,7 @@ def evaluate(
         "mode": mode,
         "first_seed": first_seed,
         "randomized": randomize,
+        "widened": widened,
         **provenance(config, policy_json),
         "summary": report["summary"],
         "episodes": report["episodes"],

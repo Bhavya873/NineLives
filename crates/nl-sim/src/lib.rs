@@ -37,6 +37,7 @@ pub mod provenance;
 pub mod randomization;
 pub mod reward;
 pub mod scenarios;
+pub mod spin_axis;
 mod stage_start;
 pub mod tank;
 pub mod thrusters;

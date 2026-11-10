@@ -110,6 +110,38 @@ half_width_m = 40.0
 # Flat floor past the plate (m): a 28 m/s car covers about 250 m in 10 s.
 run_out_m = 300.0
 
+[widening]
+# Wider Stage A and Stage F episodes for training and eval (stream 5). On by default;
+# `enabled = false` (the eval's --legacy) brings back the draws every earlier result under
+# results/ was made with. The new draws come from their own random streams, so a seed keeps
+# its speed and every other stage is untouched.
+enabled = true
+
+[widening.stage_f]
+# Replaces [stage_f] strength: the milder end is a plate the thrusters nearly catch, the
+# strong end turns the car over past 120 degrees even with them on.
+strength = [1.5, 4.0]
+# Chance of a mixed plate: a barrel roll and a flip added together ("roll + flip").
+mixed_probability = 0.25
+# What the barrel-roll and the flip part of a mixed plate are multiplied by.
+mixed_roll_share = [0.6, 1.0]
+mixed_pitch_share = [0.4, 0.8]
+# The car meets the plate tilted up to this far from level, turned off its heading by up
+# to this either way, and spinning about a random axis at up to this (rad/s).
+start_tilt_deg = 10.0
+start_yaw_deg = 8.0
+start_spin_rad_s = 0.5
+
+[widening.stage_a]
+# Some drops are scripted entries: a fast flip (about the side axis), roll (about the nose)
+# or tumble (a random axis), from a height with time to stop it. Only at the full
+# curriculum level, when [stage_a] max_spin_rad_s is at least from_max_spin_rad_s.
+scripted_probability = 0.3
+height_m = [4.0, 8.0]
+spin_rad_s = [3.0, 10.0]
+tilt_deg = 30.0
+from_max_spin_rad_s = 6.0
+
 [driver_bot]
 # SPEC §9.7 (training only). Stage D's target speed; Stage C holds its start speed.
 target_speed_m_s = [10.0, 30.0]
