@@ -2,6 +2,14 @@
    Tokens and the .tile ticket come from src/ui/theme.css (linked first by viewer.html). A tile is clipped to its notched
    shape, so focus rings and inset marks stay inside it. */
 
+/* The one source for the side column's size (main.ts reads --viewer-side-reserved to size the
+   panels). --viewer-side-width is the column's width; --viewer-side-reserved is how much of the
+   window the panels give up to it (0 where the column floats over them). */
+:root {
+  --viewer-side-width: 336px;
+  --viewer-side-reserved: var(--viewer-side-width);
+}
+
 html,
 body {
   margin: 0;
@@ -46,6 +54,12 @@ a:focus-visible {
   font-size: var(--text-s);
   line-height: 1.25;
   white-space: nowrap;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.panel-title > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .panel-title:hover {
   background: var(--slate-deep);
@@ -67,7 +81,7 @@ a:focus-visible {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 336px;
+  width: var(--viewer-side-width);
   box-sizing: border-box;
   padding: var(--edge) var(--edge) var(--edge) 0;
   display: flex;
@@ -247,9 +261,11 @@ a:focus-visible {
   top: 46px;
 }
 
+/* Narrow portrait windows: a slimmer column that floats over the panels. */
 @media (max-width: 899px) {
-  #viewer-side {
-    width: 280px;
+  :root {
+    --viewer-side-width: 280px;
+    --viewer-side-reserved: 0px;
   }
   #viewer-board {
     padding: 6px 6px 8px;
@@ -261,6 +277,52 @@ a:focus-visible {
   }
   #viewer-board td {
     padding: 2px;
+  }
+}
+/* Short landscape screens (a phone held sideways): the column takes its own strip on the right
+   and the panels tile the rest, so nothing covers a panel. Only status, back link, tabs and the
+   camera button fit; the results chart and the board are hidden. Must come after the narrow rule. */
+@media (max-height: 499px) and (min-aspect-ratio: 1/1) {
+  :root {
+    --viewer-side-width: 260px;
+    --viewer-side-reserved: var(--viewer-side-width);
+  }
+  #viewer-side {
+    gap: 6px;
+    padding: 6px 6px 6px 0;
+  }
+  #curve-panel,
+  #viewer-board {
+    display: none;
+  }
+  .panel-title {
+    padding: 3px 10px 4px 8px;
+  }
+  .panel-heading {
+    font-size: var(--text-s);
+  }
+  .panel-detail {
+    font-size: var(--text-xs);
+  }
+  #viewer-status {
+    padding: 6px 18px 6px 10px;
+    font-size: var(--text-s);
+  }
+  #viewer-back,
+  #camera-toggle {
+    min-height: 44px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  /* seven tabs on two rows: four, then three that share the row */
+  #stage-tabs {
+    flex-wrap: wrap;
+  }
+  #stage-tabs button {
+    flex: 1 0 25%;
   }
 }
 /* Reduced motion (SPEC §11.4): no animations or transitions. */

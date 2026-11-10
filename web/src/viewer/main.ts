@@ -50,10 +50,6 @@ const CARS_PER_CHECKPOINT = 8;
 const PAUSE_BETWEEN_MS = 2500;
 /** The crowd is many see-through cars, so the viewer draws at most this many pixels per CSS pixel. */
 const VIEWER_MAX_PIXEL_RATIO = 1.5;
-/** Width of the column on the right (tabs, camera button, curve), in CSS pixels. */
-const SIDEBAR_PX = 352;
-/** Below this window width the column floats over the panels instead of taking space. */
-const NARROW_PX = 900;
 /** The longest frame the cars are moved for, in s, so a hidden tab does not jump the picture. */
 const MAX_FRAME_S = 0.1;
 
@@ -176,6 +172,8 @@ async function start(): Promise<void> {
   cameraButton.addEventListener('click', toggleCamera);
   const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
   const perfSteps = requireElement('hud-perf-steps');
+  readReservedSideWidth();
+  window.addEventListener('resize', readReservedSideWidth);
   window.addEventListener('keydown', (event) => {
     if (event.code === 'KeyL') {
       toggleCamera();
@@ -268,13 +266,24 @@ async function start(): Promise<void> {
   });
 }
 
+/** Width the side column takes from the panels, in CSS pixels. viewer.css owns this number
+ * (--viewer-side-reserved, 0 where the column floats over the panels); it is re-read on resize. */
+let reservedSideWidthPx = 0;
+
+function readReservedSideWidth(): void {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(
+    '--viewer-side-reserved',
+  );
+  const px = Number.parseFloat(value);
+  reservedSideWidthPx = Number.isFinite(px) ? px : 0;
+}
+
 /** The rectangle the panels share: the window, less the column on the right. */
 function panelArea(): Rect {
-  const narrow = window.innerWidth < NARROW_PX;
   return {
     x: 0,
     y: 0,
-    w: narrow ? window.innerWidth : window.innerWidth - SIDEBAR_PX,
+    w: window.innerWidth - reservedSideWidthPx,
     h: window.innerHeight,
   };
 }
@@ -346,6 +355,9 @@ function placeLabel(label: PanelLabel, rect: Rect | undefined, panel: StagePanel
   }
   label.element.style.left = `${rect.x + 8}px`;
   label.element.style.top = `${rect.y + 8}px`;
+  // A narrow panel (a phone held sideways) shortens its title with an ellipsis instead of
+  // running over the next panel.
+  label.element.style.maxWidth = `${Math.max(0, rect.w - 16)}px`;
   const totals = stageTotals(panel);
   const cars = panel.rows.length * CARS_PER_CHECKPOINT;
   setText(label.heading, arenaLabel(panel.arena));
