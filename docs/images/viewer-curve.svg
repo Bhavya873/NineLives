@@ -7,17 +7,17 @@
 <text x="38" y="140.0" text-anchor="end" fill="#555">50%</text>
 <line x1="44" x2="540" y1="36.0" y2="36.0" stroke="#ddd"/>
 <text x="38" y="40.0" text-anchor="end" fill="#555">100%</text>
-<polyline points="55.0,94.0 132.2,77.0 209.3,70.0 297.5,69.0 374.7,75.0 451.8,73.0 529.0,76.0 540.0,74.0" fill="none" stroke="#2e86ab" stroke-width="1.8"/>
+<polyline points="60.5,79.0 143.2,73.0 209.3,72.0 292.0,75.0 374.7,75.0 440.8,72.0 523.5,72.0 540.0,73.0" fill="none" stroke="#2e86ab" stroke-width="1.8"/>
 <text x="44" y="270" fill="#2e86ab">Stage A</text>
-<polyline points="55.0,37.0 132.2,37.0 209.3,37.0 297.5,37.0 374.7,37.0 451.8,37.0 529.0,37.0 540.0,37.0" fill="none" stroke="#76b041" stroke-width="1.8"/>
+<polyline points="60.5,37.0 143.2,37.0 209.3,37.0 292.0,37.0 374.7,37.0 440.8,37.0 523.5,37.0 540.0,37.0" fill="none" stroke="#76b041" stroke-width="1.8"/>
 <text x="104" y="270" fill="#76b041">Stage B</text>
-<polyline points="55.0,36.0 132.2,36.0 209.3,36.0 297.5,36.0 374.7,36.0 451.8,36.0 529.0,36.0 540.0,36.0" fill="none" stroke="#e4572e" stroke-width="1.8"/>
+<polyline points="60.5,36.0 143.2,36.0 209.3,36.0 292.0,36.0 374.7,36.0 440.8,36.0 523.5,36.0 540.0,36.0" fill="none" stroke="#e4572e" stroke-width="1.8"/>
 <text x="164" y="270" fill="#e4572e">Stage C</text>
-<polyline points="55.0,36.0 132.2,36.0 209.3,36.0 297.5,36.0 374.7,36.0 451.8,36.0 529.0,36.0 540.0,36.0" fill="none" stroke="#f6ae2d" stroke-width="1.8"/>
+<polyline points="60.5,37.0 143.2,37.0 209.3,37.0 292.0,37.0 374.7,37.0 440.8,37.0 523.5,37.0 540.0,37.0" fill="none" stroke="#f6ae2d" stroke-width="1.8"/>
 <text x="224" y="270" fill="#f6ae2d">Stage D</text>
-<polyline points="55.0,64.0 132.2,59.0 209.3,56.0 297.5,55.0 374.7,56.0 451.8,56.0 529.0,59.0 540.0,56.0" fill="none" stroke="#6f4e7c" stroke-width="1.8"/>
+<polyline points="60.5,57.0 143.2,56.0 209.3,56.0 292.0,57.0 374.7,57.0 440.8,54.0 523.5,55.0 540.0,57.0" fill="none" stroke="#6f4e7c" stroke-width="1.8"/>
 <text x="284" y="270" fill="#6f4e7c">Stage E</text>
-<polyline points="55.0,194.0 132.2,91.0 209.3,60.0 297.5,53.0 374.7,53.0 451.8,53.0 529.0,51.0 540.0,51.0" fill="none" stroke="#555555" stroke-width="1.8"/>
+<polyline points="60.5,118.0 143.2,114.0 209.3,112.0 292.0,111.0 374.7,108.0 440.8,107.0 523.5,109.0 540.0,108.0" fill="none" stroke="#555555" stroke-width="1.8"/>
 <text x="344" y="270" fill="#555555">Stage F</text>
-<text x="540" y="254" text-anchor="end" fill="#555">training steps (max 90M)</text>
+<text x="540" y="254" text-anchor="end" fill="#555">training steps (max 60M)</text>
 </svg>

@@ -540,3 +540,36 @@ Stage F, landing % by dominant spin axis
 | pitch | 293 | 35.2 | 49.1 | 39.6 | 75.4 |
 | roll | 464 | 71.1 | 76.5 | 90.9 | 98.1 |
 
+
+## 2026-11-09 R5 and R6: the Hybrid retrained on the widened draws, promoted
+Results: `results/flight-r5_2026-11/` (compact per-cell files, `check_gate.py`, `gate.txt`, README there). Configs: `configs/train/flight-r5.yaml`, `flight-r6.yaml`.
+- **R5 run:** the R4 best warm-started (same 43-value observation), lr 1e-4, stages A/D/E/F at 0.2/0.15/0.2/0.45, half the episodes plain, on the widened Stage A and F draws, `--init-from runs/flight-r4/best --run-id flight-r5`, 100M steps. The best checkpoint by the training eval is the 60M one; it is the shipped `models/policy.json` and the viewer's last checkpoint (`web/public/checkpoints/flight-r5/`).
+- **R6 run (rejected):** a retry aimed at the mixed `roll_flip` plate. Warm start from R5 best, lr 2e-4, Stage F weight 0.6 (A/D/E 0.15/0.1/0.15), `mixed_probability` 0.5 in `scenarios.toml` for training only (eval kept 0.25). Best checkpoint at 90M steps.
+- **Evaluation:** Hybrid, 120 degree hand-over, 1000 episodes per cell, Stages A to F, both modes, on the widened draws and on `--legacy`, three seed blocks. Success rate, percent:
+
+| Block (first seed) | Policy | Widened 12-cell mean | Legacy 12-cell mean | Stage F limited | Stage F unlimited |
+|---|---|---:|---:|---:|---:|
+| 1500000 | old | 91.30 | 95.01 | 61.3 | 77.8 |
+| 1500000 | r5 | 91.68 | 95.23 | 67.4 | 76.5 |
+| 3000000 | old | 90.82 | 94.74 | 59.9 | 77.4 |
+| 3000000 | r5 | 91.44 | 94.97 | 67.2 | 76.6 |
+| 4000000 | old | 90.54 | 94.39 | 58.1 | 77.3 |
+| 4000000 | r5 | 91.28 | 94.83 | 66.0 | 76.9 |
+| 4000000 | r6 | 91.29 | 95.00 | 68.3 | 73.4 |
+
+- **Stage F landing % by plate preset, seeds 4,000,000+ (widened, Hybrid):**
+
+| preset | old limited | old unlimited | r5 limited | r5 unlimited | r6 limited | r6 unlimited |
+|---|---:|---:|---:|---:|---:|---:|
+| back_flip | 32.1 | 69.8 | 44.7 | 69.8 | 57.2 | 61.6 |
+| barrel_left | 93.9 | 98.8 | 99.4 | 98.8 | 98.8 | 99.4 |
+| barrel_right | 93.8 | 97.2 | 95.9 | 98.6 | 95.9 | 95.9 |
+| front_flip | 44.4 | 85.2 | 58.5 | 83.1 | 54.9 | 77.5 |
+| roll_flip | 22.4 | 39.0 | 29.5 | 38.6 | 30.7 | 36.1 |
+| roof_toss | 82.6 | 96.6 | 89.3 | 95.3 | 93.3 | 91.9 |
+
+- **Original gate:** every stage within 1 point of the old policy, and mixed episodes better. It failed on seeds 1,500,000+ (widened Stage F Unlimited air 77.8 to 76.5; mixed `roll_flip` not better in both modes). The rule was then **revised after seeing that result** (DECISIONS 2026-11-09) and r5 was checked against it on two fresh blocks, passing all four conditions on both.
+- **R6** reaches the mean and Stage F Limited air gains, but loses 3.9 points on Stage F Unlimited air on seeds 4,000,000+ (condition 3: 77.3 to 73.4), so it is not shipped.
+- **Mixed `roll_flip` is not fixed, and r5 is not a clear win there:** on seeds 4,000,000+ (241 episodes) Limited air lands 22.4% (old), 29.5% (r5) and 30.7% (r6); the r5 gain is about 1.8 standard errors. Unlimited air on seeds 4,000,000+: 39.0 (old), 38.6 (r5), 36.1 (r6). r5 is slightly worse than the old policy in Unlimited air on every block (1,500,000+ 34.4 to 32.6, 3,000,000+ 38.7 to 37.3, 4,000,000+ 39.0 to 38.6). Shipped as a known weak case.
+- **Viewer:** the eight `flight-r5` checkpoints (steps 2M to 60M) replace `flight-r4`; `curve.json`, `showcase.json` and `results/flight-r5_2026-11/viewer_landing_rates.json` are regenerated.
+- **Reproducibility:** the Stage F Limited air cell of seeds 4,000,000+ for r5, rerun on the promotion branch, matches the earlier run episode for episode (policy hash 5c325d425e7b3f90).

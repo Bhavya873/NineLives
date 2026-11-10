@@ -1,0 +1,48 @@
+# Flight training R6: a retry of R5 aimed at the mixed roll_flip plate. Warm start from R5 best
+# (60M), lr 2e-4, Stage F weight 0.6, and mixed_probability 0.5 in scenarios.toml for TRAINING
+# only (eval keeps 0.25; the file is put back before any eval). Cap 100M steps or 3.5 h.
+#   python -m ninelives.train --config configs/train/flight-r6.yaml --init-from runs/flight-r5/best \
+#       --run-id flight-r6 --max-minutes 210
+seed: 0
+mode: realistic        # with randomize_mode, each episode draws Realistic or Arcade (§9.8)
+controller: hybrid     # PD flies hidden until the gate hands over; each AI stretch is an episode
+stages: [A, D, E, F]   # B almost never upsets the car, so the gate would skip it all
+randomize: true
+randomize_share: 0.5    # half the episodes plain, as the game and the plain eval run
+total_steps: 100_000_000
+
+ppo:
+  n_envs: 64
+  n_steps: 512
+  batch_size: 4096
+  n_epochs: 10
+  learning_rate: 2.0e-4   # higher than R5: it barely moved roll_flip
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  net_arch: [128, 128]
+  activation: tanh
+  log_std_init: 0.0
+  initial_action_bias: -1.0
+
+normalize:
+  clip_obs: 10.0
+
+curriculum:
+  # The Hybrid checkpoint eval runs every stage at its hardest level, so training does too.
+  start_at_hardest: true
+  window: 500
+  advance_at: 0.85
+  promote_on: eval
+  # Stage F (strong flip plates) gets the most practice: it is where Hybrid trails PD.
+  stage_weights: {A: 0.15, D: 0.1, E: 0.15, F: 0.6}
+
+checkpoint:
+  every_steps: 2_000_000
+  eval_episodes: 200     # Hybrid episodes per stage on validation seeds
+  eval_seed: 1_000_000   # validation; the final test block is 3,000,000–3,000,999
+
+# Save quality reaches 0 at the success rule's 30° (reward.toml has 45°), as in R2.
+reward_overrides:
+  shape.save_heading_scale_deg: 30.0

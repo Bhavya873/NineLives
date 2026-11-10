@@ -98,14 +98,14 @@ test('wasm runs the same AI episodes as the native eval, bit for bit', () => {
 
   const rows = JSON.parse(evalEpisodes('ai', 'realistic', 0n, 30, policyJson));
 
-  // The committed rows are the drops before the widening and have no preset fields; the
-  // widened default scripts some drops, so compare the plain ones (the rest are new).
+  // The committed rows are the legacy drops (eval --legacy); the widened default scripts some
+  // drops, so compare the plain ones (the rest are new), without the preset fields.
   const plain = rows.flatMap((row, index) => (row.preset === null ? [index] : []));
   assert.ok(plain.length >= 15, `${plain.length} plain drops of 30`);
   for (const index of plain) {
     assert.deepEqual(
       asFloat32(withoutNewFields(rows[index])),
-      asFloat32(committed.episodes[index]),
+      asFloat32(withoutNewFields(committed.episodes[index])),
     );
   }
 });

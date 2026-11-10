@@ -21,7 +21,7 @@ import {
   tabArena,
 } from '../src/viewer/showcase.ts';
 
-const dir = new URL('../public/checkpoints/flight-r4/', import.meta.url);
+const dir = new URL('../public/checkpoints/flight-r5/', import.meta.url);
 const curve = parseCurve(JSON.parse(readFileSync(new URL('curve.json', dir), 'utf8')));
 const showcase = JSON.parse(readFileSync(new URL('showcase.json', dir), 'utf8'));
 
