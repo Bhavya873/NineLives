@@ -1,4 +1,5 @@
-/* Scene theme: the colours, fonts and the ticket tile shared by the game and the viewer pages. */
+/* Scene theme: the colours, fonts, type scale and the two panel materials. The game page uses the
+   see-through `.glass` panel (SPEC §11.5); the training viewer keeps the opaque ink `.tile`. */
 
 /* Barlow and Barlow Condensed, latin subset, SIL Open Font License (see src/fonts/OFL.txt). */
 @font-face {
@@ -40,17 +41,27 @@
   --red: #ff5b5b; /* danger only; 4.9:1 on slate */
   --font-text: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
-  /* the five font sizes */
-  --text-xs: 12px;
-  --text-s: 14px;
-  --text-m: 18px;
-  --text-l: 30px;
-  --text-xl: 48px;
+  /* RGB triples for alpha mixes: rgb(var(--ink-rgb) / 0.35) */
+  --ink-rgb: 21 25 31;
+  --bone-rgb: 241 237 226;
+  /* the five font sizes; nothing in the UI is smaller than the first */
+  --text-xs: 13px;
+  --text-s: 15px;
+  --text-m: 20px;
+  --text-l: 32px;
+  --text-xl: 56px;
+  /* the three letter-spacings: plain, a touch open, labels */
+  --track-0: 0;
+  --track-1: 0.04em;
+  --track-2: 0.1em;
   --tile-border: 1px;
   --edge: 16px;
+  --radius-panel: 18px;
+  /* how much ink shows through a glass panel, 0 (clear) to 1 (opaque) */
+  --glass-tint: 0.35;
 }
 
-/* The panel: flat slate, a thin slate-line edge, square corners. No fold, no clipped corner. */
+/* The ink panel (training viewer, and the glass fallback): flat slate, a thin edge, square corners. */
 .tile {
   position: relative;
   box-sizing: border-box;
@@ -66,7 +77,7 @@
 .tile-display {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--track-0);
   text-transform: uppercase;
 }
 /* A small caps label above or beside a value. */
@@ -74,11 +85,58 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--text-xs);
-  letter-spacing: 0.1em;
+  letter-spacing: var(--track-2);
   text-transform: uppercase;
   color: var(--sand-soft);
 }
 /* Danger: red text, always with words beside it. */
 .tile-danger {
   color: var(--red);
+}
+
+/* The glass panel (game page): the scene shows through a tinted, blurred pane with a light edge.
+   Roles: Barlow Condensed 700 for numbers, 600 caps for labels, Barlow for sentences. */
+.glass {
+  position: relative;
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border: 1px solid rgb(var(--bone-rgb) / 0.3);
+  border-radius: var(--radius-panel);
+  background:
+    linear-gradient(180deg, rgb(var(--bone-rgb) / 0.1), rgb(var(--bone-rgb) / 0) 45%),
+    rgb(var(--ink-rgb) / var(--glass-tint));
+  box-shadow:
+    inset 0 1px 0 rgb(var(--bone-rgb) / 0.38),
+    0 8px 24px rgb(0 0 0 / 0.35);
+  -webkit-backdrop-filter: blur(8px) saturate(1.6);
+  backdrop-filter: blur(8px) saturate(1.6);
+  color: var(--sand);
+  font-family: var(--font-text);
+  font-size: var(--text-s);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.65);
+}
+/* Chromium only: bend the scene behind the pane. src/ui/refraction.ts sets the attribute. */
+:root[data-refract='on'] .glass {
+  -webkit-backdrop-filter: url(#glass-refract) blur(3px) saturate(1.5);
+  backdrop-filter: url(#glass-refract) blur(3px) saturate(1.5);
+}
+.glass .tile-label {
+  color: var(--sand);
+}
+/* Reduced transparency: back to the opaque ink look of .tile. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  :root[data-refract='on'] .glass {
+    border-color: var(--slate-line);
+    border-radius: 0;
+    background: var(--slate);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    text-shadow: none;
+  }
+  .glass .tile-label {
+    color: var(--sand-soft);
+  }
 }
