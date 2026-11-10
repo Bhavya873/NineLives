@@ -71,7 +71,12 @@ for (const size of [
     test('the compact column and the panels do not overlap', async ({ page }) => {
       test.setTimeout(2 * PAGE_READY_TIMEOUT_MS);
       await openViewer(page);
-      const [side] = await readVisible(page, '#viewer-side');
+      const sides = await readVisible(page, '#viewer-side');
+      expect(sides, '#viewer-side is missing or not visible').toHaveLength(1);
+      const side = sides[0];
+      if (!side) {
+        throw new Error('#viewer-side has no box');
+      }
       const titles = await readVisible(page, '.panel-title');
       expect(titles).toHaveLength(5);
       titles.forEach(({ box }, i) => {
