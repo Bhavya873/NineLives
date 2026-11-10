@@ -66,9 +66,19 @@ test('holding the up arrow drives the car forward without console errors', async
   expect(consoleErrors).toEqual([]);
 });
 
-test('the game flies PD alone by default', async ({ page }) => {
+test('the game switches to Hybrid by default once the policy has loaded', async ({ page }) => {
   test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
   await page.goto('/?play=1');
+
+  await expect
+    .poll(() => readControllerCode(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+    .toBe(CONTROLLER_CODE_HYBRID_PD);
+  await expect(page.locator('#hud-status')).toHaveText('Limited air');
+});
+
+test('?controller=pd keeps the game on PD alone', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/?play=1&controller=pd');
   await expect
     .poll(() => readDebug(page, 'time'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
     .not.toBeNaN();
