@@ -1,0 +1,329 @@
+/* Touch devices (SPEC §11.9): the on-screen controls, the phone layout and the rotate card.
+   Everything keys off <html data-touch="on">, which ui/touch-mode.ts sets for a coarse pointer
+   or after the first touch, so mouse and keyboard users see none of it. The phone layout is the
+   desktop arrangement scaled down by --u (1px on wide screens, smaller on narrow ones). */
+
+/* Elements that exist only for touch. */
+.touch-only {
+  display: none;
+}
+
+:root[data-touch='on'] {
+  --u: min(1px, calc(100vw / 844));
+  /* Notches and rounded corners: edge-anchored pieces stay clear of them. */
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --pad-left: max(calc(16 * var(--u)), var(--safe-left));
+  --pad-right: max(calc(16 * var(--u)), var(--safe-right));
+  --pad-top: max(calc(12 * var(--u)), var(--safe-top));
+  --pad-bottom: max(calc(28 * var(--u)), var(--safe-bottom));
+}
+:root[data-touch='on'],
+:root[data-touch='on'] body {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+/* The key chip and card are for keyboards. */
+:root[data-touch='on'] #hud-top-right,
+:root[data-touch='on'] .keys-only {
+  display: none;
+}
+
+/* The two touch zones: the left 45% below the top row drives, the right half swipes. */
+:root[data-touch='on'] #touch-stick-zone,
+:root[data-touch='on'] #touch-swipe-zone {
+  display: block;
+  position: fixed;
+  top: 64px;
+  bottom: 0;
+  touch-action: none;
+}
+:root[data-touch='on'] #touch-stick-zone {
+  left: 0;
+  width: 45%;
+}
+:root[data-touch='on'] #touch-swipe-zone {
+  left: 50%;
+  right: 0;
+}
+
+/* The round buttons: stick ring, HOP, BOOST and pause share one look. */
+:root[data-touch='on'] #touch-stick,
+:root[data-touch='on'] #touch-hop,
+:root[data-touch='on'] #touch-boost,
+:root[data-touch='on'] #touch-pause {
+  display: flex;
+  position: fixed;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+:root[data-touch='on'] #touch-hop,
+:root[data-touch='on'] #touch-boost,
+:root[data-touch='on'] #touch-pause {
+  pointer-events: auto;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: var(--track-2);
+  text-transform: uppercase;
+  transition: transform 0.08s;
+}
+:root[data-touch='on'] #touch-hop.pressed,
+:root[data-touch='on'] #touch-boost.pressed,
+:root[data-touch='on'] #touch-pause:active {
+  transform: scale(0.92);
+  background: rgb(var(--bone-rgb) / 0.35);
+}
+/* Each button is at least 56 px, even when the screen scales the layout down. */
+:root[data-touch='on'] #touch-hop {
+  right: calc(28 * var(--u) + var(--safe-right));
+  bottom: var(--pad-bottom);
+  width: max(56px, calc(88 * var(--u)));
+  height: max(56px, calc(88 * var(--u)));
+  font-size: var(--text-m);
+}
+:root[data-touch='on'] #touch-boost {
+  right: calc(128 * var(--u) + var(--safe-right));
+  bottom: calc(100 * var(--u) + var(--safe-bottom));
+  width: max(56px, calc(64 * var(--u)));
+  height: max(56px, calc(64 * var(--u)));
+  font-size: var(--text-s);
+}
+:root[data-touch='on'] #touch-pause {
+  right: var(--pad-right);
+  top: var(--pad-top);
+  width: 56px;
+  height: 56px;
+}
+.pause-bars {
+  display: block;
+  width: 14px;
+  height: 16px;
+  border-left: 5px solid currentColor;
+  border-right: 5px solid currentColor;
+}
+
+/* The floating stick: the ring rests bottom-left; stick-math moves it under the finger. */
+:root[data-touch='on'] #touch-stick {
+  left: var(--pad-left);
+  top: calc(100% - 120 * var(--u) - var(--pad-bottom));
+  width: calc(120 * var(--u));
+  height: calc(120 * var(--u));
+  pointer-events: none;
+  transition:
+    left 0.2s,
+    top 0.2s;
+}
+:root[data-touch='on'] #touch-stick.drag {
+  transition: none;
+}
+#touch-stick-knob {
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  border: 1px solid var(--sand);
+  background: rgb(var(--bone-rgb) / 0.8);
+  transform: translate(var(--kx, 0px), var(--ky, 0px));
+  transition: transform 0.2s;
+}
+#touch-stick.drag #touch-stick-knob {
+  transition: none;
+}
+#touch-stick-label {
+  position: absolute;
+  bottom: calc(12 * var(--u));
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+#touch-stick.drag #touch-stick-label {
+  opacity: 0;
+}
+
+/* The pause card's touch buttons. */
+:root[data-touch='on'] #paused-touch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+#paused-touch button {
+  min-height: 48px;
+  padding: 8px 20px;
+  border: var(--tile-border) solid rgb(var(--bone-rgb) / 0.6);
+  border-radius: 999px;
+  background: rgb(var(--ink-rgb) / var(--glass-tint));
+  color: var(--sand);
+  font-family: var(--font-display);
+  font-size: var(--text-s);
+  font-weight: 700;
+  letter-spacing: var(--track-2);
+  text-transform: uppercase;
+  pointer-events: auto;
+  cursor: pointer;
+}
+#paused-touch button.primary {
+  background: var(--rust);
+  color: var(--slate-deep);
+}
+
+/* Held upright on a touch device: a full-screen card asks for landscape; the game waits. */
+#rotate-card {
+  display: none;
+}
+@media (orientation: portrait) {
+  :root[data-touch='on'] #rotate-card {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgb(13 16 20 / 0.88);
+  }
+}
+
+/* The phone layout: landscape touch screens. The desktop arrangement, scaled down. These rules
+   also undo every rule of the narrow-window block in game.css (max-width: 640px). */
+@media (orientation: landscape) {
+  :root[data-touch='on'] {
+    --dash-width: calc(220 * var(--u));
+    --side-tile-width: calc(72 * var(--u));
+    --instrument-gap: calc(16 * var(--u));
+    --instrument-bottom: var(--pad-bottom);
+    --phone-panel-height: calc(76 * var(--u));
+  }
+
+  /* Top row: hearts and saves, one message line, wind chip, pause. */
+  :root[data-touch='on'] #hud-top-left {
+    left: var(--pad-left);
+    top: var(--pad-top);
+    gap: calc(8 * var(--u));
+    padding: calc(6 * var(--u)) calc(12 * var(--u));
+  }
+  :root[data-touch='on'] #hud-hearts {
+    gap: 2px;
+  }
+  :root[data-touch='on'] .heart svg {
+    width: calc(15 * var(--u));
+    height: calc(13 * var(--u));
+  }
+  :root[data-touch='on'] #hud-messages {
+    top: var(--pad-top);
+    gap: 0;
+  }
+  :root[data-touch='on'] #hud-messages > .glass,
+  :root[data-touch='on'] #hud-messages > #hud-toast {
+    padding: calc(6 * var(--u)) calc(14 * var(--u));
+    font-size: var(--text-s);
+  }
+  /* One line only: a message hides every message after it (the toast comes first). */
+  :root[data-touch='on'] #hud-messages > .glass:not([hidden]) ~ .glass {
+    display: none;
+  }
+  :root[data-touch='on'] #hud-wind {
+    right: calc(var(--pad-right) + 56px + 8px);
+    bottom: auto;
+    top: var(--pad-top);
+    min-height: 44px;
+    padding: calc(6 * var(--u)) calc(12 * var(--u));
+    font-size: var(--text-s);
+  }
+  :root[data-touch='on'] #hud-perf {
+    top: calc(var(--pad-top) + 56px);
+  }
+
+  /* Bottom centre: a slim speed and air panel; the air mode is its small tappable top line. */
+  :root[data-touch='on'] #hud-dash {
+    bottom: var(--instrument-bottom);
+    width: var(--dash-width);
+    max-width: none;
+    height: var(--phone-panel-height);
+    padding: 24px calc(10 * var(--u)) 4px;
+    gap: 2px;
+  }
+  :root[data-touch='on'] #hud-speed {
+    font-size: var(--text-l);
+  }
+  :root[data-touch='on'] #hud-air {
+    width: 100%;
+    gap: calc(6 * var(--u));
+  }
+  :root[data-touch='on'] #hud-air-track {
+    flex: 1;
+    width: auto;
+    min-width: 40px;
+  }
+  :root[data-touch='on'] #hud-air-label {
+    min-width: 3ch;
+    font-size: var(--text-s);
+  }
+  :root[data-touch='on'] #hud-mode {
+    left: 50%;
+    bottom: calc(var(--instrument-bottom) + var(--phone-panel-height) - 28px);
+    transform: translateX(-50%);
+    width: var(--dash-width);
+    height: 24px;
+    padding: 0 12px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The label line is small, so the button reaches 16 px above its panel for a finger. */
+  :root[data-touch='on'] #hud-mode::before {
+    content: '';
+    position: absolute;
+    inset: -16px 0 0;
+  }
+
+  /* The nozzle map and g-meter flank the panel, small, clear of the stick, HOP and BOOST. */
+  :root[data-touch='on'] #hud-nozzle-tile,
+  :root[data-touch='on'] #hud-g-tile {
+    bottom: var(--instrument-bottom);
+    width: var(--side-tile-width);
+    height: var(--phone-panel-height);
+    min-height: 0;
+    padding: 4px;
+    overflow: hidden;
+  }
+  :root[data-touch='on'] #hud-nozzle-tile {
+    left: auto;
+    right: calc(50% + var(--dash-width) / 2 + var(--instrument-gap));
+  }
+  :root[data-touch='on'] #hud-g-tile {
+    left: calc(50% + var(--dash-width) / 2 + var(--instrument-gap));
+    right: auto;
+  }
+  :root[data-touch='on'] #hud-nozzles {
+    transform: scale(0.55);
+    transform-origin: center;
+    margin: -14px 0;
+  }
+  :root[data-touch='on'] #hud-nozzle-who,
+  :root[data-touch='on'] #hud-g > .tile-label {
+    display: none;
+  }
+  :root[data-touch='on'] #hud-g {
+    gap: 2px;
+  }
+  :root[data-touch='on'] #hud-g-live {
+    font-size: var(--text-m);
+  }
+  :root[data-touch='on'] #hud-g-peak {
+    font-size: var(--text-xs);
+  }
+}
