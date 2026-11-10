@@ -4,7 +4,8 @@ A browser driving game where a car fires 10 cold-gas air nozzles to flip itself 
 
 > Inspired by the thruster-assisted Roadster demo of October 2026. This is a generic low-poly car and an independent project: no affiliation with Tesla or SpaceX, and no logos or names from either. The numbers are plausible, not official.
 
-![The game just after a drop test: key legend, air gauge, g-meter and the peak of the landing](docs/images/game.png)
+![The glass HUD during a drop test: lives and saves, speed and air, the nozzle map and g-meter](docs/images/game.png)
+![The same game on a phone: one stick, two buttons, tap wind or air mode](docs/images/game-phone.png)
 
 ![The training viewer: eight checkpoints of the AI, 8 cars each](docs/images/viewer.png)
 
