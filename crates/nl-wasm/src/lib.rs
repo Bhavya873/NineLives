@@ -714,59 +714,53 @@ impl Game {
 /// One event as 5 numbers for JavaScript (see `EventKind`): the kind, up to four values,
 /// padded with 0.
 fn event_floats(event: SimEvent) -> [f32; FLOATS_PER_EVENT] {
-    let kind = |kind: EventKind| kind_code(kind);
     match event {
-        SimEvent::AirborneStart => [kind(EventKind::AirborneStart), 0.0, 0.0, 0.0, 0.0],
-        SimEvent::AirborneEnd => [kind(EventKind::AirborneEnd), 0.0, 0.0, 0.0, 0.0],
-        SimEvent::UpsetStart => [kind(EventKind::UpsetStart), 0.0, 0.0, 0.0, 0.0],
+        SimEvent::AirborneStart => packed(EventKind::AirborneStart, [0.0; 4]),
+        SimEvent::AirborneEnd => packed(EventKind::AirborneEnd, [0.0; 4]),
+        SimEvent::UpsetStart => packed(EventKind::UpsetStart, [0.0; 4]),
+        SimEvent::Respawn => packed(EventKind::Respawn, [0.0; 4]),
         SimEvent::Save {
             duration_s,
             air_used_kg,
             peak_tilt_rad,
             peak_g,
             ..
-        } => [
-            kind(EventKind::Save),
-            duration_s,
-            air_used_kg,
-            peak_tilt_rad,
-            peak_g,
-        ],
-        SimEvent::Crash { cause } => [kind(EventKind::Crash), crash_code(cause), 0.0, 0.0, 0.0],
-        SimEvent::Respawn => [kind(EventKind::Respawn), 0.0, 0.0, 0.0, 0.0],
-        SimEvent::CheckpointReached { number } => [
-            kind(EventKind::CheckpointReached),
-            number as f32,
-            0.0,
-            0.0,
-            0.0,
-        ],
-        SimEvent::Finished { time_s } => [kind(EventKind::Finished), time_s, 0.0, 0.0, 0.0],
-        SimEvent::Kicked { piece } => [kind(EventKind::Kicked), piece as f32, 0.0, 0.0, 0.0],
+        } => packed(
+            EventKind::Save,
+            [duration_s, air_used_kg, peak_tilt_rad, peak_g],
+        ),
+        SimEvent::Crash { cause } => packed(EventKind::Crash, [crash_code(cause), 0.0, 0.0, 0.0]),
+        SimEvent::CheckpointReached { number } => {
+            packed(EventKind::CheckpointReached, [number as f32, 0.0, 0.0, 0.0])
+        }
+        SimEvent::Finished { time_s } => packed(EventKind::Finished, [time_s, 0.0, 0.0, 0.0]),
+        SimEvent::Kicked { piece } => packed(EventKind::Kicked, [piece as f32, 0.0, 0.0, 0.0]),
         SimEvent::Scrape { normal_speed_m_s } => {
-            [kind(EventKind::Scrape), normal_speed_m_s, 0.0, 0.0, 0.0]
+            packed(EventKind::Scrape, [normal_speed_m_s, 0.0, 0.0, 0.0])
         }
         SimEvent::TooSlowFallback {
             piece,
             entry_speed_m_s,
-        } => [
-            kind(EventKind::TooSlowFallback),
-            piece as f32,
-            entry_speed_m_s,
-            0.0,
-            0.0,
-        ],
+        } => packed(
+            EventKind::TooSlowFallback,
+            [piece as f32, entry_speed_m_s, 0.0, 0.0],
+        ),
         SimEvent::HardLanding {
             compression,
             fall_m_s,
-        } => [
-            kind(EventKind::HardLanding),
-            compression,
-            fall_m_s,
-            0.0,
-            0.0,
-        ],
+        } => packed(EventKind::HardLanding, [compression, fall_m_s, 0.0, 0.0]),
     }
+}
+
+/// The kind, then four values (pad unused ones with 0), as the 5 numbers JavaScript reads.
+fn packed(event_kind: EventKind, values: [f32; 4]) -> [f32; FLOATS_PER_EVENT] {
+    [
+        kind_code(event_kind),
+        values[0],
+        values[1],
+        values[2],
+        values[3],
+    ]
 }
 
 /// An `EventKind` as the number JavaScript sees.
