@@ -89,11 +89,7 @@ impl ActuatorState {
         let mut hop_boost = self.hop_boost;
         let mut tank = self.tank;
         let mut sums = IntervalSums::default();
-        let controller = if self.thrusters_locked {
-            [0.0; NOZZLE_COUNT]
-        } else {
-            controller_throttles
-        };
+        let controller = self.unlocked_throttles(controller_throttles);
         // World::step_car, one physics step at a time.
         for _ in 0..PHYSICS_STEPS_PER_CONTROL_STEP {
             hop_boost.update(
@@ -111,13 +107,7 @@ impl ActuatorState {
             let openings = valves.effective_throttles();
             let (wrench, total_force_n) = self.push(openings, multiplier);
             let (feed_forward_wrench, _) = self.push(feed_forward, multiplier);
-            tank.use_air(
-                total_force_n,
-                self.exhaust_speed_m_s,
-                PHYSICS_DT_S,
-                &self.mode,
-            );
-            tank.refill(self.wheels_down, PHYSICS_DT_S, &self.mode);
+            self.pay_for_thrust(&mut tank, total_force_n);
             sums.add_step(
                 &wrench,
                 &feed_forward_wrench,
@@ -134,6 +124,27 @@ impl ActuatorState {
             air_used_kg,
             self.thrusters_locked,
         )
+    }
+
+    /// The controller's throttles, or all zero while the interlock has the thrusters locked.
+    fn unlocked_throttles(&self, controller_throttles: [f32; NOZZLE_COUNT]) -> [f32; NOZZLE_COUNT] {
+        if self.thrusters_locked {
+            [0.0; NOZZLE_COUNT]
+        } else {
+            controller_throttles
+        }
+    }
+
+    /// One physics step of the tank: pays for `total_force_n` of thrust, then refills if
+    /// the wheels are on the ground.
+    fn pay_for_thrust(&self, tank: &mut AirTank, total_force_n: f32) {
+        tank.use_air(
+            total_force_n,
+            self.exhaust_speed_m_s,
+            PHYSICS_DT_S,
+            &self.mode,
+        );
+        tank.refill(self.wheels_down, PHYSICS_DT_S, &self.mode);
     }
 
     /// How much of a change in the controller's throttle shows up in the interval's
