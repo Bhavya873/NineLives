@@ -81,10 +81,36 @@ interface StagePanelConfig {
 /** Starts the stage's worker and returns its (still empty) panel. */
 export function createStagePanel(scene: Scene, config: StagePanelConfig): StagePanel {
   const { worker, failure } = startWorker();
+  const panel = newPanel(scene, config, worker, failure);
+  if (worker === null) {
+    console.error(`Stage ${config.arena}: ${failure ?? 'no worker'}`);
+    return panel;
+  }
+  listenToWorker(panel, worker);
+  const init: StageInit = {
+    type: 'init',
+    arena: config.arena,
+    policies: config.policies,
+    carsPerCheckpoint: config.carsPerCheckpoint,
+    firstSeed: config.firstSeed,
+    shared: rowsShareSeeds(config.arena),
+    pauseBetweenMs: config.pauseBetweenMs,
+  };
+  send(panel, init);
+  return panel;
+}
+
+/** An empty panel: its camera aimed, nothing drawn yet. */
+function newPanel(
+  scene: Scene,
+  config: StagePanelConfig,
+  worker: Worker | null,
+  failure: string | null,
+): StagePanel {
   const camera = new PerspectiveCamera(60, 1, 0.1, 1500);
   camera.layers.enable(config.layer);
   aimFixedCamera(camera, config.arena);
-  const panel: StagePanel = {
+  return {
     arena: config.arena,
     layer: config.layer,
     worker,
@@ -108,10 +134,10 @@ export function createStagePanel(scene: Scene, config: StagePanelConfig): StageP
     error: failure,
     stepping: true,
   };
-  if (worker === null) {
-    console.error(`Stage ${config.arena}: ${failure ?? 'no worker'}`);
-    return panel;
-  }
+}
+
+/** Routes the worker's messages and errors into the panel. */
+function listenToWorker(panel: StagePanel, worker: Worker): void {
   worker.onmessage = (event: MessageEvent<FromStageWorker>) => {
     const message = event.data;
     if (message.type === 'round') {
@@ -120,27 +146,16 @@ export function createStagePanel(scene: Scene, config: StagePanelConfig): StageP
       onStageSnapshot(panel, message);
     } else {
       panel.error = message.message;
-      console.error(`Stage ${config.arena}: ${message.message}`);
+      console.error(`Stage ${panel.arena}: ${message.message}`);
     }
   };
   worker.onerror = (event) => {
     panel.error = event.message || WORKER_LOAD_FAILED;
-    console.error(`Stage ${config.arena} worker: ${panel.error}`);
+    console.error(`Stage ${panel.arena} worker: ${panel.error}`);
   };
   worker.onmessageerror = () => {
     panel.error = 'a worker message could not be read';
   };
-  const init: StageInit = {
-    type: 'init',
-    arena: config.arena,
-    policies: config.policies,
-    carsPerCheckpoint: config.carsPerCheckpoint,
-    firstSeed: config.firstSeed,
-    shared: rowsShareSeeds(config.arena),
-    pauseBetweenMs: config.pauseBetweenMs,
-  };
-  send(panel, init);
-  return panel;
 }
 
 function send(panel: StagePanel, message: ToStageWorker): void {
