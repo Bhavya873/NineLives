@@ -6,6 +6,8 @@
 // renderer and one scene, with every stage drawn into its own rectangle of the canvas, and one
 // pool of instanced meshes per stage. The stage tabs, the number keys, a click on a panel's
 // title or `?arena=…` focus one panel; Esc or the All tab tiles them again.
+import type { Scene } from 'three';
+
 import { requireElement, setText } from '../shared/dom.ts';
 import {
   createPerfOverlay,
@@ -75,8 +77,62 @@ interface PanelLabel {
   detail: HTMLElement;
 }
 
+/** What the viewer loads from the network before it can draw anything. */
+interface ViewerData {
+  run: RunEntry;
+  curve: CurveFile | null;
+  showcase: Awaited<ReturnType<typeof loadShowcase>> | null;
+  policies: string[];
+}
+
+/** The frame timing the loop and the visibility handler share. */
+interface FrameTiming {
+  lastFrameStartMs: number;
+  /** Total main-thread ms spent in frames since the last reset, and how many frames. */
+  mainMsTotal: number;
+  mainFrames: number;
+}
+
 async function start(): Promise<void> {
-  const status = requireElement('viewer-status');
+  const data = await loadViewerData();
+  const arena = createViewerArena();
+  const panels = createPanels(arena.scene, data);
+  const focus = arenaFromUrl(window.location.search);
+  const state: ViewerState = {
+    run: data.run,
+    panels,
+    focus,
+    tab: arenaTab(focus ?? 'flat'),
+    camera:
+      new URLSearchParams(window.location.search).get('camera') === 'leader' ? 'leader' : 'crowd',
+  };
+  const board = createBoard(requireElement('viewer-board'), data.run);
+  const cameraButton = requireElement('camera-toggle');
+  cameraButton.setAttribute('aria-keyshortcuts', 'L');
+  const { setFocus, applyRunning } = wireFocus(state, data.curve);
+  const panelLabels = createPanelLabels(state, setFocus);
+  setFocus(focus);
+  const toggleCamera = () => {
+    state.camera = state.camera === 'crowd' ? 'leader' : 'crowd';
+  };
+  cameraButton.addEventListener('click', toggleCamera);
+  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
+  const perfSteps = requireElement('hud-perf-steps');
+  readReservedSideWidth();
+  window.addEventListener('resize', readReservedSideWidth);
+  installKeys(toggleCamera, setFocus, perf);
+  const timing = startFrameLoop(state, arena, panelLabels, board, perf, perfSteps, cameraButton);
+  document.addEventListener('visibilitychange', () => {
+    applyRunning();
+    if (!document.hidden) {
+      timing.lastFrameStartMs = performance.now();
+    }
+  });
+  exposeTestHooks(state, arena, timing, data);
+}
+
+/** Loads the newest run, its curve, its showcase seeds, its checkpoints and the label font. */
+async function loadViewerData(): Promise<ViewerData> {
   const run = await loadNewestRun();
   const curve = await loadCurve(run).catch((error: unknown) => {
     console.error(error);
@@ -86,40 +142,43 @@ async function start(): Promise<void> {
   const policies = await Promise.all(run.checkpoints.map((entry) => loadCheckpoint(run, entry)));
   // The car labels are drawn once onto canvases, so the font must be there before they are.
   await document.fonts.load(CAR_LABEL_FONT).catch(() => []);
+  return { run, curve, showcase, policies };
+}
+
+/** The renderer and scene of the page's canvas, set up for a crowd of see-through cars. */
+function createViewerArena(): ReturnType<typeof createArena> {
   const arena = createArena(requireElement('viewer'), VIEWER_MAX_PIXEL_RATIO);
   arena.renderer.setClearColor('#16202b');
   // The sun's shadow box covers only 30 m around the origin and the crowd casts no shadows, so
   // the viewer skips the shadow pass (it would run once per panel).
   arena.renderer.shadowMap.enabled = false;
-  const labels = rowLabels(run);
-  const panels = ARENAS.map((kind, index) =>
-    createStagePanel(arena.scene, {
+  return arena;
+}
+
+/** One stage panel (and its worker) per arena. */
+function createPanels(scene: Scene, data: ViewerData): StagePanel[] {
+  const labels = rowLabels(data.run);
+  return ARENAS.map((kind, index) =>
+    createStagePanel(scene, {
       arena: kind,
       layer: index + 1,
-      policies,
+      policies: data.policies,
       rowLabels: labels,
       carsPerCheckpoint: CARS_PER_CHECKPOINT,
-      firstSeed: showcaseSeed(showcase, kind, 0, CARS_PER_CHECKPOINT),
+      firstSeed: showcaseSeed(data.showcase, kind, 0, CARS_PER_CHECKPOINT),
       pauseBetweenMs: PAUSE_BETWEEN_MS,
     }),
   );
-  const focus = arenaFromUrl(window.location.search);
-  const state: ViewerState = {
-    run,
-    panels,
-    focus,
-    tab: arenaTab(focus ?? 'flat'),
-    camera:
-      new URLSearchParams(window.location.search).get('camera') === 'leader' ? 'leader' : 'crowd',
-  };
-  const board = createBoard(requireElement('viewer-board'), run);
-  const labelsLayer = requireElement('viewer-panels');
-  const panelLabels = new Map<ArenaKind, PanelLabel>();
-  const cameraButton = requireElement('camera-toggle');
-  cameraButton.setAttribute('aria-keyshortcuts', 'L');
+}
+
+/** Builds the stage tabs and curve, and returns the focus setter and the run/stop switch. */
+function wireFocus(
+  state: ViewerState,
+  curve: CurveFile | null,
+): { setFocus: (next: ArenaKind | null) => void; applyRunning: () => void } {
   // A stage runs only while it can be seen: it is in the focus and the tab is showing.
   const applyRunning = () => {
-    for (const panel of panels) {
+    for (const panel of state.panels) {
       const shown = state.focus === null || state.focus === panel.arena;
       setStageRunning(panel, shown && !document.hidden);
     }
@@ -149,7 +208,17 @@ async function start(): Promise<void> {
     },
     () => setFocus(null),
   );
-  for (const panel of panels) {
+  return { setFocus, applyRunning };
+}
+
+/** One clickable title per panel, added to the labels layer. */
+function createPanelLabels(
+  state: ViewerState,
+  setFocus: (next: ArenaKind | null) => void,
+): Map<ArenaKind, PanelLabel> {
+  const labelsLayer = requireElement('viewer-panels');
+  const panelLabels = new Map<ArenaKind, PanelLabel>();
+  for (const panel of state.panels) {
     const element = document.createElement('button');
     element.type = 'button';
     element.className = 'tile panel-title';
@@ -165,15 +234,15 @@ async function start(): Promise<void> {
     labelsLayer.appendChild(element);
     panelLabels.set(panel.arena, { element, heading, detail });
   }
-  setFocus(focus);
-  const toggleCamera = () => {
-    state.camera = state.camera === 'crowd' ? 'leader' : 'crowd';
-  };
-  cameraButton.addEventListener('click', toggleCamera);
-  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
-  const perfSteps = requireElement('hud-perf-steps');
-  readReservedSideWidth();
-  window.addEventListener('resize', readReservedSideWidth);
+  return panelLabels;
+}
+
+/** The keyboard: L camera, F3 perf overlay, Esc or 0 all stages, 1-9 one stage. */
+function installKeys(
+  toggleCamera: () => void,
+  setFocus: (next: ArenaKind | null) => void,
+  perf: ReturnType<typeof createPerfOverlay>,
+): void {
   window.addEventListener('keydown', (event) => {
     if (event.code === 'KeyL') {
       toggleCamera();
@@ -189,49 +258,63 @@ async function start(): Promise<void> {
       }
     }
   });
+}
 
+/** Starts the frame loop and returns its timing (the visibility handler resets it). */
+function startFrameLoop(
+  state: ViewerState,
+  arena: ReturnType<typeof createArena>,
+  panelLabels: Map<ArenaKind, PanelLabel>,
+  board: Board,
+  perf: ReturnType<typeof createPerfOverlay>,
+  perfSteps: HTMLElement,
+  cameraButton: HTMLElement,
+): FrameTiming {
+  const status = requireElement('viewer-status');
   // On a slow GPU the resolution steps down by itself (adaptive-quality.ts).
   const quality = newQuality(arena.renderer.getPixelRatio());
-  let lastFrameStartMs = performance.now();
-  // A hidden tab stops the workers (no stepping, no snapshots); showing it again starts the
-  // frame timing over so the pause is not counted as a slow frame.
-  document.addEventListener('visibilitychange', () => {
-    applyRunning();
-    if (!document.hidden) {
-      lastFrameStartMs = performance.now();
-    }
-  });
-
-  let mainMsTotal = 0;
-  let mainFrames = 0;
-
+  const timing: FrameTiming = {
+    lastFrameStartMs: performance.now(),
+    mainMsTotal: 0,
+    mainFrames: 0,
+  };
   const frame = (frameStartMs: number) => {
     // Ask for the next frame first, so one error cannot stop the viewer for good.
     requestAnimationFrame(frame);
     try {
-      const realDtS = Math.min((frameStartMs - lastFrameStartMs) / 1000, MAX_FRAME_S);
+      const realDtS = Math.min((frameStartMs - timing.lastFrameStartMs) / 1000, MAX_FRAME_S);
       drawFrame(state, arena, panelLabels, realDtS, perf, perfSteps);
       setText(cameraButton, state.camera === 'leader' ? 'camera: leader' : 'camera: crowd');
       setText(status, statusText(state));
       updateBoard(board, state.panels);
       const frameEndMs = performance.now();
-      mainMsTotal += frameEndMs - frameStartMs;
-      mainFrames += 1;
+      timing.mainMsTotal += frameEndMs - frameStartMs;
+      timing.mainFrames += 1;
       recordFrame(perf, frameEndMs - frameStartMs, frameEndMs);
-      const lowerRatio = recordQualityFrame(quality, frameStartMs - lastFrameStartMs);
+      const lowerRatio = recordQualityFrame(quality, frameStartMs - timing.lastFrameStartMs);
       if (lowerRatio !== null) {
         setArenaPixelRatio(arena, lowerRatio);
       }
-      lastFrameStartMs = frameStartMs;
+      timing.lastFrameStartMs = frameStartMs;
     } catch (error) {
       console.error('Nine Lives viewer: error in the frame loop:', error);
     }
   };
   requestAnimationFrame(frame);
+  return timing;
+}
 
+/** `window.ninelivesViewer`: the read-only handles the Playwright tests use. */
+function exposeTestHooks(
+  state: ViewerState,
+  arena: ReturnType<typeof createArena>,
+  timing: FrameTiming,
+  data: ViewerData,
+): void {
+  const { panels } = state;
   Object.assign(window, {
     ninelivesViewer: {
-      checkpointCount: () => run.checkpoints.length,
+      checkpointCount: () => data.run.checkpoints.length,
       landed: () => panels.reduce((sum, panel) => sum + stageTotals(panel).landed, 0),
       focus: () => state.focus,
       /** The focused arena, or 'all'. */
@@ -256,12 +339,12 @@ async function start(): Promise<void> {
       tab: () => state.tab,
       leaderCamera: () => state.camera === 'leader',
       pixelRatio: () => arena.renderer.getPixelRatio(),
-      mainMsPerFrame: () => (mainFrames > 0 ? mainMsTotal / mainFrames : 0),
+      mainMsPerFrame: () => (timing.mainFrames > 0 ? timing.mainMsTotal / timing.mainFrames : 0),
       resetMainTiming: () => {
-        mainMsTotal = 0;
-        mainFrames = 0;
+        timing.mainMsTotal = 0;
+        timing.mainFrames = 0;
       },
-      firstSeed: (kind: ArenaKind) => showcaseSeed(showcase, kind, 0, CARS_PER_CHECKPOINT),
+      firstSeed: (kind: ArenaKind) => showcaseSeed(data.showcase, kind, 0, CARS_PER_CHECKPOINT),
     },
   });
 }
@@ -297,7 +380,7 @@ function drawFrame(
   perf: ReturnType<typeof createPerfOverlay>,
   perfSteps: HTMLElement,
 ): void {
-  const { renderer, scene } = arena;
+  const { renderer } = arena;
   const rects = layoutPanels(panelArea(), state.focus);
   // The gaps and the column on the right show the clear colour.
   renderer.setScissorTest(false);
@@ -315,24 +398,45 @@ function drawFrame(
       continue;
     }
     stepMsTotal += panel.stepMs;
-    const focused = state.focus === panel.arena;
-    updateStagePanel(panel, realDtS, labelMode(panel.arena, focused));
-    setStageAspect(panel, rect.w, rect.h);
-    aimStageCamera(panel, state.camera);
-    // A course brings its own floor; the endless floor is only for the drop arenas.
-    arena.ground.visible = panel.shapeCount === 0;
-    // three.js counts the viewport's y from the bottom of the canvas.
-    const bottomY = window.innerHeight - (rect.y + rect.h);
-    renderer.setViewport(rect.x, bottomY, rect.w, rect.h);
-    renderer.setScissor(rect.x, bottomY, rect.w, rect.h);
-    renderer.render(scene, panel.camera);
+    drawPanel(state, arena, panel, rect, realDtS);
   }
   renderer.setScissorTest(false);
   // The workers' stepping cost is what the F3 "tick" figure shows: all stages together.
   recordTick(perf, stepMsTotal);
+  showStepTimes(state.panels, perf, perfSteps);
+}
+
+/** Moves one panel's cars and camera, then renders it into its rectangle. */
+function drawPanel(
+  state: ViewerState,
+  arena: ReturnType<typeof createArena>,
+  panel: StagePanel,
+  rect: Rect,
+  realDtS: number,
+): void {
+  const { renderer, scene } = arena;
+  const focused = state.focus === panel.arena;
+  updateStagePanel(panel, realDtS, labelMode(panel.arena, focused));
+  setStageAspect(panel, rect.w, rect.h);
+  aimStageCamera(panel, state.camera);
+  // A course brings its own floor; the endless floor is only for the drop arenas.
+  arena.ground.visible = panel.shapeCount === 0;
+  // three.js counts the viewport's y from the bottom of the canvas.
+  const bottomY = window.innerHeight - (rect.y + rect.h);
+  renderer.setViewport(rect.x, bottomY, rect.w, rect.h);
+  renderer.setScissor(rect.x, bottomY, rect.w, rect.h);
+  renderer.render(scene, panel.camera);
+}
+
+/** The F3 line with each worker's ms per tick, shown only while the overlay is open. */
+function showStepTimes(
+  panels: StagePanel[],
+  perf: ReturnType<typeof createPerfOverlay>,
+  perfSteps: HTMLElement,
+): void {
   perfSteps.hidden = perf.element.hidden;
   if (!perfSteps.hidden) {
-    perfSteps.textContent = `worker ms per tick: ${state.panels
+    perfSteps.textContent = `worker ms per tick: ${panels
       .map((panel) => `${panel.arena} ${panel.stepMs.toFixed(2)}`)
       .join(' · ')}`;
   }
