@@ -104,10 +104,19 @@ def report(broken_run: Path, fixed_run: Path) -> dict[str, Any]:
     return result
 
 
-def svg_of(result: dict[str, Any]) -> str:
-    """Height against time for each run's first traces, the headline numbers underneath."""
-    width, panel_h, margin = 760, 200, 46
-    longest = max(
+PANEL_WIDTH = 760
+PANEL_HEIGHT = 200
+PANEL_MARGIN = 46
+TRACE_COLORS = ["#e4572e", "#2e86ab", "#76b041"]
+PANEL_TITLES = {
+    "broken": "Broken reward (+0.1 per upright step, no airtime cost)",
+    "fixed": "Fixed reward (SPEC 9.4)",
+}
+
+
+def trace_extents(result: dict[str, Any]) -> tuple[float, float]:
+    """The longest trace in seconds and the highest point of any trace, the shared axes."""
+    longest_s = max(
         len(trace) * result[label]["step_s"]
         for label in ("broken", "fixed")
         for trace in result[label]["height_traces"]
@@ -120,39 +129,42 @@ def svg_of(result: dict[str, Any]) -> str:
         ),
         default=1.0,
     )
-    colors = ["#e4572e", "#2e86ab", "#76b041"]
+    return longest_s, top
+
+
+def panel_svg_parts(
+    result: dict[str, Any], label: str, index: int, longest_s: float, top: float
+) -> list[str]:
+    """The SVG elements of one panel: title, frame, one line per trace and the axis labels."""
+    width, panel_h, margin = PANEL_WIDTH, PANEL_HEIGHT, PANEL_MARGIN
+    y0 = 28 + index * (panel_h + 20)
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {2 * panel_h + 90}" '
-        'font-family="system-ui, sans-serif" font-size="12">',
-        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        f'<text x="{margin}" y="{y0 - 10}" font-weight="600">{PANEL_TITLES[label]}</text>',
+        f'<rect x="{margin}" y="{y0}" width="{width - margin - 16}" height="{panel_h - 40}" '
+        'fill="none" stroke="#999"/>',
     ]
-    titles = {
-        "broken": "Broken reward (+0.1 per upright step, no airtime cost)",
-        "fixed": "Fixed reward (SPEC 9.4)",
-    }
-    for index, label in enumerate(("broken", "fixed")):
-        y0 = 28 + index * (panel_h + 20)
-        parts.append(f'<text x="{margin}" y="{y0 - 10}" font-weight="600">{titles[label]}</text>')
-        parts.append(
-            f'<rect x="{margin}" y="{y0}" width="{width - margin - 16}" height="{panel_h - 40}" '
-            'fill="none" stroke="#999"/>'
+    step_s = result[label]["step_s"]
+    for trace_index, trace in enumerate(result[label]["height_traces"]):
+        points = " ".join(
+            f"{margin + (i * step_s / longest_s) * (width - margin - 16):.1f},"
+            f"{y0 + (panel_h - 40) * (1 - value / top):.1f}"
+            for i, value in enumerate(trace)
         )
-        step_s = result[label]["step_s"]
-        for trace_index, trace in enumerate(result[label]["height_traces"]):
-            points = " ".join(
-                f"{margin + (i * step_s / longest) * (width - margin - 16):.1f},"
-                f"{y0 + (panel_h - 40) * (1 - value / top):.1f}"
-                for i, value in enumerate(trace)
-            )
-            parts.append(
-                f'<polyline points="{points}" fill="none" stroke="{colors[trace_index]}" stroke-width="1.6"/>'
-            )
-        parts.append(f'<text x="{margin}" y="{y0 + panel_h - 22}" fill="#555">0 s</text>')
         parts.append(
-            f'<text x="{width - 16}" y="{y0 + panel_h - 22}" text-anchor="end" fill="#555">{longest:.1f} s</text>'
+            f'<polyline points="{points}" fill="none" stroke="{TRACE_COLORS[trace_index]}" stroke-width="1.6"/>'
         )
-        parts.append(f'<text x="6" y="{y0 + 12}" fill="#555">height</text>')
-    base = 2 * panel_h + 44
+    parts.append(f'<text x="{margin}" y="{y0 + panel_h - 22}" fill="#555">0 s</text>')
+    parts.append(
+        f'<text x="{width - 16}" y="{y0 + panel_h - 22}" text-anchor="end" fill="#555">{longest_s:.1f} s</text>'
+    )
+    parts.append(f'<text x="6" y="{y0 + 12}" fill="#555">height</text>')
+    return parts
+
+
+def summary_svg_parts(result: dict[str, Any]) -> list[str]:
+    """One line of headline numbers per run, printed under the two panels."""
+    base = 2 * PANEL_HEIGHT + 44
+    parts = []
     for index, label in enumerate(("broken", "fixed")):
         m = result[label]
         line = (
@@ -160,7 +172,21 @@ def svg_of(result: dict[str, Any]) -> str:
             f"success {100 * m['success_rate']:.1f}%, crash {100 * m['crash_rate']:.1f}%, "
             f"time-out {100 * m['timeout_rate']:.1f}%"
         )
-        parts.append(f'<text x="{margin}" y="{base + 18 * index}">{line}</text>')
+        parts.append(f'<text x="{PANEL_MARGIN}" y="{base + 18 * index}">{line}</text>')
+    return parts
+
+
+def svg_of(result: dict[str, Any]) -> str:
+    """Height against time for each run's first traces, the headline numbers underneath."""
+    longest_s, top = trace_extents(result)
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {PANEL_WIDTH} {2 * PANEL_HEIGHT + 90}" '
+        'font-family="system-ui, sans-serif" font-size="12">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+    ]
+    for index, label in enumerate(("broken", "fixed")):
+        parts.extend(panel_svg_parts(result, label, index, longest_s, top))
+    parts.extend(summary_svg_parts(result))
     parts.append("</svg>")
     return "\n".join(parts)
 
