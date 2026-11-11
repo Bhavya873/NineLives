@@ -537,8 +537,14 @@ impl ScenariosConfig {
     /// Single numbers: none may be negative (a negative maximum would make an empty
     /// draw range), and the time limit must be above zero.
     fn check_numbers(&self) -> Result<(), ScenariosConfigError> {
-        let bot = &self.driver_bot;
-        let numbers = [
+        self.check_episode_and_stage_numbers()?;
+        self.check_stage_c_f_and_bot_numbers()?;
+        self.check_numbers_above_zero()
+    }
+
+    /// The episode, Stage A, Stage B and randomization numbers: none may be negative.
+    fn check_episode_and_stage_numbers(&self) -> Result<(), ScenariosConfigError> {
+        check_not_negative(&[
             ("episode.success_hold_s", self.episode.success_hold_s),
             ("episode.spawn_clearance_m", self.episode.spawn_clearance_m),
             (
@@ -581,6 +587,13 @@ impl ScenariosConfig {
                 "randomization.noise.height_m",
                 self.randomization.noise.height_m,
             ),
+        ])
+    }
+
+    /// The Stage C, Stage F and driver bot numbers: none may be negative.
+    fn check_stage_c_f_and_bot_numbers(&self) -> Result<(), ScenariosConfigError> {
+        let bot = &self.driver_bot;
+        check_not_negative(&[
             ("stage_c.spare_length_m", self.stage_c.spare_length_m),
             ("stage_c.run_out_m", self.stage_c.run_out_m),
             ("stage_f.plate_ahead_m", self.stage_f.plate_ahead_m),
@@ -599,12 +612,11 @@ impl ScenariosConfig {
             ("driver_bot.jerk_s", bot.jerk_s),
             ("driver_bot.hop_timing_noise_s", bot.hop_timing_noise_s),
             ("driver_bot.hop_clearance_m", bot.hop_clearance_m),
-        ];
-        for (field, value) in numbers {
-            if !value.is_finite() || value < 0.0 {
-                return Err(ScenariosConfigError::Negative { field, value });
-            }
-        }
+        ])
+    }
+
+    /// The time limits, widths, run-outs and bot lookahead: each must be above zero.
+    fn check_numbers_above_zero(&self) -> Result<(), ScenariosConfigError> {
         let above_zero = [
             ("episode.time_limit_s", self.episode.time_limit_s),
             ("stage_c.time_limit_s", self.stage_c.time_limit_s),
@@ -870,4 +882,14 @@ fn checkpoint(position: Vector, rotation: Rotation, velocity: Vector, spin: Vect
         linear_velocity_m_s: velocity.to_array(),
         angular_velocity_rad_s: spin.to_array(),
     }
+}
+
+/// Refuses a number that is not finite or is below zero, naming the field.
+fn check_not_negative(numbers: &[(&'static str, f32)]) -> Result<(), ScenariosConfigError> {
+    for &(field, value) in numbers {
+        if !value.is_finite() || value < 0.0 {
+            return Err(ScenariosConfigError::Negative { field, value });
+        }
+    }
+    Ok(())
 }
