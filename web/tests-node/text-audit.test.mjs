@@ -13,10 +13,12 @@ import {
 } from '../src/game/stunt-requests.ts';
 import { ARENAS, arenaLabel } from '../src/viewer/arena-choice.ts';
 import { approachHintText, tooSlowWarning } from '../src/ui/approach-hud.ts';
-import { HOP_BLOCKED_TEXT, MODE_TEXT } from '../src/ui/hud.ts';
+import { MOTION_HINT_TEXT, SWIPE_HINT_TEXT } from '../src/ui/air-hint.ts';
+import { HOP_BLOCKED_TEXT, MODE_TEXT, nozzleWhoText } from '../src/ui/hud.ts';
+import { savesText } from '../src/ui/lives.ts';
 import { BACK_IN_BOUNDS_TEXT, NO_AIR_TEXT, toastForEvents } from '../src/ui/toasts.ts';
 import { CURVE_LABEL } from '../src/viewer/curve.ts';
-import { CrashCode, EventKind } from './load-wasm.mjs';
+import { ControllerCode, CrashCode, EventKind } from './load-wasm.mjs';
 
 const MAX_WORDS = 6;
 
@@ -60,9 +62,16 @@ function moduleStrings() {
     ...Object.values(HOP_BLOCKED_TEXT),
     ...Object.values(MODE_TEXT),
     'hop ready in 1 s',
+    MOTION_HINT_TEXT,
+    SWIPE_HINT_TEXT,
+    'Motion stunts: on',
+    'Motion stunts: off',
     approachHintText(60),
     tooSlowWarning(new Float32Array([16, 1, 10, 0, 0])),
     'respawning',
+    nozzleWhoText(ControllerCode.Ai),
+    nozzleWhoText(ControllerCode.Pd),
+    savesText(3),
     ...ARENAS.map(arenaLabel),
     CURVE_LABEL,
     '8 checkpoints, 5 stages',

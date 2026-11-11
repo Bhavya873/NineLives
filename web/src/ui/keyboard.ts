@@ -55,6 +55,8 @@ const HANDLED_KEYS = [
   ...STUNT_KEY_CODES,
   // The performance overlay, not the browser's find-in-page.
   'F3',
+  // H folds and unfolds the key card.
+  'KeyH',
 ];
 
 /** Keys that are currently held down, by `KeyboardEvent.code`. */

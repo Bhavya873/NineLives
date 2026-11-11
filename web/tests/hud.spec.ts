@@ -25,11 +25,12 @@ async function waitForGame(page: Page): Promise<void> {
     .toBeGreaterThan(0);
 }
 
-test('the keys panel and nine full hearts show from the start', async ({ page }) => {
+test('the key card opens with H and nine full hearts show from the start', async ({ page }) => {
   const consoleErrors = collectConsoleErrors(page);
   await page.goto('/?play=1');
   await waitForGame(page);
 
+  await page.keyboard.press('KeyH');
   await expect(page.locator('#hud-keys')).toBeVisible();
   await expect(page.locator('#hud-keys')).toContainText('pause');
   await expect(page.locator('#hud-hearts .heart')).toHaveCount(LIVES);

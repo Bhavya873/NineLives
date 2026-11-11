@@ -7,14 +7,16 @@ import vehicleToml from '../../../configs/vehicle.toml?raw';
 
 import { Vector3 } from 'three';
 
-import { focusDialog, prefersReducedMotion, requireElement } from '../shared/dom.ts';
+import { focusDialog, prefersReducedMotion, requireElement, setText } from '../shared/dom.ts';
 import { createCourseSession, showCourse } from './course-session.ts';
+import { startExtraInputs } from './extra-inputs.ts';
 import { startGameLoop } from './game-loop.ts';
 import { saveRun, sessionStore, takeSavedRun } from './run-storage.ts';
 import { countOutOfBoundsCrashes, hasRealCrash } from './out-of-bounds.ts';
 import { createAirGauge, updateAirGauge } from '../ui/air-gauge.ts';
-import { findHud, updateHud } from '../ui/hud.ts';
-import { newZoneHolds, updateZones } from '../ui/hud-zones.ts';
+import { findHud, nozzleWhoText, updateHud } from '../ui/hud.ts';
+import { isAnyNozzleFiring, newZoneHolds, updateZones } from '../ui/hud-zones.ts';
+import { enableRefractionIfSupported } from '../ui/refraction.ts';
 import {
   createLives,
   grantFreeRespawns,
@@ -24,6 +26,7 @@ import {
   restoreLives,
   savesThisRun,
   updateLives,
+  updateSavesCounter,
 } from '../ui/lives.ts';
 import { createNozzleMap, updateNozzleMap } from '../ui/nozzle-map.ts';
 import { createTitle, titleWanted } from '../ui/title.ts';
@@ -40,7 +43,8 @@ import {
   toastForEvents,
   updateToasts,
 } from '../ui/toasts.ts';
-import { isNozzleKeyHeld, onKeyPress, readInputFrame, startKeyboard } from '../ui/keyboard.ts';
+import { readMergedFrame } from '../ui/input-merge.ts';
+import { isNozzleKeyHeld, onKeyPress, startKeyboard } from '../ui/keyboard.ts';
 import { followCar, snapCamera, widenWithSpeed } from '../render/chase-camera.ts';
 import {
   cameraShake,
@@ -71,6 +75,7 @@ import { containsEvent } from '../wasm-bridge/sim-events.ts';
 import { requestStuntInSim } from '../wasm-bridge/stunt-adapter.ts';
 import {
   STUNT_KEYS,
+  type StuntCodeValue,
   applyStuntEvents,
   createStuntQueue,
   expireStunt,
@@ -95,10 +100,12 @@ async function start(): Promise<void> {
   // A new random seed each visit; the game itself draws nothing from it.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
   const game = new Game(vehicleToml, modesToml, controllersToml, seed);
-  onKeyPress('KeyM', () => {
+  /** The M key and a tap on the air-mode readout. */
+  const toggleAirMode = () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
-  });
+  };
+  onKeyPress('KeyM', toggleAirMode);
   const params = new URLSearchParams(window.location.search);
   // The game flies the Hybrid (PD + the shipped r5 policy) by default: with the 120 degree
   // hand-over it gains 17 to 20 points on Stage F flip plates and is within about 1.5 points of
@@ -117,8 +124,14 @@ async function start(): Promise<void> {
   onKeyPress('F3', () => togglePerfOverlay(perf));
   // Stunt keys only queue a request; the sim's planner decides (see stunt-requests.ts).
   const stuntQueue = createStuntQueue();
+  /** Counts the requests, for the test hook below. */
+  let stuntRequests = 0;
+  const requestStunt = (stunt: StuntCodeValue) => {
+    stuntRequests += 1;
+    pressStunt(stuntQueue, stunt, performance.now() / 1000);
+  };
   for (const [code, stunt] of Object.entries(STUNT_KEYS)) {
-    onKeyPress(code, () => pressStunt(stuntQueue, stunt, performance.now() / 1000));
+    onKeyPress(code, () => requestStunt(stunt));
   }
 
   // the last two physics states, blended each frame for smooth motion
@@ -144,6 +157,7 @@ async function start(): Promise<void> {
   );
   // keyboard and the first picture
   startKeyboard(window);
+  enableRefractionIfSupported();
 
   const carPose = newBlendedPose();
   snapViewToGame(game, frames, view, carPose);
@@ -156,7 +170,8 @@ async function start(): Promise<void> {
     game.set_wind_level(level);
   };
   setWind(windLevel);
-  onKeyPress('KeyV', () => setWind(nextWindLevel(windLevel)));
+  const cycleWind = () => setWind(nextWindLevel(windLevel));
+  onKeyPress('KeyV', cycleWind);
   const course = createCourseSession(view.scene, view.ground);
   /** Puts the drawn course in step with a fresh run (null: the open arena). */
   const startCourse = (shapesJson: string | null, courseJson?: string) => {
@@ -201,6 +216,11 @@ async function start(): Promise<void> {
     nozzleTile: requireElement('hud-nozzle-tile'),
   };
   const zoneHolds = newZoneHolds();
+  const nozzleWho = requireElement('hud-nozzle-who');
+  const savesCounter = {
+    count: requireElement('hud-saves-count'),
+    label: requireElement('hud-saves-label'),
+  };
   // The title keeps the game's clock still until the player starts (?play skips it).
   let started = false;
   // Restart: a fresh playground run, which also sets the sim's counts back to zero.
@@ -214,11 +234,14 @@ async function start(): Promise<void> {
   const pausedPanel = requireElement('paused');
   let paused = false;
   let restorePauseFocus: (() => void) | null = null;
-  onKeyPress('Escape', () => {
+  const togglePause = () => {
     if (!started || lives.over) {
       return;
     }
     paused = !paused;
+    if (paused) {
+      extra.releaseHeld();
+    }
     pausedPanel.hidden = !paused;
     // The pause card is a dialog: the page behind it is inert, and Esc gives focus back.
     if (paused) {
@@ -227,31 +250,48 @@ async function start(): Promise<void> {
       restorePauseFocus?.();
       restorePauseFocus = null;
     }
-  });
-  // The key card folds with its Keys button; it starts folded on small screens.
+  };
+  onKeyPress('Escape', togglePause);
+  // The key card starts folded to a chip; the chip and the H key unfold and fold it.
   const keysPanel = requireElement('hud-keys');
   const keysToggle = requireElement('hud-keys-toggle');
-  const smallScreen = window.matchMedia('(max-width: 640px)');
-  keysPanel.dataset['collapsed'] = String(smallScreen.matches);
-  keysToggle.setAttribute('aria-expanded', String(!smallScreen.matches));
-  keysToggle.addEventListener('click', () => {
-    const collapsed = keysPanel.dataset['collapsed'] === 'true';
-    keysPanel.dataset['collapsed'] = String(!collapsed);
-    keysToggle.setAttribute('aria-expanded', String(collapsed));
+  const toggleKeyCard = () => {
+    const wasFolded = keysPanel.dataset['collapsed'] === 'true';
+    keysPanel.dataset['collapsed'] = String(!wasFolded);
+    keysToggle.setAttribute('aria-expanded', String(wasFolded));
+  };
+  keysToggle.addEventListener('click', toggleKeyCard);
+  onKeyPress('KeyH', () => {
+    if (started && !paused) {
+      toggleKeyCard();
+    }
   });
-  createTitle(requireElement('title'), requireElement('title-play'), titleWanted(params), () => {
-    started = true;
-    lastRenderMs = performance.now();
-  });
-  // X: a drop test (SPEC §9.6 Stage A) from a fresh random start, to watch a save.
-  onKeyPress('KeyX', () => {
+  // X (or the pause card's Drop test): a drop test (SPEC §9.6 Stage A) from a fresh random
+  // start, to watch a save.
+  const dropTest = () => {
     game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
     // A drop during the respawn wait clears the crash without a Respawn event.
     stopExplosion(explosion);
     snapViewToGame(game, frames, view, carPose);
     resetScreenEffects(effects);
+  };
+  onKeyPress('KeyX', dropTest);
+  // Touch, motion and gamepad: they call the same actions the keys do (ui/input-merge.ts).
+  const extra = startExtraInputs({
+    requestStunt,
+    togglePause,
+    dropTest,
+    cycleWind,
+    toggleAirMode,
+    isPaused: () => paused,
+    isAirborne: () =>
+      started && !lives.over && !hudValues.crashed && hudValues.wheelsTouching === 0,
   });
-
+  createTitle(requireElement('title'), requireElement('title-play'), titleWanted(params), () => {
+    started = true;
+    lastRenderMs = performance.now();
+    extra.onPlay();
+  });
   /**
    * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
    * frozen (SPEC §7.9), a respawn ends it and snaps the view to the checkpoint, and
@@ -284,13 +324,13 @@ async function start(): Promise<void> {
   // the game loop: physics ticks at 120 hz, one render per browser frame
   startGameLoop(Game.physics_dt_s(), {
     tick: () => {
-      if (!started || paused || lives.over) {
+      if (!started || paused || lives.over || extra.portraitBlocked()) {
         return;
       }
       const tickStartMs = performance.now();
       frames.previousChassis = frames.latestChassis;
       frames.previousWheels = frames.latestWheels;
-      game.tick(readInputFrame());
+      game.tick(readMergedFrame());
       frames.latestChassis = game.chassis_pose();
       frames.latestWheels = game.wheel_poses();
       // Remember where the wreck froze, even if it respawns before the next frame.
@@ -343,11 +383,15 @@ async function start(): Promise<void> {
       updateHud(hud, hudValues);
       updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
       updateNozzleMap(nozzleDots, throttles);
+      setText(nozzleWho, nozzleWhoText(hudValues.controller));
+      updateSavesCounter(savesCounter, savesThisRun(lives, hudValues));
       updateZones(zoneTiles, zoneHolds, {
         thrusterKeyHeld: isNozzleKeyHeld(),
+        anyNozzleFiring: isAnyNozzleFiring(throttles),
         gLoad: hudValues.crashed ? 1 : hudValues.gLoad,
         nowMs,
       });
+      extra.renderFrame(nowMs);
       updateToasts(toasts, nowMs);
       showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
       const frameEndMs = performance.now();
@@ -369,6 +413,7 @@ async function start(): Promise<void> {
         startCourse(game.load_course(courseJson), courseJson);
       },
       started: () => started,
+      stuntRequestCount: () => stuntRequests,
       heartsLeft: () => livesLeft(lives, hudValues),
       // tests only (?testhooks): takes a life as a crash would
       ...(params.has('testhooks') ? { loseLife: () => grantFreeRespawns(lives, -1) } : {}),

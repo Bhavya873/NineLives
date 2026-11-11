@@ -26,6 +26,9 @@ Open the live demo: TODO (the owner adds the link once the game is hosted).
 
 R puts the car back on the road. A stunt key is a request: the car only starts the move if it can still finish it and land. You can press stunt keys again during a jump to add moves, up to 3 per jump (a double back flip, a triple barrel roll, a flip then a roll). The toast names the move. If the air or time runs short, the toast says "not enough air" or "not enough time".
 
+On a phone (landscape): the left thumb drives with a floating stick, HOP and BOOST sit bottom-right. In the air, twist the phone to roll or flick it to flip, or swipe on the right half. Tap the wind readout or the air-mode label instead of V and M; the pause button has Drop test.
+On a gamepad: triggers drive, left stick steers, A hop, B boost, bumpers roll, Y and X flip, Start pauses.
+
 You have nine lives. The "watch the AI train" link opens the training viewer, and its "back to game" button returns you to the game with the lives you had lost kept as they were. A new tab starts with nine.
 
 ## Deploy

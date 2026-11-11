@@ -4,7 +4,7 @@
 
 import { requireElement, setText } from '../shared/dom.ts';
 import { isFast } from './approach-hud.ts';
-import { HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
+import { ControllerCode, HopBlocked, ModeCode } from '../wasm/nl_wasm.js';
 
 const KM_PER_H_PER_M_PER_S = 3.6;
 
@@ -22,6 +22,12 @@ export const MODE_TEXT: Record<number, string> = {
   [ModeCode.Arcade]: 'Unlimited air',
   [ModeCode.Custom]: 'Custom',
 };
+
+/** Under the nozzle map: who fires the nozzles, from a wasm `ControllerCode` value. */
+export function nozzleWhoText(controller: number): string {
+  const policyFlying = controller === ControllerCode.Ai || controller === ControllerCode.HybridAi;
+  return policyFlying ? 'AI flying' : 'Thrusters';
+}
 
 /** The numbers the HUD shows, already read from the game. */
 export interface HudValues {

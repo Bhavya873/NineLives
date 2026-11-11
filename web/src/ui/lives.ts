@@ -135,10 +135,23 @@ export function restartLives(lives: Lives, values: HudValues): void {
   lives.restoreFocus = null;
 }
 
+/** "1 save" or "N saves". */
+export function savesText(saves: number): string {
+  return saves === 1 ? '1 save' : `${saves} saves`;
+}
+
+/** Writes this run's save count into the top-left counter: the number, then the word. */
+export function updateSavesCounter(
+  counter: { count: HTMLElement; label: HTMLElement },
+  saves: number,
+): void {
+  setText(counter.count, String(saves));
+  setText(counter.label, saves === 1 ? 'save' : 'saves');
+}
+
 /** This run's saves, for the game-over screen. */
 function runSummary(lives: Lives, values: HudValues): string {
-  const saves = savesThisRun(lives, values);
-  return `Out of lives - ${saves === 1 ? '1 save' : `${saves} saves`}`;
+  return `Out of lives - ${savesText(savesThisRun(lives, values))}`;
 }
 
 /** One heart as an SVG of square pixels. */
