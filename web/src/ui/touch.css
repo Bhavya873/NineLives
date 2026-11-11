@@ -10,6 +10,8 @@
 
 :root[data-touch='on'] {
   --u: min(1px, calc(100vw / 844));
+  /* Height of the top row (hearts, key chip, pause) that the touch zones start below. */
+  --top-row: 64px;
   /* Notches and rounded corners: edge-anchored pieces stay clear of them. */
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
@@ -38,7 +40,7 @@
 :root[data-touch='on'] #touch-swipe-zone {
   display: block;
   position: fixed;
-  top: 64px;
+  top: var(--top-row);
   bottom: 0;
   touch-action: none;
 }
@@ -175,7 +177,7 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgb(13 16 20 / 0.88);
+    background: rgb(var(--slate-deep-rgb) / 0.88);
   }
 }
 

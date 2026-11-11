@@ -3,9 +3,6 @@
    top-right, speed and air bottom-centre. theme.css has the tokens and the glass material. */
 
 :root {
-  --heart-lost: #2c3138;
-  /* Edge of the scene seen through a gap; matches BACKDROP_HORIZON in src/render/backdrop.ts. */
-  --scene: #2a3d52;
   /* Fixed places of the bottom-centre instruments (px): the dash is centred, and the nozzle map
      and g-meter sit either side of it so the dash never moves when they fade in. */
   --dash-width: 380px;
@@ -387,7 +384,7 @@ a {
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  background: rgb(13 16 20 / 0.6);
+  background: rgb(var(--slate-deep-rgb) / 0.6);
   overflow-y: auto;
 }
 #title {
