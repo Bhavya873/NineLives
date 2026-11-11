@@ -12,6 +12,9 @@ export default defineConfig({
   // CI runs the debug wasm on a small runner, where one page boot can take longer than the
   // 30 s default; the slow viewer specs set their own, longer timeouts.
   timeout: process.env.CI ? 90_000 : 30_000,
+  // CI runs one test at a time: with 2 workers, viewer.spec.ts and viewer-landscape.spec.ts ran
+  // together, so 10 stage Web Workers shared 4 cores and the landing waits timed out now and then.
+  workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: `http://localhost:${PREVIEW_PORT}`,
     launchOptions: {
