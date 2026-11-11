@@ -1,7 +1,8 @@
 // The wind readout (HUD only): a small arrow showing which way the wind blows as seen
 // from the camera, and a label such as "Breeze 6 m/s". It takes the wind as a world
 // vector (the way the air moves, in m/s, +Y up; the sim's `HudField.WindXMS/WindZMS`)
-// and the camera's yaw. With no wind the readout stays hidden.
+// and the camera's yaw. With no wind it still shows, as "Off" without the arrow, because a
+// tap on it (or the V key) cycles the wind.
 
 import { setText } from '../shared/dom.ts';
 
@@ -62,7 +63,7 @@ export function createWindIndicator(
 
 /**
  * Shows the wind `windWorld` ([x, y, z] in m/s) for a camera at yaw `cameraYaw`;
- * hides the readout while the wind is off.
+ * while the wind is off the readout says "Off" and hides only the arrow.
  */
 export function updateWindIndicator(
   indicator: WindIndicator,
@@ -72,8 +73,9 @@ export function updateWindIndicator(
   const [windX, , windZ] = windWorld;
   const speedM_S = Math.hypot(windX, windZ);
   const off = speedM_S < WIND_OFF_BELOW_M_S;
-  indicator.box.hidden = off;
+  indicator.arrow.hidden = off;
   if (off) {
+    setText(indicator.label, windLabel(0));
     return;
   }
   const angleDeg = (windArrowAngleRad(windX, windZ, cameraYaw) * 180) / Math.PI;

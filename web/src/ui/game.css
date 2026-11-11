@@ -120,7 +120,8 @@ a {
 #hud-keys-toggle .num {
   font-size: var(--text-m);
 }
-#hud-keys {
+#hud-keys,
+#hud-pad-keys {
   margin: 8px 0 4px;
   display: grid;
   grid-template-columns: auto auto;
@@ -128,18 +129,27 @@ a {
   gap: 6px 12px;
   font-size: var(--text-s);
 }
-#hud-keys[data-collapsed='true'] {
+#hud-keys[data-collapsed='true'],
+#hud-keys[data-collapsed='true'] ~ #hud-pad-keys,
+:root:not([data-gamepad='on']) #hud-pad-keys {
   display: none;
 }
-#hud-keys dt {
+#hud-keys dt,
+#hud-pad-keys dt {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: var(--track-2);
   text-transform: uppercase;
   white-space: nowrap;
 }
-#hud-keys dd {
+#hud-keys dd,
+#hud-pad-keys dd {
   margin: 0;
+}
+/* A second section for the gamepad, under the keys, with a thin rule between. */
+#hud-pad-keys {
+  padding-top: 8px;
+  border-top: 1px solid rgb(var(--bone-rgb) / 0.25);
 }
 
 /* Bottom-centre: speed and air. */
@@ -275,7 +285,13 @@ a {
   background: var(--red);
 }
 
-/* Bottom-left: the air mode. Bottom-right: the wind, only while there is any. */
+/* Bottom-left: the air mode. Bottom-right: the wind ("Off" when there is none). */
+#hud-mode,
+#hud-wind {
+  /* Buttons: a tap does what the M and V keys do. The glass panel itself ignores the mouse. */
+  pointer-events: auto;
+  cursor: pointer;
+}
 #hud-mode {
   position: fixed;
   left: var(--edge);
@@ -459,8 +475,8 @@ a {
   font-weight: 600;
 }
 
-/* Phones (no touch controls yet): a narrower cluster, smaller hearts, and the side tiles, mode
-   and wind lift above the dash. */
+/* Narrow windows (touch devices have their own layout below, which overrides every rule here):
+   a narrower cluster, smaller hearts, and the side tiles, mode and wind lift above the dash. */
 @media (max-width: 640px) {
   :root {
     --dash-width: calc(100vw - 2 * var(--edge));
