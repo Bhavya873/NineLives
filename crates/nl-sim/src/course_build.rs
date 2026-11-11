@@ -286,7 +286,7 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
     }
 }
 
-/// The shapes of a ramp, kicker, corkscrew or gap (an empty list for other pieces).
+/// The shapes of a ramp, kicker, corkscrew or gap.
 fn jump_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
     let at = |pos: [f32; 3], yaw: f32| PieceFrame::new(index, pos, yaw);
     match piece {
@@ -329,7 +329,7 @@ fn jump_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             pit_depth,
             entry_height,
         } => catch_pit(at(*pos, 0.0), *length, *pit_depth, *entry_height),
-        _ => Vec::new(),
+        _ => unreachable!("jump_piece_shapes only takes Ramp/Kicker/Corkscrew/Gap"),
     }
 }
 
@@ -359,8 +359,7 @@ fn corkscrew_shapes(frame: PieceFrame, twist: &CorkscrewTwist, side: Side) -> Ve
     frame.corkscrew(twist, raised_side_z)
 }
 
-/// The shapes of a car row, halfpipe, half loop, bumps or wall (an empty list for
-/// other pieces).
+/// The shapes of a car row, halfpipe, half loop, bumps or wall.
 fn obstacle_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
     let at = |pos: [f32; 3], yaw: f32| PieceFrame::new(index, pos, yaw);
     match piece {
@@ -396,7 +395,9 @@ fn obstacle_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             height,
             with_ramp,
         } => wall(at(*pos, *yaw), *height, *with_ramp),
-        _ => Vec::new(),
+        _ => unreachable!(
+            "obstacle_piece_shapes is only called for a CarRow, Halfpipe, HalfLoop, Bumps or Wall piece"
+        ),
     }
 }
 
@@ -417,7 +418,9 @@ fn marking_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
         PieceSpec::Finish { pos, yaw } => {
             vec![at(*pos, *yaw).marking(Surface::Finish, LINE_LENGTH_M, LINE_WIDTH_M)]
         }
-        _ => Vec::new(),
+        _ => unreachable!(
+            "marking_piece_shapes is only called for a KickPlate, LandingPad, Checkpoint or Finish piece"
+        ),
     }
 }
 

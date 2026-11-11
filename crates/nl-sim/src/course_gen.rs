@@ -594,18 +594,26 @@ fn lay_piece(
         PieceTemplate::RampGap { .. } => lay_ramp_gap(template, design, x_m, rng),
         PieceTemplate::Kicker { .. } => lay_kicker(template, design, x_m, rng),
         PieceTemplate::Corkscrew { .. } => lay_corkscrew(template, design, x_m, rng),
-        PieceTemplate::Bumps { .. } => lay_bumps(template, x_m, rng),
-        PieceTemplate::KickPlate { .. } => lay_kick_plate(template, x_m, rng),
-        PieceTemplate::FlipPlate { .. } => lay_flip_plate(template, design, x_m, rng),
-        PieceTemplate::Halfpipe { .. } => lay_halfpipe(template, x_m, rng),
-        PieceTemplate::Wall { .. } => lay_wall(template, x_m, rng),
+        PieceTemplate::Bumps {
+            count, height_m, ..
+        } => lay_bumps(*count, *height_m, x_m, rng),
+        PieceTemplate::KickPlate {
+            impulse_up_n_s,
+            impulse_side_n_s,
+            angular_roll_n_m_s,
+            ..
+        } => {
+            let impulses = [*impulse_up_n_s, *impulse_side_n_s, *angular_roll_n_m_s];
+            lay_kick_plate(impulses, x_m, rng)
+        }
+        PieceTemplate::FlipPlate {
+            strength, presets, ..
+        } => lay_flip_plate(*strength, presets, design, x_m, rng),
+        PieceTemplate::Halfpipe {
+            radius_m, length_m, ..
+        } => lay_halfpipe(*radius_m, *length_m, x_m, rng),
+        PieceTemplate::Wall { height_m, .. } => lay_wall(*height_m, x_m, rng),
     }
-}
-
-/// An empty piece. The `lay_*` helpers return it only if `lay_piece` hands them the
-/// wrong kind of template, which its `match` rules out.
-fn no_piece() -> LaidPiece {
-    LaidPiece::on_the_ground(Vec::new(), 0.0)
 }
 
 /// A ramp template laid at `x_m`.
@@ -623,7 +631,7 @@ fn lay_ramp(
         ..
     } = template
     else {
-        return no_piece();
+        unreachable!("lay_ramp is only called for a Ramp template");
     };
     let pos = [x_m, 0.0, 0.0];
     let speed_m_s = design.speed_m_s;
@@ -656,7 +664,7 @@ fn lay_ramp_gap(
         ..
     } = template
     else {
-        return no_piece();
+        unreachable!("lay_ramp_gap is only called for a RampGap template");
     };
     let pos = [x_m, 0.0, 0.0];
     let speed_m_s = design.speed_m_s;
@@ -693,7 +701,7 @@ fn lay_kicker(
         ..
     } = template
     else {
-        return no_piece();
+        unreachable!("lay_kicker is only called for a Kicker template");
     };
     let pos = [x_m, 0.0, 0.0];
     let speed_m_s = design.speed_m_s;
@@ -730,7 +738,7 @@ fn lay_corkscrew(
         ..
     } = template
     else {
-        return no_piece();
+        unreachable!("lay_corkscrew is only called for a Corkscrew template");
     };
     let pos = [x_m, 0.0, 0.0];
     let speed_m_s = design.speed_m_s;
@@ -754,17 +762,16 @@ fn lay_corkscrew(
     }
 }
 
-/// A run-of-bumps template laid at `x_m`.
-fn lay_bumps(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
-    let PieceTemplate::Bumps {
-        count, height_m, ..
-    } = template
-    else {
-        return no_piece();
-    };
+/// A run of bumps laid at `x_m`.
+fn lay_bumps(
+    count_range: [u32; 2],
+    height_m: [f32; 2],
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
     let pos = [x_m, 0.0, 0.0];
-    let count = rng.random_range(count[0]..=count[1]);
-    let height = draw(rng, *height_m);
+    let count = rng.random_range(count_range[0]..=count_range[1]);
+    let height = draw(rng, height_m);
     let bumps = PieceSpec::Bumps {
         pos,
         yaw: 0.0,
@@ -774,47 +781,34 @@ fn lay_bumps(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPi
     LaidPiece::on_the_ground(vec![bumps], count as f32 * bump_spacing_m(height))
 }
 
-/// A kick-plate template laid at `x_m`.
-fn lay_kick_plate(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
-    let PieceTemplate::KickPlate {
-        impulse_up_n_s,
-        impulse_side_n_s,
-        angular_roll_n_m_s,
-        ..
-    } = template
-    else {
-        return no_piece();
-    };
+/// A kick plate laid at `x_m`, from its up, side and roll impulse ranges.
+fn lay_kick_plate(impulses: [[f32; 2]; 3], x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
+    let [impulse_up_n_s, impulse_side_n_s, angular_roll_n_m_s] = impulses;
     let pos = [x_m, 0.0, 0.0];
     LaidPiece::on_the_ground(
         vec![kick_plate(
             pos,
             rng,
-            *impulse_up_n_s,
-            *impulse_side_n_s,
-            *angular_roll_n_m_s,
+            impulse_up_n_s,
+            impulse_side_n_s,
+            angular_roll_n_m_s,
         )],
         KICK_PLATE_LENGTH_M,
     )
 }
 
-/// A flip-plate template laid at `x_m`.
+/// A flip plate laid at `x_m`.
 fn lay_flip_plate(
-    template: &PieceTemplate,
+    strength_range: [f32; 2],
+    presets: &[FlipPreset],
     design: &DesignRules,
     x_m: f32,
     rng: &mut ChaCha8Rng,
 ) -> LaidPiece {
-    let PieceTemplate::FlipPlate {
-        strength, presets, ..
-    } = template
-    else {
-        return no_piece();
-    };
     let pos = [x_m, 0.0, 0.0];
     let speed_m_s = design.speed_m_s;
     let preset = pick_preset(presets, rng);
-    let strength = draw(rng, *strength);
+    let strength = draw(rng, strength_range);
     let plate = preset.kick_plate_at(pos, strength);
     // The push throws the car up at impulse / mass, then it falls back.
     let rise_m_s = preset.impulse_n_s[1] * strength / design.car_mass_kg;
@@ -826,32 +820,28 @@ fn lay_flip_plate(
     }
 }
 
-/// A halfpipe template laid at `x_m`.
-fn lay_halfpipe(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
-    let PieceTemplate::Halfpipe {
-        radius_m, length_m, ..
-    } = template
-    else {
-        return no_piece();
-    };
+/// A halfpipe laid at `x_m`.
+fn lay_halfpipe(
+    radius_m: [f32; 2],
+    length_m: [f32; 2],
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
     let pos = [x_m, 0.0, 0.0];
-    let length = draw(rng, *length_m);
+    let length = draw(rng, length_m);
     let halfpipe = PieceSpec::Halfpipe {
         pos,
         yaw: 0.0,
-        radius: draw(rng, *radius_m),
+        radius: draw(rng, radius_m),
         length,
     };
     LaidPiece::on_the_ground(vec![halfpipe], length)
 }
 
-/// A wall-with-a-ramp template laid at `x_m`.
-fn lay_wall(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
-    let PieceTemplate::Wall { height_m, .. } = template else {
-        return no_piece();
-    };
+/// A wall with a ramp laid at `x_m`.
+fn lay_wall(height_m: [f32; 2], x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
     let pos = [x_m, 0.0, 0.0];
-    let height = draw(rng, *height_m);
+    let height = draw(rng, height_m);
     let wall = PieceSpec::Wall {
         pos,
         yaw: 0.0,
