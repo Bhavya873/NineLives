@@ -351,13 +351,11 @@ impl EventTracker {
         self.hard_landing_watch_s -= dt_s;
     }
 
-    /// Starts an upset, tracks it, and ends it with a save once the car has been
-    /// back on its wheels, level and still, for long enough (SPEC §7.9).
-    fn update_upset_and_save(
+    /// Starts an upset when the car has been in the air too long or tipped too far.
+    fn start_upset_if_knocked(
         &mut self,
         inputs: &EventInputs,
         config: &EventConfig,
-        dt_s: f32,
         events: &mut Vec<SimEvent>,
     ) {
         let knocked = self.airborne_s > config.upset_airborne_s
@@ -372,6 +370,18 @@ impl EventTracker {
                 landing: None,
             });
         }
+    }
+
+    /// Starts an upset, tracks it, and ends it with a save once the car has been
+    /// back on its wheels, level and still, for long enough (SPEC §7.9).
+    fn update_upset_and_save(
+        &mut self,
+        inputs: &EventInputs,
+        config: &EventConfig,
+        dt_s: f32,
+        events: &mut Vec<SimEvent>,
+    ) {
+        self.start_upset_if_knocked(inputs, config, events);
         let touched_down = self.touched_down(inputs);
         let take_off = self.take_off;
         let Some(upset) = self.upset.as_mut() else {
@@ -401,18 +411,27 @@ impl EventTracker {
         } else {
             0.0
         };
-        if upset.save_held_s >= config.save_hold_s {
-            events.push(SimEvent::Save {
-                duration_s: upset.elapsed_s,
-                air_used_kg: inputs.air_used_kg - upset.air_used_at_start_kg,
-                peak_tilt_rad: upset.peak_tilt_rad,
-                landing: landing.motion,
-                quality: landing.finish(inputs.forward_speed_m_s),
-                peak_g: self.peak_raw_g,
-            });
+        if upset.save_held_s >= config.save_hold_s
+            && let Some(event) = save_event(upset, inputs, self.peak_raw_g)
+        {
+            events.push(event);
             self.upset = None;
         }
     }
+}
+
+/// The `Save` event for an upset that has just ended, judging its landing as it stands
+/// (None if the upset has no landing yet, which a save never has).
+fn save_event(upset: &mut Upset, inputs: &EventInputs, peak_g: f32) -> Option<SimEvent> {
+    let landing = upset.landing.as_mut()?;
+    Some(SimEvent::Save {
+        duration_s: upset.elapsed_s,
+        air_used_kg: inputs.air_used_kg - upset.air_used_at_start_kg,
+        peak_tilt_rad: upset.peak_tilt_rad,
+        landing: landing.motion,
+        quality: landing.finish(inputs.forward_speed_m_s),
+        peak_g,
+    })
 }
 
 #[cfg(test)]
