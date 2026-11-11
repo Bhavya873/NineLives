@@ -8,8 +8,8 @@ Name pattern: `eval_<controller>_<stage>_<mode>.json` (+ `.csv` from the Python 
 
 - `eval_off_*`: no controller (Stages A and B). Cited by README and docs/EXPERIMENTS.md.
 - `eval_pd_*`: the PD controller, Stages A to E, both modes (`_dr` for Stage A realistic). Cited by README, docs/EXPERIMENTS.md.
-- `eval_hybrid_*`: PD plus the trained AI, Stages A to E, both modes. Cited by README, docs/EXPERIMENTS.md. 
-- `eval_ai_*`: the AI alone on Stage A (arcade, realistic, realistic `_dr`). `eval_ai_A_realistic.json` (+ `.csv`) is read by `web/tests-node/policy.test.mjs` (wasm must match native) and was rerun with the r5 policy; the other `eval_ai_*`, all `eval_hybrid_*` and the Hybrid files under `widening_2026-11/` were made with the previous policy (R4, `policy_hash` 40d054618d409972) and are not regenerated. The shipped policy's numbers are in `flight-r5_2026-11/`.
+- `eval_hybrid_*`: PD plus the trained AI (r5, `policy_hash` 5c325d425e7b3f90), Stages A to E, both modes. Cited by README, docs/EXPERIMENTS.md.
+- `eval_ai_*`: the AI alone on Stage A (arcade, realistic, realistic `_dr`). `eval_ai_A_realistic.json` (+ `.csv`) is read by `web/tests-node/policy.test.mjs` (wasm must match native) and was rerun with the r5 policy; the other `eval_ai_*` and the Hybrid files under `widening_2026-11/` (except `widened/eval_hybrid_A_realistic.json`) were made with the previous policy (R4, `policy_hash` 40d054618d409972) and are not regenerated. All ten `eval_hybrid_*` files were regenerated on 2026-11-10 with the shipped r5 policy (`policy_hash` 5c325d425e7b3f90, seeds 0 to 999, same physics and controller config hashes as the `eval_pd_*` files). The shipped policy's numbers on the widened draws are in `flight-r5_2026-11/`.
 - `hover_hack.json`: the hover-hack experiment (SPEC 9.11, docs/TRAINING.md, README chart `docs/images/hover-hack.svg`).
 - `stunt_budget.json`: air budget per stunt (docs/research/stunt-planning.md, docs/EXPERIMENTS.md).
 - `speed_sweep_after_pieces.json` / `.csv`: speed sweep over all piece kinds; named in the `nl-control` survival test.
