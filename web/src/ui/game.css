@@ -1,10 +1,17 @@
-/* Styles of the game page (index.html): the four HUD zones, messages, title, pause and
-   game-over, all drawn as slate tickets (theme.css has the tokens and the tile). */
+/* Styles of the game page (index.html): the glass HUD, messages, title, pause and game-over.
+   Layout is "centre instruments" (SPEC §11.5): hearts top-left, messages top-centre, the key chip
+   top-right, speed and air bottom-centre. theme.css has the tokens and the glass material. */
 
 :root {
   --heart-lost: #2c3138;
   /* Edge of the scene seen through a gap; matches BACKDROP_HORIZON in src/render/backdrop.ts. */
   --scene: #2a3d52;
+  /* Fixed places of the bottom-centre instruments (px): the dash is centred, and the nozzle map
+     and g-meter sit either side of it so the dash never moves when they fade in. */
+  --dash-width: 380px;
+  --side-tile-width: 130px;
+  --instrument-gap: 16px;
+  --instrument-bottom: 24px;
 }
 html,
 body {
@@ -22,30 +29,49 @@ body {
 [hidden] {
   display: none !important;
 }
-/* Every HUD ticket ignores the mouse unless it is a control. */
-.tile {
+/* Every HUD panel ignores the mouse unless it is a control. */
+.glass {
   pointer-events: none;
 }
 button,
 a {
   font-family: inherit;
 }
-/* One focus ring everywhere: sand on slate. */
+/* One focus ring everywhere: sand on a dark pane. */
 :focus-visible {
   outline: 3px solid var(--sand);
   outline-offset: 2px;
 }
+/* Numbers: Barlow Condensed 700. */
+.num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: var(--track-0);
+  line-height: 1;
+}
 
-/* Zone 1, top-left: the nine hearts. */
+/* Top-left: the nine hearts and the saves counter. */
 #hud-top-left {
   position: fixed;
   left: var(--edge);
   top: var(--edge);
-  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
 }
 #hud-hearts {
   display: flex;
   gap: 3px;
+}
+#hud-saves {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+#hud-saves-count {
+  font-size: var(--text-m);
 }
 .heart svg {
   display: block;
@@ -69,45 +95,37 @@ a {
   fill: var(--slate-line);
 }
 
-/* Zone 2, top-right: the key card and the viewer link. */
+/* Top-right: the key card, folded to an "H keys" chip until asked for. */
 #hud-top-right {
   position: fixed;
   right: var(--edge);
   top: var(--edge);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
 }
 #hud-keycard {
   pointer-events: auto;
-  padding: 4px 12px 8px;
+  padding: 6px 14px;
 }
 #hud-keys-toggle {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   width: 100%;
   padding: 2px 0;
   border: 0;
   background: none;
-  color: var(--sand-soft);
-  font-family: var(--font-display);
-  font-size: var(--text-s);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-align: left;
+  color: var(--sand);
+  text-shadow: inherit;
   cursor: pointer;
 }
-#hud-keys-toggle::after {
-  content: ' \25BE';
-}
-#hud-keys-toggle[aria-expanded='false']::after {
-  content: ' \25B8';
+#hud-keys-toggle .num {
+  font-size: var(--text-m);
 }
 #hud-keys {
-  margin: 4px 0 0;
+  margin: 8px 0 4px;
   display: grid;
   grid-template-columns: auto auto;
-  gap: 3px 12px;
+  align-items: baseline;
+  gap: 6px 12px;
   font-size: var(--text-s);
 }
 #hud-keys[data-collapsed='true'] {
@@ -115,47 +133,39 @@ a {
 }
 #hud-keys dt {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: var(--track-2);
+  text-transform: uppercase;
   white-space: nowrap;
 }
 #hud-keys dd {
   margin: 0;
 }
-#hud-watch {
-  pointer-events: auto;
-  font-family: var(--font-display);
-  font-size: var(--text-m);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-#hud-watch:hover,
-#hud-watch:focus-visible {
-  background: var(--sand);
-  color: var(--slate);
-}
 
-/* Zone 3, bottom-left: the gauge card, speed and air. */
+/* Bottom-centre: speed and air. */
 #hud-dash {
   position: fixed;
-  left: var(--edge);
-  bottom: var(--edge);
-  min-width: 190px;
-  padding: 6px 14px 10px;
+  left: 50%;
+  bottom: var(--instrument-bottom);
+  transform: translateX(-50%);
+  width: var(--dash-width);
+  height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 #hud-speed {
-  font-family: var(--font-display);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
   font-size: var(--text-xl);
-  font-weight: 700;
-  line-height: 1;
 }
-#hud-speed small {
-  margin-left: 6px;
-  font-size: var(--text-m);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--sand-soft);
+#hud-speed-value {
+  min-width: 3ch;
+  text-align: right;
 }
 #hud-speed.fast {
   color: var(--rust);
@@ -163,23 +173,24 @@ a {
 #hud-air {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 10px;
 }
 #hud-air-label {
-  min-width: 3ch;
-  font-family: var(--font-display);
-  font-weight: 700;
+  min-width: 4ch;
+  text-align: right;
+  font-size: var(--text-m);
 }
 #hud-air-track,
 #hud-g-track {
   box-sizing: border-box;
-  flex: 1;
-  min-width: 90px;
-  height: 6px;
-  border: 0;
-  background-color: var(--slate-line);
-  background: var(--slate-deep);
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgb(var(--bone-rgb) / 0.22);
+}
+#hud-air-track {
+  flex: none;
+  width: 240px;
 }
 #hud-air-fill,
 #hud-g-fill {
@@ -199,37 +210,60 @@ a {
   }
 }
 
-/* Zone 4, bottom-centre: the g-meter and the nozzle map, only on a thruster key or a hard landing. */
-#hud-center {
+/* The nozzle map (left of the dash) and g-meter (right): shown while a nozzle fires or after a
+   hard landing. Their places are fixed, so showing them moves nothing. */
+#hud-nozzle-tile,
+#hud-g-tile {
   position: fixed;
-  left: 50%;
-  bottom: var(--edge);
-  transform: translateX(-50%);
+  bottom: var(--instrument-bottom);
+  box-sizing: border-box;
+  width: var(--side-tile-width);
+  min-height: 112px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
-  width: 340px;
-  pointer-events: none;
+  gap: 4px;
+  padding: 8px;
+  text-align: center;
+}
+#hud-nozzle-tile {
+  right: calc(50% + var(--dash-width) / 2 + var(--instrument-gap));
 }
 #hud-g-tile {
-  min-width: 150px;
+  left: calc(50% + var(--dash-width) / 2 + var(--instrument-gap));
+}
+#hud-nozzles {
+  /* nozzle-map.ts sizes it from the nozzle positions, in metres. */
+  position: relative;
+}
+#hud-nozzles .car-outline {
+  /* nozzle-map.ts sets the inset so the outline matches the nozzle dots. */
+  position: absolute;
+  border: 2px solid var(--sand-soft);
+  border-radius: 6px;
+}
+.nozzle-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--rust);
 }
 #hud-g {
-  font-family: var(--font-display);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
   font-size: var(--text-s);
-  font-weight: 600;
-  color: var(--sand-soft);
 }
 #hud-g-live {
-  font-size: var(--text-m);
-  font-weight: 700;
-  color: var(--sand);
+  font-size: var(--text-l);
 }
 #hud-g-track {
-  margin: 3px 0 2px;
-  width: auto;
+  width: 100%;
 }
 #hud-g-fill {
   background: var(--sand);
@@ -240,51 +274,35 @@ a {
 #hud-g[data-level='high'] #hud-g-fill {
   background: var(--red);
 }
-#hud-nozzle-tile {
-  padding: 6px 10px;
-}
-#hud-nozzles {
-  /* nozzle-map.ts sizes it from the nozzle positions, in metres. */
-  position: relative;
-}
-#hud-nozzles .car-outline {
-  /* nozzle-map.ts sets the inset so the outline matches the nozzle dots. */
-  position: absolute;
-  border: 2px solid var(--sand-soft);
-}
-.nozzle-dot {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  margin: -4px 0 0 -4px;
-  background: var(--rust);
-}
 
-/* Bottom-right: the wind, only while there is any. */
+/* Bottom-left: the air mode. Bottom-right: the wind, only while there is any. */
+#hud-mode {
+  position: fixed;
+  left: var(--edge);
+  bottom: var(--instrument-bottom);
+  padding: 6px 14px;
+}
 #hud-wind {
   position: fixed;
   right: var(--edge);
-  bottom: var(--edge);
+  bottom: var(--instrument-bottom);
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-display);
   font-size: var(--text-m);
-  font-weight: 700;
-  color: var(--sand);
 }
 #hud-wind-arrow,
 #hud-wind-arrow svg {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
-/* Centre-low: toasts and hints in one stack of tickets. */
+/* Top-centre: toasts and hints in one stack, off the road. */
 #hud-messages {
   position: fixed;
   left: 50%;
-  bottom: 168px;
+  top: var(--edge);
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -292,34 +310,33 @@ a {
   gap: 8px;
   pointer-events: none;
 }
-#hud-messages > .tile {
-  padding: 5px 16px;
-  font-size: var(--text-m);
-  font-weight: 600;
+#hud-messages > .glass {
+  padding: 6px 16px;
+  font-size: var(--text-s);
+  font-weight: 400;
   white-space: nowrap;
 }
 #hud-messages > #hud-toast {
-  padding: 8px 22px;
-  font-family: var(--font-display);
-  font-size: var(--text-l);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  padding: 8px 20px;
+  font-size: var(--text-m);
+  font-weight: 600;
 }
 #hud-toast[data-tone='danger'] {
   color: var(--red);
-  box-shadow: inset 8px 0 0 var(--red);
 }
-/* Rust beside the text, not in it: small rust text on slate misses 4.5:1. */
+/* Rust beside the text, not in it: small rust text on a dark pane misses 4.5:1. */
 #hud-too-slow,
 #hud-envelope {
-  box-shadow: inset 6px 0 0 var(--rust);
+  box-shadow:
+    inset 6px 0 0 var(--rust),
+    0 8px 24px rgb(0 0 0 / 0.35);
 }
 
 #hud-perf {
   /* F3 (src/ui/perf-overlay.ts): fps and ms per tick and per frame. */
   position: fixed;
   left: var(--edge);
-  top: 64px;
+  top: 72px;
   font-size: var(--text-s);
 }
 
@@ -344,7 +361,7 @@ a {
   pointer-events: auto;
 }
 
-/* Title and game-over: a dark page with one big ticket. */
+/* Title and game-over: a dark scrim over the scene, with one glass card to look through. */
 #title,
 #game-over {
   position: fixed;
@@ -354,7 +371,7 @@ a {
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  background: var(--slate-deep);
+  background: rgb(13 16 20 / 0.6);
   overflow-y: auto;
 }
 #title {
@@ -390,13 +407,13 @@ a {
   font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: var(--track-2);
   text-transform: uppercase;
   color: var(--rust);
 }
 #game-over .wordmark {
   font-size: var(--text-m);
-  letter-spacing: 0.4em;
+  letter-spacing: var(--track-2);
 }
 #game-over h2 {
   font-size: var(--text-xl);
@@ -415,13 +432,14 @@ a {
 .card button,
 .card a.button {
   padding: 8px 26px;
-  border: var(--tile-border) solid var(--sand);
-  background: var(--slate);
+  border: var(--tile-border) solid rgb(var(--bone-rgb) / 0.6);
+  border-radius: 999px;
+  background: rgb(var(--ink-rgb) / var(--glass-tint));
   color: var(--sand);
   font-family: var(--font-display);
   font-size: var(--text-m);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--track-2);
   text-decoration: none;
   text-transform: uppercase;
   cursor: pointer;
@@ -441,37 +459,58 @@ a {
   font-weight: 600;
 }
 
-/* Phones: smaller hearts and gauge, the key card starts folded and the centre tiles lift. */
+/* Phones (no touch controls yet): a narrower cluster, smaller hearts, and the side tiles, mode
+   and wind lift above the dash. */
 @media (max-width: 640px) {
+  :root {
+    --dash-width: calc(100vw - 2 * var(--edge));
+  }
   .heart svg {
     width: 17px;
     height: 15px;
   }
   #hud-dash {
-    min-width: 0;
-    padding: 4px 10px 8px;
+    max-width: 380px;
+    height: auto;
+    padding: 8px 12px;
   }
   #hud-speed {
     font-size: var(--text-l);
   }
-  #hud-center {
-    bottom: 112px;
-    width: 280px;
+  #hud-air-track {
+    flex: 1;
+    width: auto;
+    min-width: 80px;
+  }
+  #hud-air {
+    width: 100%;
+  }
+  #hud-nozzle-tile,
+  #hud-g-tile {
+    bottom: 128px;
+    right: auto;
+  }
+  #hud-nozzle-tile {
+    left: var(--edge);
+  }
+  #hud-g-tile {
+    left: calc(var(--edge) + var(--side-tile-width) + 8px);
+  }
+  #hud-mode {
+    bottom: auto;
+    top: 72px;
+  }
+  #hud-wind {
+    bottom: 128px;
   }
   #hud-messages {
-    bottom: 230px;
-  }
-  #hud-messages > #hud-toast {
-    font-size: var(--text-m);
+    top: 116px;
   }
   .wordmark {
     font-size: var(--text-l);
   }
   .card {
     padding: 26px 20px 20px;
-  }
-  #hud-wind {
-    bottom: 112px;
   }
 }
 /* Reduced motion (SPEC §11.4): no animations or transitions anywhere. */
