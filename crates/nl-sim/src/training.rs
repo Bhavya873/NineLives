@@ -226,15 +226,7 @@ impl TrainingEnv {
         let saves_before = episode.saves();
         let hard_landings_before = episode.hard_landings();
         let air_before_kg = episode.world().air_used_kg();
-        // Physics steps until the next control step (SPEC §7.1: two of them), or the end.
-        loop {
-            episode.step(throttles);
-            self.track_flight(&episode);
-            let ended = episode.status() != EpisodeStatus::Running;
-            if ended || episode.world().is_control_step() {
-                break;
-            }
-        }
+        self.run_to_next_control_step(&mut episode, throttles);
         self.control_steps += 1;
         let status = episode.status();
         let crashed = matches!(status, EpisodeStatus::Crashed(_));
@@ -263,6 +255,19 @@ impl TrainingEnv {
         };
         self.episode = Some(episode);
         Some(outcome)
+    }
+
+    /// Runs physics steps until the next control step (SPEC §7.1: two of them), or until
+    /// the episode ends.
+    fn run_to_next_control_step(&mut self, episode: &mut Episode, throttles: [f32; NOZZLE_COUNT]) {
+        loop {
+            episode.step(throttles);
+            self.track_flight(episode);
+            let ended = episode.status() != EpisodeStatus::Running;
+            if ended || episode.world().is_control_step() {
+                break;
+            }
+        }
     }
 
     /// A new episode of `stage` at `level` from `seed`, with a randomized car and world
