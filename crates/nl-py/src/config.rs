@@ -96,14 +96,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         serde_json::from_str(json).map_err(|error| format!("sim config JSON: {error}"))?;
     let vehicle = VehicleConfig::from_toml_str(&fields.vehicle_toml).map_err(as_message)?;
     let modes = ModesConfig::from_toml_str(&fields.modes_toml).map_err(as_message)?;
-    let mut scenarios =
-        ScenariosConfig::from_toml_str(&fields.scenarios_toml).map_err(as_message)?;
-    if let Some(pieces_json) = &fields.pieces_json {
-        scenarios = scenarios
-            .with_pieces_json(pieces_json)
-            .map_err(as_message)?;
-    }
-    scenarios.randomization.vary_mode = fields.randomize_mode;
+    let scenarios = parse_scenarios(&fields)?;
     let reward = RewardConfig::from_toml_str(&fields.reward_toml).map_err(as_message)?;
     let mode = modes.by_name(&fields.mode).ok_or_else(|| {
         format!(
@@ -117,12 +110,7 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         Some(residual) => Some(parse_residual(residual)?),
     };
     let hybrid = parse_hybrid(fields.controller.as_deref(), residual.is_some())?;
-    if !(0.0..=1.0).contains(&fields.randomize_share) {
-        return Err(format!(
-            "sim config JSON: randomize_share must be between 0 and 1, not {}",
-            fields.randomize_share
-        ));
-    }
+    check_randomize_share(fields.randomize_share)?;
     Ok(SimConfig {
         training: TrainingConfig {
             vehicle,
@@ -137,6 +125,29 @@ pub fn parse_sim_config(json: &str) -> Result<SimConfig, String> {
         residual,
         hybrid,
     })
+}
+
+/// The scenarios config, with the course pieces and the mode randomization from `fields`.
+fn parse_scenarios(fields: &SimConfigJson) -> Result<ScenariosConfig, String> {
+    let mut scenarios =
+        ScenariosConfig::from_toml_str(&fields.scenarios_toml).map_err(as_message)?;
+    if let Some(pieces_json) = &fields.pieces_json {
+        scenarios = scenarios
+            .with_pieces_json(pieces_json)
+            .map_err(as_message)?;
+    }
+    scenarios.randomization.vary_mode = fields.randomize_mode;
+    Ok(scenarios)
+}
+
+/// Checks the share of randomized episodes is between 0 and 1.
+fn check_randomize_share(randomize_share: f32) -> Result<(), String> {
+    if !(0.0..=1.0).contains(&randomize_share) {
+        return Err(format!(
+            "sim config JSON: randomize_share must be between 0 and 1, not {randomize_share}"
+        ));
+    }
+    Ok(())
 }
 
 /// The residual settings, after checking the base controller is PD (`ResidualPd::new`
