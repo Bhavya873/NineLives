@@ -5,17 +5,12 @@ import modesToml from '../../../configs/modes.toml?raw';
 import playgroundJson from '../../../courses/playground.json?raw';
 import vehicleToml from '../../../configs/vehicle.toml?raw';
 
-import { Vector3 } from 'three';
-
-import { focusDialog, prefersReducedMotion, requireElement, setText } from '../shared/dom.ts';
-import { createCourseSession, showCourse } from './course-session.ts';
-import { startExtraInputs } from './extra-inputs.ts';
+import { focusDialog, prefersReducedMotion, requireElement } from '../shared/dom.ts';
+import { type ExtraInputs, type GameActions, startExtraInputs } from './extra-inputs.ts';
 import { startGameLoop } from './game-loop.ts';
+import { createLoopCallbacks, type LoopContext, type RunState } from './frame-steps.ts';
+import { createHudParts, type HudParts } from './hud-parts.ts';
 import { saveRun, sessionStore, takeSavedRun } from './run-storage.ts';
-import { countOutOfBoundsCrashes, hasRealCrash } from './out-of-bounds.ts';
-import { createAirGauge, updateAirGauge } from '../ui/air-gauge.ts';
-import { findHud, nozzleWhoText, updateHud } from '../ui/hud.ts';
-import { isAnyNozzleFiring, newZoneHolds, updateZones } from '../ui/hud-zones.ts';
 import { enableRefractionIfSupported } from '../ui/refraction.ts';
 import {
   createLives,
@@ -25,93 +20,50 @@ import {
   restartLives,
   restoreLives,
   savesThisRun,
-  updateLives,
-  updateSavesCounter,
 } from '../ui/lives.ts';
-import { createNozzleMap, updateNozzleMap } from '../ui/nozzle-map.ts';
 import { createTitle, titleWanted } from '../ui/title.ts';
-import {
-  createPerfOverlay,
-  recordFrame,
-  recordTick,
-  togglePerfOverlay,
-} from '../ui/perf-overlay.ts';
-import {
-  createToasts,
-  showNoAirIfNew,
-  showToast,
-  toastForEvents,
-  updateToasts,
-} from '../ui/toasts.ts';
-import { readMergedFrame } from '../ui/input-merge.ts';
-import { isNozzleKeyHeld, onKeyPress, startKeyboard } from '../ui/keyboard.ts';
-import { followCar, snapCamera, widenWithSpeed } from '../render/chase-camera.ts';
-import {
-  cameraShake,
-  createExplosion,
-  startExplosion,
-  stopExplosion,
-  updateExplosion,
-} from '../render/explosion.ts';
-import { createFlames, updateFlames } from '../render/flames.ts';
-import { type BlendedPose, FLOATS_PER_POSE, newBlendedPose } from '../render/pose-blend.ts';
-import {
-  createGameScene,
-  type GameScene,
-  type PhysicsFrames,
-  placeCar,
-  setCarVisible,
-} from '../render/scene.ts';
+import { createPerfOverlay, togglePerfOverlay } from '../ui/perf-overlay.ts';
+import { onKeyPress, startKeyboard } from '../ui/keyboard.ts';
+import { nextWindLevel, startingWindLevel, type WindLevel } from '../render/screen-effects.ts';
 import { loadPolicy } from '../wasm-bridge/policy.ts';
-import {
-  createScreenEffects,
-  renderScreenEffects,
-  nextWindLevel,
-  resetScreenEffects,
-  startingWindLevel,
-  type WindLevel,
-} from '../render/screen-effects.ts';
-import { containsEvent } from '../wasm-bridge/sim-events.ts';
-import { requestStuntInSim } from '../wasm-bridge/stunt-adapter.ts';
-import {
-  STUNT_KEYS,
-  type StuntCodeValue,
-  applyStuntEvents,
-  createStuntQueue,
-  expireStunt,
-  pressStunt,
-  stuntToastForEvents,
-  submitPendingStunt,
-} from './stunt-requests.ts';
+import { createStuntQueue, pressStunt, STUNT_KEYS, type StuntCodeValue } from './stunt-requests.ts';
 import { fillHudValues, newHudValues } from '../wasm-bridge/hud-values.ts';
 import { checkWasmLayout } from '../wasm-bridge/layout-check.ts';
-import { readNozzleLayout } from '../wasm-bridge/nozzle-layout.ts';
-import initWasm, { ControllerCode, EventKind, Game, HudField, ModeCode } from '../wasm/nl_wasm.js';
+import initWasm, { ControllerCode, Game, HudField, ModeCode } from '../wasm/nl_wasm.js';
+import { createCourseControls, createDropTest, createWorld, snapViewToGame } from './world.ts';
+import type { CourseControls, World } from './world.ts';
 
-/** Reused each frame so the render loop allocates nothing for these. */
-const shake = new Vector3();
-const crashPosition = new Vector3();
 const hudValues = newHudValues();
 
-async function start(): Promise<void> {
-  // load the wasm physics and check it matches this page
+type LivesState = ReturnType<typeof createLives>;
+
+/** Loads the wasm physics, checks it matches this page and creates the game. */
+async function createGame(): Promise<Game> {
   await initWasm();
   checkWasmLayout();
   // A new random seed each visit; the game itself draws nothing from it.
   const seed = BigInt(Math.floor(Math.random() * 2 ** 32));
-  const game = new Game(vehicleToml, modesToml, controllersToml, seed);
-  /** The M key and a tap on the air-mode readout. */
+  return new Game(vehicleToml, modesToml, controllersToml, seed);
+}
+
+/** The M key and a tap on the air-mode readout. Returns the toggle for the touch buttons. */
+function setupAirModeToggle(game: Game): () => void {
   const toggleAirMode = () => {
     const isArcade = game.hud()[HudField.Mode] === ModeCode.Arcade;
     game.set_mode(isArcade ? 'realistic' : 'arcade');
   };
   onKeyPress('KeyM', toggleAirMode);
-  const params = new URLSearchParams(window.location.search);
-  // The game flies the Hybrid (PD + the shipped r5 policy) by default: with the 120 degree
-  // hand-over it gains 17 to 20 points on Stage F flip plates and is within about 1.5 points of
-  // PD elsewhere (DECISIONS 2026-11-10). PD still flies below 120 degrees of tilt and above the
-  // 55 m/s envelope. ?controller=pd keeps PD alone and skips loading the policy. If the policy
-  // fails to load, the game stays on PD.
+  return toggleAirMode;
+}
+
+/**
+ * The game flies the Hybrid (PD + the shipped r5 policy) by default: with the 120 degree
+ * hand-over it gains 17 to 20 points on Stage F flip plates and is within about 1.5 points of
+ * PD elsewhere (DECISIONS 2026-11-10). PD still flies below 120 degrees of tilt and above the
+ * 55 m/s envelope. ?controller=pd keeps PD alone and skips loading the policy. If the policy
+ * fails to load, the game stays on PD.
+ */
+function startPolicy(game: Game, params: URLSearchParams): void {
   if (params.get('controller') !== 'pd') {
     void loadPolicy(game).then((loaded) => {
       if (loaded) {
@@ -119,51 +71,26 @@ async function start(): Promise<void> {
       }
     });
   }
-  // f3 performance overlay
-  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
-  onKeyPress('F3', () => togglePerfOverlay(perf));
-  // Stunt keys only queue a request; the sim's planner decides (see stunt-requests.ts).
+}
+
+/** Stunt keys only queue a request; the sim's planner decides (see stunt-requests.ts). */
+function setupStunts(state: RunState): {
+  stuntQueue: ReturnType<typeof createStuntQueue>;
+  requestStunt: (stunt: StuntCodeValue) => void;
+} {
   const stuntQueue = createStuntQueue();
-  /** Counts the requests, for the test hook below. */
-  let stuntRequests = 0;
   const requestStunt = (stunt: StuntCodeValue) => {
-    stuntRequests += 1;
+    state.stuntRequests += 1;
     pressStunt(stuntQueue, stunt, performance.now() / 1000);
   };
   for (const [code, stunt] of Object.entries(STUNT_KEYS)) {
     onKeyPress(code, () => requestStunt(stunt));
   }
+  return { stuntQueue, requestStunt };
+}
 
-  // the last two physics states, blended each frame for smooth motion
-  const frames: PhysicsFrames = {
-    previousChassis: game.chassis_pose(),
-    latestChassis: game.chassis_pose(),
-    previousWheels: game.wheel_poses(),
-    latestWheels: game.wheel_poses(),
-  };
-  const wheelCount = frames.latestWheels.length / FLOATS_PER_POSE;
-  // scene, hud parts and effects
-  const view = createGameScene(requireElement('game'), wheelCount);
-  const hud = findHud();
-  const toasts = createToasts(requireElement('hud-toast'));
-  const explosion = createExplosion(view.scene, prefersReducedMotion());
-  const nozzles = readNozzleLayout(game.nozzle_layout());
-  const flames = createFlames(view.carBody, nozzles);
-  const nozzleDots = createNozzleMap(requireElement('hud-nozzles'), nozzles);
-  const airGauge = createAirGauge(
-    requireElement('hud-air'),
-    requireElement('hud-air-fill'),
-    requireElement('hud-air-label'),
-  );
-  // keyboard and the first picture
-  startKeyboard(window);
-  enableRefractionIfSupported();
-
-  const carPose = newBlendedPose();
-  snapViewToGame(game, frames, view, carPose);
-  const reducedMotion = prefersReducedMotion();
-  const effects = createScreenEffects(view.scene);
-  // Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it.
+/** Wind (SPEC §7.2): ?wind=breeze|storm picks the starting level, V cycles it. */
+function setupWind(game: Game, params: URLSearchParams): () => void {
   let windLevel = startingWindLevel(params);
   const setWind = (level: WindLevel) => {
     windLevel = level;
@@ -172,31 +99,16 @@ async function start(): Promise<void> {
   setWind(windLevel);
   const cycleWind = () => setWind(nextWindLevel(windLevel));
   onKeyPress('KeyV', cycleWind);
-  const course = createCourseSession(view.scene, view.ground);
-  /** Puts the drawn course in step with a fresh run (null: the open arena). */
-  const startCourse = (shapesJson: string | null, courseJson?: string) => {
-    showCourse(course, shapesJson, courseJson);
-    stopExplosion(explosion);
-    snapViewToGame(game, frames, view, carPose);
-    resetScreenEffects(effects);
-  };
-  // Free driving happens in the open-world playground; ?world=flat keeps the empty arena.
-  const startFreeDrive = () => {
-    if (params.get('world') === 'flat') {
-      game.load_flat_ground();
-      startCourse(null);
-    } else {
-      startCourse(game.load_course(playgroundJson), playgroundJson);
-    }
-  };
-  startFreeDrive();
-  // Nine hearts, one lost per crash; at zero the game-over screen offers a restart.
+  return cycleWind;
+}
+
+/** Nine hearts, one lost per crash; at zero the game-over screen offers a restart. */
+function setupLives(game: Game, params: URLSearchParams): LivesState {
   const lives = createLives(
     requireElement('hud-hearts'),
     requireElement('game-over'),
     requireElement('game-over-summary'),
   );
-  let lastRenderMs = performance.now();
   fillHudValues(game.hud(), hudValues);
   // Back from the viewer (?play=1&resume=1): the lives lost before leaving stay lost.
   if (params.has('play') && params.has('resume')) {
@@ -211,40 +123,37 @@ async function start(): Promise<void> {
       saveRun(sessionStore(), run, lives.over ? 0 : left);
     });
   }
-  const zoneTiles = {
-    gTile: requireElement('hud-g-tile'),
-    nozzleTile: requireElement('hud-nozzle-tile'),
-  };
-  const zoneHolds = newZoneHolds();
-  const nozzleWho = requireElement('hud-nozzle-who');
-  const savesCounter = {
-    count: requireElement('hud-saves-count'),
-    label: requireElement('hud-saves-label'),
-  };
-  // The title keeps the game's clock still until the player starts (?play skips it).
-  let started = false;
-  // Restart: a fresh playground run, which also sets the sim's counts back to zero.
+  return lives;
+}
+
+/** Restart: a fresh playground run, which also sets the sim's counts back to zero. */
+function setupRestart(game: Game, lives: LivesState, courses: CourseControls): void {
   requireElement('restart').addEventListener('click', () => {
-    startFreeDrive();
+    courses.startFreeDrive();
     game.drain_events();
     fillHudValues(game.hud(), hudValues);
     restartLives(lives, hudValues);
   });
-  // Esc pauses and resumes; nothing moves while paused or after the last life.
+}
+
+/**
+ * Esc pauses and resumes; nothing moves while paused or after the last life.
+ * `releaseHeldInputs` lets go of touch controls when the game pauses under a finger.
+ */
+function setupPause(state: RunState, lives: LivesState, releaseHeldInputs: () => void): () => void {
   const pausedPanel = requireElement('paused');
-  let paused = false;
   let restorePauseFocus: (() => void) | null = null;
   const togglePause = () => {
-    if (!started || lives.over) {
+    if (!state.started || lives.over) {
       return;
     }
-    paused = !paused;
-    if (paused) {
-      extra.releaseHeld();
+    state.paused = !state.paused;
+    if (state.paused) {
+      releaseHeldInputs();
     }
-    pausedPanel.hidden = !paused;
+    pausedPanel.hidden = !state.paused;
     // The pause card is a dialog: the page behind it is inert, and Esc gives focus back.
-    if (paused) {
+    if (state.paused) {
       restorePauseFocus = focusDialog(pausedPanel, pausedPanel.querySelector('a') ?? pausedPanel);
     } else {
       restorePauseFocus?.();
@@ -252,7 +161,11 @@ async function start(): Promise<void> {
     }
   };
   onKeyPress('Escape', togglePause);
-  // The key card starts folded to a chip; the chip and the H key unfold and fold it.
+  return togglePause;
+}
+
+/** The key card starts folded to a chip; the chip and the H key unfold and fold it. */
+function setupKeyCard(state: RunState): void {
   const keysPanel = requireElement('hud-keys');
   const keysToggle = requireElement('hud-keys-toggle');
   const toggleKeyCard = () => {
@@ -262,169 +175,92 @@ async function start(): Promise<void> {
   };
   keysToggle.addEventListener('click', toggleKeyCard);
   onKeyPress('KeyH', () => {
-    if (started && !paused) {
+    if (state.started && !state.paused) {
       toggleKeyCard();
     }
   });
-  // X (or the pause card's Drop test): a drop test (SPEC §9.6 Stage A) from a fresh random
-  // start, to watch a save.
-  const dropTest = () => {
-    game.drop_test(BigInt(Math.floor(Math.random() * 2 ** 32)));
-    // A drop during the respawn wait clears the crash without a Respawn event.
-    stopExplosion(explosion);
-    snapViewToGame(game, frames, view, carPose);
-    resetScreenEffects(effects);
-  };
-  onKeyPress('KeyX', dropTest);
-  // Touch, motion and gamepad: they call the same actions the keys do (ui/input-merge.ts).
-  const extra = startExtraInputs({
-    requestStunt,
-    togglePause,
-    dropTest,
-    cycleWind,
-    toggleAirMode,
-    isPaused: () => paused,
-    isAirborne: () =>
-      started && !lives.over && !hudValues.crashed && hudValues.wheelsTouching === 0,
-  });
-  createTitle(requireElement('title'), requireElement('title-play'), titleWanted(params), () => {
-    started = true;
-    lastRenderMs = performance.now();
-    extra.onPlay();
-  });
-  /**
-   * Reacts to this frame's sim events: a crash starts the explosion where the wreck is
-   * frozen (SPEC §7.9), a respawn ends it and snaps the view to the checkpoint, and
-   * saves and crashes get a toast. The sim decides all of it; the view only follows.
-   * Flying out of bounds is no wreck: no explosion, and the life is given back above.
-   */
-  const reactToEvents = (events: Float32Array, nowMs: number) => {
-    if (hasRealCrash(events)) {
-      startExplosion(explosion, crashPosition);
-    }
-    if (containsEvent(events, EventKind.Respawn)) {
-      stopExplosion(explosion);
-      // Jump straight to the checkpoint: no blending from the crash site, no camera swing.
-      snapViewToGame(game, frames, view, carPose);
-      resetScreenEffects(effects);
-    }
-    applyStuntEvents(stuntQueue, events);
-    expireStunt(stuntQueue, nowMs / 1000);
-    submitPendingStunt(
-      stuntQueue,
-      (code) => !paused && !lives.over && requestStuntInSim(game, code),
-    );
-    const toast = stuntToastForEvents(events) ?? toastForEvents(events);
-    // Nothing covers the game-over screen.
-    if (toast && !lives.over) {
-      showToast(toasts, toast, nowMs);
-    }
-  };
+}
 
-  // the game loop: physics ticks at 120 hz, one render per browser frame
-  // Frozen (paused or the rotate card up) means nothing moves; game over keeps running.
-  const isFrozen = (): boolean => paused || extra.portraitBlocked();
-  startGameLoop(Game.physics_dt_s(), {
-    frozen: isFrozen,
-    tick: () => {
-      if (!started || paused || lives.over || extra.portraitBlocked()) {
-        return;
-      }
-      const tickStartMs = performance.now();
-      frames.previousChassis = frames.latestChassis;
-      frames.previousWheels = frames.latestWheels;
-      game.tick(readMergedFrame());
-      frames.latestChassis = game.chassis_pose();
-      frames.latestWheels = game.wheel_poses();
-      // Remember where the wreck froze, even if it respawns before the next frame.
-      if (game.is_crashed()) {
-        crashPosition.fromArray(frames.latestChassis);
-      }
-      recordTick(perf, performance.now() - tickStartMs);
-    },
-    render: (blend) => {
-      const nowMs = performance.now();
-      const frameS = isFrozen() ? 0 : (nowMs - lastRenderMs) / 1000;
-      lastRenderMs = nowMs;
-      // Events queue up in the sim, so reading them once per frame is enough.
-      // The HUD's save and crash counts update as events drain, so drain first.
-      const events = game.drain_events();
-      fillHudValues(game.hud(), hudValues);
-      // An out-of-bounds crash is a free respawn: give the life back before the hearts draw.
-      grantFreeRespawns(lives, countOutOfBoundsCrashes(events));
-      updateLives(lives, hudValues, nowMs);
-      reactToEvents(events, nowMs);
-
-      // Valve lag already smooths the throttles, so one read per frame is enough.
-      const throttles = game.nozzle_throttles();
-      placeCar(view, frames, blend, carPose);
-      setCarVisible(view, !hudValues.crashed);
-      updateFlames(flames, throttles);
-      followCar(view.camera, carPose, frameS, hudValues.wheelsTouching === 0);
-      if (!reducedMotion) {
-        widenWithSpeed(view.camera, hudValues.speedMS, frameS);
-      }
-      updateExplosion(explosion, frameS);
-      // Shake only this frame's picture, so the camera's smoothing never sees it.
-      view.camera.position.add(cameraShake(explosion, shake));
-      view.renderer.render(view.scene, view.camera);
-      view.camera.position.sub(shake);
-      renderScreenEffects(effects, {
-        gLoad: hudValues.gLoad,
-        peakG: hudValues.peakG,
-        policyOutOfEnvelope: hudValues.policyOutOfEnvelope,
-        approachHintMS: hudValues.approachHintMS,
-        events,
-        windWorldM_S: hudValues.windWorldM_S,
-        crashed: hudValues.crashed,
-        camera: view.camera,
-        carPosition: carPose.position,
-        frameS,
-        nowS: nowMs / 1000,
-      });
-
-      updateHud(hud, hudValues);
-      updateAirGauge(airGauge, hudValues.airFraction, hudValues.unlimitedAir);
-      updateNozzleMap(nozzleDots, throttles);
-      setText(nozzleWho, nozzleWhoText(hudValues.controller));
-      updateSavesCounter(savesCounter, savesThisRun(lives, hudValues));
-      updateZones(zoneTiles, zoneHolds, {
-        thrusterKeyHeld: isNozzleKeyHeld(),
-        anyNozzleFiring: isAnyNozzleFiring(throttles),
-        gLoad: hudValues.crashed ? 1 : hudValues.gLoad,
-        nowMs,
-      });
-      extra.renderFrame(nowMs);
-      updateToasts(toasts, nowMs);
-      showNoAirIfNew(toasts, hudValues.outOfAir, hudValues.airFraction, nowMs);
-      const frameEndMs = performance.now();
-      recordFrame(perf, frameEndMs - nowMs, frameEndMs);
-    },
-  });
-
-  // A small read-only hook so automated tests can see where the car is and how much
-  // simulated time has passed (slow test machines run fewer ticks per real second).
+/** A small read-only hook so automated tests can see the car, the clock and the lives. */
+function installDebugHook(
+  ctx: LoopContext,
+  params: URLSearchParams,
+  courses: CourseControls,
+): void {
+  const { game, world, state, lives } = ctx;
   Object.assign(window, {
     ninelivesDebug: {
       chassisPose: () => Array.from(game.chassis_pose()),
       simTimeS: () => game.hud()[HudField.TimeS] ?? 0,
       controllerCode: () => game.hud()[HudField.Controller] ?? ControllerCode.Off,
-      courseMeshCount: () => course.view?.children.length ?? 0,
+      courseMeshCount: () => world.course.view?.children.length ?? 0,
       checkpointCount: () => game.hud()[HudField.CheckpointCount] ?? 0,
       // Tests start a course of their own (the playground has no piece that needs speed).
       loadCourse: (courseJson: string) => {
-        startCourse(game.load_course(courseJson), courseJson);
+        courses.startCourse(game.load_course(courseJson), courseJson);
       },
-      started: () => started,
-      stuntRequestCount: () => stuntRequests,
+      started: () => state.started,
+      stuntRequestCount: () => state.stuntRequests,
       // where the car mesh and the camera are drawn (not the sim pose)
-      drawnCarPosition: () => plainPoint(view.carBody.position),
-      cameraPosition: () => plainPoint(view.camera.position),
+      drawnCarPosition: () => plainPoint(world.view.carBody.position),
+      cameraPosition: () => plainPoint(world.view.camera.position),
       heartsLeft: () => livesLeft(lives, hudValues),
       // tests only (?testhooks): takes a life as a crash would
       ...(params.has('testhooks') ? { loseLife: () => grantFreeRespawns(lives, -1) } : {}),
     },
   });
+}
+
+/** Builds the world and the HUD parts, then shows the first picture. */
+function setupWorld(game: Game): { world: World; hudParts: HudParts } {
+  const world = createWorld(game);
+  const hudParts = createHudParts(game, world);
+  startKeyboard(window);
+  enableRefractionIfSupported();
+  snapViewToGame(world);
+  return { world, hudParts };
+}
+
+/** The pause, key-card, drop-test and restart controls. Returns what the touch inputs call. */
+function setupControls(
+  game: Game,
+  world: World,
+  state: RunState,
+  lives: LivesState,
+  courses: CourseControls,
+  releaseHeldInputs: () => void,
+): { togglePause: () => void; dropTest: () => void } {
+  setupRestart(game, lives, courses);
+  const togglePause = setupPause(state, lives, releaseHeldInputs);
+  setupKeyCard(state);
+  const dropTest = createDropTest(world);
+  onKeyPress('KeyX', dropTest);
+  return { togglePause, dropTest };
+}
+
+/** Touch, motion and gamepad call the same actions the keys do (ui/input-merge.ts). */
+function startInputs(
+  params: URLSearchParams,
+  state: RunState,
+  lives: LivesState,
+  actions: Pick<
+    GameActions,
+    'requestStunt' | 'togglePause' | 'dropTest' | 'cycleWind' | 'toggleAirMode'
+  >,
+): ExtraInputs {
+  const extra = startExtraInputs({
+    ...actions,
+    isPaused: () => state.paused,
+    isAirborne: () =>
+      state.started && !lives.over && !hudValues.crashed && hudValues.wheelsTouching === 0,
+  });
+  // The title keeps the game's clock still until the player starts (?play skips it).
+  createTitle(requireElement('title'), requireElement('title-play'), titleWanted(params), () => {
+    state.started = true;
+    state.lastRenderMs = performance.now();
+    extra.onPlay();
+  });
+  return extra;
 }
 
 /** Copies a three.js vector into a plain `{x, y, z}` object (for the test hook). */
@@ -436,17 +272,49 @@ function plainPoint(point: { x: number; y: number; z: number }): {
   return { x: point.x, y: point.y, z: point.z };
 }
 
-/** Shows the car exactly where the sim has it, with no blending or camera easing. */
-function snapViewToGame(
-  game: Game,
-  frames: PhysicsFrames,
-  view: GameScene,
-  carPose: BlendedPose,
-): void {
-  frames.previousChassis = frames.latestChassis = game.chassis_pose();
-  frames.previousWheels = frames.latestWheels = game.wheel_poses();
-  placeCar(view, frames, 1, carPose);
-  snapCamera(view.camera, carPose);
+/** Wires the sim, the world, the HUD and every input, then starts the game loop. */
+async function start(): Promise<void> {
+  const game = await createGame();
+  const toggleAirMode = setupAirModeToggle(game);
+  const params = new URLSearchParams(window.location.search);
+  startPolicy(game, params);
+  const perf = createPerfOverlay(requireElement('hud-perf'), performance.now());
+  onKeyPress('F3', () => togglePerfOverlay(perf));
+  const state: RunState = { started: false, paused: false, lastRenderMs: 0, stuntRequests: 0 };
+  const { stuntQueue, requestStunt } = setupStunts(state);
+
+  const { world, hudParts } = setupWorld(game);
+  const cycleWind = setupWind(game, params);
+  const courses = createCourseControls(world, params, playgroundJson);
+  courses.startFreeDrive();
+  const lives = setupLives(game, params);
+  state.lastRenderMs = performance.now();
+  const { togglePause, dropTest } = setupControls(game, world, state, lives, courses, () =>
+    extra.releaseHeld(),
+  );
+  const extra = startInputs(params, state, lives, {
+    requestStunt,
+    togglePause,
+    dropTest,
+    cycleWind,
+    toggleAirMode,
+  });
+  const reducedMotion = prefersReducedMotion();
+  const ctx: LoopContext = {
+    game,
+    world,
+    hudParts,
+    hudValues,
+    lives,
+    state,
+    perf,
+    stuntQueue,
+    extra,
+    reducedMotion,
+  };
+  // the game loop: physics ticks at 120 hz, one render per browser frame
+  startGameLoop(Game.physics_dt_s(), createLoopCallbacks(ctx));
+  installDebugHook(ctx, params, courses);
 }
 
 start().catch((error: unknown) => {

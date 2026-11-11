@@ -198,7 +198,8 @@ function updateHudWidgets(ctx: LoopContext, throttles: Float32Array, nowMs: numb
 function renderFrame(ctx: LoopContext, blend: number): void {
   const { state } = ctx;
   const nowMs = performance.now();
-  const frameS = (nowMs - state.lastRenderMs) / 1000;
+  // Frozen (paused or the rotate card up) means nothing moves, so no time passes for the view.
+  const frameS = isFrozen(ctx) ? 0 : (nowMs - state.lastRenderMs) / 1000;
   state.lastRenderMs = nowMs;
   const events = readSimState(ctx, nowMs);
   // Valve lag already smooths the throttles, so one read per frame is enough.
@@ -210,12 +211,19 @@ function renderFrame(ctx: LoopContext, blend: number): void {
   recordFrame(ctx.perf, frameEndMs - nowMs, frameEndMs);
 }
 
-/** The two callbacks the game loop calls: a physics tick and a rendered frame. */
+/** True while the game is paused or the rotate card covers it; game over keeps running. */
+function isFrozen(ctx: LoopContext): boolean {
+  return ctx.state.paused || ctx.extra.portraitBlocked();
+}
+
+/** The callbacks the game loop calls: a physics tick, a rendered frame and the frozen test. */
 export function createLoopCallbacks(ctx: LoopContext): {
   tick: () => void;
   render: (blend: number) => void;
+  frozen: () => boolean;
 } {
   return {
+    frozen: () => isFrozen(ctx),
     tick: () => tickPhysics(ctx),
     render: (blend) => renderFrame(ctx, blend),
   };
