@@ -209,7 +209,15 @@ impl Default for StuntConfig {
 
 impl StuntConfig {
     /// Every number as (name, value) for the positive check.
-    fn fields(&self) -> [(&'static str, f32); 24] {
+    fn fields(&self) -> Vec<(&'static str, f32)> {
+        let mut all_fields = Vec::new();
+        all_fields.extend(self.rotation_fields());
+        all_fields.extend(self.landing_fields());
+        all_fields
+    }
+
+    /// The coast rates, spin authority, air costs and catch numbers, as (name, value).
+    fn rotation_fields(&self) -> [(&'static str, f32); 12] {
         [
             (
                 "stunt.flip_coast_rate_realistic_rad_s",
@@ -238,6 +246,12 @@ impl StuntConfig {
                 "stunt.complete_rotation_slack_rad",
                 self.complete_rotation_slack_rad,
             ),
+        ]
+    }
+
+    /// The settle margin, landing, forecast, start and timeout numbers, as (name, value).
+    fn landing_fields(&self) -> [(&'static str, f32); 12] {
+        [
             ("stunt.settle_margin_s", self.settle_margin_s),
             (
                 "stunt.landing_max_normal_tilt_deg",
@@ -304,127 +318,182 @@ impl ControllersConfig {
         Ok(config)
     }
 
+    /// Runs every section's check, in the order the sections appear in the file.
     fn check(&self) -> Result<(), ControllersConfigError> {
-        let pd = &self.pd;
-        let allocation = &self.allocation;
-        let fields = [
-            ("pd.kp", pd.kp),
-            ("pd.kd", pd.kd),
-            ("pd.kp_tumble", pd.kp_tumble),
-            ("pd.kd_tumble", pd.kd_tumble),
-            ("pd.tumble_blend_start_deg", pd.tumble_blend_start_deg),
-            ("pd.tumble_blend_end_deg", pd.tumble_blend_end_deg),
-            ("pd.upright_alignment", pd.upright_alignment),
-            ("pd.brake_height_m", pd.brake_height_m),
-            ("pd.brake_safety", pd.brake_safety),
-            ("pd.brake_usable_fraction", pd.brake_usable_fraction),
-            ("pd.brake_margin_m", pd.brake_margin_m),
-            ("pd.brake_speed_m_s", pd.brake_speed_m_s),
-            ("pd.target_descent_m_s", pd.target_descent_m_s),
-            ("pd.kv", pd.kv),
-            ("pd.on_ground_height_m", pd.on_ground_height_m),
-            ("pd.lying_max_fall_speed_m_s", pd.lying_max_fall_speed_m_s),
-            ("pd.ground_roll_gain", pd.ground_roll_gain),
-            ("pd.ground_side_push", pd.ground_side_push),
-            ("pd.kv_lateral", pd.kv_lateral),
-            ("pd.max_angular_accel_rad_s2", pd.max_angular_accel_rad_s2),
-            ("pd.air_yaw_rate_rad_s", pd.air_yaw_rate_rad_s),
-            ("pd.air_pitch_rad", pd.air_pitch_rad),
-            ("pd.air_wish_min_height_m", pd.air_wish_min_height_m),
-            ("pd.quiet_max_tilt_deg", pd.quiet_max_tilt_deg),
-            ("pd.quiet_max_spin_rad_s", pd.quiet_max_spin_rad_s),
-            ("pd.obstacle_margin_m", pd.obstacle_margin_m),
-            ("pd.catch_window_s", pd.catch_window_s),
-            ("pd.hold_deadband_deg", pd.hold_deadband_deg),
-            ("pd.hold_max_spin_rad_s", pd.hold_max_spin_rad_s),
-            ("pd.reserve_safety", pd.reserve_safety),
-            ("pd.reserve_catch_air_kg", pd.reserve_catch_air_kg),
-            ("pd.low_air_floor_kg", pd.low_air_floor_kg),
-            ("pd.edge_pitch_max_rad", pd.edge_pitch_max_rad),
-            ("pd.normal_aim_max_deg", pd.normal_aim_max_deg),
-            ("allocation.force_weight", allocation.force_weight),
-            ("allocation.torque_weight", allocation.torque_weight),
-            ("allocation.regularisation", allocation.regularisation),
-            ("allocation.iterations", allocation.iterations as f32),
-        ];
-        for (field, value) in fields {
-            if !value.is_finite() || value <= 0.0 {
-                return Err(ControllersConfigError::NotPositive { field, value });
-            }
-        }
-        // An alignment is the cosine of a tilt and the others are shares, so each must be
-        // a fraction.
-        let fractions = [
-            ("pd.upright_alignment", pd.upright_alignment),
-            ("pd.brake_usable_fraction", pd.brake_usable_fraction),
-            ("pd.ground_side_push", pd.ground_side_push),
-        ];
-        if pd.tumble_blend_end_deg <= pd.tumble_blend_start_deg {
-            return Err(ControllersConfigError::NotPositive {
-                field: "pd.tumble_blend_end_deg - pd.tumble_blend_start_deg",
-                value: pd.tumble_blend_end_deg - pd.tumble_blend_start_deg,
-            });
-        }
-        let lag_compensation = allocation.lag_compensation;
-        if !(0.0..=1.0).contains(&lag_compensation) {
-            return Err(ControllersConfigError::NotFraction {
-                field: "allocation.lag_compensation",
-                value: lag_compensation,
-            });
-        }
-        for (field, value) in fractions {
-            if value > 1.0 {
-                return Err(ControllersConfigError::NotFraction { field, value });
-            }
-        }
-        for (field, value) in self.stunt.fields() {
-            if !value.is_finite() || value <= 0.0 {
-                return Err(ControllersConfigError::NotPositive { field, value });
-            }
-        }
-        let stunt = &self.stunt;
-        if stunt.landing_max_normal_tilt_deg >= 90.0 {
-            return Err(ControllersConfigError::NotTilt {
-                field: "stunt.landing_max_normal_tilt_deg",
-                value: stunt.landing_max_normal_tilt_deg,
-            });
-        }
-        if stunt.start_max_tilt_deg > 180.0 {
-            return Err(ControllersConfigError::NotTilt {
-                field: "stunt.start_max_tilt_deg",
-                value: stunt.start_max_tilt_deg,
-            });
-        }
-        if stunt.forecast_speed_spread >= 1.0 {
-            return Err(ControllersConfigError::NotFraction {
-                field: "stunt.forecast_speed_spread",
-                value: stunt.forecast_speed_spread,
-            });
-        }
-        if stunt.complete_rotation_slack_rad >= std::f32::consts::PI {
-            return Err(ControllersConfigError::NotFraction {
-                field: "stunt.complete_rotation_slack_rad",
-                value: stunt.complete_rotation_slack_rad,
-            });
-        }
-        if let Some(value) = self.hybrid.enter_tilt_deg
-            && !(value > 0.0 && value <= 180.0)
-        {
-            return Err(ControllersConfigError::NotTilt {
-                field: "hybrid.enter_tilt_deg",
-                value,
-            });
-        }
-        if let Some(value) = self.hybrid.policy_max_speed_m_s
-            && !(value.is_finite() && value > 0.0)
-        {
-            return Err(ControllersConfigError::NotPositive {
-                field: "hybrid.policy_max_speed_m_s",
-                value,
-            });
-        }
+        check_pd_and_allocation_positive(&self.pd, &self.allocation)?;
+        check_tumble_blend(&self.pd)?;
+        check_lag_compensation(&self.allocation)?;
+        check_pd_fractions(&self.pd)?;
+        check_stunt(&self.stunt)?;
+        check_hybrid(&self.hybrid)?;
         Ok(())
     }
+}
+
+/// Refuses a number that is not finite and above 0, naming the field.
+fn check_positive(fields: &[(&'static str, f32)]) -> Result<(), ControllersConfigError> {
+    for &(field, value) in fields {
+        if !value.is_finite() || value <= 0.0 {
+            return Err(ControllersConfigError::NotPositive { field, value });
+        }
+    }
+    Ok(())
+}
+
+/// Every `[pd]` and `[allocation]` number must be positive.
+fn check_pd_and_allocation_positive(
+    pd: &PdConfig,
+    allocation: &AllocationConfig,
+) -> Result<(), ControllersConfigError> {
+    check_pd_gains_and_braking_positive(pd)?;
+    check_pd_air_and_hold_positive(pd)?;
+    check_allocation_positive(allocation)
+}
+
+/// The `[pd]` gains, tumble blend, braking and ground numbers must be positive.
+fn check_pd_gains_and_braking_positive(pd: &PdConfig) -> Result<(), ControllersConfigError> {
+    check_positive(&[
+        ("pd.kp", pd.kp),
+        ("pd.kd", pd.kd),
+        ("pd.kp_tumble", pd.kp_tumble),
+        ("pd.kd_tumble", pd.kd_tumble),
+        ("pd.tumble_blend_start_deg", pd.tumble_blend_start_deg),
+        ("pd.tumble_blend_end_deg", pd.tumble_blend_end_deg),
+        ("pd.upright_alignment", pd.upright_alignment),
+        ("pd.brake_height_m", pd.brake_height_m),
+        ("pd.brake_safety", pd.brake_safety),
+        ("pd.brake_usable_fraction", pd.brake_usable_fraction),
+        ("pd.brake_margin_m", pd.brake_margin_m),
+        ("pd.brake_speed_m_s", pd.brake_speed_m_s),
+        ("pd.target_descent_m_s", pd.target_descent_m_s),
+        ("pd.kv", pd.kv),
+        ("pd.on_ground_height_m", pd.on_ground_height_m),
+        ("pd.lying_max_fall_speed_m_s", pd.lying_max_fall_speed_m_s),
+        ("pd.ground_roll_gain", pd.ground_roll_gain),
+        ("pd.ground_side_push", pd.ground_side_push),
+        ("pd.kv_lateral", pd.kv_lateral),
+    ])
+}
+
+/// The `[pd]` air, quiet, hold, reserve and aim numbers must be positive.
+fn check_pd_air_and_hold_positive(pd: &PdConfig) -> Result<(), ControllersConfigError> {
+    check_positive(&[
+        ("pd.max_angular_accel_rad_s2", pd.max_angular_accel_rad_s2),
+        ("pd.air_yaw_rate_rad_s", pd.air_yaw_rate_rad_s),
+        ("pd.air_pitch_rad", pd.air_pitch_rad),
+        ("pd.air_wish_min_height_m", pd.air_wish_min_height_m),
+        ("pd.quiet_max_tilt_deg", pd.quiet_max_tilt_deg),
+        ("pd.quiet_max_spin_rad_s", pd.quiet_max_spin_rad_s),
+        ("pd.obstacle_margin_m", pd.obstacle_margin_m),
+        ("pd.catch_window_s", pd.catch_window_s),
+        ("pd.hold_deadband_deg", pd.hold_deadband_deg),
+        ("pd.hold_max_spin_rad_s", pd.hold_max_spin_rad_s),
+        ("pd.reserve_safety", pd.reserve_safety),
+        ("pd.reserve_catch_air_kg", pd.reserve_catch_air_kg),
+        ("pd.low_air_floor_kg", pd.low_air_floor_kg),
+        ("pd.edge_pitch_max_rad", pd.edge_pitch_max_rad),
+        ("pd.normal_aim_max_deg", pd.normal_aim_max_deg),
+    ])
+}
+
+/// The `[allocation]` weights, regularisation and iteration count must be positive.
+fn check_allocation_positive(allocation: &AllocationConfig) -> Result<(), ControllersConfigError> {
+    check_positive(&[
+        ("allocation.force_weight", allocation.force_weight),
+        ("allocation.torque_weight", allocation.torque_weight),
+        ("allocation.regularisation", allocation.regularisation),
+        ("allocation.iterations", allocation.iterations as f32),
+    ])
+}
+
+/// The tumble blend must end above where it starts.
+fn check_tumble_blend(pd: &PdConfig) -> Result<(), ControllersConfigError> {
+    if pd.tumble_blend_end_deg <= pd.tumble_blend_start_deg {
+        return Err(ControllersConfigError::NotPositive {
+            field: "pd.tumble_blend_end_deg - pd.tumble_blend_start_deg",
+            value: pd.tumble_blend_end_deg - pd.tumble_blend_start_deg,
+        });
+    }
+    Ok(())
+}
+
+/// The lag compensation is a share, so it must be between 0 and 1.
+fn check_lag_compensation(allocation: &AllocationConfig) -> Result<(), ControllersConfigError> {
+    let lag_compensation = allocation.lag_compensation;
+    if !(0.0..=1.0).contains(&lag_compensation) {
+        return Err(ControllersConfigError::NotFraction {
+            field: "allocation.lag_compensation",
+            value: lag_compensation,
+        });
+    }
+    Ok(())
+}
+
+/// An alignment is the cosine of a tilt and the others are shares, so each must be a
+/// fraction (already known to be positive).
+fn check_pd_fractions(pd: &PdConfig) -> Result<(), ControllersConfigError> {
+    let fractions = [
+        ("pd.upright_alignment", pd.upright_alignment),
+        ("pd.brake_usable_fraction", pd.brake_usable_fraction),
+        ("pd.ground_side_push", pd.ground_side_push),
+    ];
+    for (field, value) in fractions {
+        if value > 1.0 {
+            return Err(ControllersConfigError::NotFraction { field, value });
+        }
+    }
+    Ok(())
+}
+
+/// Every `[stunt]` number must be positive, then the angles and spreads must be in range.
+fn check_stunt(stunt: &StuntConfig) -> Result<(), ControllersConfigError> {
+    check_positive(&stunt.fields())?;
+    if stunt.landing_max_normal_tilt_deg >= 90.0 {
+        return Err(ControllersConfigError::NotTilt {
+            field: "stunt.landing_max_normal_tilt_deg",
+            value: stunt.landing_max_normal_tilt_deg,
+        });
+    }
+    if stunt.start_max_tilt_deg > 180.0 {
+        return Err(ControllersConfigError::NotTilt {
+            field: "stunt.start_max_tilt_deg",
+            value: stunt.start_max_tilt_deg,
+        });
+    }
+    if stunt.forecast_speed_spread >= 1.0 {
+        return Err(ControllersConfigError::NotFraction {
+            field: "stunt.forecast_speed_spread",
+            value: stunt.forecast_speed_spread,
+        });
+    }
+    if stunt.complete_rotation_slack_rad >= std::f32::consts::PI {
+        return Err(ControllersConfigError::NotFraction {
+            field: "stunt.complete_rotation_slack_rad",
+            value: stunt.complete_rotation_slack_rad,
+        });
+    }
+    Ok(())
+}
+
+/// The optional `[hybrid]` numbers, when set, must be in range.
+fn check_hybrid(hybrid: &HybridConfig) -> Result<(), ControllersConfigError> {
+    if let Some(value) = hybrid.enter_tilt_deg
+        && !(value > 0.0 && value <= 180.0)
+    {
+        return Err(ControllersConfigError::NotTilt {
+            field: "hybrid.enter_tilt_deg",
+            value,
+        });
+    }
+    if let Some(value) = hybrid.policy_max_speed_m_s
+        && !(value.is_finite() && value > 0.0)
+    {
+        return Err(ControllersConfigError::NotPositive {
+            field: "hybrid.policy_max_speed_m_s",
+            value,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
