@@ -56,7 +56,9 @@
   --track-2: 0.1em;
   --tile-border: 1px;
   --edge: 16px;
-  --radius-panel: 18px;
+  --radius-panel: 8px;
+  --radius-control: 6px; /* card and pause-menu buttons */
+  --radius-pill: 999px; /* bar tracks */
   /* how much ink shows through a glass panel, 0 (clear) to 1 (opaque) */
   --glass-tint: 0.35;
 }
