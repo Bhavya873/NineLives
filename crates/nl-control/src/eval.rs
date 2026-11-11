@@ -147,36 +147,58 @@ impl LandingSamples {
     }
 }
 
-/// Summarises many episodes.
-pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
-    let mut spins = Vec::new();
-    let mut falls = Vec::new();
-    let mut landings = LandingSamples::default();
-    let mut successes = 0;
-    let mut saved = 0;
-    let mut crashed = 0;
-    let mut inverted = 0;
-    let mut total_saves = 0;
-    let mut total_air_kg = 0.0;
+/// Counts and touchdown samples gathered over many episodes, before they become rates and
+/// percentiles.
+#[derive(Default)]
+struct EpisodeTally {
+    spins: Vec<f32>,
+    falls: Vec<f32>,
+    successes: usize,
+    saved: usize,
+    crashed: usize,
+    inverted: usize,
+    total_saves: u32,
+    total_air_kg: f32,
+}
+
+/// Walks `results` once, filling an [`EpisodeTally`] and the landing `samples`.
+fn tally_episodes(results: &[EpisodeResult], landings: &mut LandingSamples) -> EpisodeTally {
+    let mut tally = EpisodeTally::default();
     for result in results {
         landings.add(result);
         if result.success {
-            successes += 1;
+            tally.successes += 1;
         }
         if result.saves > 0 {
-            saved += 1;
+            tally.saved += 1;
         }
         if result.crash_cause.is_some() {
-            crashed += 1;
+            tally.crashed += 1;
         }
         if result.peak_tilt_deg > INVERTED_TILT_DEG {
-            inverted += 1;
+            tally.inverted += 1;
         }
-        spins.extend(result.touchdown_spin_rad_s);
-        falls.extend(result.touchdown_fall_m_s);
-        total_saves += result.saves;
-        total_air_kg += result.air_used_in_saves_kg;
+        tally.spins.extend(result.touchdown_spin_rad_s);
+        tally.falls.extend(result.touchdown_fall_m_s);
+        tally.total_saves += result.saves;
+        tally.total_air_kg += result.air_used_in_saves_kg;
     }
+    tally
+}
+
+/// Summarises many episodes.
+pub fn summarise(results: &[EpisodeResult]) -> EvalSummary {
+    let mut landings = LandingSamples::default();
+    let EpisodeTally {
+        mut spins,
+        mut falls,
+        successes,
+        saved,
+        crashed,
+        inverted,
+        total_saves,
+        total_air_kg,
+    } = tally_episodes(results, &mut landings);
     let episodes = results.len();
     let rate = |count: usize| count as f32 / episodes.max(1) as f32;
     EvalSummary {
