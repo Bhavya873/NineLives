@@ -119,7 +119,8 @@ def main(argv: list[str] | None = None) -> None:
         args.dr,
         not args.keep_mode,
     )
-    log.info(json.dumps(report["summary"], indent=2))
+    # the result goes to stdout
+    print(json.dumps(report["summary"], indent=2))
     log.info(f"wrote {write_report(report, args.out)}")
 
 
