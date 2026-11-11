@@ -1,6 +1,6 @@
 # Speed survival and drive research (R2)
 
-Research stream R2 of the stunts/speed/viewer plan (`docs/plans/2026-10-27-stunts-speed-viewer.md`). No gameplay change: it measures, and proposes values for G2 (`claude/roadster-drive`, `claude/fearless-pieces`). All numbers come from the tools in this PR and can be reproduced with the commands below. Results: `results/baseline_2026-10/speed_sweep.{json,csv}` (the G1 baseline under today's physics) and `results/speed_sweep_drive_candidate.{json,csv}` (removed in the repo cleanup; the numbers below stay, and the command at the end recreates it).
+Research stream R2 of the stunts/speed/viewer plan (`docs/plans/2026-10-27-stunts-speed-viewer.md`). No gameplay change: it measures, and proposes values for G2 (`roadster-drive`, `fearless-pieces`). All numbers come from the tools in this PR and can be reproduced with the commands below. Results: `results/baseline_2026-10/speed_sweep.{json,csv}` (the G1 baseline under today's physics) and `results/speed_sweep_drive_candidate.{json,csv}` (removed in the repo cleanup; the numbers below stay, and the command at the end recreates it).
 
 ## 1. Drive values (R2a)
 

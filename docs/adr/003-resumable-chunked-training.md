@@ -26,7 +26,7 @@ Training runs in a cloud container with 4 CPU cores and no GPU. A single backgro
 | Speed | Limited by 4 cores (estimate 3k–10k steps/s) |
 
 ### B: One long run on the owner's machine
-**Pros:** no chunking needed; possibly more cores. **Cons:** depends on the owner's time and machine; harder for Claude to inspect. Kept as the fallback.
+**Pros:** no chunking needed; possibly more cores. **Cons:** depends on the owner's time and machine; harder to inspect. Kept as the fallback.
 
 ### C: A rented cloud VM or GPU service
 **Pros:** more cores. **Cons:** costs money and needs credentials; a GPU doesn't help this workload. Not needed for now.

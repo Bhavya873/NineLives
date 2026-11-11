@@ -1,7 +1,7 @@
 //! Domain randomization (SPEC §9.8): every training episode gets its own car and world,
 //! drawn from the ranges in `[randomization]` of scenarios.toml, so the policy cannot
 //! overfit one exact car. Draws come from the episode seed on a ChaCha8 stream of their
-//! own, so an episode seed always gives the same variation (CLAUDE.md rule 2). The
+//! own, so an episode seed always gives the same variation (CONTRIBUTING.md rule 2). The
 //! `Episode` applies a variation: car, mode, ground and wind at the start, then
 //! actuation latency and observation noise while it runs.
 
@@ -231,6 +231,6 @@ pub(crate) fn gaussian(rng: &mut ChaCha8Rng) -> f32 {
     // 1 − u keeps the logarithm's argument in (0, 1].
     let u1: f32 = 1.0 - rng.random_range(0.0..1.0);
     let u2: f32 = rng.random_range(0.0..1.0);
-    // libm keeps the noise bit-identical on every platform (CLAUDE.md rule 2).
+    // libm keeps the noise bit-identical on every platform (CONTRIBUTING.md rule 2).
     (-2.0 * libm::logf(u1)).sqrt() * libm::cosf(std::f32::consts::TAU * u2)
 }

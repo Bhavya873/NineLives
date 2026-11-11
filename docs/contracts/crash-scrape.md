@@ -1,6 +1,6 @@
 # Contract: scrape or crash (crash-rule safeguards)
 
-Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.3). Built in G2 (`claude/fearless-pieces`).
+Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.3). Built in G2 (`fearless-pieces`).
 
 ## Why
 At high speed the car's underbody touches ramps and crests. A gentle touch like that should not cost a life. But the rule must not be loosened so far that real crashes stop counting.

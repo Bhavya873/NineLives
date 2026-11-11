@@ -4,7 +4,7 @@ Evaluation of the r5 policy (`models/policy.json`, run `flight-r5`, 60M-step "be
 
 ## What the files are
 
-Each `seeds_<first seed>/` folder is one block of 1000 episodes per cell, seeds `first seed` to `first seed + 999`, run with the Rust eval (`cargo run --release -p nl-control --example eval`), Hybrid with the 120 degree hand-over, Stages A to F, both modes, on the code of `claude/night` before the promotion. Files:
+Each `seeds_<first seed>/` folder is one block of 1000 episodes per cell, seeds `first seed` to `first seed + 999`, run with the Rust eval (`cargo run --release -p nl-control --example eval`), Hybrid with the 120 degree hand-over, Stages A to F, both modes, on the code of `night` before the promotion. Files:
 
 - `old.json`: the R4 policy (`policy_hash` 40d054618d409972), the shipped policy before this change.
 - `r5.json`: the r5 best checkpoint (`policy_hash` 5c325d425e7b3f90), the shipped policy now.

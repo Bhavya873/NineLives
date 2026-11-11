@@ -1,6 +1,6 @@
 # Contract: stunt state machine and nozzle ownership
 
-Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.5). Built in G4 (`claude/stunt-forecast`, `claude/stunt-keys`, `claude/stunt-integrate`). The phase list below is as built: R1's braking budget added a `Brake` phase.
+Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.5). Built in G4 (`stunt-forecast`, `stunt-keys`, `stunt-integrate`). The phase list below is as built: R1's braking budget added a `Brake` phase.
 
 ## Phases
 ```text

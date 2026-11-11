@@ -114,13 +114,13 @@ G0 Contracts ──► G1 Baseline ──► G2 Drive+geometry+crash rules ─�
 - Sim-affecting PRs re-record the golden trace with a reviewed diff.
 - One **final authoritative re-record** happens at G5 after the last sim change.
 
-### G0 `claude/contracts`
+### G0 `contracts`
 - Commit this plan.
 - `docs/contracts/` holds §1.1–1.7.
 - Add the reserved enum comment in `crates/nl-wasm/src/lib.rs`.
 - Add empty config stubs: `approach.toml`, `pieces.json` fields, `[stunt]`.
 
-### G1 `claude/baseline`
+### G1 `baseline`
 - Under current physics, record:
   - the PD/Hybrid evals A–F (both modes, plain and `--dr`);
   - the speed sweep;
@@ -128,7 +128,7 @@ G0 Contracts ──► G1 Baseline ──► G2 Drive+geometry+crash rules ─�
 - **Every eval artifact gets** `physics_hash` (hash of vehicle/modes/pieces/approach configs), `controller_config_hash`, `policy_hash` and the git SHA. This goes in `python/ninelives/eval.py` and the nl-control eval example.
 - Results go to `results/baseline_2026-10/`. Historical results stay separate from new-physics results.
 
-### R1 `claude/research-stunts` (alongside G0/G1)
+### R1 `research-stunts` (alongside G0/G1)
 - **Survey** in `docs/research/stunt-planning.md`:
   - quadrotor multi-flip primitives (Lupashin and D'Andrea);
   - minimum-time bang-bang attitude moves;
@@ -142,23 +142,23 @@ G0 Contracts ──► G1 Baseline ──► G2 Drive+geometry+crash rules ─�
   - airtime per playground ramp.
 - **Output:** the `[stunt]` defaults.
 
-### R2 `claude/research-speed` (alongside G0/G1)
+### R2 `research-speed` (alongside G0/G1)
 - **(a) Drive values** for 0–100 km/h in 2.0 s and 103 m/s: engine force, power and longitudinal grip. Check that steering and lateral grip stay usable at 100 m/s.
 - **(b) Bump-stop design and the measured `n_max`.**
 - **(c) Per-piece speed sweep and cause table** in `docs/research/speed-survival.md`.
 
-### A1 `claude/g-peak-sim` (any time after G0)
+### A1 `g-peak-sim` (any time after G0)
 - `EventTracker` keeps the raw peak g per §1.7, and Save carries `peak_g`.
 - HudField 23.
 - Events go to 5 floats.
 
-### D1 `claude/viewer-hybrid-stages` (any time after G0)
+### D1 `viewer-hybrid-stages` (any time after G0)
 - `crowd.rs` flies through `build_controller("hybrid", …)`.
 - `Crowd::for_stage` covers A, D, F, the gauntlet and the arena.
 - `episode::course_for_stage()` lets the web draw generated courses.
 - Pull the arena obstacles into the drop zone.
 
-### G2 `claude/roadster-drive` and `claude/fearless-pieces` (two PRs, after G1 and R2)
+### G2 `roadster-drive` and `fearless-pieces` (two PRs, after G1 and R2)
 **Drive**
 - `[drive]` values from R2a, with `max_speed_m_s = 103`.
 - Rapier **CCD** on the chassis.
@@ -176,12 +176,12 @@ G0 Contracts ──► G1 Baseline ──► G2 Drive+geometry+crash rules ─�
 - Energy check: the rebound energy is ≤ the compression energy over a drop test.
 - Stability check: no oscillation growth over 10 s of bump-strip driving at 55 m/s.
 
-### G3 `claude/pd-retune-new-physics`
+### G3 `pd-retune-new-physics`
 - Re-tune PD with the CMA-ES tuner under the new physics, using the earlier adoption rule.
 - Regenerate `results/eval_*` with hashes.
 - **Policy envelope:** `PolicyOutOfEnvelope` is set when speed > 55 m/s (policy-validated) or other obs clamp. Then Hybrid falls back to PD, unless the Hybrid has been validated in that region. Validation means running the Hybrid eval there and logging the result.
 
-### G4 `claude/stunt-forecast`, `claude/stunt-planner` and `claude/stunt-keys`
+### G4 `stunt-forecast`, `stunt-planner` and `stunt-keys`
 - **Landing forecast:** `World::forecast_landing()` returns touchdown time, point, **surface normal**, **usable landing length** (the distance of flat-enough, obstacle-free surface around the point) and **uncertainty**. The uncertainty is a time and position spread from ±2% speed and ±1° pitch samples.
 - **Planner authorizes only if all of these hold:**
   1. the landing surface normal is within 15° of up and the usable length is ≥ 2 car lengths;
@@ -195,7 +195,7 @@ G0 Contracts ──► G1 Baseline ──► G2 Drive+geometry+crash rules ─�
   - a queued request expires after 3 s;
   - toasts: "Back flip! max 3.8 g", "Not enough air time", "Landing blocked".
 
-### G5 `claude/g-meter-web`, `claude/approach-hud` and `claude/viewer-curve-ui`, then the final golden trace
+### G5 `g-meter-web`, `approach-hud` and `viewer-curve-ui`, then the final golden trace
 **G-meter web**
 - Delete the blackout, and add `g-meter.ts` and `g-record.ts`.
 

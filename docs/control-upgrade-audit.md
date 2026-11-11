@@ -3,7 +3,7 @@
 What the thruster controller sees and drives today. This is the first step of the
 "Targeted Control Improvements" brief: every later change is checked against this map and
 the legacy PD baseline in `results/control_upgrade/`. It describes the code at branch
-`claude/control-audit` (based on the realistic-drive commit `6d91dfb`). Paths are from the
+`control-audit` (based on the realistic-drive commit `6d91dfb`). Paths are from the
 repo root; symbols are `file::item`.
 
 ## Conventions
@@ -115,7 +115,7 @@ The order matters for any predictor, so here it is exactly:
    `principal_inertia()`, which Rapier lists in its own principal-axis order:
    `[850, 2900, 3250]`. So PD's attitude torque uses 3250 for pitch (12% too much) and 2900
    for yaw (11% too little). Found by `tests/actuator_model.rs`, which measures the car's
-   real spin-up. **Fixed on `claude/pd-model-fix`**, together with finding 1 (torques now
+   real spin-up. **Fixed on `pd-model-fix`**, together with finding 1 (torques now
    about the true centre of mass), and PD's gains retuned for the corrected model
    (`results/control_upgrade/2026-10-26-pd-model-fix/`).
 

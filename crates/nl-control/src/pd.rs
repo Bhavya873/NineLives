@@ -227,7 +227,7 @@ impl Pd {
     /// straight-line blend between.
     pub fn attitude_gains(&self, state: &CarState) -> (f32, f32) {
         let config = &self.config;
-        // libm keeps the angle identical on every platform (CLAUDE.md rule 2).
+        // libm keeps the angle identical on every platform (CONTRIBUTING.md rule 2).
         let tilt_deg = libm::acosf(state.up_alignment().clamp(-1.0, 1.0)).to_degrees();
         let band_deg = config.tumble_blend_end_deg - config.tumble_blend_start_deg;
         let share = ((tilt_deg - config.tumble_blend_start_deg) / band_deg).clamp(0.0, 1.0);

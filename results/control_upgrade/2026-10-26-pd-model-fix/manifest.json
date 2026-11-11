@@ -290,6 +290,6 @@
    }
   }
  },
- "git_branch": "claude/pd-model-fix",
+ "git_branch": "pd-model-fix",
  "build_target": "native release, aarch64-apple-darwin"
 }

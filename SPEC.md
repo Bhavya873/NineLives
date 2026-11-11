@@ -8,7 +8,7 @@ Status: v1 spec, ready to build · Owner: Bhavya Modi · Last updated: 2026-10-1
 
 ## 0. How to use this document
 
-- This is the source of truth for **what** to build. `CLAUDE.md` holds the working rules for **how** to build it.
+- This is the source of truth for **what** to build. `CONTRIBUTING.md` holds the working rules for **how** to build it.
 - Build milestone by milestone (section 13). Each milestone has acceptance criteria; a milestone is done only when all of them pass.
 - Numbers marked *(start)* are starting values to tune, not requirements. Numbers marked *(req)* are requirements.
 - When a decision here turns out wrong, change this file and add one line to `docs/DECISIONS.md` (date, decision, why).
@@ -108,7 +108,7 @@ On 2026-10-15 Tesla revealed a Roadster with a SpaceX-developed package of 10 co
 
 ```
 ninelives/
-├── CLAUDE.md
+├── CONTRIBUTING.md
 ├── SPEC.md
 ├── Cargo.toml                 # workspace
 ├── rust-toolchain.toml        # stable, with wasm32-unknown-unknown target

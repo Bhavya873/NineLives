@@ -164,7 +164,7 @@ pub struct World {
     finish_time_s: Option<f32>,
     /// The wind and its gusts (SPEC §7.2), on a seeded stream of their own.
     wind: Wind,
-    /// The sim's random generator for Chaos (CLAUDE.md golden rule 2).
+    /// The sim's random generator for Chaos (CONTRIBUTING.md golden rule 2).
     rng: ChaCha8Rng,
     step_count: u64,
 }

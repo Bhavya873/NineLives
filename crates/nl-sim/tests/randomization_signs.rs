@@ -1,5 +1,5 @@
 //! Sign tests for the domain-randomization physics (SPEC §9.8), written before the code
-//! (CLAUDE.md golden rule 5): wind pushes the car the way it blows, and a centre of mass
+//! (CONTRIBUTING.md golden rule 5): wind pushes the car the way it blows, and a centre of mass
 //! moved forward makes equal lift pitch the nose down.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.

@@ -12,7 +12,7 @@ use nl_sim::vehicle_config::VehicleConfig;
 use crate::config::{ControllersConfig, ControllersConfigError};
 use crate::{Ai, ControlCtx, Controller, Hybrid, HybridGateSettings, Manual, Off, Pd};
 
-/// Every controller there is. A plain enum rather than trait objects (CLAUDE.md: plain
+/// Every controller there is. A plain enum rather than trait objects (CONTRIBUTING.md: plain
 /// constructs). Each variant holds its controller, so controllers that keep state
 /// between control steps (PD's warm start) keep it.
 #[derive(Debug, Clone, PartialEq)]
