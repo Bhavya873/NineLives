@@ -288,14 +288,15 @@ fn alpha_for(config: &StuntConfig, kind: StuntKind, state: &CarState) -> f32 {
 
 /// The spin the car coasts at. One turn uses the configured rate; several turns may go as
 /// fast as the fastest configured rate, which shortens a long coast, as long as spin-up and
-/// brake still fit in the turns (w² <= turns·2·pi·alpha + end²/2).
+/// brake still fit in the turns (coast² <= turns·2·pi·angular_accel + end²/2, with the
+/// coast and end rates in rad/s and the acceleration in rad/s²).
 fn coast_rate_for(
     config: &StuntConfig,
     kind: StuntKind,
     mode: StuntMode,
-    alpha: f32,
+    angular_accel_rad_s2: f32,
     turns: u8,
-    end_rate: f32,
+    end_rate_rad_s: f32,
 ) -> f32 {
     let configured = match (kind.is_flip(), mode) {
         (true, StuntMode::Realistic) => config.flip_coast_rate_realistic_rad_s,
@@ -303,7 +304,9 @@ fn coast_rate_for(
         (true, StuntMode::Arcade) => config.flip_coast_rate_arcade_rad_s,
         (false, StuntMode::Arcade) => config.barrel_coast_rate_arcade_rad_s,
     };
-    let fits = (f32::from(turns.max(1)) * TAU * alpha + 0.5 * end_rate.powi(2)).sqrt();
+    let fits = (f32::from(turns.max(1)) * TAU * angular_accel_rad_s2
+        + 0.5 * end_rate_rad_s.powi(2))
+    .sqrt();
     if turns > 1 {
         let fastest = config
             .flip_coast_rate_realistic_rad_s
@@ -358,24 +361,26 @@ struct SegmentTimes {
     brake_s: f32,
 }
 
-/// The remaining times of a segment that is at `rate` with `rotation` turned so far,
-/// before it has started braking (spin-up and coast), aiming for `omega`.
+/// The remaining times of a segment that is spinning at `spin_rate_rad_s` with
+/// `rotation_rad` turned so far, before it has started braking (spin-up and coast),
+/// aiming for `coast_rate_rad_s`.
 fn times_to_go(
     segment: Segment,
-    omega: f32,
-    alpha: f32,
-    end_rate: f32,
-    rate: f32,
-    rotation: f32,
+    coast_rate_rad_s: f32,
+    angular_accel_rad_s2: f32,
+    end_rate_rad_s: f32,
+    spin_rate_rad_s: f32,
+    rotation_rad: f32,
 ) -> SegmentTimes {
     let target = f32::from(segment.turns) * TAU;
-    let up_s = (omega - rate).max(0.0) / alpha;
-    let turned = ramp_angle(rate, omega, alpha) + ramp_angle(end_rate, omega, alpha);
-    let coast_s = (target - rotation - turned).max(0.0) / omega;
+    let up_s = (coast_rate_rad_s - spin_rate_rad_s).max(0.0) / angular_accel_rad_s2;
+    let turned = ramp_angle(spin_rate_rad_s, coast_rate_rad_s, angular_accel_rad_s2)
+        + ramp_angle(end_rate_rad_s, coast_rate_rad_s, angular_accel_rad_s2);
+    let coast_s = (target - rotation_rad - turned).max(0.0) / coast_rate_rad_s;
     SegmentTimes {
         up_s,
         coast_s,
-        brake_s: (omega - end_rate).max(0.0) / alpha,
+        brake_s: (coast_rate_rad_s - end_rate_rad_s).max(0.0) / angular_accel_rad_s2,
     }
 }
 
@@ -385,9 +390,10 @@ struct Cost {
     air_kg: f32,
 }
 
-/// Cost of `segments` from segment `index`, which is in `phase` at `rate` with `rotation`
-/// turned and coasting at `omega`; the later segments start from rest. Excludes the catch,
-/// the margin and the landing reserve.
+/// Cost of `segments` from segment `index`, which is in `phase` spinning at
+/// `spin_rate_rad_s` with `rotation_rad` turned and coasting at `coast_rate_rad_s`; the
+/// later segments start from rest. Excludes the catch, the margin and the landing
+/// reserve.
 #[allow(clippy::too_many_arguments)]
 fn remaining_cost(
     config: &StuntConfig,
@@ -395,9 +401,9 @@ fn remaining_cost(
     segments: &[Segment],
     index: usize,
     phase: StuntPhase,
-    rate: f32,
-    rotation: f32,
-    omega: f32,
+    spin_rate_rad_s: f32,
+    rotation_rad: f32,
+    coast_rate_rad_s: f32,
 ) -> Cost {
     let mut cost = Cost {
         time_s: 0.0,
@@ -405,48 +411,73 @@ fn remaining_cost(
     };
     for (i, &segment) in segments.iter().enumerate().skip(index) {
         let last = i + 1 == segments.len();
-        let end_rate = end_rate_for(config, last);
-        let alpha = alpha_for(config, segment.kind, &inputs.state);
+        let end_rate_rad_s = end_rate_for(config, last);
+        let angular_accel_rad_s2 = alpha_for(config, segment.kind, &inputs.state);
         let air_rate = air_rate_for(config, segment.kind);
         if i == index {
             let target = f32::from(segment.turns) * TAU;
-            let brake_s = (rate.max(end_rate) - end_rate) / alpha;
+            let brake_s =
+                (spin_rate_rad_s.max(end_rate_rad_s) - end_rate_rad_s) / angular_accel_rad_s2;
             let (time_s, firing_s) = match phase {
                 // Past the point of braking the rotation is what it is.
                 StuntPhase::Brake => (brake_s, brake_s),
                 StuntPhase::Coast => {
-                    let to_turn = (target - rotation - ramp_angle(end_rate, rate, alpha)).max(0.0);
-                    let firing_s =
-                        (omega - rate).max(0.0) / alpha + (omega - end_rate).max(0.0) / alpha;
-                    (to_turn / rate.max(0.1) + brake_s, firing_s)
+                    let to_turn = (target
+                        - rotation_rad
+                        - ramp_angle(end_rate_rad_s, spin_rate_rad_s, angular_accel_rad_s2))
+                    .max(0.0);
+                    let firing_s = (coast_rate_rad_s - spin_rate_rad_s).max(0.0)
+                        / angular_accel_rad_s2
+                        + (coast_rate_rad_s - end_rate_rad_s).max(0.0) / angular_accel_rad_s2;
+                    (to_turn / spin_rate_rad_s.max(0.1) + brake_s, firing_s)
                 }
                 _ => {
-                    let t = times_to_go(segment, omega, alpha, end_rate, rate, rotation);
-                    (t.up_s + t.coast_s + t.brake_s, t.up_s + t.brake_s)
+                    let times = times_to_go(
+                        segment,
+                        coast_rate_rad_s,
+                        angular_accel_rad_s2,
+                        end_rate_rad_s,
+                        spin_rate_rad_s,
+                        rotation_rad,
+                    );
+                    (
+                        times.up_s + times.coast_s + times.brake_s,
+                        times.up_s + times.brake_s,
+                    )
                 }
             };
             cost.time_s += time_s;
             cost.air_kg += air_rate * firing_s;
         } else {
-            let omega = coast_rate_for(
+            let coast_rate_rad_s = coast_rate_for(
                 config,
                 segment.kind,
                 inputs.mode,
-                alpha,
+                angular_accel_rad_s2,
                 segment.turns,
-                end_rate,
+                end_rate_rad_s,
             );
-            let t = times_to_go(segment, omega, alpha, end_rate, 0.0, 0.0);
-            cost.time_s += t.up_s + t.coast_s + t.brake_s;
-            cost.air_kg += air_rate * (t.up_s + t.brake_s);
+            let times = times_to_go(
+                segment,
+                coast_rate_rad_s,
+                angular_accel_rad_s2,
+                end_rate_rad_s,
+                0.0,
+                0.0,
+            );
+            cost.time_s += times.up_s + times.coast_s + times.brake_s;
+            cost.air_kg += air_rate * (times.up_s + times.brake_s);
         }
     }
     cost
 }
 
-/// Angle of spin-up from rest (or from `from` rad/s) to `to` rad/s at `alpha`.
-fn ramp_angle(from: f32, to: f32, alpha: f32) -> f32 {
-    ((to * to - from * from) / (2.0 * alpha)).max(0.0)
+/// Angle turned, in rad, while the spin rate changes from `from_rate_rad_s` to
+/// `to_rate_rad_s` at `angular_accel_rad_s2`.
+fn ramp_angle(from_rate_rad_s: f32, to_rate_rad_s: f32, angular_accel_rad_s2: f32) -> f32 {
+    ((to_rate_rad_s * to_rate_rad_s - from_rate_rad_s * from_rate_rad_s)
+        / (2.0 * angular_accel_rad_s2))
+        .max(0.0)
 }
 
 /// Rule 1: the landing surface. `Err` carries which part failed.
@@ -957,12 +988,12 @@ impl StuntPlanner {
         &self,
         segments: &[Segment],
         inputs: &PlannerInputs,
-        alpha: f32,
-        rate: f32,
-        omega: f32,
+        angular_accel_rad_s2: f32,
+        spin_rate_rad_s: f32,
+        coast_rate_rad_s: f32,
     ) -> Option<StuntReason> {
         let cfg = &self.config;
-        if inputs.state.wheels_down() > 0 || alpha < MIN_ALPHA_RAD_S2 {
+        if inputs.state.wheels_down() > 0 || angular_accel_rad_s2 < MIN_ALPHA_RAD_S2 {
             return Some(StuntReason::ControlLost);
         }
         let Some(landing) = inputs.forecast else {
@@ -977,9 +1008,9 @@ impl StuntPlanner {
             segments,
             self.segment_index,
             self.phase,
-            rate,
+            spin_rate_rad_s,
             self.rotation_rad,
-            omega,
+            coast_rate_rad_s,
         );
         let window_s = landing.time_s - landing.time_uncertainty_s;
         if window_s < cost.time_s + cfg.catch_time_s + cfg.settle_margin_s {
