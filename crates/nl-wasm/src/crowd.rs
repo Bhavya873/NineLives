@@ -275,54 +275,94 @@ impl Crowd {
             DEFAULT_CONTROLLERS_TOML,
             Some(policy_json),
         )?;
-        let owned_course = match (course, stage) {
-            (Some(_), _) => None,
-            (None, CrowdStage::Arena) => Some(CourseSpec::from_json_str(ARENA_JSON)?),
-            (None, CrowdStage::Gauntlet) => Some(CourseSpec::from_json_str(GAUNTLET_JSON)?),
-            (None, CrowdStage::Driving | CrowdStage::Flight) => {
-                course_for_stage(&plain, &scenarios, stage.stage(), first_seed)?
-            }
-            (None, CrowdStage::FlatDrop | CrowdStage::FlatSide) => None,
-        };
+        let owned_course = owned_course_for(course, stage, &plain, &scenarios, first_seed)?;
         let course = course.or(owned_course.as_ref());
-        let mut episodes = Vec::new();
-        let mut pilots = Vec::new();
-        let mut labels = Vec::new();
-        for offset in 0..u64::from(count) {
-            let seed = first_seed
-                .checked_add(offset)
-                .ok_or_else(|| JsError::new("Crowd: first_seed is too large"))?;
-            // Stage F cars each fly their own plate, so each builds its own course.
-            let shared = course.filter(|_| stage != CrowdStage::Flight);
-            let episode = match shared {
-                Some(course) => {
-                    Episode::start_on_course(&plain, &scenarios, stage.stage(), course, seed)?
-                }
-                None => Episode::start(&plain, &scenarios, stage.stage(), seed)?,
-            };
-            labels.push(match (stage, episode.result().preset) {
-                (CrowdStage::Flight, Some(name)) => preset_label(&name),
-                _ => String::new(),
-            });
-            episodes.push(episode);
-            let mut pilot = hybrid.clone();
-            pilot.reset(seed);
-            pilots.push(pilot);
-        }
+        let cars = start_cars(
+            &plain, &scenarios, &hybrid, stage, course, first_seed, count,
+        )?;
         let course_shapes_json = match course {
             Some(course) => Some(serde_json::to_string(&build_course_shapes(course))?),
             None => None,
         };
-        let throttles = vec![[0.0; NOZZLE_COUNT]; episodes.len()];
+        let throttles = vec![[0.0; NOZZLE_COUNT]; cars.episodes.len()];
         Ok(Crowd {
             stage,
-            episodes,
-            pilots,
+            episodes: cars.episodes,
+            pilots: cars.pilots,
             throttles,
             course_shapes_json,
-            labels,
+            labels: cars.labels,
         })
     }
+}
+
+/// The course a crowd of `stage` builds for itself, or None if the caller gave `course` or
+/// the stage has none.
+fn owned_course_for(
+    course: Option<&CourseSpec>,
+    stage: CrowdStage,
+    plain: &EpisodeVariation,
+    scenarios: &ScenariosConfig,
+    first_seed: u64,
+) -> Result<Option<CourseSpec>, JsError> {
+    Ok(match (course, stage) {
+        (Some(_), _) => None,
+        (None, CrowdStage::Arena) => Some(CourseSpec::from_json_str(ARENA_JSON)?),
+        (None, CrowdStage::Gauntlet) => Some(CourseSpec::from_json_str(GAUNTLET_JSON)?),
+        (None, CrowdStage::Driving | CrowdStage::Flight) => {
+            course_for_stage(plain, scenarios, stage.stage(), first_seed)?
+        }
+        (None, CrowdStage::FlatDrop | CrowdStage::FlatSide) => None,
+    })
+}
+
+/// The cars of a crowd as `start_cars` makes them: one entry of each per car.
+struct StartedCars {
+    episodes: Vec<Episode>,
+    pilots: Vec<ControllerKind>,
+    labels: Vec<String>,
+}
+
+/// Starts `count` cars on seeds from `first_seed`: an episode, a pilot (a clone of
+/// `hybrid`, reset for the seed) and a preset label each.
+fn start_cars(
+    plain: &EpisodeVariation,
+    scenarios: &ScenariosConfig,
+    hybrid: &ControllerKind,
+    stage: CrowdStage,
+    course: Option<&CourseSpec>,
+    first_seed: u64,
+    count: u32,
+) -> Result<StartedCars, JsError> {
+    let mut episodes = Vec::new();
+    let mut pilots = Vec::new();
+    let mut labels = Vec::new();
+    for offset in 0..u64::from(count) {
+        let seed = first_seed
+            .checked_add(offset)
+            .ok_or_else(|| JsError::new("Crowd: first_seed is too large"))?;
+        // Stage F cars each fly their own plate, so each builds its own course.
+        let shared = course.filter(|_| stage != CrowdStage::Flight);
+        let episode = match shared {
+            Some(course) => {
+                Episode::start_on_course(plain, scenarios, stage.stage(), course, seed)?
+            }
+            None => Episode::start(plain, scenarios, stage.stage(), seed)?,
+        };
+        labels.push(match (stage, episode.result().preset) {
+            (CrowdStage::Flight, Some(name)) => preset_label(&name),
+            _ => String::new(),
+        });
+        episodes.push(episode);
+        let mut pilot = hybrid.clone();
+        pilot.reset(seed);
+        pilots.push(pilot);
+    }
+    Ok(StartedCars {
+        episodes,
+        pilots,
+        labels,
+    })
 }
 
 #[cfg(test)]
