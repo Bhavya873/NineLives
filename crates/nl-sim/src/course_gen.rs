@@ -291,6 +291,16 @@ impl PieceCatalog {
         if !sizes.iter().all(|size| size.is_finite() && *size > 0.0) {
             return bad("sizes must be finite numbers above zero");
         }
+        self.check_design_numbers()?;
+        if !is_range(self.straight_m) {
+            return bad("`straight_m` must be [low, high] with 0 ≤ low ≤ high");
+        }
+        self.check_pieces()?;
+        Ok(())
+    }
+
+    /// The design rules must be finite numbers above zero.
+    fn check_design_numbers(&self) -> Result<(), PieceCatalogError> {
         let design = &self.design;
         let design_numbers = [
             design.speed_m_s,
@@ -304,11 +314,15 @@ impl PieceCatalog {
             .iter()
             .all(|value| value.is_finite() && *value > 0.0)
         {
-            return bad("`design` numbers must be finite and above zero");
+            return Err(PieceCatalogError::Bad(
+                "`design` numbers must be finite and above zero".to_string(),
+            ));
         }
-        if !is_range(self.straight_m) {
-            return bad("`straight_m` must be [low, high] with 0 ≤ low ≤ high");
-        }
+        Ok(())
+    }
+
+    /// Every piece template must have sane numbers, and some weight must be above zero.
+    fn check_pieces(&self) -> Result<(), PieceCatalogError> {
         let mut total_weight = 0.0;
         for (index, piece) in self.pieces.iter().enumerate() {
             if !piece.has_sane_numbers() {
@@ -319,7 +333,9 @@ impl PieceCatalog {
             total_weight += piece.weight();
         }
         if total_weight <= 0.0 {
-            return bad("at least one piece needs a weight above zero");
+            return Err(PieceCatalogError::Bad(
+                "at least one piece needs a weight above zero".to_string(),
+            ));
         }
         Ok(())
     }
@@ -573,170 +589,277 @@ fn lay_piece(
     x_m: f32,
     rng: &mut ChaCha8Rng,
 ) -> LaidPiece {
+    match template {
+        PieceTemplate::Ramp { .. } => lay_ramp(template, design, x_m, rng),
+        PieceTemplate::RampGap { .. } => lay_ramp_gap(template, design, x_m, rng),
+        PieceTemplate::Kicker { .. } => lay_kicker(template, design, x_m, rng),
+        PieceTemplate::Corkscrew { .. } => lay_corkscrew(template, design, x_m, rng),
+        PieceTemplate::Bumps { .. } => lay_bumps(template, x_m, rng),
+        PieceTemplate::KickPlate { .. } => lay_kick_plate(template, x_m, rng),
+        PieceTemplate::FlipPlate { .. } => lay_flip_plate(template, design, x_m, rng),
+        PieceTemplate::Halfpipe { .. } => lay_halfpipe(template, x_m, rng),
+        PieceTemplate::Wall { .. } => lay_wall(template, x_m, rng),
+    }
+}
+
+/// An empty piece. The `lay_*` helpers return it only if `lay_piece` hands them the
+/// wrong kind of template, which its `match` rules out.
+fn no_piece() -> LaidPiece {
+    LaidPiece::on_the_ground(Vec::new(), 0.0)
+}
+
+/// A ramp template laid at `x_m`.
+fn lay_ramp(
+    template: &PieceTemplate,
+    design: &DesignRules,
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
+    let PieceTemplate::Ramp {
+        radius_m,
+        width_m,
+        angle_deg,
+        v_complete_min_m_s,
+        ..
+    } = template
+    else {
+        return no_piece();
+    };
     let pos = [x_m, 0.0, 0.0];
     let speed_m_s = design.speed_m_s;
-    match template {
-        PieceTemplate::Ramp {
-            radius_m,
-            width_m,
-            angle_deg,
-            v_complete_min_m_s,
-            ..
-        } => {
-            let angle = draw(rng, *angle_deg);
-            let length = draw(rng, *radius_m) * angle.to_radians();
-            let width = draw(rng, *width_m);
-            let ramp = ramp(pos, length, width, angle, *v_complete_min_m_s);
-            let lip_m = ramp_lip_height_m(length, angle);
-            LaidPiece {
-                pieces: vec![ramp],
-                length_m: length,
-                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
-            }
-        }
-        PieceTemplate::RampGap {
-            radius_m,
-            width_m,
-            angle_deg,
-            gap_m,
-            pit_depth_m,
-            v_complete_min_m_s,
-            ..
-        } => {
-            let angle = draw(rng, *angle_deg);
-            let length = draw(rng, *radius_m) * angle.to_radians();
-            let width = draw(rng, *width_m);
-            let ramp = ramp(pos, length, width, angle, *v_complete_min_m_s);
-            let lip_m = ramp_lip_height_m(length, angle);
-            let gap_length = draw(rng, *gap_m);
-            let gap = PieceSpec::Gap {
-                pos: [x_m + length, 0.0, 0.0],
-                length: gap_length,
-                pit_depth: *pit_depth_m,
-                entry_height: lip_m,
-            };
-            LaidPiece {
-                pieces: vec![ramp, gap],
-                length_m: length + gap_length,
-                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
-            }
-        }
-        PieceTemplate::Kicker {
-            radius_m,
-            width_m,
-            angle_deg,
-            ..
-        } => {
-            let angle = draw(rng, *angle_deg);
-            let length = draw(rng, *radius_m) * angle.to_radians();
-            let kicker = PieceSpec::Kicker {
-                pos,
-                yaw: 0.0,
-                length,
-                width: draw(rng, *width_m),
-                angle_deg: angle,
-                side: random_side(rng),
-            };
-            let lip_m = ramp_lip_height_m(length, angle);
-            LaidPiece {
-                pieces: vec![kicker],
-                length_m: length,
-                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
-            }
-        }
-        PieceTemplate::Corkscrew {
-            radius_m,
-            width_m,
-            angle_deg,
-            bank_deg,
-            ..
-        } => {
-            let angle = draw(rng, *angle_deg);
-            // The low edge is a parabola: radius at the foot = length / tan(angle).
-            let length = draw(rng, *radius_m) * libm::tanf(angle.to_radians());
-            let corkscrew = PieceSpec::Corkscrew {
-                pos,
-                yaw: 0.0,
-                length,
-                width: draw(rng, *width_m),
-                angle_deg: angle,
-                bank_deg: draw(rng, *bank_deg),
-                side: random_side(rng),
-            };
-            let lip_m = 0.5 * length * libm::tanf(angle.to_radians());
-            LaidPiece {
-                pieces: vec![corkscrew],
-                length_m: length,
-                landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
-            }
-        }
-        PieceTemplate::Bumps {
-            count, height_m, ..
-        } => {
-            let count = rng.random_range(count[0]..=count[1]);
-            let height = draw(rng, *height_m);
-            let bumps = PieceSpec::Bumps {
-                pos,
-                yaw: 0.0,
-                count,
-                height,
-            };
-            LaidPiece::on_the_ground(vec![bumps], count as f32 * bump_spacing_m(height))
-        }
-        PieceTemplate::KickPlate {
-            impulse_up_n_s,
-            impulse_side_n_s,
-            angular_roll_n_m_s,
-            ..
-        } => LaidPiece::on_the_ground(
-            vec![kick_plate(
-                pos,
-                rng,
-                *impulse_up_n_s,
-                *impulse_side_n_s,
-                *angular_roll_n_m_s,
-            )],
-            KICK_PLATE_LENGTH_M,
-        ),
-        PieceTemplate::FlipPlate {
-            strength, presets, ..
-        } => {
-            let preset = pick_preset(presets, rng);
-            let strength = draw(rng, *strength);
-            let plate = preset.kick_plate_at(pos, strength);
-            // The push throws the car up at impulse / mass, then it falls back.
-            let rise_m_s = preset.impulse_n_s[1] * strength / design.car_mass_kg;
-            let airtime_s = 2.0 * rise_m_s / 9.81;
-            LaidPiece {
-                pieces: vec![plate],
-                length_m: KICK_PLATE_LENGTH_M,
-                landing_reach_m: KICK_PLATE_LENGTH_M + speed_m_s * airtime_s,
-            }
-        }
-        PieceTemplate::Halfpipe {
-            radius_m, length_m, ..
-        } => {
-            let length = draw(rng, *length_m);
-            let halfpipe = PieceSpec::Halfpipe {
-                pos,
-                yaw: 0.0,
-                radius: draw(rng, *radius_m),
-                length,
-            };
-            LaidPiece::on_the_ground(vec![halfpipe], length)
-        }
-        PieceTemplate::Wall { height_m, .. } => {
-            let height = draw(rng, *height_m);
-            let wall = PieceSpec::Wall {
-                pos,
-                yaw: 0.0,
-                height,
-                with_ramp: true,
-            };
-            let length = wall_ramp_total_length_m(height);
-            LaidPiece::on_the_ground(vec![wall], length)
-        }
+    let angle = draw(rng, *angle_deg);
+    let length = draw(rng, *radius_m) * angle.to_radians();
+    let width = draw(rng, *width_m);
+    let ramp = ramp(pos, length, width, angle, *v_complete_min_m_s);
+    let lip_m = ramp_lip_height_m(length, angle);
+    LaidPiece {
+        pieces: vec![ramp],
+        length_m: length,
+        landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
     }
+}
+
+/// A ramp-with-a-gap template laid at `x_m`.
+fn lay_ramp_gap(
+    template: &PieceTemplate,
+    design: &DesignRules,
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
+    let PieceTemplate::RampGap {
+        radius_m,
+        width_m,
+        angle_deg,
+        gap_m,
+        pit_depth_m,
+        v_complete_min_m_s,
+        ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let speed_m_s = design.speed_m_s;
+    let angle = draw(rng, *angle_deg);
+    let length = draw(rng, *radius_m) * angle.to_radians();
+    let width = draw(rng, *width_m);
+    let ramp = ramp(pos, length, width, angle, *v_complete_min_m_s);
+    let lip_m = ramp_lip_height_m(length, angle);
+    let gap_length = draw(rng, *gap_m);
+    let gap = PieceSpec::Gap {
+        pos: [x_m + length, 0.0, 0.0],
+        length: gap_length,
+        pit_depth: *pit_depth_m,
+        entry_height: lip_m,
+    };
+    LaidPiece {
+        pieces: vec![ramp, gap],
+        length_m: length + gap_length,
+        landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+    }
+}
+
+/// A kicker template laid at `x_m`.
+fn lay_kicker(
+    template: &PieceTemplate,
+    design: &DesignRules,
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
+    let PieceTemplate::Kicker {
+        radius_m,
+        width_m,
+        angle_deg,
+        ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let speed_m_s = design.speed_m_s;
+    let angle = draw(rng, *angle_deg);
+    let length = draw(rng, *radius_m) * angle.to_radians();
+    let kicker = PieceSpec::Kicker {
+        pos,
+        yaw: 0.0,
+        length,
+        width: draw(rng, *width_m),
+        angle_deg: angle,
+        side: random_side(rng),
+    };
+    let lip_m = ramp_lip_height_m(length, angle);
+    LaidPiece {
+        pieces: vec![kicker],
+        length_m: length,
+        landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+    }
+}
+
+/// A corkscrew template laid at `x_m`.
+fn lay_corkscrew(
+    template: &PieceTemplate,
+    design: &DesignRules,
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
+    let PieceTemplate::Corkscrew {
+        radius_m,
+        width_m,
+        angle_deg,
+        bank_deg,
+        ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let speed_m_s = design.speed_m_s;
+    let angle = draw(rng, *angle_deg);
+    // The low edge is a parabola: radius at the foot = length / tan(angle).
+    let length = draw(rng, *radius_m) * libm::tanf(angle.to_radians());
+    let corkscrew = PieceSpec::Corkscrew {
+        pos,
+        yaw: 0.0,
+        length,
+        width: draw(rng, *width_m),
+        angle_deg: angle,
+        bank_deg: draw(rng, *bank_deg),
+        side: random_side(rng),
+    };
+    let lip_m = 0.5 * length * libm::tanf(angle.to_radians());
+    LaidPiece {
+        pieces: vec![corkscrew],
+        length_m: length,
+        landing_reach_m: length + flight_distance_m(speed_m_s, angle, lip_m),
+    }
+}
+
+/// A run-of-bumps template laid at `x_m`.
+fn lay_bumps(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
+    let PieceTemplate::Bumps {
+        count, height_m, ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let count = rng.random_range(count[0]..=count[1]);
+    let height = draw(rng, *height_m);
+    let bumps = PieceSpec::Bumps {
+        pos,
+        yaw: 0.0,
+        count,
+        height,
+    };
+    LaidPiece::on_the_ground(vec![bumps], count as f32 * bump_spacing_m(height))
+}
+
+/// A kick-plate template laid at `x_m`.
+fn lay_kick_plate(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
+    let PieceTemplate::KickPlate {
+        impulse_up_n_s,
+        impulse_side_n_s,
+        angular_roll_n_m_s,
+        ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    LaidPiece::on_the_ground(
+        vec![kick_plate(
+            pos,
+            rng,
+            *impulse_up_n_s,
+            *impulse_side_n_s,
+            *angular_roll_n_m_s,
+        )],
+        KICK_PLATE_LENGTH_M,
+    )
+}
+
+/// A flip-plate template laid at `x_m`.
+fn lay_flip_plate(
+    template: &PieceTemplate,
+    design: &DesignRules,
+    x_m: f32,
+    rng: &mut ChaCha8Rng,
+) -> LaidPiece {
+    let PieceTemplate::FlipPlate {
+        strength, presets, ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let speed_m_s = design.speed_m_s;
+    let preset = pick_preset(presets, rng);
+    let strength = draw(rng, *strength);
+    let plate = preset.kick_plate_at(pos, strength);
+    // The push throws the car up at impulse / mass, then it falls back.
+    let rise_m_s = preset.impulse_n_s[1] * strength / design.car_mass_kg;
+    let airtime_s = 2.0 * rise_m_s / 9.81;
+    LaidPiece {
+        pieces: vec![plate],
+        length_m: KICK_PLATE_LENGTH_M,
+        landing_reach_m: KICK_PLATE_LENGTH_M + speed_m_s * airtime_s,
+    }
+}
+
+/// A halfpipe template laid at `x_m`.
+fn lay_halfpipe(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
+    let PieceTemplate::Halfpipe {
+        radius_m, length_m, ..
+    } = template
+    else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let length = draw(rng, *length_m);
+    let halfpipe = PieceSpec::Halfpipe {
+        pos,
+        yaw: 0.0,
+        radius: draw(rng, *radius_m),
+        length,
+    };
+    LaidPiece::on_the_ground(vec![halfpipe], length)
+}
+
+/// A wall-with-a-ramp template laid at `x_m`.
+fn lay_wall(template: &PieceTemplate, x_m: f32, rng: &mut ChaCha8Rng) -> LaidPiece {
+    let PieceTemplate::Wall { height_m, .. } = template else {
+        return no_piece();
+    };
+    let pos = [x_m, 0.0, 0.0];
+    let height = draw(rng, *height_m);
+    let wall = PieceSpec::Wall {
+        pos,
+        yaw: 0.0,
+        height,
+        with_ramp: true,
+    };
+    let length = wall_ramp_total_length_m(height);
+    LaidPiece::on_the_ground(vec![wall], length)
 }
 
 /// A straight ramp piece.
