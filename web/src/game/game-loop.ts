@@ -13,6 +13,9 @@ interface LoopCallbacks {
   tick: (lastOfFrame: boolean) => void;
   /** Draw a frame. `blend` is 0..1: how far we are between the previous and latest tick. */
   render: (blend: number) => void;
+  /** Optional. While it returns true no ticks run, the leftover time is kept, and the
+   * frame is drawn with the same blend as before, so a paused picture holds still. */
+  frozen?: () => boolean;
 }
 
 /**
@@ -49,6 +52,10 @@ export function startGameLoop(tickS: number, callbacks: LoopCallbacks): void {
     lastFrameMs = nowMs;
 
     try {
+      if (callbacks.frozen?.()) {
+        callbacks.render(leftoverS / tickS);
+        return;
+      }
       const plan = planTicks(leftoverS, elapsedS, tickS);
       for (let tick = 0; tick < plan.ticks; tick += 1) {
         callbacks.tick(tick === plan.ticks - 1);
