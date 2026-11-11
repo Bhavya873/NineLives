@@ -2,7 +2,7 @@
 //! against. The game picks a level (Off, Breeze, Storm) from `[wind]` in scenarios.toml;
 //! training randomizes up to Storm (SPEC §9.8). Gusts are an Ornstein–Uhlenbeck process
 //! on the horizontal wind, stepped once per physics step from a seeded ChaCha8 stream of
-//! their own, so a seed always gives the same gusts (CLAUDE.md rule 2).
+//! their own, so a seed always gives the same gusts (CONTRIBUTING.md rule 2).
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -159,7 +159,7 @@ impl Wind {
             self.gust_m_s = [0.0; 2];
             return;
         }
-        // libm keeps the gusts bit-identical on every platform (CLAUDE.md rule 2).
+        // libm keeps the gusts bit-identical on every platform (CONTRIBUTING.md rule 2).
         let keep = libm::expf(-dt_s / self.level.gust_time_constant_s);
         let kick = sigma * libm::sqrtf(1.0 - keep * keep);
         for gust in &mut self.gust_m_s {

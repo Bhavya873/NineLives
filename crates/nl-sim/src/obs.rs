@@ -1,7 +1,7 @@
 //! The observation the AI sees (SPEC §9.2): 43 numbers in a fixed order, defined here
 //! and nowhere else. Python, the policy exporter and the browser read this layout
 //! through `OBS_SPEC` and check `obs_schema_hash` before trusting a policy
-//! (CLAUDE.md golden rule 4). Any change to the names, their order or their ranges
+//! (CONTRIBUTING.md golden rule 4). Any change to the names, their order or their ranges
 //! changes the hash.
 
 use crate::car_state::{CarState, MAX_HEIGHT_M, TERRAIN_PROBE_CAP_M};

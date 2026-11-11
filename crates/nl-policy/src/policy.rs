@@ -21,7 +21,7 @@ pub enum PolicyError {
     )]
     WrongFormat { format: String, version: u32 },
 
-    /// The policy was trained on a different observation layout (CLAUDE.md rule 4).
+    /// The policy was trained on a different observation layout (CONTRIBUTING.md rule 4).
     #[error(
         "policy.json: obs_schema_hash is {found}, but this build's observation layout is {expected}; re-export the policy from a run trained on this build"
     )]

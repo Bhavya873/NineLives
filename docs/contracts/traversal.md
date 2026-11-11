@@ -1,6 +1,6 @@
 # Contract: approach is separate from outcome (traversal)
 
-Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.2). Built in G2 (`claude/fearless-pieces`).
+Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.2). Built in G2 (`fearless-pieces`).
 
 ## What it is
 A record kept while the car goes over one piece. It answers "did the car come in cleanly?", separately from "what happened next?".

@@ -1,8 +1,8 @@
 # Nine Lives — Build Plan and Deliverables
 
-> Historical. This is the plan the build followed (M0 to M8). The current rules are in `SPEC.md`, `CLAUDE.md` and `docs/DECISIONS.md`. The Gauntlet course mentioned here is retired (DECISIONS 2026-11-03).
+> Historical. This is the plan the build followed (M0 to M8). The current rules are in `SPEC.md`, `CONTRIBUTING.md` and `docs/DECISIONS.md`. The Gauntlet course mentioned here is retired (DECISIONS 2026-11-03).
 
-Status: **approved 2026-10-17** · Based on `SPEC.md` (v1, 2026-10-16), `CLAUDE.md` and the owner's answers of 2026-10-17
+Status: **approved 2026-10-17** · Based on `SPEC.md` (v1, 2026-10-16), `CONTRIBUTING.md` and the owner's answers of 2026-10-17
 
 This plan turns the spec into an ordered build. It doesn't restate the spec. Section numbers like §7.4 point into `SPEC.md`. The owner approved it on 2026-10-17.
 
@@ -27,8 +27,8 @@ This plan turns the spec into an ordered build. It doesn't restate the spec. Sec
 | D1 | **A hard or upside-down landing explodes the car, and it respawns.** | Crash rules change (§3.1). The roof-recovery problem goes away: a roof landing is a crash by design. Stage B shrinks to slow side tip-overs. |
 | D2 | **No external platform requirements.** Train with our own setup. | §5 covers how training runs. No third-party AI services, no backend. The spec's "no server" non-goal stands. |
 | D3 | **Stop for review** after M4 (before training starts) and after M7 (before polish). | Built into §4. |
-| D4 | **Small-feature PRs, authored by the owner, reviewed by the owner.** | §6. The GitHub connection acts as `Bhavya873`, so PRs show you as the author. Commits are authored as Bhavya Modi, with a `Co-Authored-By: Claude` trailer. |
-| D5 | **Code a junior developer could have written and can read.** | New coding standard (§7). `CLAUDE.md` gets updated to match. |
+| D4 | **Small-feature PRs, authored by the owner, reviewed by the owner.** | §6. The GitHub connection acts as `Bhavya873`, so PRs show you as the author. Commits are authored as Bhavya Modi. |
+| D5 | **Code a junior developer could have written and can read.** | New coding standard (§7). `CONTRIBUTING.md` gets updated to match. |
 | D6 | **Watch the cars learn.** Training stays PPO (many headless cars feed one shared policy), plus a *training viewer*: a crowd of cars (about 64) runs each saved checkpoint through an obstacle arena, so you see them improve round by round. | M5 exports a few evenly spaced checkpoints as policy JSON; M6 adds the viewer on Stage A drops; M7's obstacle arena course gives it ramps and blocks. |
 | D7 | **Lab-arena look everywhere:** checkered floor, neutral lighting, plain-coloured ramps and blocks, like a physics simulator's test arena. | Done for the floor, light and backdrop after M3; course pieces use plain colours in M7. |
 
@@ -66,7 +66,7 @@ A "save" today only means the car ends still, upright and on four wheels. For a 
 
 The events, rules and terms live only in `nl-sim` (golden rule 1). Python and the browser read them from there.
 
-**Implemented 2026-10-17** (branch `claude/m7-landing-quality`): all five rows, in `nl_sim::landing`, `events`, `episode`, `reward` and `training`, with numbers in `vehicle.toml [events]`, `scenarios.toml [episode]` and `reward.toml`. The heading reference is the last take-off from the wheels; a landing after a start in the air (Stage A) or a tip-over (Stage B) has no heading error and no heading factor. A Stage D "course direction" reference and the Stage C/D "error < 30°" success rule are left to the stage work, which can read `Episode::last_save_quality()`. Speed kept needs a take-off from the wheels above 3 m/s instead of a stage check. See DECISIONS and EXPERIMENTS.
+**Implemented 2026-10-17** (branch `m7-landing-quality`): all five rows, in `nl_sim::landing`, `events`, `episode`, `reward` and `training`, with numbers in `vehicle.toml [events]`, `scenarios.toml [episode]` and `reward.toml`. The heading reference is the last take-off from the wheels; a landing after a start in the air (Stage A) or a tip-over (Stage B) has no heading error and no heading factor. A Stage D "course direction" reference and the Stage C/D "error < 30°" success rule are left to the stage work, which can read `Episode::last_save_quality()`. Speed kept needs a take-off from the wheels above 3 m/s instead of a stage check. See DECISIONS and EXPERIMENTS.
 
 ### 3.4 M7 training run (agreed with the owner, 2026-10-17)
 - Start fresh; the curriculum takes it from Stage A up to E. 150M steps, a checkpoint every 1M, best = mean eval success over the unlocked stages. Domain randomization on.
@@ -80,11 +80,11 @@ The events, rules and terms live only in `nl-sim` (golden rule 1). Python and th
 
 ## 4. Milestones
 
-Effort: **S** is a few hours, **M** is about a session, **L** is several sessions. A milestone is done only when every SPEC §13 box for it is ticked and the CLAUDE.md checks are clean.
+Effort: **S** is a few hours, **M** is about a session, **L** is several sessions. A milestone is done only when every SPEC §13 box for it is ticked and the CONTRIBUTING.md checks are clean.
 
 | Milestone | Scope | Size | PRs |
 |---|---|---|---|
-| **M0 Scaffold** | workspace, 5 crates, Python package, Vite app, CI (3 jobs), docs, SPEC/CLAUDE updates from §3 and §7 | S | 2 |
+| **M0 Scaffold** | workspace, 5 crates, Python package, Vite app, CI (3 jobs), docs, SPEC/CONTRIBUTING updates from §3 and §7 | S | 2 |
 | **M1 Drivable car** | configs, world, raycast vehicle, upright-gated wheel contact, `InputFrame`, snapshot/restore, determinism, `drive` example, golden trace generator | M | 3 |
 | **M2 Browser viewer** | wasm `Game`, renderer, chase camera, fixed-step loop + interpolation, wasm golden-trace test, **perf probe** (ms per tick) | M | 2 |
 | **M3 Thrusters, tank, modes, events** | nozzles + valve lag, tank, modes, Hop/Boost, events, **explosion + respawn**, Chaos; web flames, nozzle map, air gauge, toasts, Manual | L | 4 |
@@ -128,10 +128,10 @@ Training runs on the owner's machine (8-core Apple M1 Pro, 16 GB). Checkpoints s
 1. **`python -m ninelives.train --config … --run-id … --resume`** continues from the last checkpoint. That checkpoint includes the PPO model, the `VecNormalize` statistics, the curriculum state (stage, level, success windows) and the RNG seeds.
 2. **Chunks:** `--max-minutes N` makes a command write a checkpoint and exit cleanly after N minutes; a checkpoint is also written every 1M steps (SPEC §9.10). I run chunks in the background, check the logs between them, and start the next one.
 3. **Checkpoints stay in `runs/`:** the latest and the best (by eval success) are kept in `runs/<run-id>/`. Losing that folder costs the run, not the project: the committed `models/policy.json`, the viewer checkpoints and `docs/EXPERIMENTS.md` hold everything the repo needs.
-4. **Every chunk is logged** in `docs/EXPERIMENTS.md`: date, config, seed, steps so far, wall time, success per stage and notes. That follows CLAUDE.md.
+4. **Every chunk is logged** in `docs/EXPERIMENTS.md`: date, config, seed, steps so far, wall time, success per stage and notes. That follows CONTRIBUTING.md.
 5. **After each stage unlocks:** export `models/policy.json`, run the fixed-seed eval, watch a replay for odd behaviour, and commit the policy and results on the feature branch for your PR review.
 
-`docs/TRAINING.md` lists the commands step by step, so the owner can also start or resume a run without me.
+`docs/TRAINING.md` lists the commands step by step, so the owner can start or resume a run directly.
 
 ### 5.4 Keeping training honest
 - **Reward hacking:** for every run, I watch a replay in the browser (M6+) or a headless trajectory plot, not just the score. The hover hack (SPEC §9.11) is run on purpose in M8 to show what that failure looks like.
@@ -142,14 +142,14 @@ Training runs on the owner's machine (8-core Apple M1 Pro, 16 GB). Checkpoints s
 
 ## 6. Workflow: PRs, reviews, skills
 
-- **Branches:** one short-lived branch per small feature off `main` (e.g. `claude/m1-vehicle`), with one PR each into `main`. *Needs your OK; see §9 Q1.*
-- **Authorship:** the GitHub connection acts as `Bhavya873`, so PRs show you as the author. Commits are authored as `Bhavya Modi <51858604+Bhavya873@users.noreply.github.com>` with a `Co-Authored-By: Claude` trailer. GitHub doesn't let a PR's author formally **approve** it, but you can review, comment and merge. If branch protection requires an approval, turn that off for `main`.
+- **Branches:** one short-lived branch per small feature off `main` (e.g. `m1-vehicle`), with one PR each into `main`. *Needs your OK; see §9 Q1.*
+- **Authorship:** the GitHub connection acts as `Bhavya873`, so PRs show you as the author. Commits are authored as `Bhavya Modi <51858604+Bhavya873@users.noreply.github.com>`. GitHub doesn't let a PR's author formally **approve** it, but you can review, comment and merge. If branch protection requires an approval, turn that off for `main`.
 - **PR size:** aim for under ~400 changed lines (excluding lockfiles), one idea per PR. Each description has: what and why, how to test it, screenshots or GIFs for anything visual, and the spec section it covers.
 - **Before every PR**, in this order:
   1. `/simplify`;
   2. `/code-review`;
   3. `/security-review` for anything that parses external input (course JSON, policy JSON, `localStorage`);
-  4. the full checks from `CLAUDE.md`.
+  4. the full checks from `CONTRIBUTING.md`.
 - **Planning skills:** `engineering:architecture` for the ADRs in M0 (determinism strategy, the Rust↔Python binding, the training harness); `engineering:testing-strategy` for the test plan; `engineering:documentation` for the README and `docs/TRAINING.md`; `engineering:deploy-checklist` before the Railway deploy.
 - After opening each PR, I'll watch it and fix CI failures and review comments.
 
@@ -157,12 +157,12 @@ Training runs on the owner's machine (8-core Apple M1 Pro, 16 GB). Checkpoints s
 
 ## 7. Coding standard: "a junior developer wrote this"
 
-This goes into `CLAUDE.md` § Style. Readable beats clever, everywhere.
+This goes into `CONTRIBUTING.md` § Style. Readable beats clever, everywhere.
 
 - **Names say what and in what unit:** `speed_m_s`, `air_left_kg`, `tilt_rad`. No one-letter names except loop indices and maths that copies a spec formula, which gets a comment citing the section.
 - **Small files, small functions:** a function does one thing and fits on a screen (~40 lines). A file covers one concept (`tank.rs`, `valve_lag.rs`).
 - **Plain constructs:** structs, enums, `for` loops and `match`. No macros we wrote ourselves, no trait-object or generic gymnastics, no iterator chains longer than about 3 steps, no lifetimes beyond the obvious. Rust traits only where the spec requires one (`Controller`).
-- **Comments:** every public item gets a `///` doc comment saying what it is and its units. Inline comments say **why**, not what. Every formula comment links its spec section, e.g. `// SPEC §7.5: mass flow = force / exhaust speed`. *(This replaces CLAUDE.md's "comments only where the code cannot explain itself".)*
+- **Comments:** every public item gets a `///` doc comment saying what it is and its units. Inline comments say **why**, not what. Every formula comment links its spec section, e.g. `// SPEC §7.5: mass flow = force / exhaust speed`. *(This replaces CONTRIBUTING.md's "comments only where the code cannot explain itself".)*
 - **Errors:** `Result` + `thiserror` with messages a person can act on ("course.json: piece 4 'ramp' is missing 'length'").
 - **Tests read like examples:** names like `firing_front_left_lift_raises_left_front_corner`, with an arrange / act / assert layout.
 - **Python:** type hints, short modules, no classes where a function will do.
@@ -193,7 +193,7 @@ This goes into `CLAUDE.md` § Style. Readable beats clever, everywhere.
 
 ## 9. Owner answers (2026-10-17)
 
-1. **Branches:** yes. One `claude/<feature>` branch per PR. *(The `ckpt/<run-id>` checkpoint branches were dropped on 2026-10-17; see answer 2.)*
+1. **Branches:** yes. One `<feature>` branch per PR. *(The `ckpt/<run-id>` checkpoint branches were dropped on 2026-10-17; see answer 2.)*
 2. **Training location:** ~~train here in resumable 1-hour chunks, with the owner's machine as the fallback~~. Updated 2026-10-17 at the start of M5: train locally on the owner's machine; checkpoints stay in `runs/` (gitignored).
 3. **Review speed:** the owner reviews PRs within about a day.
 4. **Deploy:** the game is hosted on **Railway** as a static site. The repo goes public once there's a working deliverable.

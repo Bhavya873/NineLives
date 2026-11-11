@@ -1,6 +1,6 @@
 # Configs
 
-Tunable numbers live here, not in code (CLAUDE.md, golden rule 6).
+Tunable numbers live here, not in code (CONTRIBUTING.md, golden rule 6).
 
 | File | Arrives in | Holds |
 |---|---|---|

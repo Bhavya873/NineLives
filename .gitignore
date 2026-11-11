@@ -24,7 +24,8 @@ runs/
 .idea/
 .vscode/
 
-# Local agent tooling: Claude Code state, the graphify map and its ignore file
+# local tooling
+CLAUDE.md
 .claude/
 graphify-out/
 .graphifyignore

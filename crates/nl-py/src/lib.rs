@@ -1,6 +1,6 @@
 //! The `ninelives_sim` Python module (SPEC §9.1): `BatchedSim` for training, `run_eval`
 //! and `policy_actions` for evaluation and export checks, plus the observation layout
-//! and its schema hash, so Python never re-declares them (CLAUDE.md golden rules 1, 4).
+//! and its schema hash, so Python never re-declares them (CONTRIBUTING.md golden rules 1, 4).
 
 mod batched_sim;
 mod config;

@@ -1,5 +1,5 @@
 //! Thruster sign tests (SPEC §7.4, §12), written before the thruster code
-//! (CLAUDE.md golden rule 5). Each nozzle's torque at full force must match the
+//! (CONTRIBUTING.md golden rule 5). Each nozzle's torque at full force must match the
 //! table in SPEC §7.4, and firing a nozzle must turn the car the right way.
 
 // Test helpers may panic on bad setup; that is a test failure, not a library bug.

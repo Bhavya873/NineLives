@@ -4,7 +4,7 @@
 //! its side just above the ground. The driving stages C, D and E are set up in
 //! `driving_stages`; their settings live here with the rest of scenarios.toml. Every draw
 //! comes from a ChaCha8 generator seeded by the episode's seed, so the same seed always
-//! gives the same start (CLAUDE.md rule 2).
+//! gives the same start (CONTRIBUTING.md rule 2).
 
 use std::sync::Arc;
 

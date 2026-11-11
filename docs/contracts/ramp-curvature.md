@@ -1,6 +1,6 @@
 # Contract: ramp curvature
 
-Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.4). Applied to piece geometry in G2 (`claude/fearless-pieces`). **G2 update (2026-10-29):** `n_max` was measured at 4.2 g, not 3 g, so the concave radius is 110 m, not 158 m (see below).
+Frozen at Gate 0 (plan `docs/plans/2026-10-27-stunts-speed-viewer.md` §1.4). Applied to piece geometry in G2 (`fearless-pieces`). **G2 update (2026-10-29):** `n_max` was measured at 4.2 g, not 3 g, so the concave radius is 110 m, not 158 m (see below).
 
 ## Why
 Today's ramp curves (radius 31–39 m) bottom out the 0.2 m suspension at 31–34 m/s. At 200 km/h the curves must be gentle enough that the suspension (with its new bump stop) can carry the load.

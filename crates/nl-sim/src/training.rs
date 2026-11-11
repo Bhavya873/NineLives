@@ -2,7 +2,7 @@
 //! observation, reward and end flags out, one control step (2 physics steps) at a time.
 //! It steps `episode::Episode`, so success, crash and time limit mean what they mean
 //! in eval. `nl-py`'s `BatchedSim` runs many of these side by side; nothing about the
-//! reward or the episode rules lives in Python (CLAUDE.md golden rule 1).
+//! reward or the episode rules lives in Python (CONTRIBUTING.md golden rule 1).
 
 use rand::RngExt;
 use serde::Serialize;

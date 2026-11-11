@@ -55,7 +55,7 @@ pub(crate) fn safe_throttle(commanded: f32) -> f32 {
 
 /// The fraction of the remaining gap a valve closes in one step of `dt_s`.
 pub fn valve_step_fraction(dt_s: f32, time_constant_s: f32) -> f32 {
-    // libm keeps this bit-identical on every platform (CLAUDE.md rule 2).
+    // libm keeps this bit-identical on every platform (CONTRIBUTING.md rule 2).
     1.0 - libm::expf(-dt_s / time_constant_s)
 }
 

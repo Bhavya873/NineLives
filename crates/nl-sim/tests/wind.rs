@@ -1,4 +1,4 @@
-//! Wind (SPEC §7.2): sign tests written before the code (CLAUDE.md golden rule 5). A
+//! Wind (SPEC §7.2): sign tests written before the code (CONTRIBUTING.md golden rule 5). A
 //! steady side wind pushes a car in the air downwind and, because the centre of
 //! pressure sits behind and above the centre of mass, turns its nose into the wind and
 //! leans its top downwind. Gusts are seeded, so a seed always gives the same gusts, and
