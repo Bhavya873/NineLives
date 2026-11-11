@@ -100,19 +100,13 @@ const pose = newBlendedPose();
 const placed = new Matrix4();
 const instance = new Matrix4();
 
-/** Builds one row of `carsPerRow` cars per label in `rowLabels` and adds them to `scene`, on
- * three.js layer `layer` (a camera draws them only if it has that layer enabled). */
-export function createCrowdView(
+/** One floating label sprite per car, laid out on the row/column grid. */
+function createCarLabels(
   scene: Scene,
   rowLabels: string[],
   carsPerRow: number,
-  wheelCount: number,
-  layer = 0,
-): CrowdView {
-  const looks = new Map<Material, { flying: Material; crashed: Material }>();
-  const carCount = rowLabels.length * carsPerRow;
-  const bodySlots = slotsOf(buildCarBody(), carCount, looks, scene, layer);
-  const wheelSlots = slotsOf(buildWheel(), carCount * wheelCount, looks, scene, layer);
+  layer: number,
+): GhostCar[] {
   const cars: GhostCar[] = [];
   rowLabels.forEach((text, row) => {
     // One full and one faded material per row, not per car: fewer materials to bind.
@@ -130,6 +124,23 @@ export function createCrowdView(
       cars.push({ label, looks: labelLooks, gridOffset, crashed: false });
     }
   });
+  return cars;
+}
+
+/** Builds one row of `carsPerRow` cars per label in `rowLabels` and adds them to `scene`, on
+ * three.js layer `layer` (a camera draws them only if it has that layer enabled). */
+export function createCrowdView(
+  scene: Scene,
+  rowLabels: string[],
+  carsPerRow: number,
+  wheelCount: number,
+  layer = 0,
+): CrowdView {
+  const looks = new Map<Material, { flying: Material; crashed: Material }>();
+  const carCount = rowLabels.length * carsPerRow;
+  const bodySlots = slotsOf(buildCarBody(), carCount, looks, scene, layer);
+  const wheelSlots = slotsOf(buildWheel(), carCount * wheelCount, looks, scene, layer);
+  const cars = createCarLabels(scene, rowLabels, carsPerRow, layer);
   const allSlots = [...wheelSlots, ...bodySlots];
   setDrawOrder(wheelSlots, bodySlots);
   return {
