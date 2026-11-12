@@ -49,38 +49,50 @@ impl PhysicsHooks for FloorNormalHook {
         if rigid.normal.dot(true_normal) >= TRUE_NORMAL_COS {
             return;
         }
-        let on_top_face = |point: Vector| {
-            point.x > aabb.mins.x + EDGE_MARGIN_M
-                && point.x < aabb.maxs.x - EDGE_MARGIN_M
-                && point.z > aabb.mins.z + EDGE_MARGIN_M
-                && point.z < aabb.maxs.z - EDGE_MARGIN_M
-                && point.y > aabb.maxs.y - BELOW_TOP_M
-        };
-        let car_side = |contact: &SolverContact| {
-            if first_is_floor {
-                contact.anchor2
-            } else {
-                contact.anchor1
-            }
-        };
+        let car_side = |contact: &SolverContact| car_side_anchor(contact, first_is_floor);
         if !rigid
             .solver_contacts
             .iter()
-            .all(|contact| on_top_face(car_side(contact)))
+            .all(|contact| is_on_top_face(&aabb, car_side(contact)))
         {
             return;
         }
         *rigid.normal = true_normal;
-        for contact in rigid.solver_contacts.iter_mut() {
-            let car_point = car_side(contact);
-            // Separation along the true normal: height of the car's point over the top.
-            contact.dist = car_point.y - aabb.maxs.y;
-            let floor_point = Vector::new(car_point.x, aabb.maxs.y, car_point.z);
-            if first_is_floor {
-                contact.anchor1 = floor_point;
-            } else {
-                contact.anchor2 = floor_point;
-            }
+        snap_contacts_to_top(rigid.solver_contacts, &aabb, first_is_floor);
+    }
+}
+
+/// The contact point on the car's side: collider 2's anchor when collider 1 is the floor.
+fn car_side_anchor(contact: &SolverContact, first_is_floor: bool) -> Vector {
+    if first_is_floor {
+        contact.anchor2
+    } else {
+        contact.anchor1
+    }
+}
+
+/// Whether `point` lies on the floor's top face, inside the edge margin and not far below
+/// the top.
+fn is_on_top_face(aabb: &Aabb, point: Vector) -> bool {
+    point.x > aabb.mins.x + EDGE_MARGIN_M
+        && point.x < aabb.maxs.x - EDGE_MARGIN_M
+        && point.z > aabb.mins.z + EDGE_MARGIN_M
+        && point.z < aabb.maxs.z - EDGE_MARGIN_M
+        && point.y > aabb.maxs.y - BELOW_TOP_M
+}
+
+/// Re-measures each contact against the floor's flat top: the separation along the true
+/// normal, and the floor-side anchor straight below the car's point.
+fn snap_contacts_to_top(contacts: &mut [SolverContact], aabb: &Aabb, first_is_floor: bool) {
+    for contact in contacts.iter_mut() {
+        let car_point = car_side_anchor(contact, first_is_floor);
+        // Separation along the true normal: height of the car's point over the top.
+        contact.dist = car_point.y - aabb.maxs.y;
+        let floor_point = Vector::new(car_point.x, aabb.maxs.y, car_point.z);
+        if first_is_floor {
+            contact.anchor1 = floor_point;
+        } else {
+            contact.anchor2 = floor_point;
         }
     }
 }

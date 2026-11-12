@@ -22,7 +22,8 @@ use crate::car_state::{
 use crate::chaos::apply_chaos_knock;
 use crate::checkpoint::Checkpoint;
 use crate::contacts::{
-    BodyPose, MotionBeforeStep, ScrapeRule, is_touching, is_touching_tagged, read_body_contacts,
+    BodyContacts, BodyPose, MotionBeforeStep, ScrapeRule, is_touching, is_touching_tagged,
+    read_body_contacts,
 };
 use crate::conventions::{
     NOZZLE_COUNT, PHYSICS_DT_S, PHYSICS_HZ, PHYSICS_STEPS_PER_CONTROL_STEP, WHEEL_COUNT,
@@ -285,34 +286,8 @@ impl World {
     /// One physics step of a car that has not crashed, in SPEC §7.1 order.
     /// `presses` are the buttons that went down this step.
     fn step_car(&mut self, input: InputFrame, presses: u16) {
-        // 1–2. Driver input and the Hop/Boost feed-forward.
-        let wheels_down = self.wheels_touching_count();
-        let air_kg = self.tank.air_kg();
-        let hop_just_pressed = presses & BUTTON_HOP != 0;
-        let boost_held = input.is_pressed(BUTTON_BOOST);
-        self.hop_boost.update(
-            hop_just_pressed,
-            boost_held,
-            wheels_down,
-            air_kg,
-            &self.mode,
-            PHYSICS_DT_S,
-        );
-        if presses & BUTTON_CHAOS != 0 {
-            self.knock();
-        }
-        // 3–4. Held controller throttles plus feed-forward, clamped (SPEC §7.7).
-        let forward_speed_m_s = self.car.forward_speed_m_s(&self.physics);
-        let boost_share = boost_speed_share(&self.car.config().drive, forward_speed_m_s);
-        let feed_forward = self
-            .hop_boost
-            .feed_forward_throttles(&self.mode, boost_share);
-        let controller = if self.thrusters_locked() {
-            [0.0; NOZZLE_COUNT]
-        } else {
-            self.controller_throttles
-        };
-        let commanded = combine_throttles(feed_forward, controller);
+        self.apply_driver_input(input, presses);
+        let commanded = self.commanded_throttles();
         // 5–8. Valve lag, tank gate, air drag in this step's wind, nozzle forces, wheels.
         let thrust_multiplier = self.thrust_multiplier();
         self.wind.step(PHYSICS_DT_S);
@@ -341,6 +316,42 @@ impl World {
         // 12. Events (SPEC §7.9).
         self.update_events(&motion_before, touching_after);
         self.update_traversal(touching_after);
+    }
+
+    /// Steps 1–2 of `step_car`: the driver's Hop and Boost buttons feed the feed-forward,
+    /// and the chaos button knocks the car.
+    fn apply_driver_input(&mut self, input: InputFrame, presses: u16) {
+        let wheels_down = self.wheels_touching_count();
+        let air_kg = self.tank.air_kg();
+        let hop_just_pressed = presses & BUTTON_HOP != 0;
+        let boost_held = input.is_pressed(BUTTON_BOOST);
+        self.hop_boost.update(
+            hop_just_pressed,
+            boost_held,
+            wheels_down,
+            air_kg,
+            &self.mode,
+            PHYSICS_DT_S,
+        );
+        if presses & BUTTON_CHAOS != 0 {
+            self.knock();
+        }
+    }
+
+    /// Steps 3–4 of `step_car`: the held controller throttles plus the Hop/Boost
+    /// feed-forward, clamped (SPEC §7.7).
+    fn commanded_throttles(&self) -> [f32; NOZZLE_COUNT] {
+        let forward_speed_m_s = self.car.forward_speed_m_s(&self.physics);
+        let boost_share = boost_speed_share(&self.car.config().drive, forward_speed_m_s);
+        let feed_forward = self
+            .hop_boost
+            .feed_forward_throttles(&self.mode, boost_share);
+        let controller = if self.thrusters_locked() {
+            [0.0; NOZZLE_COUNT]
+        } else {
+            self.controller_throttles
+        };
+        combine_throttles(feed_forward, controller)
     }
 
     /// Folds this step's seat g-load into the smoothed passenger g-load (SPEC §9.4).
@@ -446,10 +457,29 @@ impl World {
             &body_pose,
         );
         self.report_scrape(contacts.scrape_speed_m_s);
+        let inputs = self.event_inputs(motion_before, touching, &contacts);
+        let config = &self.car.config().events;
+        self.events
+            .update(&inputs, config, PHYSICS_DT_S, &mut self.pending_events);
+        self.drop_events_over_the_cap();
+        if self.events.crashed() {
+            // The wreck stays frozen, so close its valves rather than show live flames.
+            self.reset_controls();
+        }
+    }
+
+    /// The numbers the event rules read this step (SPEC §7.9). `touching` is which wheels
+    /// touch after the physics step.
+    fn event_inputs(
+        &self,
+        motion_before: &MotionBeforeStep,
+        touching: [bool; WHEEL_COUNT],
+        contacts: &BodyContacts,
+    ) -> EventInputs {
         let body = &self.physics.bodies[self.car.chassis];
         let nose = body.rotation() * Vector::X;
         let compressions = self.car.compressions_of(touching);
-        let inputs = EventInputs {
+        EventInputs {
             wheels_down: count_true(touching),
             tilt_rad: self.tilt_rad(),
             spin_rad_s: body.angvel().length(),
@@ -469,14 +499,6 @@ impl World {
                 .is_some_and(|bounds| !bounds.contains(body.center_of_mass().to_array())),
             raw_g: self.g_load.raw_g(),
             displayed_g: self.g_load.g(),
-        };
-        let config = &self.car.config().events;
-        self.events
-            .update(&inputs, config, PHYSICS_DT_S, &mut self.pending_events);
-        self.drop_events_over_the_cap();
-        if self.events.crashed() {
-            // The wreck stays frozen, so close its valves rather than show live flames.
-            self.reset_controls();
         }
     }
 

@@ -133,41 +133,8 @@ pub(crate) fn forecast(
 ) -> Option<LandingForecast> {
     let gravity = physics.gravity;
     let nominal = touch_down(physics, car, position, velocity, gravity, settings, STEP_S)?;
-    let mut time_spread = 0.0_f32;
-    let mut position_spread = 0.0_f32;
-    for speed_scale in [
-        1.0 - settings.speed_spread,
-        1.0,
-        1.0 + settings.speed_spread,
-    ] {
-        for pitch_deg in [-settings.pitch_spread_deg, 0.0, settings.pitch_spread_deg] {
-            if speed_scale == 1.0 && pitch_deg == 0.0 {
-                continue;
-            }
-            let sample_velocity = tilt_pitch(velocity * speed_scale, pitch_deg.to_radians());
-            match touch_down(
-                physics,
-                car,
-                position,
-                sample_velocity,
-                gravity,
-                settings,
-                STEP_S,
-            ) {
-                Some(sample) => {
-                    time_spread = time_spread.max((sample.time_s - nominal.time_s).abs());
-                    let offset = sample.point - nominal.point;
-                    position_spread =
-                        position_spread.max(Vector::new(offset.x, 0.0, offset.z).length());
-                }
-                // A sample that never lands within the horizon: as uncertain as it gets.
-                None => {
-                    time_spread = time_spread.max(settings.max_time_s - nominal.time_s);
-                    position_spread = position_spread.max(velocity.length() * settings.max_time_s);
-                }
-            }
-        }
-    }
+    let (time_spread, position_spread) =
+        sample_spreads(physics, car, position, velocity, &nominal, settings);
     let heading = horizontal(velocity).unwrap_or_else(|| {
         horizontal(*physics.bodies[car.chassis].rotation() * Vector::X).unwrap_or(Vector::X)
     });
@@ -182,6 +149,69 @@ pub(crate) fn forecast(
         time_uncertainty_s: time_spread,
         position_uncertainty_m: position_spread,
     })
+}
+
+/// How far the landing time (s) and point (m, on the ground plane) move when the launch
+/// speed and pitch are nudged by the settings' spreads, against the `nominal` landing.
+fn sample_spreads(
+    physics: &PhysicsWorld,
+    car: &Car,
+    position: Vector,
+    velocity: Vector,
+    nominal: &Touchdown,
+    settings: &ForecastSettings,
+) -> (f32, f32) {
+    let gravity = physics.gravity;
+    let mut time_spread = 0.0_f32;
+    let mut position_spread = 0.0_f32;
+    for speed_scale in [
+        1.0 - settings.speed_spread,
+        1.0,
+        1.0 + settings.speed_spread,
+    ] {
+        for pitch_deg in [-settings.pitch_spread_deg, 0.0, settings.pitch_spread_deg] {
+            if speed_scale == 1.0 && pitch_deg == 0.0 {
+                continue;
+            }
+            let sample_velocity = tilt_pitch(velocity * speed_scale, pitch_deg.to_radians());
+            let sample = touch_down(
+                physics,
+                car,
+                position,
+                sample_velocity,
+                gravity,
+                settings,
+                STEP_S,
+            );
+            let (time_s, position_m) = sample_offsets(sample, nominal, velocity, settings);
+            time_spread = time_spread.max(time_s);
+            position_spread = position_spread.max(position_m);
+        }
+    }
+    (time_spread, position_spread)
+}
+
+/// How far one nudged landing `sample` is from the `nominal` one: in time (s) and along
+/// the ground (m). A sample that never lands within the horizon is as uncertain as it gets.
+fn sample_offsets(
+    sample: Option<Touchdown>,
+    nominal: &Touchdown,
+    velocity: Vector,
+    settings: &ForecastSettings,
+) -> (f32, f32) {
+    match sample {
+        Some(sample) => {
+            let offset = sample.point - nominal.point;
+            (
+                (sample.time_s - nominal.time_s).abs(),
+                Vector::new(offset.x, 0.0, offset.z).length(),
+            )
+        }
+        None => (
+            settings.max_time_s - nominal.time_s,
+            velocity.length() * settings.max_time_s,
+        ),
+    }
 }
 
 /// Flies one ballistic path until the centre of mass is within the rest height of the
@@ -203,21 +233,7 @@ fn touch_down(
     for step in 0..=steps {
         let t = step as f32 * step_s;
         let position = start + velocity * t + gravity * (0.5 * t * t);
-        let ray = Ray::new(position, down);
-        let mut cast = physics.cast_ray_and_get_normal(&ray, reach, true, filter);
-        if let Some((_, hit)) = &cast {
-            // A fast fall can step from just above the ground to just inside it, and a ray
-            // that starts inside a solid reports distance 0 and no normal. Cast again from
-            // a little higher, so the touchdown still gets its surface and normal.
-            if hit.time_of_impact <= 0.0 {
-                let lift = INSIDE_LIFT_M;
-                let higher = Ray::new(position + Vector::new(0.0, lift, 0.0), down);
-                cast = physics.cast_ray_and_get_normal(&higher, reach + lift, true, filter);
-                if let Some((_, lifted)) = cast.as_mut() {
-                    lifted.time_of_impact -= lift;
-                }
-            }
-        }
+        let cast = cast_down(physics, position, reach, filter);
         if let Some((handle, hit)) = cast {
             let gap = hit.time_of_impact - settings.rest_height_m;
             if gap <= 0.0 {
@@ -240,6 +256,33 @@ fn touch_down(
         }
     }
     None
+}
+
+/// Casts a ray straight down from `position` for up to `reach` m, and returns the first
+/// surface hit with its normal.
+fn cast_down(
+    physics: &PhysicsWorld,
+    position: Vector,
+    reach: f32,
+    filter: QueryFilter,
+) -> Option<(ColliderHandle, RayIntersection)> {
+    let down = Vector::new(0.0, -1.0, 0.0);
+    let ray = Ray::new(position, down);
+    let mut cast = physics.cast_ray_and_get_normal(&ray, reach, true, filter);
+    if let Some((_, hit)) = &cast {
+        // A fast fall can step from just above the ground to just inside it, and a ray
+        // that starts inside a solid reports distance 0 and no normal. Cast again from
+        // a little higher, so the touchdown still gets its surface and normal.
+        if hit.time_of_impact <= 0.0 {
+            let lift = INSIDE_LIFT_M;
+            let higher = Ray::new(position + Vector::new(0.0, lift, 0.0), down);
+            cast = physics.cast_ray_and_get_normal(&higher, reach + lift, true, filter);
+            if let Some((_, lifted)) = cast.as_mut() {
+                lifted.time_of_impact -= lift;
+            }
+        }
+    }
+    cast
 }
 
 /// Tilts `velocity`'s pitch by `angle_rad` about the horizontal axis across its heading.
