@@ -209,15 +209,40 @@ pub fn footprints_of(course: &CourseSpec) -> Vec<PieceFootprint> {
     footprints
 }
 
+/// The lane footprint of `piece`, or None for a piece the car does not drive along.
 fn footprint_of(piece_id: usize, piece: &PieceSpec) -> Option<PieceFootprint> {
-    let make = |pos: &[f32; 3], yaw: f32, length_m: f32, width_m: f32, v_min: f32| PieceFootprint {
-        piece_id,
-        origin_xz_m: [pos[0], pos[2]],
-        yaw_rad: yaw.to_radians(),
-        length_m,
-        width_m,
-        v_complete_min_m_s: v_min,
-    };
+    match piece {
+        PieceSpec::HalfLoop {
+            pos,
+            yaw,
+            radius,
+            width,
+            v_complete_min_m_s,
+        } => Some(make_footprint(
+            piece_id,
+            pos,
+            *yaw,
+            [2.0 * radius, *width],
+            *v_complete_min_m_s,
+        )),
+        PieceSpec::Wall {
+            pos,
+            yaw,
+            height,
+            with_ramp: true,
+        } => Some(make_footprint(
+            piece_id,
+            pos,
+            *yaw,
+            [wall_ramp_total_length_m(*height), LANE_WIDTH_M],
+            0.0,
+        )),
+        _ => ramp_like_footprint(piece_id, piece),
+    }
+}
+
+/// The footprint of a ramp, kicker, corkscrew or half-pipe; None for any other piece.
+fn ramp_like_footprint(piece_id: usize, piece: &PieceSpec) -> Option<PieceFootprint> {
     match piece {
         PieceSpec::Ramp {
             pos,
@@ -226,40 +251,52 @@ fn footprint_of(piece_id: usize, piece: &PieceSpec) -> Option<PieceFootprint> {
             width,
             v_complete_min_m_s,
             ..
-        } => Some(make(pos, *yaw, *length, *width, *v_complete_min_m_s)),
+        } => Some(make_footprint(
+            piece_id,
+            pos,
+            *yaw,
+            [*length, *width],
+            *v_complete_min_m_s,
+        )),
         PieceSpec::Kicker {
             pos, yaw, length, ..
-        } => Some(make(pos, *yaw, *length, LANE_WIDTH_M, 0.0)),
+        }
+        | PieceSpec::Halfpipe {
+            pos, yaw, length, ..
+        } => Some(make_footprint(
+            piece_id,
+            pos,
+            *yaw,
+            [*length, LANE_WIDTH_M],
+            0.0,
+        )),
         PieceSpec::Corkscrew {
             pos,
             yaw,
             length,
             width,
             ..
-        } => Some(make(pos, *yaw, *length, *width, 0.0)),
-        PieceSpec::Halfpipe {
-            pos, yaw, length, ..
-        } => Some(make(pos, *yaw, *length, LANE_WIDTH_M, 0.0)),
-        PieceSpec::HalfLoop {
-            pos,
-            yaw,
-            radius,
-            width,
-            v_complete_min_m_s,
-        } => Some(make(pos, *yaw, 2.0 * radius, *width, *v_complete_min_m_s)),
-        PieceSpec::Wall {
-            pos,
-            yaw,
-            height,
-            with_ramp: true,
-        } => Some(make(
-            pos,
-            *yaw,
-            wall_ramp_total_length_m(*height),
-            LANE_WIDTH_M,
-            0.0,
-        )),
+        } => Some(make_footprint(piece_id, pos, *yaw, [*length, *width], 0.0)),
         _ => None,
+    }
+}
+
+/// A footprint at `pos` (m, only x and z used) turned `yaw_deg` degrees; `size_m` is its
+/// [length, width] in m.
+fn make_footprint(
+    piece_id: usize,
+    pos: &[f32; 3],
+    yaw_deg: f32,
+    size_m: [f32; 2],
+    v_complete_min_m_s: f32,
+) -> PieceFootprint {
+    PieceFootprint {
+        piece_id,
+        origin_xz_m: [pos[0], pos[2]],
+        yaw_rad: yaw_deg.to_radians(),
+        length_m: size_m[0],
+        width_m: size_m[1],
+        v_complete_min_m_s,
     }
 }
 

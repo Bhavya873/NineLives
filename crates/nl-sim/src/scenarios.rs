@@ -487,51 +487,9 @@ impl ScenariosConfig {
         let Some(widening) = &self.widening else {
             return Ok(());
         };
-        let (f, a) = (&widening.stage_f, &widening.stage_a);
-        let ranges = [
-            ("widening.stage_f.strength", f.strength),
-            ("widening.stage_f.mixed_roll_share", f.mixed_roll_share),
-            ("widening.stage_f.mixed_pitch_share", f.mixed_pitch_share),
-            ("widening.stage_a.height_m", a.height_m),
-            ("widening.stage_a.spin_rad_s", a.spin_rad_s),
-        ];
-        for (field, range) in ranges {
-            let [low, high] = range;
-            if !(low.is_finite() && high.is_finite() && 0.0 <= low && low <= high) {
-                return Err(ScenariosConfigError::BadRange { field, range });
-            }
-        }
-        let chances = [
-            ("widening.stage_f.mixed_probability", f.mixed_probability),
-            (
-                "widening.stage_a.scripted_probability",
-                a.scripted_probability,
-            ),
-        ];
-        for (field, value) in chances {
-            if !(0.0..=1.0).contains(&value) {
-                return Err(ScenariosConfigError::BadDrivingStage {
-                    field,
-                    rule: "between 0 and 1",
-                });
-            }
-        }
-        let numbers = [
-            ("widening.stage_f.start_tilt_deg", f.start_tilt_deg),
-            ("widening.stage_f.start_yaw_deg", f.start_yaw_deg),
-            ("widening.stage_f.start_spin_rad_s", f.start_spin_rad_s),
-            ("widening.stage_a.tilt_deg", a.tilt_deg),
-            (
-                "widening.stage_a.from_max_spin_rad_s",
-                a.from_max_spin_rad_s,
-            ),
-        ];
-        for (field, value) in numbers {
-            if !(value.is_finite() && value >= 0.0) {
-                return Err(ScenariosConfigError::Negative { field, value });
-            }
-        }
-        Ok(())
+        check_widening_ranges(&widening.stage_f, &widening.stage_a)?;
+        check_widening_chances(&widening.stage_f, &widening.stage_a)?;
+        check_widening_numbers(&widening.stage_f, &widening.stage_a)
     }
 
     /// Single numbers: none may be negative (a negative maximum would make an empty
@@ -544,6 +502,12 @@ impl ScenariosConfig {
 
     /// The episode, Stage A, Stage B and randomization numbers: none may be negative.
     fn check_episode_and_stage_numbers(&self) -> Result<(), ScenariosConfigError> {
+        self.check_episode_numbers()?;
+        self.check_stage_a_b_and_randomization_numbers()
+    }
+
+    /// The episode numbers: none may be negative.
+    fn check_episode_numbers(&self) -> Result<(), ScenariosConfigError> {
         check_not_negative(&[
             ("episode.success_hold_s", self.episode.success_hold_s),
             ("episode.spawn_clearance_m", self.episode.spawn_clearance_m),
@@ -563,6 +527,12 @@ impl ScenariosConfig {
                 "episode.settle_max_side_speed_m_s",
                 self.episode.settle_max_side_speed_m_s,
             ),
+        ])
+    }
+
+    /// The Stage A, Stage B and randomization numbers: none may be negative.
+    fn check_stage_a_b_and_randomization_numbers(&self) -> Result<(), ScenariosConfigError> {
+        check_not_negative(&[
             ("stage_a.max_tilt_deg", self.stage_a.max_tilt_deg),
             ("stage_a.max_spin_rad_s", self.stage_a.max_spin_rad_s),
             ("stage_b.max_pitch_yaw_deg", self.stage_b.max_pitch_yaw_deg),
@@ -713,17 +683,9 @@ pub(crate) fn start_episode_tagged(
     let mut tag = ScenarioTag::default();
     let start = match stage {
         Stage::A => {
-            let scripted = config
-                .widened()
-                .filter(|_| widened)
-                .and_then(|widening| scripted_drop(config, &widening.stage_a, seed));
-            match scripted {
-                Some((start, scripted_tag)) => {
-                    tag = scripted_tag;
-                    start
-                }
-                None => sample_drop(&config.stage_a, &mut rng),
-            }
+            let (start, stage_a_tag) = stage_a_start(config, widened, seed, &mut rng);
+            tag = stage_a_tag;
+            start
         }
         Stage::B => sample_tip_over(&config.stage_b, &mut rng),
         Stage::C | Stage::D | Stage::E | Stage::F => {
@@ -749,6 +711,24 @@ pub(crate) fn start_episode_tagged(
     Ok(tag)
 }
 
+/// The Stage A start for `seed`: a scripted entry if the widening picks one, else a plain
+/// random drop from `rng`. The tag is empty for a plain drop.
+fn stage_a_start(
+    config: &ScenariosConfig,
+    widened: bool,
+    seed: u64,
+    rng: &mut ChaCha8Rng,
+) -> (Checkpoint, ScenarioTag) {
+    let scripted = config
+        .widened()
+        .filter(|_| widened)
+        .and_then(|widening| scripted_drop(config, &widening.stage_a, seed));
+    match scripted {
+        Some(found) => found,
+        None => (sample_drop(&config.stage_a, rng), ScenarioTag::default()),
+    }
+}
+
 /// A scripted Stage A entry for `seed` (a flip, a roll or a tumble about a random axis),
 /// or None if this drop is a plain one. Drawn from a stream of its own.
 fn scripted_drop(
@@ -765,17 +745,7 @@ fn scripted_drop(
         return None;
     }
     let drop = &config.stage_a;
-    let rate_rad_s = draw(&mut rng, widening.spin_rad_s);
-    let sign = if rng.random_range(0.0..1.0) < 0.5 {
-        1.0
-    } else {
-        -1.0
-    };
-    let (name, body_spin) = match rng.random_range(0..3) {
-        0 => ("scripted_flip", Vector::new(0.0, 0.0, sign * rate_rad_s)),
-        1 => ("scripted_roll", Vector::new(sign * rate_rad_s, 0.0, 0.0)),
-        _ => ("scripted_tumble", random_direction(&mut rng) * rate_rad_s),
-    };
+    let (name, body_spin, rate_rad_s) = draw_scripted_spin(&mut rng, widening);
     let height_m = draw(&mut rng, widening.height_m);
     let heading = Rotation::from_rotation_y(rng.random_range(0.0..std::f32::consts::TAU));
     let tilt_axis_rad = rng.random_range(0.0..std::f32::consts::TAU);
@@ -801,6 +771,90 @@ fn scripted_drop(
         spin_axis: SpinAxis::dominant(body_spin.to_array()),
     };
     Some((start, tag))
+}
+
+/// Every widening range is in order: finite, non-negative, low at most high.
+fn check_widening_ranges(f: &FlightWidening, a: &DropWidening) -> Result<(), ScenariosConfigError> {
+    let ranges = [
+        ("widening.stage_f.strength", f.strength),
+        ("widening.stage_f.mixed_roll_share", f.mixed_roll_share),
+        ("widening.stage_f.mixed_pitch_share", f.mixed_pitch_share),
+        ("widening.stage_a.height_m", a.height_m),
+        ("widening.stage_a.spin_rad_s", a.spin_rad_s),
+    ];
+    for (field, range) in ranges {
+        let [low, high] = range;
+        if !(low.is_finite() && high.is_finite() && 0.0 <= low && low <= high) {
+            return Err(ScenariosConfigError::BadRange { field, range });
+        }
+    }
+    Ok(())
+}
+
+/// Every widening chance is between 0 and 1.
+fn check_widening_chances(
+    f: &FlightWidening,
+    a: &DropWidening,
+) -> Result<(), ScenariosConfigError> {
+    let chances = [
+        ("widening.stage_f.mixed_probability", f.mixed_probability),
+        (
+            "widening.stage_a.scripted_probability",
+            a.scripted_probability,
+        ),
+    ];
+    for (field, value) in chances {
+        if !(0.0..=1.0).contains(&value) {
+            return Err(ScenariosConfigError::BadDrivingStage {
+                field,
+                rule: "between 0 and 1",
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Every other widening number is finite and not negative.
+fn check_widening_numbers(
+    f: &FlightWidening,
+    a: &DropWidening,
+) -> Result<(), ScenariosConfigError> {
+    let numbers = [
+        ("widening.stage_f.start_tilt_deg", f.start_tilt_deg),
+        ("widening.stage_f.start_yaw_deg", f.start_yaw_deg),
+        ("widening.stage_f.start_spin_rad_s", f.start_spin_rad_s),
+        ("widening.stage_a.tilt_deg", a.tilt_deg),
+        (
+            "widening.stage_a.from_max_spin_rad_s",
+            a.from_max_spin_rad_s,
+        ),
+    ];
+    for (field, value) in numbers {
+        if !(value.is_finite() && value >= 0.0) {
+            return Err(ScenariosConfigError::Negative { field, value });
+        }
+    }
+    Ok(())
+}
+
+/// The preset name, the body-frame spin and its rate in rad/s for a scripted drop: a
+/// flip, a roll or a tumble about a random axis, spinning either way.
+fn draw_scripted_spin(
+    rng: &mut ChaCha8Rng,
+    widening: &DropWidening,
+) -> (&'static str, Vector, f32) {
+    let rate_rad_s = draw(rng, widening.spin_rad_s);
+    let sign = if rng.random_range(0.0..1.0) < 0.5 {
+        1.0
+    } else {
+        -1.0
+    };
+    let (name, body_spin) = match rng.random_range(0..3) {
+        0 => ("scripted_flip", Vector::new(0.0, 0.0, sign * rate_rad_s)),
+        1 => ("scripted_roll", Vector::new(sign * rate_rad_s, 0.0, 0.0)),
+        _ => ("scripted_tumble", random_direction(rng) * rate_rad_s),
+    };
+    (name, body_spin, rate_rad_s)
 }
 
 /// Puts the car at `start`, raised by `lift_m`.
