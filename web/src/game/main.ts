@@ -322,7 +322,10 @@ async function start(): Promise<void> {
   };
 
   // the game loop: physics ticks at 120 hz, one render per browser frame
+  // Frozen (paused or the rotate card up) means nothing moves; game over keeps running.
+  const isFrozen = (): boolean => paused || extra.portraitBlocked();
   startGameLoop(Game.physics_dt_s(), {
+    frozen: isFrozen,
     tick: () => {
       if (!started || paused || lives.over || extra.portraitBlocked()) {
         return;
@@ -341,7 +344,7 @@ async function start(): Promise<void> {
     },
     render: (blend) => {
       const nowMs = performance.now();
-      const frameS = (nowMs - lastRenderMs) / 1000;
+      const frameS = isFrozen() ? 0 : (nowMs - lastRenderMs) / 1000;
       lastRenderMs = nowMs;
       // Events queue up in the sim, so reading them once per frame is enough.
       // The HUD's save and crash counts update as events drain, so drain first.
@@ -414,11 +417,23 @@ async function start(): Promise<void> {
       },
       started: () => started,
       stuntRequestCount: () => stuntRequests,
+      // where the car mesh and the camera are drawn (not the sim pose)
+      drawnCarPosition: () => plainPoint(view.carBody.position),
+      cameraPosition: () => plainPoint(view.camera.position),
       heartsLeft: () => livesLeft(lives, hudValues),
       // tests only (?testhooks): takes a life as a crash would
       ...(params.has('testhooks') ? { loseLife: () => grantFreeRespawns(lives, -1) } : {}),
     },
   });
+}
+
+/** Copies a three.js vector into a plain `{x, y, z}` object (for the test hook). */
+function plainPoint(point: { x: number; y: number; z: number }): {
+  x: number;
+  y: number;
+  z: number;
+} {
+  return { x: point.x, y: point.y, z: point.z };
 }
 
 /** Shows the car exactly where the sim has it, with no blending or camera easing. */

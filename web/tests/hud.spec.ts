@@ -172,3 +172,63 @@ test('flying out of bounds respawns for free with a back in bounds toast', async
     )
     .toBeLessThan(20);
 });
+
+/** A point read from the drawn car mesh or the camera. */
+interface Point3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** Reads the drawn car and camera positions on `frameCount` consecutive animation frames. */
+async function sampleDrawnPositions(
+  page: Page,
+  frameCount: number,
+): Promise<{ car: Point3; camera: Point3 }[]> {
+  return page.evaluate(async (count) => {
+    const hook = (
+      window as unknown as {
+        ninelivesDebug: { drawnCarPosition: () => Point3; cameraPosition: () => Point3 };
+      }
+    ).ninelivesDebug;
+    const samples: { car: Point3; camera: Point3 }[] = [];
+    for (let frame = 0; frame < count; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      samples.push({ car: hook.drawnCarPosition(), camera: hook.cameraPosition() });
+    }
+    return samples;
+  }, frameCount);
+}
+
+test('pausing while moving holds the car and camera still', async ({ page }) => {
+  test.setTimeout(2 * SLOW_MACHINE_TIMEOUT_MS);
+  await page.goto('/?play=1');
+  await waitForGame(page);
+
+  await page.keyboard.down('ArrowUp');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as { ninelivesDebug: { drawnCarPosition: () => Point3 } }
+            ).ninelivesDebug.drawnCarPosition().x,
+        ),
+      { timeout: SLOW_MACHINE_TIMEOUT_MS },
+    )
+    .toBeGreaterThan(8);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#paused')).toBeVisible();
+  const pausedSamples = await sampleDrawnPositions(page, 30);
+  for (const sample of pausedSamples) {
+    expect(sample).toEqual(pausedSamples[0]);
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#paused')).toBeHidden();
+  const resumedSamples = await sampleDrawnPositions(page, 30);
+  expect(resumedSamples.at(-1)?.car.x).toBeGreaterThan(pausedSamples[0]?.car.x ?? Infinity);
+  await page.keyboard.up('ArrowUp');
+});

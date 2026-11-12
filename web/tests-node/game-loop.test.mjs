@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { planTicks } from '../src/game/game-loop.ts';
+import { planTicks, startGameLoop } from '../src/game/game-loop.ts';
 
 const TICK_S = 1 / 120;
 
@@ -27,4 +27,38 @@ test('a long pause runs at most 8 ticks and drops the rest', () => {
 
   assert.equal(plan.ticks, 8);
   assert.equal(plan.leftoverS, 0);
+});
+
+test('a frozen loop runs no ticks and keeps its blend', () => {
+  const frameCallbacks = [];
+  globalThis.requestAnimationFrame = (callback) => frameCallbacks.push(callback);
+  let isFrozen = false;
+  let tickCount = 0;
+  const blends = [];
+  startGameLoop(TICK_S, {
+    tick: () => {
+      tickCount += 1;
+    },
+    render: (blend) => blends.push(blend),
+    frozen: () => isFrozen,
+  });
+  const runFrame = (nowMs) => frameCallbacks.shift()(nowMs);
+
+  runFrame(0);
+  runFrame(10); // 10 ms: one tick, 1.67 ms left over
+  const ticksBeforeFreeze = tickCount;
+  const blendBeforeFreeze = blends.at(-1);
+
+  isFrozen = true;
+  runFrame(1010);
+  runFrame(1020);
+  assert.equal(tickCount, ticksBeforeFreeze);
+  assert.equal(blends.at(-1), blendBeforeFreeze);
+  assert.equal(blends.at(-2), blendBeforeFreeze);
+
+  // Resuming continues from the kept leftover: the frozen second is not replayed.
+  isFrozen = false;
+  runFrame(1030);
+  assert.equal(tickCount, ticksBeforeFreeze + 1);
+  delete globalThis.requestAnimationFrame;
 });
