@@ -169,6 +169,23 @@ impl Pd {
         landing: Option<&LandingView>,
         far: bool,
     ) -> [f32; 3] {
+        let up_wanted = self.up_wanted(state, landing, far);
+        if far && self.holds_attitude(state, &up_wanted) {
+            return [0.0; 3];
+        }
+        let mut error = tilt_error(wish, &up_wanted);
+        let accel = self.wanted_accel(state, wish, landing, far, &mut error);
+        let accel = cap_length(accel, self.config.max_angular_accel_rad_s2);
+        let mut torque = [0.0; 3];
+        for axis in 0..3 {
+            torque[axis] = self.inertia_kg_m2[axis] * accel[axis];
+        }
+        torque
+    }
+
+    /// The body-frame direction that should point up: against gravity, or, near
+    /// touchdown on a tilted surface, the surface normal.
+    fn up_wanted(&self, state: &CarState, landing: Option<&LandingView>, far: bool) -> [f32; 3] {
         let [gx, gy, gz] = state.gravity_dir_body;
         let mut up_wanted = [-gx, -gy, -gz];
         if let (Some(view), false) = (landing, far) {
@@ -179,22 +196,20 @@ impl Pd {
                 up_wanted = normal;
             }
         }
-        if far && self.holds_attitude(state, &up_wanted) {
-            return [0.0; 3];
-        }
-        let (sin_p, cos_p) = (
-            libm::sinf(wish.nose_down_rad),
-            libm::cosf(wish.nose_down_rad),
-        );
-        let axis_up = [-sin_p, cos_p, 0.0];
-        let mut error = cross(axis_up, up_wanted);
-        let upside_down = up_wanted[1] < 0.0;
-        if upside_down && error[0].abs() < MIN_TILT_ERROR && error[2].abs() < MIN_TILT_ERROR {
-            // The cross product vanishes; roll (either way works) at the threshold size,
-            // so the torque does not jump as the error crosses it.
-            let roll_sign = if up_wanted[2] >= 0.0 { 1.0 } else { -1.0 };
-            error = [roll_sign * MIN_TILT_ERROR, 0.0, 0.0];
-        }
+        up_wanted
+    }
+
+    /// The wanted angular acceleration in rad/s^2 (before the g-load cap): kp times the
+    /// tilt `error` minus kd times the spin relative to the wished yaw rate. May flip
+    /// `error` on an axis the car should keep spinning through.
+    fn wanted_accel(
+        &self,
+        state: &CarState,
+        wish: &AirWish,
+        landing: Option<&LandingView>,
+        far: bool,
+        error: &mut [f32; 3],
+    ) -> [f32; 3] {
         let spin = state.angular_velocity_body_rad_s;
         let wished_spin = [0.0, wish.yaw_rate_rad_s, 0.0];
         let (kp, kd) = self.attitude_gains(state);
@@ -214,12 +229,7 @@ impl Pd {
             }
             accel[axis] = kp * error[axis] - kd * damped_spin;
         }
-        let accel = cap_length(accel, self.config.max_angular_accel_rad_s2);
-        let mut torque = [0.0; 3];
-        for axis in 0..3 {
-            torque[axis] = self.inertia_kg_m2[axis] * accel[axis];
-        }
-        torque
+        accel
     }
 
     /// The attitude gains (kp, kd) for the car's tilt: the near-upright pair up to
@@ -443,6 +453,26 @@ struct AirWish {
     yaw_rate_rad_s: f32,
     /// Wanted pitch, positive tipping the nose down, in rad.
     nose_down_rad: f32,
+}
+
+/// The tilt error `axis_up x up_wanted`, where `axis_up` is the body axis that should
+/// point up (tipped forward by the pitch wish). Upside down, where the cross product
+/// vanishes, it rolls at `MIN_TILT_ERROR` instead.
+fn tilt_error(wish: &AirWish, up_wanted: &[f32; 3]) -> [f32; 3] {
+    let (sin_p, cos_p) = (
+        libm::sinf(wish.nose_down_rad),
+        libm::cosf(wish.nose_down_rad),
+    );
+    let axis_up = [-sin_p, cos_p, 0.0];
+    let mut error = cross(axis_up, *up_wanted);
+    let upside_down = up_wanted[1] < 0.0;
+    if upside_down && error[0].abs() < MIN_TILT_ERROR && error[2].abs() < MIN_TILT_ERROR {
+        // The cross product vanishes; roll (either way works) at the threshold size,
+        // so the torque does not jump as the error crosses it.
+        let roll_sign = if up_wanted[2] >= 0.0 { 1.0 } else { -1.0 };
+        error = [roll_sign * MIN_TILT_ERROR, 0.0, 0.0];
+    }
+    error
 }
 
 /// a × b.

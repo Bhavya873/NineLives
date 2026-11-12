@@ -414,62 +414,101 @@ fn remaining_cost(
         let end_rate_rad_s = end_rate_for(config, last);
         let angular_accel_rad_s2 = alpha_for(config, segment.kind, &inputs.state);
         let air_rate = air_rate_for(config, segment.kind);
-        if i == index {
-            let target = f32::from(segment.turns) * TAU;
-            let brake_s =
-                (spin_rate_rad_s.max(end_rate_rad_s) - end_rate_rad_s) / angular_accel_rad_s2;
-            let (time_s, firing_s) = match phase {
-                // Past the point of braking the rotation is what it is.
-                StuntPhase::Brake => (brake_s, brake_s),
-                StuntPhase::Coast => {
-                    let to_turn = (target
-                        - rotation_rad
-                        - ramp_angle(end_rate_rad_s, spin_rate_rad_s, angular_accel_rad_s2))
-                    .max(0.0);
-                    let firing_s = (coast_rate_rad_s - spin_rate_rad_s).max(0.0)
-                        / angular_accel_rad_s2
-                        + (coast_rate_rad_s - end_rate_rad_s).max(0.0) / angular_accel_rad_s2;
-                    (to_turn / spin_rate_rad_s.max(0.1) + brake_s, firing_s)
-                }
-                _ => {
-                    let times = times_to_go(
-                        segment,
-                        coast_rate_rad_s,
-                        angular_accel_rad_s2,
-                        end_rate_rad_s,
-                        spin_rate_rad_s,
-                        rotation_rad,
-                    );
-                    (
-                        times.up_s + times.coast_s + times.brake_s,
-                        times.up_s + times.brake_s,
-                    )
-                }
-            };
-            cost.time_s += time_s;
-            cost.air_kg += air_rate * firing_s;
-        } else {
-            let coast_rate_rad_s = coast_rate_for(
-                config,
-                segment.kind,
-                inputs.mode,
-                angular_accel_rad_s2,
-                segment.turns,
+        let (time_s, firing_s) = if i == index {
+            current_segment_times(
+                segment,
+                phase,
+                spin_rate_rad_s,
+                rotation_rad,
+                coast_rate_rad_s,
                 end_rate_rad_s,
-            );
+                angular_accel_rad_s2,
+            )
+        } else {
+            later_segment_times(
+                config,
+                inputs,
+                segment,
+                end_rate_rad_s,
+                angular_accel_rad_s2,
+            )
+        };
+        cost.time_s += time_s;
+        cost.air_kg += air_rate * firing_s;
+    }
+    cost
+}
+
+/// Time and firing time, both in s, that the segment in progress still needs: it is in
+/// `phase`, spinning at `spin_rate_rad_s` with `rotation_rad` turned.
+fn current_segment_times(
+    segment: Segment,
+    phase: StuntPhase,
+    spin_rate_rad_s: f32,
+    rotation_rad: f32,
+    coast_rate_rad_s: f32,
+    end_rate_rad_s: f32,
+    angular_accel_rad_s2: f32,
+) -> (f32, f32) {
+    let target = f32::from(segment.turns) * TAU;
+    let brake_s = (spin_rate_rad_s.max(end_rate_rad_s) - end_rate_rad_s) / angular_accel_rad_s2;
+    match phase {
+        // Past the point of braking the rotation is what it is.
+        StuntPhase::Brake => (brake_s, brake_s),
+        StuntPhase::Coast => {
+            let to_turn = (target
+                - rotation_rad
+                - ramp_angle(end_rate_rad_s, spin_rate_rad_s, angular_accel_rad_s2))
+            .max(0.0);
+            let firing_s = (coast_rate_rad_s - spin_rate_rad_s).max(0.0) / angular_accel_rad_s2
+                + (coast_rate_rad_s - end_rate_rad_s).max(0.0) / angular_accel_rad_s2;
+            (to_turn / spin_rate_rad_s.max(0.1) + brake_s, firing_s)
+        }
+        _ => {
             let times = times_to_go(
                 segment,
                 coast_rate_rad_s,
                 angular_accel_rad_s2,
                 end_rate_rad_s,
-                0.0,
-                0.0,
+                spin_rate_rad_s,
+                rotation_rad,
             );
-            cost.time_s += times.up_s + times.coast_s + times.brake_s;
-            cost.air_kg += air_rate * (times.up_s + times.brake_s);
+            (
+                times.up_s + times.coast_s + times.brake_s,
+                times.up_s + times.brake_s,
+            )
         }
     }
-    cost
+}
+
+/// Time and firing time, both in s, of a segment that starts from rest.
+fn later_segment_times(
+    config: &StuntConfig,
+    inputs: &PlannerInputs,
+    segment: Segment,
+    end_rate_rad_s: f32,
+    angular_accel_rad_s2: f32,
+) -> (f32, f32) {
+    let coast_rate_rad_s = coast_rate_for(
+        config,
+        segment.kind,
+        inputs.mode,
+        angular_accel_rad_s2,
+        segment.turns,
+        end_rate_rad_s,
+    );
+    let times = times_to_go(
+        segment,
+        coast_rate_rad_s,
+        angular_accel_rad_s2,
+        end_rate_rad_s,
+        0.0,
+        0.0,
+    );
+    (
+        times.up_s + times.coast_s + times.brake_s,
+        times.up_s + times.brake_s,
+    )
 }
 
 /// Angle turned, in rad, while the spin rate changes from `from_rate_rad_s` to
@@ -543,6 +582,18 @@ pub fn authorize_chain(
     let Some(&first) = segments.first() else {
         return refuse(StuntReason::NoLanding);
     };
+    plan_chain(config, inputs, &landing, &segments, first)
+}
+
+/// Rules 2 and 3 for a chain of `segments` whose `first` stunt is about to start: builds
+/// the plan, or names the rule that failed.
+fn plan_chain(
+    config: &StuntConfig,
+    inputs: &PlannerInputs,
+    landing: &LandingForecast,
+    segments: &[Segment],
+    first: Segment,
+) -> Result<StuntPlan, StuntRefusal> {
     let end_rate = end_rate_for(config, segments.len() == 1);
     let alpha = alpha_for(config, first.kind, &inputs.state);
     let omega = coast_rate_for(
@@ -557,28 +608,15 @@ pub fn authorize_chain(
     let cost = remaining_cost(
         config,
         inputs,
-        &segments,
+        segments,
         0,
         StuntPhase::SpinUp,
         0.0,
         0.0,
         omega,
     );
-    let required_s = cost.time_s + config.catch_time_s + config.settle_margin_s;
-    // Rule 2.
-    if landing.time_s - landing.time_uncertainty_s < required_s {
-        return refuse(StuntReason::NotEnoughTime);
-    }
-    // Rule 3.
-    let air_needed_kg = if inputs.unlimited_air {
-        0.0
-    } else {
-        config.air_margin * (cost.air_kg + config.catch_air_kg)
-            + landing_reserve_kg(config, &inputs.state, &landing)
-    };
-    if !inputs.unlimited_air && inputs.air_kg < air_needed_kg {
-        return refuse(StuntReason::NotEnoughAir);
-    }
+    let (required_s, air_needed_kg) = check_time_and_air(config, inputs, landing, &cost)
+        .map_err(|reason| StuntRefusal { reason })?;
     Ok(StuntPlan {
         coast_rate_rad_s: omega,
         alpha_rad_s2: alpha,
@@ -588,6 +626,32 @@ pub fn authorize_chain(
         required_s,
         air_needed_kg,
     })
+}
+
+/// Rule 2 (time) then rule 3 (air) for a chain costing `cost`. `Ok` carries the time the
+/// chain needs in s and the air it needs in kg.
+fn check_time_and_air(
+    config: &StuntConfig,
+    inputs: &PlannerInputs,
+    landing: &LandingForecast,
+    cost: &Cost,
+) -> Result<(f32, f32), StuntReason> {
+    let required_s = cost.time_s + config.catch_time_s + config.settle_margin_s;
+    // Rule 2.
+    if landing.time_s - landing.time_uncertainty_s < required_s {
+        return Err(StuntReason::NotEnoughTime);
+    }
+    // Rule 3.
+    let air_needed_kg = if inputs.unlimited_air {
+        0.0
+    } else {
+        config.air_margin * (cost.air_kg + config.catch_air_kg)
+            + landing_reserve_kg(config, &inputs.state, landing)
+    };
+    if !inputs.unlimited_air && inputs.air_kg < air_needed_kg {
+        return Err(StuntReason::NotEnoughAir);
+    }
+    Ok((required_s, air_needed_kg))
 }
 
 /// The air kept for the PD landing after the stunt, in kg: `landing_air_kg_per_m_s` times
