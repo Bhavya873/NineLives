@@ -3,9 +3,6 @@
    top-right, speed and air bottom-centre. theme.css has the tokens and the glass material. */
 
 :root {
-  --heart-lost: #2c3138;
-  /* Edge of the scene seen through a gap; matches BACKDROP_HORIZON in src/render/backdrop.ts. */
-  --scene: #2a3d52;
   /* Fixed places of the bottom-centre instruments (px): the dash is centred, and the nozzle map
      and g-meter sit either side of it so the dash never moves when they fade in. */
   --dash-width: 380px;
@@ -194,7 +191,7 @@ a {
 #hud-g-track {
   box-sizing: border-box;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
   background: rgb(var(--bone-rgb) / 0.22);
 }
@@ -387,7 +384,7 @@ a {
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  background: rgb(13 16 20 / 0.6);
+  background: rgb(var(--slate-deep-rgb) / 0.6);
   overflow-y: auto;
 }
 #title {
@@ -445,11 +442,13 @@ a {
   gap: 12px;
   margin-top: 6px;
 }
+/* The card buttons and the pause-menu buttons (touch.css) share this look; each adds its own size. */
 .card button,
-.card a.button {
+.card a.button,
+#paused-touch button {
   padding: 8px 26px;
   border: var(--tile-border) solid rgb(var(--bone-rgb) / 0.6);
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: rgb(var(--ink-rgb) / var(--glass-tint));
   color: var(--sand);
   font-family: var(--font-display);
@@ -461,12 +460,16 @@ a {
   cursor: pointer;
 }
 /* slate-deep on rust is 4.1:1, and the label is 18 px bold */
-.card button.primary {
+.card button.primary,
+#paused-touch button.primary {
   background: var(--rust);
   color: var(--slate-deep);
 }
 .card button:hover,
-.card a.button:hover {
+.card a.button:hover,
+.card button:focus-visible,
+.card a.button:focus-visible,
+#paused-touch button:focus-visible {
   background: var(--sand);
   color: var(--slate);
 }

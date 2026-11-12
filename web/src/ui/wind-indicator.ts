@@ -4,7 +4,7 @@
 // and the camera's yaw. With no wind it still shows, as "Off" without the arrow, because a
 // tap on it (or the V key) cycles the wind.
 
-import { setText } from '../shared/dom.ts';
+import { setAriaLabel, setText } from '../shared/dom.ts';
 
 /** Below this speed (m/s) the wind counts as off and the readout hides. */
 const WIND_OFF_BELOW_M_S = 0.5;
@@ -36,12 +36,20 @@ export function windArrowAngleRad(windX: number, windZ: number, cameraYaw: numbe
   return Math.atan2(across, along);
 }
 
-/** The label for a level wind speed in m/s: "Off", or "Breeze 6 m/s" / "Storm 20 m/s". */
-export function windLabel(speedM_S: number): string {
+/** The wind's level for a speed in m/s: "Off", "Breeze" or "Storm". */
+export function windKind(speedM_S: number): 'Off' | 'Breeze' | 'Storm' {
   if (speedM_S < WIND_OFF_BELOW_M_S) {
     return 'Off';
   }
-  const kind = speedM_S >= STORM_FROM_M_S ? 'Storm' : 'Breeze';
+  return speedM_S >= STORM_FROM_M_S ? 'Storm' : 'Breeze';
+}
+
+/** The label for a level wind speed in m/s: "Off", or "Breeze 6 m/s" / "Storm 20 m/s". */
+export function windLabel(speedM_S: number): string {
+  const kind = windKind(speedM_S);
+  if (kind === 'Off') {
+    return kind;
+  }
   return `${kind} ${speedM_S.toFixed(0)} m/s`;
 }
 
@@ -74,6 +82,7 @@ export function updateWindIndicator(
   const speedM_S = Math.hypot(windX, windZ);
   const off = speedM_S < WIND_OFF_BELOW_M_S;
   indicator.arrow.hidden = off;
+  setAriaLabel(indicator.box, `Wind: ${windKind(speedM_S)}`);
   if (off) {
     setText(indicator.label, windLabel(0));
     return;

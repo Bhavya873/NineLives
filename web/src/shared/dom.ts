@@ -21,6 +21,13 @@ export function setText(element: HTMLElement, text: string): void {
   }
 }
 
+/** Writes the `aria-label` only when it changed. */
+export function setAriaLabel(element: HTMLElement, label: string): void {
+  if (element.getAttribute('aria-label') !== label) {
+    element.setAttribute('aria-label', label);
+  }
+}
+
 /**
  * Makes the rest of the page inert (no Tab, no clicks, hidden from screen readers) while a
  * modal dialog is up. Returns a function that undoes exactly what it changed.

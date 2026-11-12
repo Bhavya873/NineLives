@@ -1,6 +1,7 @@
 /* Styles of the training viewer page (viewer.html): slate tickets over the dark scene.
-   Tokens and the .tile ticket come from src/ui/theme.css (linked first by viewer.html). A tile is clipped to its notched
-   shape, so focus rings and inset marks stay inside it. */
+   Tokens and the .tile ticket come from src/ui/theme.css (linked first by viewer.html).
+   A tile is a flat slate panel with a thin edge and square corners; its focus rings and inset marks
+   sit inside the edge. */
 
 /* The one source for the side column's size (main.ts reads --viewer-side-reserved to size the
    panels). --viewer-side-width is the column's width; --viewer-side-reserved is how much of the
@@ -16,7 +17,7 @@ body {
   height: 100%;
   overflow: hidden;
   /* the scene's clear colour (main.ts) */
-  background: #16202b;
+  background: var(--viewer-scene);
   font-family: var(--font-text);
 }
 #viewer {

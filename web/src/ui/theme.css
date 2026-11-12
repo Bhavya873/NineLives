@@ -39,10 +39,16 @@
      enough for small text, but small text stays bone. */
   --rust: #e0542f;
   --red: #ff5b5b; /* danger only; 4.9:1 on slate */
+  --heart-lost: #2c3138; /* an empty heart */
+  /* Edge of the scene seen through a gap; matches BACKDROP_HORIZON in src/render/backdrop.ts. */
+  --scene: #2a3d52;
+  /* The training viewer's clear colour; matches setClearColor in src/viewer/main.ts. */
+  --viewer-scene: #16202b;
   --font-text: 'Barlow', 'Helvetica Neue', Arial, sans-serif;
   --font-display: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
   /* RGB triples for alpha mixes: rgb(var(--ink-rgb) / 0.35) */
   --ink-rgb: 21 25 31;
+  --slate-deep-rgb: 13 16 20; /* the channels of --slate-deep */
   --bone-rgb: 241 237 226;
   /* the five font sizes; nothing in the UI is smaller than the first */
   --text-xs: 13px;
@@ -56,9 +62,16 @@
   --track-2: 0.1em;
   --tile-border: 1px;
   --edge: 16px;
-  --radius-panel: 18px;
+  --radius-panel: 8px;
+  --radius-control: 6px; /* card and pause-menu buttons */
+  --radius-pill: 999px; /* bar tracks */
   /* how much ink shows through a glass panel, 0 (clear) to 1 (opaque) */
   --glass-tint: 0.35;
+}
+
+/* An SVG that only holds shared definitions (the refraction filter): out of the layout. */
+.svg-defs {
+  position: absolute;
 }
 
 /* The ink panel (training viewer, and the glass fallback): flat slate, a thin edge, square corners. */
