@@ -43,7 +43,9 @@ def bar_panel_parts(results: Path, mode: str, mode_index: int) -> list[str]:
     panel_w, top, left = BAR_PANEL_WIDTH, BAR_TOP, BAR_LEFT
     plot_h = BAR_PANEL_HEIGHT - top - BAR_BOTTOM
     x0 = left + mode_index * (panel_w + 10)
-    parts = [f'<text x="{x0}" y="22" font-weight="600">{mode.capitalize()}, 1000 episodes per bar</text>']
+    parts = [
+        f'<text x="{x0}" y="22" font-weight="600">{mode.capitalize()}, 1000 episodes per bar</text>'
+    ]
     for tick in (0, 0.5, 1.0):
         y = top + plot_h * (1 - tick)
         parts.append(
