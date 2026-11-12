@@ -14,9 +14,9 @@ import {
 } from '../ui/motion-stunts.ts';
 import { enterPhoneSession } from '../ui/phone-session.ts';
 import { createSwipeStunts } from '../ui/swipe-stunts.ts';
+import { createTouchArrows, readArrows, releaseArrows } from '../ui/touch-arrows.ts';
 import { createTouchButtons, readButtons, releaseButtons } from '../ui/touch-buttons.ts';
 import { portraitOnTouch, startTouchMode, touchModeOn } from '../ui/touch-mode.ts';
-import { createTouchStick, readStick, releaseStick } from '../ui/touch-stick.ts';
 import type { StuntCodeValue } from './stunt-requests.ts';
 
 /** What the game offers to the input devices. */
@@ -82,9 +82,9 @@ function wirePauseButtons(
 /** Starts every non-keyboard input. Call once at start-up, before the title's onPlay can run. */
 export function startExtraInputs(actions: GameActions): ExtraInputs {
   startTouchMode();
-  const stick = createTouchStick(requireElement('touch-stick-zone'), requireElement('touch-stick'));
+  const arrows = createTouchArrows(requireElement('touch-arrows'));
   const buttons = createTouchButtons(requireElement('touch-hop'), requireElement('touch-boost'));
-  addInputSource((out) => readStick(stick, out));
+  addInputSource((out) => readArrows(arrows, out));
   addInputSource((out) => readButtons(buttons, out));
   createSwipeStunts(requireElement('touch-swipe-zone'), actions.requestStunt);
   onTap('touch-pause', actions.togglePause);
@@ -114,7 +114,7 @@ export function startExtraInputs(actions: GameActions): ExtraInputs {
       updateAirHint(hint, touchModeOn(), airborne, motionActive(motion), nowMs);
     },
     releaseHeld: () => {
-      releaseStick(stick);
+      releaseArrows(arrows);
       releaseButtons(buttons);
     },
     portraitBlocked: portraitOnTouch,

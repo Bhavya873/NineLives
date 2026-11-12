@@ -35,8 +35,7 @@
   display: none;
 }
 
-/* The two touch zones: the left 45% below the top row drives, the right half swipes. */
-:root[data-touch='on'] #touch-stick-zone,
+/* The swipe zone: the right half below the top row. */
 :root[data-touch='on'] #touch-swipe-zone {
   display: block;
   position: fixed;
@@ -44,17 +43,12 @@
   bottom: 0;
   touch-action: none;
 }
-:root[data-touch='on'] #touch-stick-zone {
-  left: 0;
-  width: 45%;
-}
 :root[data-touch='on'] #touch-swipe-zone {
   left: 50%;
   right: 0;
 }
 
-/* The round buttons: stick ring, HOP, BOOST and pause share one look. */
-:root[data-touch='on'] #touch-stick,
+/* The round buttons: HOP, BOOST and pause share one look. */
 :root[data-touch='on'] #touch-hop,
 :root[data-touch='on'] #touch-boost,
 :root[data-touch='on'] #touch-pause {
@@ -112,40 +106,67 @@
   border-right: 5px solid currentColor;
 }
 
-/* The floating stick: the ring rests bottom-left; stick-math moves it under the finger. */
-:root[data-touch='on'] #touch-stick {
+/* The arrow cross: a 3 x 3 grid, bottom-left, with an arrow in the up, left, right and down
+   cells. The whole grid is the touch target, so a thumb can slide between arrows. */
+:root[data-touch='on'] #touch-arrows {
+  --arrow-size: max(56px, calc(64 * var(--u)));
+  display: grid;
+  position: fixed;
   left: var(--pad-left);
-  top: calc(100% - 120 * var(--u) - var(--pad-bottom));
-  width: calc(120 * var(--u));
-  height: calc(120 * var(--u));
-  pointer-events: none;
-  transition:
-    left 0.2s,
-    top 0.2s;
+  /* Raised 8 px so the right arrow clears the nozzle map on the narrowest phone. */
+  bottom: calc(var(--pad-bottom) + 8px);
+  grid-template-columns: repeat(3, var(--arrow-size));
+  grid-template-rows: repeat(3, var(--arrow-size));
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
-:root[data-touch='on'] #touch-stick.drag {
-  transition: none;
-}
-#touch-stick-knob {
-  width: 40%;
-  height: 40%;
-  border-radius: 50%;
-  border: 1px solid var(--sand);
-  background: rgb(var(--bone-rgb) / 0.8);
-  transform: translate(var(--kx, 0px), var(--ky, 0px));
-  transition: transform 0.2s;
-}
-#touch-stick.drag #touch-stick-knob {
-  transition: none;
-}
-#touch-stick-label {
+/* A little invisible margin, so a thumb that lands just beside the cross still counts. */
+:root[data-touch='on'] #touch-arrows::before {
+  content: '';
   position: absolute;
-  bottom: calc(12 * var(--u));
-  opacity: 0.7;
-  transition: opacity 0.15s;
+  inset: calc(-12 * var(--u));
 }
-#touch-stick.drag #touch-stick-label {
-  opacity: 0;
+.touch-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-panel);
+  transition:
+    transform 0.08s,
+    background 0.08s;
+}
+.touch-arrow[data-arrow='up'] {
+  grid-area: 1 / 2;
+}
+.touch-arrow[data-arrow='left'] {
+  grid-area: 2 / 1;
+}
+.touch-arrow[data-arrow='right'] {
+  grid-area: 2 / 3;
+}
+.touch-arrow[data-arrow='down'] {
+  grid-area: 3 / 2;
+}
+.touch-arrow.pressed {
+  transform: scale(0.92);
+  background: rgb(var(--bone-rgb) / 0.35);
+}
+/* The arrow shape: a triangle pointing up, turned for the other three. */
+.arrow-glyph {
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 16px solid currentColor;
+}
+.touch-arrow[data-arrow='down'] .arrow-glyph {
+  transform: rotate(180deg);
+}
+.touch-arrow[data-arrow='left'] .arrow-glyph {
+  transform: rotate(-90deg);
+}
+.touch-arrow[data-arrow='right'] .arrow-glyph {
+  transform: rotate(90deg);
 }
 
 /* The pause card's touch buttons. */
@@ -280,7 +301,7 @@
     inset: -16px 0 0;
   }
 
-  /* The nozzle map and g-meter flank the panel, small, clear of the stick, HOP and BOOST. */
+  /* The nozzle map and g-meter flank the panel, small, clear of the arrows, HOP and BOOST. */
   :root[data-touch='on'] #hud-nozzle-tile,
   :root[data-touch='on'] #hud-g-tile {
     bottom: var(--instrument-bottom);

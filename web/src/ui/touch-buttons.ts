@@ -36,6 +36,13 @@ function wireButton(button: TouchButton): void {
   element.addEventListener('pointerup', letGo);
   element.addEventListener('pointercancel', letGo);
   element.addEventListener('lostpointercapture', letGo);
+  // Enter or Space on a focused button arrives as a click with no pointer (`detail` is 0); a
+  // pointer tap also clicks (`detail` 1 or more) but was already counted on pointerdown.
+  element.addEventListener('click', (event) => {
+    if (event.detail === 0) {
+      button.tapped = true;
+    }
+  });
   // A long press on a phone opens a context menu; the game never wants it.
   element.addEventListener('contextmenu', (event) => event.preventDefault());
 }
