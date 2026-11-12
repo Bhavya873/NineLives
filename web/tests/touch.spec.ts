@@ -1,5 +1,5 @@
-// Touch and phone layout (SPEC §11.9): the controls show only on touch devices, the floating
-// stick drives, HOP works with the other thumb, the wind and air-mode readouts are buttons, the
+// Touch and phone layout (SPEC §11.9): the controls show only on touch devices, the arrow
+// buttons drive, HOP works with the other thumb, the wind and air-mode readouts are buttons, the
 // pause card has Drop test, a portrait phone gets the rotate card, swipes ask for stunts, and
 // no HUD piece overlaps another. Touches are sent with Chromium's own touch events (CDP).
 import { expect, test, type CDPSession, type Locator, type Page } from '@playwright/test';
@@ -107,7 +107,7 @@ test.describe('on a phone in landscape', () => {
     const consoleErrors = collectConsoleErrors(page);
     await page.goto('/?play=1');
     await waitForGame(page);
-    for (const id of ['touch-stick', 'touch-hop', 'touch-boost', 'touch-pause']) {
+    for (const id of ['touch-arrows', 'touch-hop', 'touch-boost', 'touch-pause']) {
       await expect(page.locator(`#${id}`)).toBeVisible();
     }
     await expect(page.locator('#hud-keys-toggle')).toBeHidden();
@@ -119,26 +119,27 @@ test.describe('on a phone in landscape', () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('dragging in the left zone moves the stick and the car drives, with HOP on the other thumb', async ({
+  test('holding up-left on the arrows drives and steers, with HOP on the other thumb', async ({
     page,
   }) => {
     await page.goto('/?play=1');
     await waitForGame(page);
     const fingers = await Fingers.attach(page);
-    const ring = page.locator('#touch-stick');
-    const restBox = await ring.boundingBox();
+    const cross = page.locator('#touch-arrows');
+    const up = page.locator('#touch-arrow-up');
+    const left = page.locator('#touch-arrow-left');
+    const right = page.locator('#touch-arrow-right');
 
-    // Thumb 1 lands left of the rest place; the ring re-centres under it.
-    await fingers.press(1, 200, 250);
-    await fingers.move(1, 200, 200);
-    await expect(ring).toHaveClass(/drag/);
-    const movedBox = await ring.boundingBox();
-    expect(Math.abs((movedBox?.x ?? 0) + (movedBox?.width ?? 0) / 2 - 200)).toBeLessThan(2);
-    expect(movedBox?.x).not.toBe(restBox?.x);
-    const knobY = await page
-      .locator('#touch-stick-knob')
-      .evaluate((knob) => getComputedStyle(knob).transform);
-    expect(knobY).not.toBe('none');
+    // Thumb 1 lands on the up arrow, then slides to the left arrow's corner: both light up.
+    const [upX, upY] = await centreOf(up);
+    const [leftX, leftY] = await centreOf(left);
+    await fingers.press(1, upX, upY);
+    await expect(up).toHaveClass(/pressed/);
+    await expect(left).not.toHaveClass(/pressed/);
+    await fingers.move(1, (upX + leftX) / 2, (upY + leftY) / 2);
+    await expect(up).toHaveClass(/pressed/);
+    await expect(left).toHaveClass(/pressed/);
+    await expect(right).not.toHaveClass(/pressed/);
     await expect
       .poll(() => speedKmH(page), { timeout: SLOW_MACHINE_TIMEOUT_MS })
       .toBeGreaterThan(5);
@@ -154,9 +155,22 @@ test.describe('on a phone in landscape', () => {
     await fingers.lift(2);
     await expect(page.locator('#touch-hop')).not.toHaveClass(/pressed/);
 
-    // Letting go eases the ring home.
+    // Letting go clears the arrows.
     await fingers.lift(1);
-    await expect(ring).not.toHaveClass(/drag/);
+    await expect(up).not.toHaveClass(/pressed/);
+    await expect(left).not.toHaveClass(/pressed/);
+    await expect(cross).toBeVisible();
+  });
+
+  test('HOP works from the keyboard too (Enter on the focused button)', async ({ page }) => {
+    await page.goto('/?play=1');
+    await waitForGame(page);
+    const groundY = await debugValue(page, 'y');
+    await page.locator('#touch-hop').focus();
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(() => debugValue(page, 'y'), { timeout: SLOW_MACHINE_TIMEOUT_MS })
+      .toBeGreaterThan(groundY + 0.15);
   });
 
   test('tapping the wind readout cycles it and tapping the air-mode label switches mode', async ({
@@ -252,7 +266,10 @@ const HUD_PIECES = [
   '#hud-dash',
   '#hud-nozzle-tile',
   '#hud-g-tile',
-  '#touch-stick',
+  '#touch-arrow-up',
+  '#touch-arrow-left',
+  '#touch-arrow-right',
+  '#touch-arrow-down',
   '#touch-hop',
   '#touch-boost',
 ];
@@ -365,7 +382,7 @@ test.describe('on a desktop', () => {
   test('the touch controls are absent and the readouts still click', async ({ page }) => {
     await page.goto('/?play=1');
     await waitForGame(page);
-    for (const id of ['touch-stick', 'touch-hop', 'touch-boost', 'touch-pause', 'rotate-card']) {
+    for (const id of ['touch-arrows', 'touch-hop', 'touch-boost', 'touch-pause', 'rotate-card']) {
       await expect(page.locator(`#${id}`)).toBeHidden();
     }
     await expect(page.locator('#hud-keys-toggle')).toBeVisible();

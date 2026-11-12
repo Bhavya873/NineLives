@@ -39,9 +39,8 @@
       </filter>
     </svg>
     <div id="game"></div>
-    <!-- Touch only (data-touch on <html>): the stick zone, the swipe zone and the stick ring sit
-         under the other controls, so a touch on a button never starts a stick or a swipe. -->
-    <div id="touch-stick-zone" class="touch-only"></div>
+    <!-- Touch only (data-touch on <html>): the swipe zone sits under the other controls, so a
+         touch on a button never starts a swipe. -->
     <div id="touch-swipe-zone" class="touch-only"></div>
     <!-- Top-left: the nine hearts and the saves so far. -->
     <div id="hud-top-left" class="glass">
@@ -143,13 +142,23 @@
       <span id="hud-wind-label" class="num">Off</span>
     </button>
     <div id="hud-perf" class="glass" hidden></div>
-    <!-- Touch only: the pause button, the stick ring and the two action buttons. -->
+    <!-- Touch only: the pause button, the arrow cross and the two action buttons. -->
     <button type="button" id="touch-pause" class="glass touch-only" aria-label="Pause">
       <span class="pause-bars"></span>
     </button>
-    <div id="touch-stick" class="glass touch-only" aria-hidden="true">
-      <div id="touch-stick-knob"></div>
-      <span id="touch-stick-label" class="tile-label">Drive</span>
+    <div id="touch-arrows" class="touch-only" aria-hidden="true">
+      <div id="touch-arrow-up" class="touch-arrow glass" data-arrow="up">
+        <span class="arrow-glyph"></span>
+      </div>
+      <div id="touch-arrow-left" class="touch-arrow glass" data-arrow="left">
+        <span class="arrow-glyph"></span>
+      </div>
+      <div id="touch-arrow-right" class="touch-arrow glass" data-arrow="right">
+        <span class="arrow-glyph"></span>
+      </div>
+      <div id="touch-arrow-down" class="touch-arrow glass" data-arrow="down">
+        <span class="arrow-glyph"></span>
+      </div>
     </div>
     <button type="button" id="touch-boost" class="glass touch-only">Boost</button>
     <button type="button" id="touch-hop" class="glass touch-only">Hop</button>
