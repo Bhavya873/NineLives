@@ -155,6 +155,22 @@ function postSnapshot(current: Stage, nowMs: number): void {
   current.lastPostMs = nowMs;
 }
 
+/** Steps every row that is still flying by `ticks` physics ticks and adds the wall-clock cost
+ * to the stats the next snapshot reports. */
+function stepCrowds(current: Stage, ticks: number): void {
+  const stepStartMs = performance.now();
+  for (let tick = 0; tick < ticks; tick += 1) {
+    for (const row of current.rows) {
+      if (row.running) {
+        row.running = row.crowd.step();
+      }
+    }
+    current.ticks += 1;
+  }
+  current.stepMs += performance.now() - stepStartMs;
+  current.stepTicks += ticks;
+}
+
 function loop(): void {
   timer = setTimeout(loop, LOOP_MS);
   const current = stage;
@@ -174,17 +190,7 @@ function loop(): void {
     const plan = planTicks(current.leftoverS, elapsedS, current.tickS);
     current.leftoverS = plan.leftoverS;
     if (plan.ticks > 0) {
-      const stepStartMs = performance.now();
-      for (let tick = 0; tick < plan.ticks; tick += 1) {
-        for (const row of current.rows) {
-          if (row.running) {
-            row.running = row.crowd.step();
-          }
-        }
-        current.ticks += 1;
-      }
-      current.stepMs += performance.now() - stepStartMs;
-      current.stepTicks += plan.ticks;
+      stepCrowds(current, plan.ticks);
     }
     const anyRunning = current.rows.some((row) => row.running);
     if (plan.ticks > 0 && (!anyRunning || nowMs - current.lastPostMs >= POST_MS)) {
