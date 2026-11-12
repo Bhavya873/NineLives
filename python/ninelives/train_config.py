@@ -108,6 +108,27 @@ class TrainConfig:
     survival_bonus: float = 0.0
 
 
+def read_curriculum_settings(raw: dict[str, Any]) -> dict[str, Any]:
+    """The TrainConfig fields that come from the `curriculum` section, keyed by field name."""
+    curriculum = raw["curriculum"]
+    unlock = curriculum.get("unlock", {})
+    return {
+        "stage_weights": {
+            str(stage): float(weight) for stage, weight in curriculum["stage_weights"].items()
+        },
+        "curriculum_window": int(curriculum["window"]),
+        "curriculum_advance_at": read_bar(curriculum["advance_at"]),
+        "curriculum_unlock_on_pd": strict_bool(
+            "curriculum.unlock.beat_pd", unlock.get("beat_pd", False)
+        ),
+        "curriculum_unlock_every_steps": optional_int(unlock.get("every_steps")),
+        "curriculum_promote_on": str(curriculum.get("promote_on", "eval")),
+        "curriculum_start_at_hardest": strict_bool(
+            "curriculum.start_at_hardest", curriculum.get("start_at_hardest", False)
+        ),
+    }
+
+
 def load_train_config(path: Path) -> TrainConfig:
     """Reads a training YAML; a missing key (or an unknown key under `ppo`) raises an
     error naming it."""
@@ -117,38 +138,22 @@ def load_train_config(path: Path) -> TrainConfig:
             seed=int(raw["seed"]),
             mode=str(raw["mode"]),
             stages=[str(stage) for stage in raw["stages"]],
-            stage_weights={
-                str(stage): float(weight)
-                for stage, weight in raw["curriculum"]["stage_weights"].items()
-            },
             randomize=strict_bool("randomize", raw["randomize"]),
             randomize_mode=strict_bool("randomize_mode", raw.get("randomize_mode", True)),
             randomize_share=share_of_episodes(raw.get("randomize_share", 1.0)),
             total_steps=int(raw["total_steps"]),
             ppo=read_ppo(raw["ppo"]),
             clip_obs=float(raw["normalize"]["clip_obs"]),
-            curriculum_window=int(raw["curriculum"]["window"]),
-            curriculum_advance_at=read_bar(raw["curriculum"]["advance_at"]),
-            curriculum_unlock_on_pd=strict_bool(
-                "curriculum.unlock.beat_pd",
-                raw["curriculum"].get("unlock", {}).get("beat_pd", False),
-            ),
-            curriculum_unlock_every_steps=optional_int(
-                raw["curriculum"].get("unlock", {}).get("every_steps")
-            ),
             reward_overrides={
                 str(name): float(value) for name, value in raw.get("reward_overrides", {}).items()
             },
-            curriculum_promote_on=str(raw["curriculum"].get("promote_on", "eval")),
             checkpoint_every_steps=int(raw["checkpoint"]["every_steps"]),
             eval_episodes=int(raw["checkpoint"]["eval_episodes"]),
             eval_seed=int(raw["checkpoint"]["eval_seed"]),
             residual=read_residual(raw.get("residual")),
-            curriculum_start_at_hardest=strict_bool(
-                "curriculum.start_at_hardest", raw["curriculum"].get("start_at_hardest", False)
-            ),
             controller=str(raw.get("controller", "ai")),
             survival_bonus=float(raw.get("survival_bonus", 0.0)),
+            **read_curriculum_settings(raw),
         )
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError(f"{path}: missing or invalid setting: {error}") from error

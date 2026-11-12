@@ -197,11 +197,9 @@ def resume_run(config: TrainConfig, env: NineLivesVecEnv, run_dir: Path) -> tupl
     return model, state
 
 
-def train(argv: list[str] | None = None) -> RunState:
-    """Runs (or resumes) training until total_steps or the time limit; returns the state."""
-    args = parse_args(argv)
-    # progress messages go to the console
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+def load_config_for_run(args: argparse.Namespace) -> TrainConfig:
+    """Loads the YAML config, applies the --total-steps override and rejects flag
+    combinations that do not work together."""
     config = load_train_config(args.config)
     if args.total_steps is not None:
         config.total_steps = args.total_steps
@@ -210,10 +208,12 @@ def train(argv: list[str] | None = None) -> RunState:
             "--keep-curriculum cannot be used with controller: hybrid (it trains every stage "
             "at its hardest level, the levels its checkpoints are scored on)"
         )
-    run_dir = args.runs_dir / args.run_id
-    if not args.resume and (run_dir / "latest").exists():
-        raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
-    env = NineLivesVecEnv(
+    return config
+
+
+def make_vec_env(config: TrainConfig) -> NineLivesVecEnv:
+    """The batched training environment, starting on the first stage of the config."""
+    return NineLivesVecEnv(
         config.ppo.n_envs,
         config.seed,
         config.mode,
@@ -226,17 +226,29 @@ def train(argv: list[str] | None = None) -> RunState:
         randomize_share=config.randomize_share,
         survival_bonus=config.survival_bonus,
     )
+
+
+def start_model(
+    args: argparse.Namespace, config: TrainConfig, env: NineLivesVecEnv, run_dir: Path
+) -> tuple[PPO, RunState]:
+    """Resumes the run in `run_dir`, or creates the run folder and a new model."""
     if args.resume:
-        model, state = resume_run(config, env, run_dir)
-    else:
-        run_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy(args.config, run_dir / "config.yaml")
-        # The TOML configs too: the reward and scenarios are part of what was trained.
-        shutil.copytree(CONFIGS_DIR, run_dir / "configs", ignore=shutil.ignore_patterns("train"))
-        model, state = new_run(config, env, run_dir, args.init_from, args.keep_curriculum)
-    # Before learn(): it resets every env, and those first episodes must already run
-    # the curriculum's stages and levels.
-    env.set_stage_mix(state.curriculum.mix())
+        return resume_run(config, env, run_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(args.config, run_dir / "config.yaml")
+    # The TOML configs too: the reward and scenarios are part of what was trained.
+    shutil.copytree(CONFIGS_DIR, run_dir / "configs", ignore=shutil.ignore_patterns("train"))
+    return new_run(config, env, run_dir, args.init_from, args.keep_curriculum)
+
+
+def learn_and_save(
+    args: argparse.Namespace,
+    config: TrainConfig,
+    model: PPO,
+    state: RunState,
+    run_dir: Path,
+) -> None:
+    """Runs model.learn() with the training callbacks, then saves the latest checkpoint."""
     checkpoints = RunCheckpointCallback(state, run_dir, config)
     promote_from_training = config.curriculum_promote_on == "training"
     # The finite check comes first, so a NaN step never reaches a checkpoint save.
@@ -262,6 +274,23 @@ def train(argv: list[str] | None = None) -> RunState:
     if normalizer is not None:
         save_checkpoint(run_dir / "latest", model, normalizer, state)
     log.info(f"saved {run_dir / 'latest'} at {state.steps} steps")
+
+
+def train(argv: list[str] | None = None) -> RunState:
+    """Runs (or resumes) training until total_steps or the time limit; returns the state."""
+    args = parse_args(argv)
+    # progress messages go to the console
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    config = load_config_for_run(args)
+    run_dir = args.runs_dir / args.run_id
+    if not args.resume and (run_dir / "latest").exists():
+        raise SystemExit(f"{run_dir} already has a run; pass --resume or pick a new --run-id")
+    env = make_vec_env(config)
+    model, state = start_model(args, config, env, run_dir)
+    # Before learn(): it resets every env, and those first episodes must already run
+    # the curriculum's stages and levels.
+    env.set_stage_mix(state.curriculum.mix())
+    learn_and_save(args, config, model, state, run_dir)
     return state
 
 
