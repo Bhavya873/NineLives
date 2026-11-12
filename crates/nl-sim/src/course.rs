@@ -476,28 +476,34 @@ fn check_piece(index: usize, piece: &PieceSpec, bounds: &BoundsSpec) -> Result<(
             "`count` must be 1 to {MAX_COUNT}, not {count}"
         )));
     }
-    if let PieceSpec::Ramp { angle_deg, .. }
-    | PieceSpec::Kicker { angle_deg, .. }
-    | PieceSpec::Corkscrew { angle_deg, .. } = piece
-        && !(MIN_RAMP_ANGLE_DEG..MAX_RAMP_ANGLE_DEG).contains(angle_deg)
-    {
-        return Err(fail(format!(
-            "`angle_deg` must be at least {MIN_RAMP_ANGLE_DEG} and below {MAX_RAMP_ANGLE_DEG}, not {angle_deg}"
-        )));
-    }
-    if let PieceSpec::Corkscrew { bank_deg, .. } = piece
-        && !(MIN_BANK_DEG..MAX_BANK_DEG).contains(bank_deg)
-    {
-        return Err(fail(format!(
-            "`bank_deg` must be at least {MIN_BANK_DEG} and below {MAX_BANK_DEG}, not {bank_deg}"
-        )));
-    }
+    check_slope_angles(piece).map_err(fail)?;
     check_fallback_fields(piece).map_err(fail)?;
     if !bounds.contains(piece.position()) {
         return Err(fail(format!(
             "`pos` {:?} is outside the course bounds",
             piece.position()
         )));
+    }
+    Ok(())
+}
+
+/// Checks a ramp, kicker or corkscrew's slope angle and a corkscrew's bank angle.
+fn check_slope_angles(piece: &PieceSpec) -> Result<(), String> {
+    if let PieceSpec::Ramp { angle_deg, .. }
+    | PieceSpec::Kicker { angle_deg, .. }
+    | PieceSpec::Corkscrew { angle_deg, .. } = piece
+        && !(MIN_RAMP_ANGLE_DEG..MAX_RAMP_ANGLE_DEG).contains(angle_deg)
+    {
+        return Err(format!(
+            "`angle_deg` must be at least {MIN_RAMP_ANGLE_DEG} and below {MAX_RAMP_ANGLE_DEG}, not {angle_deg}"
+        ));
+    }
+    if let PieceSpec::Corkscrew { bank_deg, .. } = piece
+        && !(MIN_BANK_DEG..MAX_BANK_DEG).contains(bank_deg)
+    {
+        return Err(format!(
+            "`bank_deg` must be at least {MIN_BANK_DEG} and below {MAX_BANK_DEG}, not {bank_deg}"
+        ));
     }
     Ok(())
 }
@@ -532,6 +538,12 @@ fn check_fallback_fields(piece: &PieceSpec) -> Result<(), String> {
 fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
     let mut numbers = piece.position().to_vec();
     numbers.extend(piece_sizes(piece).into_iter().map(|(_, size)| size));
+    push_piece_specific_numbers(&mut numbers, piece);
+    numbers
+}
+
+/// Adds the numbers beyond position and sizes (yaw, angles, impulses, pit) to `numbers`.
+fn push_piece_specific_numbers(numbers: &mut Vec<f32>, piece: &PieceSpec) {
     match piece {
         PieceSpec::Ramp {
             yaw,
@@ -574,7 +586,6 @@ fn piece_numbers(piece: &PieceSpec) -> Vec<f32> {
             ..
         } => numbers.extend([*pit_depth, *entry_height]),
     }
-    numbers
 }
 
 /// The sizes a piece declares, by field name; each must be above zero.

@@ -178,7 +178,31 @@ pub fn shape_collider(shape: &CourseShape, friction: f32) -> Option<ColliderBuil
     if !shape.solid {
         return None;
     }
-    let builder = match &shape.geometry {
+    let builder = geometry_collider(&shape.geometry)?;
+    let user_data = if shape.surface == Surface::Obstacle {
+        OBSTACLE_USER_DATA
+    } else {
+        0
+    };
+    // The floor's contacts go through `floor_hook`, which keeps their normal vertical.
+    let hooks = if shape.surface == Surface::Floor {
+        ActiveHooks::MODIFY_SOLVER_CONTACTS
+    } else {
+        ActiveHooks::empty()
+    };
+    Some(
+        builder
+            .position(shape.pose.to_rapier())
+            .friction(shape.friction.unwrap_or(friction))
+            .user_data(user_data)
+            .active_hooks(hooks),
+    )
+}
+
+/// The bare collider builder for a shape's geometry (None for a hull or mesh Rapier
+/// cannot build).
+fn geometry_collider(geometry: &ShapeGeometry) -> Option<ColliderBuilder> {
+    let builder = match geometry {
         ShapeGeometry::Box {
             half_extents_m: [x, y, z],
         } => ColliderBuilder::cuboid(*x, *y, *z),
@@ -203,24 +227,7 @@ pub fn shape_collider(shape: &CourseShape, friction: f32) -> Option<ColliderBuil
             ColliderBuilder::trimesh_with_flags(points, triangles.clone(), flags).ok()?
         }
     };
-    let user_data = if shape.surface == Surface::Obstacle {
-        OBSTACLE_USER_DATA
-    } else {
-        0
-    };
-    // The floor's contacts go through `floor_hook`, which keeps their normal vertical.
-    let hooks = if shape.surface == Surface::Floor {
-        ActiveHooks::MODIFY_SOLVER_CONTACTS
-    } else {
-        ActiveHooks::empty()
-    };
-    Some(
-        builder
-            .position(shape.pose.to_rapier())
-            .friction(shape.friction.unwrap_or(friction))
-            .user_data(user_data)
-            .active_hooks(hooks),
-    )
+    Some(builder)
 }
 
 /// The floor: the bounds' footprint at y = 0, cut into segments along X around gaps.
@@ -262,6 +269,25 @@ fn floor_segments(spec: &CourseSpec) -> Vec<CourseShape> {
 
 /// The shapes of one piece.
 fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
+    match piece {
+        PieceSpec::Ramp { .. }
+        | PieceSpec::Kicker { .. }
+        | PieceSpec::Corkscrew { .. }
+        | PieceSpec::Gap { .. } => jump_piece_shapes(index, piece),
+        PieceSpec::CarRow { .. }
+        | PieceSpec::Halfpipe { .. }
+        | PieceSpec::HalfLoop { .. }
+        | PieceSpec::Bumps { .. }
+        | PieceSpec::Wall { .. } => obstacle_piece_shapes(index, piece),
+        PieceSpec::KickPlate { .. }
+        | PieceSpec::LandingPad { .. }
+        | PieceSpec::Checkpoint { .. }
+        | PieceSpec::Finish { .. } => marking_piece_shapes(index, piece),
+    }
+}
+
+/// The shapes of a ramp, kicker, corkscrew or gap.
+fn jump_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
     let at = |pos: [f32; 3], yaw: f32| PieceFrame::new(index, pos, yaw);
     match piece {
         PieceSpec::Ramp {
@@ -279,14 +305,7 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             width,
             angle_deg,
             side,
-        } => {
-            // Left is −Z (SPEC §4): the kicker rises away from the lane's centre line.
-            let outer_z = match side {
-                Side::Left => -width,
-                Side::Right => *width,
-            };
-            at(*pos, *yaw).kicker(*length, outer_z, *angle_deg)
-        }
+        } => kicker_shapes(at(*pos, *yaw), *length, *width, *angle_deg, *side),
         PieceSpec::Corkscrew {
             pos,
             yaw,
@@ -296,18 +315,13 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             bank_deg,
             side,
         } => {
-            // Left is −Z (SPEC §4): the raised edge is on that side of the lane.
-            let raised_side_z = match side {
-                Side::Left => -1.0,
-                Side::Right => 1.0,
-            };
             let twist = CorkscrewTwist {
                 length: *length,
                 width: *width,
                 lip_angle_deg: *angle_deg,
                 bank_deg: *bank_deg,
             };
-            at(*pos, *yaw).corkscrew(&twist, raised_side_z)
+            corkscrew_shapes(at(*pos, *yaw), &twist, *side)
         }
         PieceSpec::Gap {
             pos,
@@ -315,6 +329,40 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             pit_depth,
             entry_height,
         } => catch_pit(at(*pos, 0.0), *length, *pit_depth, *entry_height),
+        _ => unreachable!("jump_piece_shapes only takes Ramp/Kicker/Corkscrew/Gap"),
+    }
+}
+
+/// A kicker on the given side of the lane.
+fn kicker_shapes(
+    frame: PieceFrame,
+    length: f32,
+    width: f32,
+    angle_deg: f32,
+    side: Side,
+) -> Vec<CourseShape> {
+    // Left is −Z (SPEC §4): the kicker rises away from the lane's centre line.
+    let outer_z = match side {
+        Side::Left => -width,
+        Side::Right => width,
+    };
+    frame.kicker(length, outer_z, angle_deg)
+}
+
+/// A corkscrew with its raised edge on the given side of the lane.
+fn corkscrew_shapes(frame: PieceFrame, twist: &CorkscrewTwist, side: Side) -> Vec<CourseShape> {
+    // Left is −Z (SPEC §4): the raised edge is on that side of the lane.
+    let raised_side_z = match side {
+        Side::Left => -1.0,
+        Side::Right => 1.0,
+    };
+    frame.corkscrew(twist, raised_side_z)
+}
+
+/// The shapes of a car row, halfpipe, half loop, bumps or wall.
+fn obstacle_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
+    let at = |pos: [f32; 3], yaw: f32| PieceFrame::new(index, pos, yaw);
+    match piece {
         PieceSpec::CarRow {
             pos,
             yaw,
@@ -341,15 +389,26 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
             count,
             height,
         } => bumps(at(*pos, *yaw), *count, *height),
-        PieceSpec::KickPlate { pos, yaw, .. } => {
-            vec![at(*pos, *yaw).marking(Surface::KickPlate, KICK_PLATE_LENGTH_M, LANE_WIDTH_M)]
-        }
         PieceSpec::Wall {
             pos,
             yaw,
             height,
             with_ramp,
         } => wall(at(*pos, *yaw), *height, *with_ramp),
+        _ => unreachable!(
+            "obstacle_piece_shapes is only called for a CarRow, Halfpipe, HalfLoop, Bumps or Wall piece"
+        ),
+    }
+}
+
+/// The painted markings: kick plate, landing pad, checkpoint and finish line (an empty
+/// list for other pieces).
+fn marking_piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
+    let at = |pos: [f32; 3], yaw: f32| PieceFrame::new(index, pos, yaw);
+    match piece {
+        PieceSpec::KickPlate { pos, yaw, .. } => {
+            vec![at(*pos, *yaw).marking(Surface::KickPlate, KICK_PLATE_LENGTH_M, LANE_WIDTH_M)]
+        }
         PieceSpec::LandingPad { pos, yaw } => {
             vec![at(*pos, *yaw).marking(Surface::LandingPad, LANDING_PAD_LENGTH_M, LANE_WIDTH_M)]
         }
@@ -359,6 +418,9 @@ fn piece_shapes(index: usize, piece: &PieceSpec) -> Vec<CourseShape> {
         PieceSpec::Finish { pos, yaw } => {
             vec![at(*pos, *yaw).marking(Surface::Finish, LINE_LENGTH_M, LINE_WIDTH_M)]
         }
+        _ => unreachable!(
+            "marking_piece_shapes is only called for a KickPlate, LandingPad, Checkpoint or Finish piece"
+        ),
     }
 }
 
