@@ -410,7 +410,27 @@ impl PieceTemplate {
         {
             return false;
         }
-        let ranges: Vec<[f32; 2]> = match self {
+        if !self.has_sane_flip_presets() {
+            return false;
+        }
+        let mut ranges = self.ramp_family_ranges();
+        ranges.extend(self.other_ranges());
+        ranges.into_iter().all(is_range)
+    }
+
+    /// A flip plate needs sane presets with a total weight above zero; every other piece
+    /// has no presets to check.
+    fn has_sane_flip_presets(&self) -> bool {
+        if let PieceTemplate::FlipPlate { presets, .. } = self {
+            let total_weight: f32 = presets.iter().map(|preset| preset.weight).sum();
+            return presets.iter().all(FlipPreset::is_sane) && total_weight > 0.0;
+        }
+        true
+    }
+
+    /// The [low, high] ranges of the ramp-like pieces (empty for every other piece).
+    fn ramp_family_ranges(&self) -> Vec<[f32; 2]> {
+        match self {
             PieceTemplate::Ramp {
                 radius_m,
                 width_m,
@@ -437,6 +457,13 @@ impl PieceTemplate {
                 bank_deg,
                 ..
             } => vec![*radius_m, *width_m, *angle_deg, *bank_deg],
+            _ => Vec::new(),
+        }
+    }
+
+    /// The [low, high] ranges of the pieces that are not ramp-like (empty for the ramps).
+    fn other_ranges(&self) -> Vec<[f32; 2]> {
+        match self {
             PieceTemplate::Bumps {
                 count, height_m, ..
             } => vec![[count[0] as f32, count[1] as f32], *height_m],
@@ -449,21 +476,14 @@ impl PieceTemplate {
             PieceTemplate::FlipPlate {
                 strength,
                 strong_strength,
-                presets,
                 ..
-            } => {
-                let total_weight: f32 = presets.iter().map(|preset| preset.weight).sum();
-                if !presets.iter().all(FlipPreset::is_sane) || total_weight <= 0.0 {
-                    return false;
-                }
-                vec![*strength, [*strong_strength, *strong_strength]]
-            }
+            } => vec![*strength, [*strong_strength, *strong_strength]],
             PieceTemplate::Halfpipe {
                 radius_m, length_m, ..
             } => vec![*radius_m, *length_m],
             PieceTemplate::Wall { height_m, .. } => vec![*height_m],
-        };
-        ranges.into_iter().all(is_range)
+            _ => Vec::new(),
+        }
     }
 }
 
